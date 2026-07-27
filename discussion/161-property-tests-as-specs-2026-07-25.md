@@ -4,7 +4,7 @@ Status: **Informational**
 Date: 2026-07-25
 Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [158](158-ring-model-and-enumeration-2026-07-22.md),
-[160](160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md)
+[160](160-relevant-cycle-algs-2026-07-25.md)
 
 ## Scope
 

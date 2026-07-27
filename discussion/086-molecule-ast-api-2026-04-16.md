@@ -1,5 +1,13 @@
 # Molecule AST API
 
+Status: **Completed**
+
+The implemented `MoleculeAst` API work is complete. The proposed
+chemist-facing wrapper hierarchy was withdrawn. The remaining hydrogen
+transformation and validator work moved to
+[166](166-molecule-ops-2026-07-27.md). This document is a design and
+implementation record, not the current task tracker.
+
 Working notes on the public API around `MoleculeAst` and its derived views. Focus: where derived data is cached, how it surfaces to consumers, and which procedural operations should also have constraint counterparts in step 9 of doc 80.
 
 ## Terminology
@@ -1588,7 +1596,7 @@ Property-style tests can come after the focused cases:
 
 ### Resolution interdependence
 
-The per-atom electron-conservation equation (from [doc 52 §10.1.3](52-graph-ir-2026-02-11.md#1013-invariants), combining the orbital-count and electron-count invariants):
+The per-atom electron-conservation equation (from [doc 52 §10.1.3](052-graph-ir-2026-02-11.md#1013-invariants), combining the orbital-count and electron-count invariants):
 
 ```
 Z(element) − charge = valence + implicit_h
@@ -1598,7 +1606,7 @@ Z(element) − charge = valence + implicit_h
 
 with side constraints: each term ≥ 0; parity `unpaired ↔ multiplicity`; `valence ∈ allowed_valences`; `aromatic_valence ∈ {0, 1, 2}`. Accepted pairs cancel between the orbital-count and electron-count invariants and do not appear here.
 
-The case-by-case analysis of how the resolver should narrow `(charge, implicit_h, unpaired, lone_pairs)` under various input shapes — including the `is_aromatic` interaction, the `Normal` sentinel removal, partial-narrowing options for underdetermined inputs, and the role of fixed-point iteration for non-implicit-H cases (aromatic charge equalization, mixed-valence clusters, etc.) — lives in [doc 96](96-valence-resolution-plan-2026-05-21.md). That doc holds the chemistry-level discussion; this file holds the implementation work list.
+The case-by-case analysis of how the resolver should narrow `(charge, implicit_h, unpaired, lone_pairs)` under various input shapes — including the `is_aromatic` interaction, the `Normal` sentinel removal, partial-narrowing options for underdetermined inputs, and the role of fixed-point iteration for non-implicit-H cases (aromatic charge equalization, mixed-valence clusters, etc.) — lives in [doc 96](096-valence-resolution-plan-2026-05-21.md). That doc holds the chemistry-level discussion; this file holds the implementation work list.
 
 ### Phase 11a — Implicit-H transformer pair
 
@@ -1608,7 +1616,7 @@ The case-by-case analysis of how the resolver should narrow `(charge, implicit_h
 - `ToImplicitHydrogens`: inverse. For each candidate H atom — exactly one incident covalent bond, single, non-H partner — remove the H and its bond and increment the partner's `implicit_hydrogens`. Preserved as-is: isotope-labeled H (D/T, explicit `#i`), charged H, spin-bearing H, H in dative/multicenter/aromatic/noncovalent relations, H₂. Idempotent (no removable H → no-op).
 - Both implement the existing `Transformer` trait; pair round-trips when the input is in the source form.
 
-Implicit-H *perception* is not a separate phase. The implicit-H count is resolved inside valence resolution (counts / atom-typing) alongside `charge`, `unpaired`, and lone-pair `n`. See [doc 96](96-valence-resolution-plan-2026-05-21.md) for the case analysis and the design discussion for partial narrowing under underdetermined inputs.
+Implicit-H *perception* is not a separate phase. The implicit-H count is resolved inside valence resolution (counts / atom-typing) alongside `charge`, `unpaired`, and lone-pair `n`. See [doc 96](096-valence-resolution-plan-2026-05-21.md) for the case analysis and the design discussion for partial narrowing under underdetermined inputs.
 
 **Completion**: `ops/implicit_hydrogens.rs` carries both transformers; tests cover round-trip and per-direction correctness on representative aromatic/non-aromatic, charged/neutral, isotope-labeled, and dative inputs. **Dependencies**: Phase 14 (lattice infra). **Risk**: low — mechanical rewrite.
 
@@ -2014,7 +2022,7 @@ Holds for ground and partial ASTs alike. A pattern with `Undetermined` element s
 
 Universal — they follow from electron and angular-momentum conservation. Hold for every chemical system regardless of model.
 
-- **Per-atom electron count** (full form in [doc 52 §10.1.3](52-graph-ir-2026-02-11.md#1013-invariants)): `Z − charge = valence + implicit_h + aromatic_valence + multicenter_valence + 2·lone_pairs + 2·donated_pairs + unpaired`.
+- **Per-atom electron count** (full form in [doc 52 §10.1.3](052-graph-ir-2026-02-11.md#1013-invariants)): `Z − charge = valence + implicit_h + aromatic_valence + multicenter_valence + 2·lone_pairs + 2·donated_pairs + unpaired`.
 - **Total charge consistency.** Sum of atom charges = asserted molecular total (if asserted via `Derived { TotalCharge }`).
 - **Total spin coupling.** Per-atom unpaired electrons couple consistently to asserted total spin.
 - **Unpaired electrons/spin multiplicity consistency.** = u % 2 + 1 <= M <= u + 1
@@ -2079,17 +2087,19 @@ Singleton non-binding sets *do* collapse: `ValueAst::LitSet([5])` and `ElementAs
 
 This is the conservative position. The alternative — singleton `Bind` ⇒ ground, mirroring `LitSet → Lit` — remains defensible and can be revisited if a use case demands it.
 
-## Deferred
+## Withdrawn wrapper proposal
 
-- **Migration plan from current state to the proposed hierarchy.** To be sketched between doc 80 points 9 and 10. The current code has no `Molecule` type; `MoleculeAst` is the only public surface; parsers return `MoleculeAst`. The migration must order the `Molecule`/`Pattern` introduction, parser API conversion, and tier-2 invariant restoration.
-- **Pattern cache contents.** Only ring view is needed for the immediate use cases; matcher-side scaffolding (per-atom constraint index, sub-pattern dependency graph, packed pattern adjacency) is addressed when step 9 lands.
-- **`ReactionRule` / `ReactionRuleAst` parallel.** Mirror of the `Molecule` / `MoleculeAst` split for reactions. Addressed when doc 80 step 10 lands.
+The proposed `Molecule`/`Pattern` and `ReactionRule`/`ReactionRuleAst`
+hierarchies are not part of the current architecture. `MoleculeAst` and
+`ReactionAst` are the public semantic models. External formats retain their own
+boundary types, and derived data is exposed through explicit operation and view
+objects rather than cached wrapper state.
 
 ## Open questions
 
 (To be filled in as the rest of this discussion progresses.)
 
-## Implementation status (2026-04-27)
+## Historical implementation status (2026-04-27)
 
 The pre-restructure tier-1 prototype (in-tree `umol_graph::api::Molecule`,
 `MoleculePattern`, the bespoke `MoleculeAst`/`MoleculePattern` storage with
@@ -2137,31 +2147,16 @@ actually live now:
   `parse_smiles_to_ast`, plus the ctfile equivalents. Configuration takes
   `&ChemistryModel`.
 
-## Outstanding
+## Remaining work moved
 
-Discuss first, not all required.
-
-- [ ] **`Molecule` chemist-facing wrapper.** Holds an `Arc<MoleculeInner>`
-  with the AST plus chemistry-side cache slots. Doc 92's open question on
-  metadata-on-`Molecule` (round-trip preservation vs. purely semantic
-  object) is unsettled; revisit when the type is reintroduced.
-- [ ] **Coordinate annotations on `Molecule`.** Optional per-atom
-  `Coordinate` payload propagated through MOL / CXSMILES roundtrip; stored
-  but never recomputed.
-- [ ] **Tier-1 parser entry-points returning chemist-facing types.**
-  `parse_smiles → Molecule`, `parse_smarts → Pattern`, `parse_smirks →
-  ReactionRule`. Today the parsers return `MoleculeAst`; chemist-facing
-  variants land once `Molecule` and `Pattern` exist.
-- [ ] **Remaining tier-2 propagators.** `TotalCharge`, `TotalSpin`, and
-  `AromaticElectronCount` exist as `MoleculeConstraint` variants but the
-  `ConstraintValidator` is a stub. Wire evaluators in once their per-engine
-  work lands.
-- [ ] **Per-entity spin-coupling propagator.** `SpinCouplingValidator` is a
-  stub returning `Determined`; check is `multiplicity = unpaired − 2k + 1`
-  for some `k ∈ 0..=unpaired/2` on any entity carrying a `SpinStateAst`
-  (atom, aromatic system, multicenter bond). Parity rule lives in
-  `umol_shared::spin::SpinState`; lift into the validator alongside
-  `ElectronInvariant`.
+- Phase 11a, the implicit/explicit hydrogen transformer pair, is tracked in
+  doc 166.
+- Phase 12, completion of `ConstraintValidator`,
+  `SpinInvariantsValidator`, and aromaticity conformance, is tracked in doc
+  166.
+- Phase 13's idempotence defect is fixed. Bare aromatic declarations are
+  resolved through the materialized valence-to-aromaticity stage boundary;
+  the obsolete standalone path is not carried forward.
 
 ## Edit-API evolution: join / split / uniform construction (2026-07-09)
 

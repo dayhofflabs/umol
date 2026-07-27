@@ -5,7 +5,7 @@ Date: 2026-07-25
 Relates: [108](108-mcs-algorithms-2026-06-09.md),
 [135](135-reaction-composition-completeness-2026-07-01.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
-[161](161-property-tests-as-executable-specifications-2026-07-25.md)
+[161](161-property-tests-as-specs-2026-07-25.md)
 
 ## Scope
 

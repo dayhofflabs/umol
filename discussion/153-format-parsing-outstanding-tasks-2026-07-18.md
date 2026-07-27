@@ -85,6 +85,9 @@ Required work:
 - Split `ExtendedAtom`, `ExtendedBond`, SGroup, RGroup, and related structures into semantically named records instead of parser-convenience containers.
 - Decide whether cold extension records, side tables, or another compact layout should hold rarely used payloads.
 - Remove parser result type choices where possible so each external format has one parsed boundary representation.
+- Review the public localized-bond endpoint accessor on TableIR. Keep the
+  endpoint pair directly accessible if that is the stable semantic shape;
+  avoid wrapping it only for parser convenience.
 - Add whole-record MOL/SDF benchmarks before replacing representation internals.
 - Keep parse latency, allocation count, and retained size as explicit gates.
 
@@ -139,6 +142,11 @@ Required work:
 - Add CXSMILES conformance categories and snapshots once CX has an explicit boundary.
 - Add no-panic fuzz targets for CXSMILES parsing and for MOL/SDF parsing.
 - Add parse-plus-raise fuzz or property coverage where the AST semantics are well-defined.
+- Move corpus-validity checks out of parser unit tests and into dedicated
+  integration tests so unit tests do not repeatedly validate fixture setup.
+- Audit conformance-test feature gates. Expensive or externally sourced
+  conformance suites must be gated consistently, while ordinary semantic
+  regressions remain in the default test surface.
 - Refresh classification tools after the ordinary-SMILES/CXSMILES split.
 - Preserve regression fixtures for known parser and raise issue classes.
 

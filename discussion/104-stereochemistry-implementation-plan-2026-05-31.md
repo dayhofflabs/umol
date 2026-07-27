@@ -1,8 +1,14 @@
 # 104 — Stereochemistry implementation plan
 
-Status: **Active.** Step 1 (graph-core relation infrastructure) and Phases A, A′, B, C, D are done;
-**Phase E (matching) is the only outstanding phase** (Phase F 3D and Phase G deferred). Design record:
-[103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md](103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md).
+Status: **Completed**
+
+Step 1 and Phases A, A′, B, C, D, and the
+absolute-stereo portion of E are implemented. The remaining `#T`/`#C`
+constraint-matching task and the reference-fixture decision moved to
+[165](165-ast-api-worklist-2026-07-27.md). Phase F 3D and Phase G symmetry,
+relative variables, and deeper perception were outside the A–E deliverable and
+remain in the geometry, symmetry, and variable documents. Design record:
+[103-stereochemistry-overlay-and-ports-2026-05-28.md](103-stereochemistry-overlay-and-ports-2026-05-28.md).
 
 The full staged plan for the stereo deliverable. Design and decisions live in doc 103 (molecule-
 level semantics, the `:stereo-atoms`/`:stereo-bonds` DSL, `#T`/`#C`, config algebra, contract D1/D2/D3, port trajectory,
@@ -1723,5 +1729,6 @@ match. Run `mol/smiles/sdf_parsing` + resolution conformance (`--features confor
 
 ## Open
 
-- Whether the `#T`/`#C` constraint is a stored `AtomConstraint`/`BondConstraint` kind (recommended,
-  symmetric with `#a`) vs raise-transient.
+`#T` and `#C` are stored atom and bond constraint kinds. Their remaining
+frame-correct substructure-matching path is tracked by doc 165. No open work
+remains in this implementation plan.

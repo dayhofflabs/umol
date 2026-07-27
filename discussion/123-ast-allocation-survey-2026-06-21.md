@@ -1,5 +1,24 @@
 # 123 — AST allocation/clone survey and prioritized worklist (2026-06-21)
 
+Status: **In Progress**
+
+## Current worklist
+
+- Skip semantically vacuous pattern fields in matching without weakening the
+  lattice laws.
+- Add allocation-free stereo value matching where the coset semantics permit
+  it.
+- Remove the per-call `Vec<Cow<...>>` buffers from the no-derivation
+  substructure path; entity cloning on that path is already gone.
+- Measure and address per-match embedding allocation and per-call incidence
+  graph construction where the measured workload justifies it.
+- Audit resolver and transaction mutation paths for clone-then-modify patterns,
+  while preserving rollback snapshots required by transactionality.
+
+Constraint accessors returning references and the host-entity borrowing change
+are complete. The profiles below are the evidence that produced this worklist,
+not independent task lists.
+
 ## Method
 
 Static pass over `umol-ast/src/ast`: every `.clone()` and every owned-returning accessor,
@@ -7,11 +26,11 @@ classified **read** vs **build** per the doc 122 principle (read paths must not 
 `meet`/`join`/`canonicalize`/builder/`transact`/`edit`/`derive_constraints`/`from_*` own
 legitimately). Cross-referenced with the callgrind hot spots (doc 121).
 
-**Runtime weights are pending a refresh.** The `cg.out` numbers (`ValueAst::matches` 6.86%,
+The initial `cg.out` numbers (`ValueAst::matches` 6.86%,
 `AtomConstraints::matches` 4.85%, `ValueAst::clone` 2.24%) predate the empty-pattern
 short-circuit, the `AromaticValenceAst`/`MulticenterValenceAst` cheap matches, and the
-`Cow` host-borrow — so they overstate the predicate cost. Re-run `prof 300 10` under
-callgrind and re-rank. The static priority below is primary until then.
+`Cow` host-borrow, so they overstate the predicate cost. The fresh profiles
+later in this document supersede them.
 
 ## Already addressed
 
@@ -21,18 +40,19 @@ callgrind and re-rank. The static priority below is primary until then.
   `matches`).
 - `host_match_targets` borrows via `Cow` in the no-derive path (no per-atom host clone for
   element/bond patterns).
+- Constraint accessors return `Option<&T>` rather than cloning stored values.
 
 ## Prioritized findings (read paths)
 
-**P1 — Constraint accessors return owned (`v.clone()`), the read-stored anti-pattern.**
+**P1 — Constraint accessors returned owned values. Completed.**
 `constraint/atom.rs:505–605` — 14 accessors (`valence`, `total_valence`, `degree`,
 `total_degree`, `ring_degree`, `ring_valence`, `total_hydrogens`, `donated_pairs`,
 `accepted_pairs`, `ring_count`, `aromatic_valence`, `multicenter_valence`,
 `tetrahedral_stereo`); `constraint/bond.rs:149,157` (`ring_count`, `cis_trans_stereo`). Each
-clones the stored value. Called by the collection `matches` per candidate for *constrained*
-patterns (the short-circuit only covers empty patterns). **Fix: doc 122 Option A** —
+cloned the stored value and was called by collection `matches` for constrained
+patterns. Implemented using doc 122 Option A:
 `-> Option<&ValueAst>` / `Option<&…Ast>`; `matches` compares by reference; `meet` clones at
-the point it builds. This is the agreed design; the top read-path item.
+the point it builds.
 
 **P2 — Stereo value-type `matches` still meet-derived.** `TetrahedralStereoAst`,
 `CisTransStereoAst` (the `stereo.rs:297` Lattice macro), `StereoConfigurationAst`
@@ -87,10 +107,9 @@ Two structural facts from this run:
   For element-only patterns, charge/h/lone_pairs/spin are `Undetermined`; don't call
   `matches` on them. Derive could emit `pat.f.is_undetermined() || pat.f.matches(t.f)`, or
   the bigger version, a specialized ground/element fast path. Highest now.
-- **P1 (was top) — constraint accessor references (doc 122 Option A).** Confirmed *not*
-  visible here because element/bond patterns short-circuit past the accessors; it bites
-  *constrained* SMARTS queries. Still the right structural fix, just not what this corpus
-  exercises.
+- **Completed baseline — constraint accessor references (doc 122 Option A).**
+  The change is not visible here because element/bond patterns short-circuit
+  past the accessors; it benefits constrained queries.
 - **R2 — per-call `host_match_targets` `Vec<Cow>` allocation** (one per `substructure_matches`
   call). Borrow the host directly in the no-derive closure to drop the Vec.
 - **P2 (stereo value-type matches), P3 (embedding), P4 (incidence)** — unchanged priority;
@@ -123,8 +142,8 @@ fixes completely validated. No single dominant cost; match splits three ways:
   exactly this decision. The host `Vec<Cow>` (one per call) folds in here.
 - **L3 — `Graph::neighbors` / search** (~20% of match). Mostly the algorithm; least
   recoverable (RDKit pays it).
-- **P1 — constraint accessor references (doc 122 Option A)** — for *constrained* patterns
-  only (this corpus short-circuits past it).
+- **Completed — constraint accessor references (doc 122 Option A).** This
+  affects constrained patterns; the profiling corpus short-circuits past it.
 - **Parse/raise (~80M one-time)** — largest absolute, amortized in screening; separate.
 
 ## In-place mutation review (build/mutate paths) — intent

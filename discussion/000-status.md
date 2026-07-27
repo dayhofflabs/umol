@@ -1,166 +1,199 @@
 # Status of discussion documents
 
-| Name                                                                                                             | Status        | Last Checked |
-| ---------------------------------------------------------------------------------------------------------------- | ------------- | ------------ |
-| [001-design-chat-2025-02-14.md](001-design-chat-2025-02-14.md)                                                   | Informational | 2026-02-17   |
-| [002-design-summary-2025-02-16.md](002-design-summary-2025-02-16.md)                                             | Informational | 2026-02-17   |
-| [003-alternative-stacks-2025-03-01.md](003-alternative-stacks-2025-03-01.md)                                     | Informational | 2026-02-17   |
-| [004-implementation-start-2025-03-01.md](004-implementation-start-2025-03-01.md)                                 | Outdated      | 2026-02-17   |
-| [005-mutability-2025-03-01.md](005-mutability-2025-03-01.md)                                                     | Informational | 2026-02-17   |
-| [006-atom-bond-identity-iteration-2025-03-01.md](006-atom-bond-identity-iteration-2025-03-01.md)                 | Informational | 2026-02-17   |
-| [007-molecule-slices-2025-03-01.md](007-molecule-slices-2025-03-01.md)                                           | Informational | 2026-02-17   |
-| [008-molecule-builder-api-2025-03-01.md](008-molecule-builder-api-2025-03-01.md)                                 | Informational | 2026-03-06   |
-| [009-torch-api-design-inspiration-2025-03-02.md](009-torch-api-design-inspiration-2025-03-02.md)                 | Informational | 2026-02-17   |
-| [010-diesel-api-design-inspiration.md](010-diesel-api-design-inspiration.md)                                     | Informational | 2026-02-17   |
-| [011-cheminformatics-libraries.md](011-cheminformatics-libraries.md)                                             | Informational | 2026-02-17   |
-| [012-molecular-representations-2025-03-01.md](012-molecular-representations-2025-03-01.md)                       | Informational | 2026-02-17   |
-| [013-substructure-match-2025-03-02.md](013-substructure-match-2025-03-02.md)                                     | Informational | 2026-02-17   |
-| [014-aromaticity-2025-03-08.md](014-aromaticity-2025-03-08.md)                                                   | Outdated      | 2026-03-11   |
-| [015-semantic-model-2025-03-10.md](015-semantic-model-2025-03-10.md)                                             | Informational | 2026-07-03   |
-| [016-hypergraphs-2025-03-10.md](016-hypergraphs-2025-03-10.md)                                                   | Informational | 2026-02-17   |
-| [017-molecular-builder-api-2025-03-15.md](017-molecular-builder-api-2025-03-15.md)                               | Informational | 2026-02-17   |
-| [018-atomic-encoding-2025-03-19.md](018-atomic-encoding-2025-03-19.md)                                           | Outdated      | 2026-02-17   |
-| [019-molecular-builder-impl-2025-04-04.md](019-molecular-builder-impl-2025-04-04.md)                             | Outdated      | 2026-02-17   |
-| [020-core-traits-impl-2025-04-04.md](020-core-traits-impl-2025-04-04.md)                                         | Outdated      | 2026-04-17   |
-| [021-core-traits-update-2025-04-07.md](021-core-traits-update-2025-04-07.md)                                     | Outdated      | 2026-04-17   |
-| [022-capability-traits-2025-04-09.md](022-capability-traits-2025-04-09.md)                                       | Outdated      | 2026-04-17   |
-| [023-valence-states-2025-04-19.md](023-valence-states-2025-04-19.md)                                             | Completed     | 2026-03-15   |
-| [024-mol-file-parsing-2025-06-16.md](024-mol-file-parsing-2025-06-16.md)                                         | Completed     | 2026-02-17   |
-| [025-ctab-properties-2025-07-03.md](025-ctab-properties-2025-07-03.md)                                           | Completed     | 2026-02-17   |
-| [026-ctab-parser-status-2025-07-03.md](026-ctab-parser-status-2025-07-03.md)                                     | Completed     | 2026-02-17   |
-| [027-ctab-parser-todos-2025-07-03.md](027-ctab-parser-todos-2025-07-03.md)                                       | Completed     | 2026-02-17   |
-| [028-intermediate-representation-2025-08-18.md](028-intermediate-representation-2025-08-18.md)                   | Outdated      | 2026-04-17   |
-| [029-mol-parsing-ir-impl-2025-08-24.md](029-mol-parsing-ir-impl-2025-08-24.md)                                   | Outdated      | 2026-02-17   |
-| [030-mol-compliance-suite-2025-09-01.md](030-mol-compliance-suite-2025-09-01.md)                                 | Completed     | 2026-02-17   |
-| [031-mol-compliance-errors-2025-09-02.md](031-mol-compliance-errors-2025-09-02.md)                               | Outdated      | 2026-02-17   |
-| [032-project-status-2025-09-10.md](032-project-status-2025-09-10.md)                                             | Outdated      | 2026-02-17   |
-| [033-opensmiles-impl-status-2025-09-11.md](033-opensmiles-impl-status-2025-09-11.md)                             | Outdated      | 2026-02-17   |
-| [034-opensmiles-formal-grammar-2025-09-13.md](034-opensmiles-formal-grammar-2025-09-13.md)                       | Completed     | 2026-02-17   |
-| [035-opensmiles-missing-specs-2025-09-13.md](035-opensmiles-missing-specs-2025-09-13.md)                         | Outdated      | 2026-02-17   |
-| [036-opensmiles-linting-2025-09-14.md](036-opensmiles-linting-2025-09-14.md)                                     | Outdated      | 2026-02-17   |
-| [037-opensmiles-parser-opt-2025-09-21.md](037-opensmiles-parser-opt-2025-09-21.md)                               | Completed     | 2026-02-17   |
-| [038-opensmiles-conformance-strategy-2025-09-30.md](038-opensmiles-conformance-strategy-2025-09-30.md)           | Completed     | 2026-02-17   |
-| [039-opensmiles-semantic-issues-2025-09-30.md](039-opensmiles-semantic-issues-2025-09-30.md)                     | Informational | 2026-03-15   |
-| [040-opensmiles-ir-modeling-2025-09-30.md](040-opensmiles-ir-modeling-2025-09-30.md)                             | Outdated      | 2026-02-17   |
-| [041-opensmiles-aromaticity-2025-10-01.md](041-opensmiles-aromaticity-2025-10-01.md)                             | Informational | 2026-02-17   |
-| [042-relational-representation-2025-11-23.md](042-relational-representation-2025-11-23.md)                       | Informational | 2026-03-11   |
-| [043-mutative-undoable-mutation-2025-12-23.md](043-mutative-undoable-mutation-2025-12-23.md)                     | Informational | 2026-02-17   |
-| [044-unified-ir-graph-models-2026-01-14.md](044-unified-ir-graph-models-2026-01-14.md)                           | Outdated      | 2026-04-17   |
-| [045-mol-file-parsing-benchmarks-2026-01-14.md](045-mol-file-parsing-benchmarks-2026-01-14.md)                   | Completed     | 2026-02-17   |
-| [046-mol-parser-performance-analysis-2026-01-14.md](046-mol-parser-performance-analysis-2026-01-14.md)           | Informational | 2026-02-17   |
-| [047-smiles-conformance-suite-2026-01-21.md](047-smiles-conformance-suite-2026-01-21.md)                         | Completed     | 2026-02-17   |
-| [048-smiles-parser-configuration-2026-01-23.md](048-smiles-parser-configuration-2026-01-23.md)                   | Completed     | 2026-02-17   |
-| [049-stereochemistry-encoding-2026-01-29.md](049-stereochemistry-encoding-2026-01-29.md)                         | Outdated      | 2026-02-17   |
-| [050-reaction-design-research-2026-02-08.md](050-reaction-design-research-2026-02-08.md)                         | Informational | 2026-02-17   |
-| [051-reaction-design-research-claude-2026-02-08.md](051-reaction-design-research-claude-2026-02-08.md)           | Informational | 2026-02-17   |
-| [052-graph-ir-2026-02-11.md](052-graph-ir-2026-02-11.md)                                                         | Completed     | 2026-07-04   |
-| [053-molecule-validation-scheme-2026-02-17.md](053-molecule-validation-scheme-2026-02-17.md)                     | Outdated      | 2026-07-04   |
-| [054-molecule-validation-phases-2026-02-17.md](054-molecule-validation-phases-2026-02-17.md)                     | Outdated      | 2026-07-04   |
-| [055-opensmiles-spec-validation-2026-03-06.md](055-opensmiles-spec-validation-2026-03-06.md)                     | Active        | 2026-03-06   |
-| [056-default-registry-2026-03-07.md](056-default-registry-2026-03-07.md)                                         | Active        | 2026-03-11   |
-| [057-sssr-needed-2026-03-11.md](057-sssr-needed-2026-03-11.md)                                                   | Informational | 2026-03-11   |
-| [058-aromaticity-perception-2026-03-11.md](058-aromaticity-perception-2026-03-11.md)                             | Completed     | 2026-03-15   |
-| [059-aromaticity-perception-review-2026-03-12.md](059-aromaticity-perception-review-2026-03-12.md)               | Completed     | 2026-03-15   |
-| [060-molecule-builder-dsl-2026-03-21.md](060-molecule-builder-dsl-2026-03-21.md)                                 | Completed     | 2026-07-04   |
-| [061-spin-state-builder-2026-03-22.md](061-spin-state-builder-2026-03-22.md)                                     | Completed     | 2026-03-22   |
-| [062-rust-clojure-reader-status-2026-03-31.md](062-rust-clojure-reader-status-2026-03-31.md)                     | Informational | 2026-03-31   |
-| [063-rust-edn-reader-2026-03-31.md](063-rust-edn-reader-2026-03-31.md)                                           | Completed     | 2026-04-01   |
-| [064-spin-state-parse-defaults-2026-03-31.md](064-spin-state-parse-defaults-2026-03-31.md)                       | Completed     | 2026-03-31   |
-| [065-umol-error-handling-2026-03-31.md](065-umol-error-handling-2026-03-31.md)                                   | Completed     | 2026-03-31   |
-| [066-edn-spec-conformance-2026-04-01.md](066-edn-spec-conformance-2026-04-01.md)                                 | Completed     | 2026-04-01   |
-| [067-atomref-serialization-roundtrip-2026-04-02.md](067-atomref-serialization-roundtrip-2026-04-02.md)           | Completed     | 2026-04-07   |
-| [068-umol-edn-code-review-2026-04-02.md](068-umol-edn-code-review-2026-04-02.md)                                 | Completed     | 2026-04-03   |
-| [069-umol-geometric-design-2026-04-04.md](069-umol-geometric-design-2026-04-04.md)                               | Completed     | 2026-04-05   |
-| [070-bond-perception-2026-04-04.md](070-bond-perception-2026-04-04.md)                                           | Completed     | 2026-04-04   |
-| [071-distance-geometry-plan-2026-04-04.md](071-distance-geometry-plan-2026-04-04.md)                             | Active        | 2026-04-19   |
-| [072-msym-integration-2026-04-04.md](072-msym-integration-2026-04-04.md)                                         | Completed     | 2026-04-07   |
-| [073-molecule-symmetry-collection-2026-04-04.md](073-molecule-symmetry-collection-2026-04-04.md)                 | Active        | 2026-04-04   |
-| [074-symmetry-roadmap-2026-04-06.md](074-symmetry-roadmap-2026-04-06.md)                                         | Active        | 2026-04-06   |
-| [075-geometry-operations-2026-04-06.md](075-geometry-operations-2026-04-06.md)                                   | Active        | 2026-04-06   |
-| [076-numerical-primitives-2026-04-06.md](076-numerical-primitives-2026-04-06.md)                                 | Active        | 2026-04-06   |
-| [077-umol-edn-usability-review-2026-04-07.md](077-umol-edn-usability-review-2026-04-07.md)                       | Completed     | 2026-04-08   |
-| [078-edn-subgrammar-design-2026-04-09.md](078-edn-subgrammar-design-2026-04-09.md)                               | Completed     | 2026-04-24   |
-| [079-pattern-language-design-2026-04-10.md](079-pattern-language-design-2026-04-10.md)                           | Informational | 2026-04-10   |
-| [080-unified-constraint-ast-2026-04-10.md](080-unified-constraint-ast-2026-04-10.md)                             | Completed     | 2026-07-04   |
-| [081-fix-point-group-impl-2026-04-11.md](081-fix-point-group-impl-2026-04-11.md)                                 | Completed     | 2026-04-12   |
-| [082-graph-representation-2026-04-13.md](082-graph-representation-2026-04-13.md)                                 | Informational | 2026-04-13   |
-| [083-constraint-unification-architecture-2026-04-13.md](083-constraint-unification-architecture-2026-04-13.md)   | Completed     | 2026-07-04   |
-| [084-graph-library-decision-2026-04-14.md](084-graph-library-decision-2026-04-14.md)                             | Completed     | 2026-04-15   |
-| [085-kekulization-algorithms-2026-04-15.md](085-kekulization-algorithms-2026-04-15.md)                           | Active        | 2026-04-15   |
-| [086-molecule-ast-api-2026-04-16.md](086-molecule-ast-api-2026-04-16.md)                                         | Active        | 2026-07-09   |
-| [087-constraint-taxonomy-2026-04-17.md](087-constraint-taxonomy-2026-04-17.md)                                   | Completed     | 2026-04-19   |
-| [088-fix-dsl-parsing-2026-04-19.md](088-fix-dsl-parsing-2026-04-19.md)                                           | Completed     | 2026-04-24   |
-| [089-substructure-matching-variables-2026-04-21.md](089-substructure-matching-variables-2026-04-21.md)           | Completed     | 2026-04-24   |
-| [090-reactions-relation-mutation-2026-04-21.md](090-reactions-relation-mutation-2026-04-21.md)                   | Active        | 2026-04-21   |
-| [091-molecule-dsl-profiling-2026-04-23.md](091-molecule-dsl-profiling-2026-04-23.md)                             | Completed     | 2026-04-24   |
-| [092-umol-graph-engines-restructure-2026-04-25.md](092-umol-graph-engines-restructure-2026-04-25.md)             | Completed     | 2026-04-27   |
-| [093-aromatic-charge-and-transformer-2026-04-29.md](093-aromatic-charge-and-transformer-2026-04-29.md)           | Completed     | 2026-05-07   |
-| [094-dsl-ast-io-ergonomics-2026-05-07.md](094-dsl-ast-io-ergonomics-2026-05-07.md)                               | Completed     | 2026-05-07   |
-| [095-ast-equality-and-ordering-2026-05-10.md](095-ast-equality-and-ordering-2026-05-10.md)                       | Completed     | 2026-05-10   |
-| [096-valence-resolution-plan-2026-05-21.md](096-valence-resolution-plan-2026-05-21.md)                           | Completed     | 2026-05-27   |
-| [097-joint-domain-design-2026-05-23.md](097-joint-domain-design-2026-05-23.md)                                   | Outdated      | 2026-06-16   |
-| [098-bind-scope-2026-05-23.md](098-bind-scope-2026-05-23.md)                                                     | Active        | 2026-05-23   |
-| [099-counts-as-invariants-2026-05-23.md](099-counts-as-invariants-2026-05-23.md)                                 | Completed     | 2026-05-27   |
-| [100-table-ir-raise-ast-2026-05-27.md](100-table-ir-raise-ast-2026-05-27.md)                                     | Completed     | 2026-05-27   |
-| [101-stereochemistry-framework-2026-05-28.md](101-stereochemistry-framework-2026-05-28.md)                       | Informational | 2026-05-28   |
-| [102-stereochemistry-framework-research-2026-05-28.md](102-stereochemistry-framework-research-2026-05-28.md)     | Informational | 2026-05-28   |
-| [103-stereochemistry-overlay-and-ports-2026-05-28.md](103-stereochemistry-overlay-and-ports-2026-05-28.md)       | Informational | 2026-07-05   |
-| [104-stereochemistry-implementation-plan-2026-05-31.md](104-stereochemistry-implementation-plan-2026-05-31.md)   | Active        | 2026-05-31   |
-| [105-dsl-fixes-2026-06-06.md](105-dsl-fixes-2026-06-06.md)                                                       | Active        | 2026-06-06   |
-| [106-io-geometry-crate-split-2026-06-07.md](106-io-geometry-crate-split-2026-06-07.md)                           | Completed     | 2026-06-07   |
-| [107-unconventional-stereochemistry-types-2026-06-08.md](107-unconventional-stereochemistry-types-2026-06-08.md) | Informational | 2026-06-08   |
-| [108-mcs-algorithms-2026-06-09.md](108-mcs-algorithms-2026-06-09.md)                                             | Completed     | 2026-06-09   |
-| [109-permutation-infrastructure-2026-06-09.md](109-permutation-infrastructure-2026-06-09.md)                     | Informational | 2026-06-09   |
-| [110-molecular-symmetry-structure-2026-06-11.md](110-molecular-symmetry-structure-2026-06-11.md)                 | Active        | 2026-06-11   |
-| [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md)                                   | Completed     | 2026-06-11   |
-| [112-ctfile-winnow-migration-2026-06-13.md](112-ctfile-winnow-migration-2026-06-13.md)                           | Active        | 2026-06-13   |
-| [113-ast-canonical-equality-and-lattice-2026-06-14.md](113-ast-canonical-equality-and-lattice-2026-06-14.md)     | Completed     | 2026-06-14   |
-| [114-atom-bond-interning-2026-06-16.md](114-atom-bond-interning-2026-06-16.md)                                   | Active        | 2026-06-16   |
-| [115-variable-facility-2026-06-16.md](115-variable-facility-2026-06-16.md)                                       | Active        | 2026-06-16   |
-| [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                             | Completed     | 2026-06-18   |
-| [117-entity-model-extensibility-2026-06-20.md](117-entity-model-extensibility-2026-06-20.md)                     | Active        | 2026-06-20   |
-| [118-validator-architecture-2026-06-20.md](118-validator-architecture-2026-06-20.md)                             | Completed     | 2026-06-20   |
-| [119-umol-perm-review-2026-06-21.md](119-umol-perm-review-2026-06-21.md)                                         | Completed     | 2026-06-21   |
-| [120-molecular-graph-generation-2026-06-21.md](120-molecular-graph-generation-2026-06-21.md)                     | Active        | 2026-06-21   |
-| [121-linux-profiling-setup-2026-06-21.md](121-linux-profiling-setup-2026-06-21.md)                               | Informational | 2026-06-21   |
-| [122-ast-read-path-references-2026-06-21.md](122-ast-read-path-references-2026-06-21.md)                         | Completed     | 2026-06-21   |
-| [123-ast-allocation-survey-2026-06-21.md](123-ast-allocation-survey-2026-06-21.md)                               | Active        | 2026-06-21   |
-| [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Completed     | 2026-07-05   |
-| [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Active        | 2026-06-22   |
-| [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Active        | 2026-06-23   |
-| [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Outdated      | 2026-07-04   |
-| [128-substructure-derived-predicates-2026-06-23.md](128-substructure-derived-predicates-2026-06-23.md)           | Active        | 2026-06-23   |
-| [129-crate-organization-2026-06-24.md](129-crate-organization-2026-06-24.md)                                     | Completed     | 2026-06-24   |
-| [130-crate-reorganization-plan-2026-06-24.md](130-crate-reorganization-plan-2026-06-24.md)                       | Completed     | 2026-06-24   |
-| [131-reaction-application-design-2026-06-24.md](131-reaction-application-design-2026-06-24.md)                   | Informational | 2026-07-05   |
-| [132-reaction-ast-implementation-plan-2026-06-25.md](132-reaction-ast-implementation-plan-2026-06-25.md)         | Completed     | 2026-06-25   |
-| [133-reaction-edn-surface-2026-06-26.md](133-reaction-edn-surface-2026-06-26.md)                                 | Completed     | 2026-06-29   |
-| [134-reaction-application-overlays-2026-06-26.md](134-reaction-application-overlays-2026-06-26.md)               | Completed     | 2026-07-02   |
-| [135-reaction-composition-completeness-2026-07-01.md](135-reaction-composition-completeness-2026-07-01.md)       | Completed     | 2026-07-01   |
-| [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Informational | 2026-07-04   |
-| [137-python-bindings-2026-07-05.md](137-python-bindings-2026-07-05.md)                                           | Active        | 2026-07-05   |
-| [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Completed     | 2026-07-08   |
-| [139-mutability-hashability-equality-2026-07-09.md](139-mutability-hashability-equality-2026-07-09.md)           | Informational | 2026-07-09   |
-| [140-python-entity-bindings-plan-2026-07-09.md](140-python-entity-bindings-plan-2026-07-09.md)                   | Completed     | 2026-07-13   |
-| [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Completed     | 2026-07-09   |
-| [142-join-split-2026-07-10.md](142-join-split-2026-07-10.md)                                                     | Completed     | 2026-07-10   |
-| [143-vendored-nauty-integration-2026-07-11.md](143-vendored-nauty-integration-2026-07-11.md)                     | Completed     | 2026-07-11   |
-| [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-11   |
-| [145-kekulization-matching-design-spike-2026-07-12.md](145-kekulization-matching-design-spike-2026-07-12.md)     | Informational | 2026-07-12   |
-| [146-kekulization-matching-enumeration-2026-07-12.md](146-kekulization-matching-enumeration-2026-07-12.md)       | Completed     | 2026-07-12   |
-| [147-kekulization-single-structure-2026-07-13.md](147-kekulization-single-structure-2026-07-13.md)               | Active        | 2026-07-13   |
-| [148-validated-transactions-operations-2026-07-13.md](148-validated-transactions-operations-2026-07-13.md)       | Active        | 2026-07-13   |
-| [149-molecule-ring-cache-and-hashing-2026-07-13.md](149-molecule-ring-cache-and-hashing-2026-07-13.md)           | Active        | 2026-07-13   |
-| [150-python-reaction-bindings-plan-2026-07-13.md](150-python-reaction-bindings-plan-2026-07-13.md)               | Completed     | 2026-07-14   |
-| [151-python-molecule-workflows-2026-07-13.md](151-python-molecule-workflows-2026-07-13.md)                       | Completed     | 2026-07-25   |
-| [152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md)                         | Completed     | 2026-07-18   |
-| [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)         | Active        | 2026-07-18   |
-| [154-lattice-probabilistic-fingerprints-2026-07-18.md](154-lattice-probabilistic-fingerprints-2026-07-18.md)     | Informational | 2026-07-18   |
-| [155-smiles-io-and-resolve-configuration-2026-07-19.md](155-smiles-io-and-resolve-configuration-2026-07-19.md)   | Completed     | 2026-07-19   |
-| [156-ast-comparison-and-property-suite-2026-07-20.md](156-ast-comparison-and-property-suite-2026-07-20.md)       | Completed     | 2026-07-21   |
-| [157-umol-perm-fallibility-and-arguments-2026-07-20.md](157-umol-perm-fallibility-and-arguments-2026-07-20.md)   | Completed     | 2026-07-21   |
-| [158-ring-model-and-enumeration-2026-07-22.md](158-ring-model-and-enumeration-2026-07-22.md)                     | Completed     | 2026-07-25   |
-| [159-simple-graph-policy-2026-07-23.md](159-simple-graph-policy-2026-07-23.md)                                   | Active        | 2026-07-23   |
-| [160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md](160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md) | Active        | 2026-07-25   |
-| [161-property-tests-as-executable-specifications-2026-07-25.md](161-property-tests-as-executable-specifications-2026-07-25.md) | Informational | 2026-07-25   |
-| [162-common-subgraph-enumeration-alternatives-2026-07-25.md](162-common-subgraph-enumeration-alternatives-2026-07-25.md) | Completed     | 2026-07-25   |
+This index is authoritative for document status. Inline status text in older
+documents may use the former `Active` status or otherwise be stale.
+
+## Status vocabulary
+
+| Status        | Meaning                                                                                                                                             |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Proposed      | Future implementation or unresolved design work; implementation has not started. Deferral is recorded in the note rather than as a separate status. |
+| In Progress   | Implementation has started and some planned scope remains. The note identifies the outstanding work.                                                |
+| Blocked       | Work is otherwise ready or under way but cannot continue. The note must identify the concrete blocker.                                              |
+| Completed     | The document's agreed implementation scope is complete. Deferred follow-ups belong in another proposed document.                                    |
+| Informational | Research, analysis, evidence, or a durable decision record with no tracked implementation scope.                                                    |
+| Superseded    | A newer document replaces this document. The note identifies the replacement.                                                                       |
+| Outdated      | Historical material that is no longer an accurate description and has no single replacement recorded here.                                          |
+
+`Blocked` is not a synonym for deferred, lower-priority, or awaiting selection.
+Do not use `In Progress` merely because a document is still relevant.
+
+## Current frontier
+
+- Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
+  105 into area-specific proposed worklists.
+- [163 — Release preparation](163-release-preparation-2026-07-26.md) is the
+  upcoming workstream; implementation has not started.
+
+## Document index
+
+| Name                                                                                                             | Status        | Last Checked | Note                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------- | ------------- | ------------ | ---------------------------------------------------------------------------------------------------------- |
+| [001-design-chat-2025-02-14.md](001-design-chat-2025-02-14.md)                                                   | Informational | 2026-02-17   |                                                                                                            |
+| [002-design-summary-2025-02-16.md](002-design-summary-2025-02-16.md)                                             | Informational | 2026-02-17   |                                                                                                            |
+| [003-alternative-stacks-2025-03-01.md](003-alternative-stacks-2025-03-01.md)                                     | Informational | 2026-02-17   |                                                                                                            |
+| [004-implementation-start-2025-03-01.md](004-implementation-start-2025-03-01.md)                                 | Outdated      | 2026-02-17   |                                                                                                            |
+| [005-mutability-2025-03-01.md](005-mutability-2025-03-01.md)                                                     | Informational | 2026-02-17   |                                                                                                            |
+| [006-atom-bond-identity-iteration-2025-03-01.md](006-atom-bond-identity-iteration-2025-03-01.md)                 | Informational | 2026-02-17   |                                                                                                            |
+| [007-molecule-slices-2025-03-01.md](007-molecule-slices-2025-03-01.md)                                           | Informational | 2026-02-17   |                                                                                                            |
+| [008-molecule-builder-api-2025-03-01.md](008-molecule-builder-api-2025-03-01.md)                                 | Informational | 2026-03-06   |                                                                                                            |
+| [009-torch-api-design-inspiration-2025-03-02.md](009-torch-api-design-inspiration-2025-03-02.md)                 | Informational | 2026-02-17   |                                                                                                            |
+| [010-diesel-api-design-inspiration.md](010-diesel-api-design-inspiration.md)                                     | Informational | 2026-02-17   |                                                                                                            |
+| [011-cheminformatics-libraries.md](011-cheminformatics-libraries.md)                                             | Informational | 2026-02-17   |                                                                                                            |
+| [012-molecular-representations-2025-03-01.md](012-molecular-representations-2025-03-01.md)                       | Informational | 2026-02-17   |                                                                                                            |
+| [013-substructure-match-2025-03-02.md](013-substructure-match-2025-03-02.md)                                     | Informational | 2026-02-17   |                                                                                                            |
+| [014-aromaticity-2025-03-08.md](014-aromaticity-2025-03-08.md)                                                   | Outdated      | 2026-03-11   |                                                                                                            |
+| [015-semantic-model-2025-03-10.md](015-semantic-model-2025-03-10.md)                                             | Informational | 2026-07-03   |                                                                                                            |
+| [016-hypergraphs-2025-03-10.md](016-hypergraphs-2025-03-10.md)                                                   | Informational | 2026-02-17   |                                                                                                            |
+| [017-molecular-builder-api-2025-03-15.md](017-molecular-builder-api-2025-03-15.md)                               | Informational | 2026-02-17   |                                                                                                            |
+| [018-atomic-encoding-2025-03-19.md](018-atomic-encoding-2025-03-19.md)                                           | Outdated      | 2026-02-17   |                                                                                                            |
+| [019-molecular-builder-impl-2025-04-04.md](019-molecular-builder-impl-2025-04-04.md)                             | Outdated      | 2026-02-17   |                                                                                                            |
+| [020-core-traits-impl-2025-04-04.md](020-core-traits-impl-2025-04-04.md)                                         | Outdated      | 2026-04-17   |                                                                                                            |
+| [021-core-traits-update-2025-04-07.md](021-core-traits-update-2025-04-07.md)                                     | Outdated      | 2026-04-17   |                                                                                                            |
+| [022-capability-traits-2025-04-09.md](022-capability-traits-2025-04-09.md)                                       | Outdated      | 2026-04-17   |                                                                                                            |
+| [023-valence-states-2025-04-19.md](023-valence-states-2025-04-19.md)                                             | Completed     | 2026-03-15   |                                                                                                            |
+| [024-mol-file-parsing-2025-06-16.md](024-mol-file-parsing-2025-06-16.md)                                         | Completed     | 2026-02-17   |                                                                                                            |
+| [025-ctab-properties-2025-07-03.md](025-ctab-properties-2025-07-03.md)                                           | Completed     | 2026-02-17   |                                                                                                            |
+| [026-ctab-parser-status-2025-07-03.md](026-ctab-parser-status-2025-07-03.md)                                     | Completed     | 2026-02-17   |                                                                                                            |
+| [027-ctab-parser-todos-2025-07-03.md](027-ctab-parser-todos-2025-07-03.md)                                       | Completed     | 2026-02-17   |                                                                                                            |
+| [028-intermediate-representation-2025-08-18.md](028-intermediate-representation-2025-08-18.md)                   | Outdated      | 2026-04-17   |                                                                                                            |
+| [029-mol-parsing-ir-impl-2025-08-24.md](029-mol-parsing-ir-impl-2025-08-24.md)                                   | Outdated      | 2026-02-17   |                                                                                                            |
+| [030-mol-compliance-suite-2025-09-01.md](030-mol-compliance-suite-2025-09-01.md)                                 | Completed     | 2026-02-17   |                                                                                                            |
+| [031-mol-compliance-errors-2025-09-02.md](031-mol-compliance-errors-2025-09-02.md)                               | Outdated      | 2026-02-17   |                                                                                                            |
+| [032-project-status-2025-09-10.md](032-project-status-2025-09-10.md)                                             | Outdated      | 2026-02-17   |                                                                                                            |
+| [033-opensmiles-impl-status-2025-09-11.md](033-opensmiles-impl-status-2025-09-11.md)                             | Outdated      | 2026-02-17   |                                                                                                            |
+| [034-opensmiles-formal-grammar-2025-09-13.md](034-opensmiles-formal-grammar-2025-09-13.md)                       | Completed     | 2026-02-17   |                                                                                                            |
+| [035-opensmiles-missing-specs-2025-09-13.md](035-opensmiles-missing-specs-2025-09-13.md)                         | Outdated      | 2026-02-17   |                                                                                                            |
+| [036-opensmiles-linting-2025-09-14.md](036-opensmiles-linting-2025-09-14.md)                                     | Outdated      | 2026-02-17   |                                                                                                            |
+| [037-opensmiles-parser-opt-2025-09-21.md](037-opensmiles-parser-opt-2025-09-21.md)                               | Completed     | 2026-02-17   |                                                                                                            |
+| [038-opensmiles-conformance-strategy-2025-09-30.md](038-opensmiles-conformance-strategy-2025-09-30.md)           | Completed     | 2026-02-17   |                                                                                                            |
+| [039-opensmiles-semantic-issues-2025-09-30.md](039-opensmiles-semantic-issues-2025-09-30.md)                     | Informational | 2026-03-15   |                                                                                                            |
+| [040-opensmiles-ir-modeling-2025-09-30.md](040-opensmiles-ir-modeling-2025-09-30.md)                             | Outdated      | 2026-02-17   |                                                                                                            |
+| [041-opensmiles-aromaticity-2025-10-01.md](041-opensmiles-aromaticity-2025-10-01.md)                             | Informational | 2026-02-17   |                                                                                                            |
+| [042-relational-representation-2025-11-23.md](042-relational-representation-2025-11-23.md)                       | Informational | 2026-03-11   |                                                                                                            |
+| [043-mutative-undoable-mutation-2025-12-23.md](043-mutative-undoable-mutation-2025-12-23.md)                     | Informational | 2026-02-17   |                                                                                                            |
+| [044-unified-ir-graph-models-2026-01-14.md](044-unified-ir-graph-models-2026-01-14.md)                           | Outdated      | 2026-04-17   |                                                                                                            |
+| [045-mol-file-parsing-benchmarks-2026-01-14.md](045-mol-file-parsing-benchmarks-2026-01-14.md)                   | Completed     | 2026-02-17   |                                                                                                            |
+| [046-mol-parser-performance-analysis-2026-01-14.md](046-mol-parser-performance-analysis-2026-01-14.md)           | Informational | 2026-02-17   |                                                                                                            |
+| [047-smiles-conformance-suite-2026-01-21.md](047-smiles-conformance-suite-2026-01-21.md)                         | Completed     | 2026-02-17   |                                                                                                            |
+| [048-smiles-parser-configuration-2026-01-23.md](048-smiles-parser-configuration-2026-01-23.md)                   | Completed     | 2026-02-17   |                                                                                                            |
+| [049-stereochemistry-encoding-2026-01-29.md](049-stereochemistry-encoding-2026-01-29.md)                         | Outdated      | 2026-02-17   |                                                                                                            |
+| [050-reaction-design-research-2026-02-08.md](050-reaction-design-research-2026-02-08.md)                         | Informational | 2026-02-17   |                                                                                                            |
+| [051-reaction-design-research-claude-2026-02-08.md](051-reaction-design-research-claude-2026-02-08.md)           | Informational | 2026-02-17   |                                                                                                            |
+| [052-graph-ir-2026-02-11.md](052-graph-ir-2026-02-11.md)                                                         | Completed     | 2026-07-04   |                                                                                                            |
+| [053-molecule-validation-scheme-2026-02-17.md](053-molecule-validation-scheme-2026-02-17.md)                     | Outdated      | 2026-07-04   |                                                                                                            |
+| [054-molecule-validation-phases-2026-02-17.md](054-molecule-validation-phases-2026-02-17.md)                     | Outdated      | 2026-07-04   |                                                                                                            |
+| [055-opensmiles-spec-validation-2026-03-06.md](055-opensmiles-spec-validation-2026-03-06.md)                     | Proposed      | 2026-07-27   | Validation strategies are defined; implementation has not started.                                         |
+| [056-default-registry-2026-03-07.md](056-default-registry-2026-03-07.md)                                         | In Progress   | 2026-07-27   | Registry expansion is partially implemented; the conformance status and remaining entries need review.     |
+| [057-sssr-needed-2026-03-11.md](057-sssr-needed-2026-03-11.md)                                                   | Informational | 2026-03-11   |                                                                                                            |
+| [058-aromaticity-perception-2026-03-11.md](058-aromaticity-perception-2026-03-11.md)                             | Completed     | 2026-03-15   |                                                                                                            |
+| [059-aromaticity-perception-review-2026-03-12.md](059-aromaticity-perception-review-2026-03-12.md)               | Completed     | 2026-03-15   |                                                                                                            |
+| [060-molecule-builder-dsl-2026-03-21.md](060-molecule-builder-dsl-2026-03-21.md)                                 | Completed     | 2026-07-04   |                                                                                                            |
+| [061-spin-state-builder-2026-03-22.md](061-spin-state-builder-2026-03-22.md)                                     | Completed     | 2026-03-22   |                                                                                                            |
+| [062-rust-clojure-reader-status-2026-03-31.md](062-rust-clojure-reader-status-2026-03-31.md)                     | Informational | 2026-03-31   |                                                                                                            |
+| [063-rust-edn-reader-2026-03-31.md](063-rust-edn-reader-2026-03-31.md)                                           | Completed     | 2026-04-01   |                                                                                                            |
+| [064-spin-state-parse-defaults-2026-03-31.md](064-spin-state-parse-defaults-2026-03-31.md)                       | Completed     | 2026-03-31   |                                                                                                            |
+| [065-umol-error-handling-2026-03-31.md](065-umol-error-handling-2026-03-31.md)                                   | Completed     | 2026-03-31   |                                                                                                            |
+| [066-edn-spec-conformance-2026-04-01.md](066-edn-spec-conformance-2026-04-01.md)                                 | Completed     | 2026-04-01   |                                                                                                            |
+| [067-atomref-serialization-roundtrip-2026-04-02.md](067-atomref-serialization-roundtrip-2026-04-02.md)           | Completed     | 2026-04-07   |                                                                                                            |
+| [068-umol-edn-code-review-2026-04-02.md](068-umol-edn-code-review-2026-04-02.md)                                 | Completed     | 2026-04-03   |                                                                                                            |
+| [069-umol-geometric-design-2026-04-04.md](069-umol-geometric-design-2026-04-04.md)                               | Completed     | 2026-04-05   |                                                                                                            |
+| [070-bond-perception-2026-04-04.md](070-bond-perception-2026-04-04.md)                                           | Completed     | 2026-04-04   |                                                                                                            |
+| [071-distance-geometry-plan-2026-04-04.md](071-distance-geometry-plan-2026-04-04.md)                             | Proposed      | 2026-07-27   | Implementation plan; no implementation status is recorded.                                                 |
+| [072-msym-integration-2026-04-04.md](072-msym-integration-2026-04-04.md)                                         | Completed     | 2026-04-07   |                                                                                                            |
+| [073-molecule-symmetry-collection-2026-04-04.md](073-molecule-symmetry-collection-2026-04-04.md)                 | Informational | 2026-07-27   | Curated reference collection rather than an implementation plan.                                           |
+| [074-symmetry-roadmap-2026-04-06.md](074-symmetry-roadmap-2026-04-06.md)                                         | Proposed      | 2026-07-27   | Future symmetry work; individual items require their own implementation plans.                             |
+| [075-geometry-operations-2026-04-06.md](075-geometry-operations-2026-04-06.md)                                   | Proposed      | 2026-07-27   | Open design and operation inventory; implementation has not started.                                       |
+| [076-numerical-primitives-2026-04-06.md](076-numerical-primitives-2026-04-06.md)                                 | Informational | 2026-07-27   | Technique inventory; explicitly not a roadmap.                                                             |
+| [077-umol-edn-usability-review-2026-04-07.md](077-umol-edn-usability-review-2026-04-07.md)                       | Completed     | 2026-04-08   |                                                                                                            |
+| [078-edn-subgrammar-design-2026-04-09.md](078-edn-subgrammar-design-2026-04-09.md)                               | Completed     | 2026-04-24   |                                                                                                            |
+| [079-pattern-language-design-2026-04-10.md](079-pattern-language-design-2026-04-10.md)                           | Informational | 2026-04-10   |                                                                                                            |
+| [080-unified-constraint-ast-2026-04-10.md](080-unified-constraint-ast-2026-04-10.md)                             | Completed     | 2026-07-04   |                                                                                                            |
+| [081-fix-point-group-impl-2026-04-11.md](081-fix-point-group-impl-2026-04-11.md)                                 | Completed     | 2026-04-12   |                                                                                                            |
+| [082-graph-representation-2026-04-13.md](082-graph-representation-2026-04-13.md)                                 | Informational | 2026-04-13   |                                                                                                            |
+| [083-constraint-unification-architecture-2026-04-13.md](083-constraint-unification-architecture-2026-04-13.md)   | Completed     | 2026-07-04   |                                                                                                            |
+| [084-graph-library-decision-2026-04-14.md](084-graph-library-decision-2026-04-14.md)                             | Completed     | 2026-04-15   |                                                                                                            |
+| [085-kekulization-algorithms-2026-04-15.md](085-kekulization-algorithms-2026-04-15.md)                           | Superseded    | 2026-07-27   | Implementation work was split into docs 145–147.                                                           |
+| [086-molecule-ast-api-2026-04-16.md](086-molecule-ast-api-2026-04-16.md)                                         | Completed     | 2026-07-27   | Wrapper proposal withdrawn; remaining transformer and validator work moved to doc 166.                     |
+| [087-constraint-taxonomy-2026-04-17.md](087-constraint-taxonomy-2026-04-17.md)                                   | Completed     | 2026-04-19   |                                                                                                            |
+| [088-fix-dsl-parsing-2026-04-19.md](088-fix-dsl-parsing-2026-04-19.md)                                           | Completed     | 2026-04-24   |                                                                                                            |
+| [089-substructure-matching-variables-2026-04-21.md](089-substructure-matching-variables-2026-04-21.md)           | Completed     | 2026-04-24   |                                                                                                            |
+| [090-reactions-relation-mutation-2026-04-21.md](090-reactions-relation-mutation-2026-04-21.md)                   | Proposed      | 2026-07-27   | Design and API inventory; no implementation status is recorded.                                            |
+| [091-molecule-dsl-profiling-2026-04-23.md](091-molecule-dsl-profiling-2026-04-23.md)                             | Completed     | 2026-04-24   |                                                                                                            |
+| [092-umol-graph-engines-restructure-2026-04-25.md](092-umol-graph-engines-restructure-2026-04-25.md)             | Completed     | 2026-04-27   |                                                                                                            |
+| [093-aromatic-charge-and-transformer-2026-04-29.md](093-aromatic-charge-and-transformer-2026-04-29.md)           | Completed     | 2026-05-07   |                                                                                                            |
+| [094-dsl-ast-io-ergonomics-2026-05-07.md](094-dsl-ast-io-ergonomics-2026-05-07.md)                               | Completed     | 2026-05-07   |                                                                                                            |
+| [095-ast-equality-and-ordering-2026-05-10.md](095-ast-equality-and-ordering-2026-05-10.md)                       | Completed     | 2026-05-10   |                                                                                                            |
+| [096-valence-resolution-plan-2026-05-21.md](096-valence-resolution-plan-2026-05-21.md)                           | Completed     | 2026-05-27   |                                                                                                            |
+| [097-joint-domain-design-2026-05-23.md](097-joint-domain-design-2026-05-23.md)                                   | Outdated      | 2026-06-16   |                                                                                                            |
+| [098-bind-scope-2026-05-23.md](098-bind-scope-2026-05-23.md)                                                     | Proposed      | 2026-07-27   | Open design moved from atom-local storage to molecule-level scope by doc 113.                              |
+| [099-counts-as-invariants-2026-05-23.md](099-counts-as-invariants-2026-05-23.md)                                 | Completed     | 2026-05-27   |                                                                                                            |
+| [100-table-ir-raise-ast-2026-05-27.md](100-table-ir-raise-ast-2026-05-27.md)                                     | Completed     | 2026-05-27   |                                                                                                            |
+| [101-stereochemistry-framework-2026-05-28.md](101-stereochemistry-framework-2026-05-28.md)                       | Informational | 2026-05-28   |                                                                                                            |
+| [102-stereochemistry-framework-research-2026-05-28.md](102-stereochemistry-framework-research-2026-05-28.md)     | Informational | 2026-05-28   |                                                                                                            |
+| [103-stereochemistry-overlay-and-ports-2026-05-28.md](103-stereochemistry-overlay-and-ports-2026-05-28.md)       | Informational | 2026-07-05   |                                                                                                            |
+| [104-stereochemistry-implementation-plan-2026-05-31.md](104-stereochemistry-implementation-plan-2026-05-31.md)   | Completed     | 2026-07-27   | A–E deliverable complete; remaining constraint matching and fixture decision moved to doc 165.             |
+| [105-dsl-fixes-2026-06-06.md](105-dsl-fixes-2026-06-06.md)                                                       | Superseded    | 2026-07-27   | Live tasks reorganized into docs 164–168 and existing focused documents.                                   |
+| [106-io-geometry-crate-split-2026-06-07.md](106-io-geometry-crate-split-2026-06-07.md)                           | Completed     | 2026-06-07   |                                                                                                            |
+| [107-unconventional-stereochemistry-types-2026-06-08.md](107-unconventional-stereochemistry-types-2026-06-08.md) | Informational | 2026-06-08   |                                                                                                            |
+| [108-mcs-algorithms-2026-06-09.md](108-mcs-algorithms-2026-06-09.md)                                             | Completed     | 2026-06-09   |                                                                                                            |
+| [109-permutation-infrastructure-2026-06-09.md](109-permutation-infrastructure-2026-06-09.md)                     | Informational | 2026-06-09   |                                                                                                            |
+| [110-molecular-symmetry-structure-2026-06-11.md](110-molecular-symmetry-structure-2026-06-11.md)                 | Proposed      | 2026-07-27   | Decision record and staged roadmap; molecule-scale permutation work is future implementation.              |
+| [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md)                                   | Completed     | 2026-06-11   |                                                                                                            |
+| [112-ctfile-winnow-migration-2026-06-13.md](112-ctfile-winnow-migration-2026-06-13.md)                           | Proposed      | 2026-07-27   | Migration plan; implementation has not started.                                                            |
+| [113-ast-canonical-equality-and-lattice-2026-06-14.md](113-ast-canonical-equality-and-lattice-2026-06-14.md)     | Completed     | 2026-06-14   |                                                                                                            |
+| [114-atom-bond-interning-2026-06-16.md](114-atom-bond-interning-2026-06-16.md)                                   | Proposed      | 2026-07-27   | Deferred forward-looking design.                                                                           |
+| [115-variable-facility-2026-06-16.md](115-variable-facility-2026-06-16.md)                                       | Proposed      | 2026-07-27   | Deferred design prospecting; no implementation is committed.                                               |
+| [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                             | Completed     | 2026-06-18   |                                                                                                            |
+| [117-entity-model-extensibility-2026-06-20.md](117-entity-model-extensibility-2026-06-20.md)                     | Proposed      | 2026-07-27   | Analysis only; open entity-model decisions remain and no code is authorized.                               |
+| [118-validator-architecture-2026-06-20.md](118-validator-architecture-2026-06-20.md)                             | Completed     | 2026-06-20   |                                                                                                            |
+| [119-umol-perm-review-2026-06-21.md](119-umol-perm-review-2026-06-21.md)                                         | Completed     | 2026-06-21   |                                                                                                            |
+| [120-molecular-graph-generation-2026-06-21.md](120-molecular-graph-generation-2026-06-21.md)                     | Proposed      | 2026-07-27   | Architecture proposal with decisions required before implementation planning.                              |
+| [121-linux-profiling-setup-2026-06-21.md](121-linux-profiling-setup-2026-06-21.md)                               | Informational | 2026-06-21   |                                                                                                            |
+| [122-ast-read-path-references-2026-06-21.md](122-ast-read-path-references-2026-06-21.md)                         | Completed     | 2026-06-21   |                                                                                                            |
+| [123-ast-allocation-survey-2026-06-21.md](123-ast-allocation-survey-2026-06-21.md)                               | In Progress   | 2026-07-27   | Focused performance worklist; predicate, buffer, embedding, incidence, and mutation audits remain.         |
+| [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Completed     | 2026-07-05   |                                                                                                            |
+| [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Proposed      | 2026-07-27   | Draft API and open design questions; implementation is not planned yet.                                    |
+| [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Completed     | 2026-07-27   | Completed scope is recorded in the document; deferred fingerprint families are separate future work.       |
+| [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Outdated      | 2026-07-04   |                                                                                                            |
+| [128-substructure-derived-predicates-2026-06-23.md](128-substructure-derived-predicates-2026-06-23.md)           | Proposed      | 2026-07-27   | Design decisions remain before implementation can be planned.                                              |
+| [129-crate-organization-2026-06-24.md](129-crate-organization-2026-06-24.md)                                     | Completed     | 2026-06-24   |                                                                                                            |
+| [130-crate-reorganization-plan-2026-06-24.md](130-crate-reorganization-plan-2026-06-24.md)                       | Completed     | 2026-06-24   |                                                                                                            |
+| [131-reaction-application-design-2026-06-24.md](131-reaction-application-design-2026-06-24.md)                   | Informational | 2026-07-05   |                                                                                                            |
+| [132-reaction-ast-implementation-plan-2026-06-25.md](132-reaction-ast-implementation-plan-2026-06-25.md)         | Completed     | 2026-06-25   |                                                                                                            |
+| [133-reaction-edn-surface-2026-06-26.md](133-reaction-edn-surface-2026-06-26.md)                                 | Completed     | 2026-06-29   |                                                                                                            |
+| [134-reaction-application-overlays-2026-06-26.md](134-reaction-application-overlays-2026-06-26.md)               | Completed     | 2026-07-02   |                                                                                                            |
+| [135-reaction-composition-completeness-2026-07-01.md](135-reaction-composition-completeness-2026-07-01.md)       | Completed     | 2026-07-01   |                                                                                                            |
+| [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Informational | 2026-07-04   |                                                                                                            |
+| [137-python-bindings-2026-07-05.md](137-python-bindings-2026-07-05.md)                                           | Completed     | 2026-07-27   | Initial binding strategy and slices are complete; later binding work is tracked in docs 140, 150, and 151. |
+| [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Completed     | 2026-07-08   |                                                                                                            |
+| [139-mutability-hashability-equality-2026-07-09.md](139-mutability-hashability-equality-2026-07-09.md)           | Informational | 2026-07-09   |                                                                                                            |
+| [140-python-entity-bindings-plan-2026-07-09.md](140-python-entity-bindings-plan-2026-07-09.md)                   | Completed     | 2026-07-13   |                                                                                                            |
+| [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Completed     | 2026-07-09   |                                                                                                            |
+| [142-join-split-2026-07-10.md](142-join-split-2026-07-10.md)                                                     | Completed     | 2026-07-10   |                                                                                                            |
+| [143-vendored-nauty-integration-2026-07-11.md](143-vendored-nauty-integration-2026-07-11.md)                     | Completed     | 2026-07-11   |                                                                                                            |
+| [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-11   |                                                                                                            |
+| [145-kekulization-matching-design-spike-2026-07-12.md](145-kekulization-matching-design-spike-2026-07-12.md)     | Informational | 2026-07-12   |                                                                                                            |
+| [146-kekulization-matching-enumeration-2026-07-12.md](146-kekulization-matching-enumeration-2026-07-12.md)       | Completed     | 2026-07-12   |                                                                                                            |
+| [147-kekulization-single-structure-2026-07-13.md](147-kekulization-single-structure-2026-07-13.md)               | Completed     | 2026-07-27   | The S0–S4 Experiment B deliverable is implemented; S5 is explicitly optional.                              |
+| [148-validated-transactions-operations-2026-07-13.md](148-validated-transactions-operations-2026-07-13.md)       | Proposed      | 2026-07-27   | Design sequence remains to be resolved and converted into an implementation plan.                          |
+| [149-molecule-ring-cache-and-hashing-2026-07-13.md](149-molecule-ring-cache-and-hashing-2026-07-13.md)           | In Progress   | 2026-07-27   | Ring-cache removal complete; hashing remains. Ring-view cleanup moved to doc 165.                          |
+| [150-python-reaction-bindings-plan-2026-07-13.md](150-python-reaction-bindings-plan-2026-07-13.md)               | Completed     | 2026-07-14   |                                                                                                            |
+| [151-python-molecule-workflows-2026-07-13.md](151-python-molecule-workflows-2026-07-13.md)                       | Completed     | 2026-07-25   |                                                                                                            |
+| [152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md)                         | Completed     | 2026-07-18   |                                                                                                            |
+| [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)         | Proposed      | 2026-07-27   | Future task inventory; implementation order is not yet settled.                                            |
+| [154-lattice-probabilistic-fingerprints-2026-07-18.md](154-lattice-probabilistic-fingerprints-2026-07-18.md)     | Informational | 2026-07-18   |                                                                                                            |
+| [155-smiles-io-and-resolve-configuration-2026-07-19.md](155-smiles-io-and-resolve-configuration-2026-07-19.md)   | Completed     | 2026-07-19   |                                                                                                            |
+| [156-ast-comparison-and-property-suite-2026-07-20.md](156-ast-comparison-and-property-suite-2026-07-20.md)       | Completed     | 2026-07-21   |                                                                                                            |
+| [157-umol-perm-fallibility-and-arguments-2026-07-20.md](157-umol-perm-fallibility-and-arguments-2026-07-20.md)   | Completed     | 2026-07-21   |                                                                                                            |
+| [158-ring-model-and-enumeration-2026-07-22.md](158-ring-model-and-enumeration-2026-07-22.md)                     | Completed     | 2026-07-25   |                                                                                                            |
+| [159-simple-graph-policy-2026-07-23.md](159-simple-graph-policy-2026-07-23.md)                                   | Proposed      | 2026-07-27   | Tentative policy and follow-up audit; reaction semantics remain open.                                      |
+| [160-relevant-cycle-algs-2026-07-25.md](160-relevant-cycle-algs-2026-07-25.md)                                   | Proposed      | 2026-07-27   | Algorithm spikes and comparative evaluation have not started.                                              |
+| [161-property-tests-as-specs-2026-07-25.md](161-property-tests-as-specs-2026-07-25.md)                           | Informational | 2026-07-25   |                                                                                                            |
+| [162-common-subgraph-algs-2026-07-25.md](162-common-subgraph-algs-2026-07-25.md)                                 | Completed     | 2026-07-25   |                                                                                                            |
+| [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | Proposed      | 2026-07-27   | Upcoming release workstream; implementation has not started.                                               |
+| [164-dsl-edn-worklist-2026-07-27.md](164-dsl-edn-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated DSL, EDN, specification, and parsing-infrastructure work.                                     |
+| [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
+| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | Proposed      | 2026-07-27   | Hydrogen transformations and remaining validator implementation.                                           |
+| [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Proposed      | 2026-07-27   | Visitor, eager, and resumable graph-algorithm execution APIs.                                              |
+| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-07-27   | Crate boundaries, visibility, re-exports, errors, and diagnostic representations.                          |

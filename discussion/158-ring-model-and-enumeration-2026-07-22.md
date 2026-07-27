@@ -9,7 +9,7 @@ Relates: [057](057-sssr-needed-2026-03-11.md),
 [149](149-molecule-ring-cache-and-hashing-2026-07-13.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
 [159](159-simple-graph-policy-2026-07-23.md),
-[160](160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md)
+[160](160-relevant-cycle-algs-2026-07-25.md)
 
 ## Scope
 

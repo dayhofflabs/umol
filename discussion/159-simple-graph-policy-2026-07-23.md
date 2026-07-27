@@ -8,7 +8,7 @@ Relates: [118](118-validator-architecture-2026-06-20.md),
 [136](136-dpo-primitives-2026-07-04.md),
 [148](148-validated-transactions-operations-2026-07-13.md),
 [158](158-ring-model-and-enumeration-2026-07-22.md),
-[162](162-common-subgraph-enumeration-alternatives-2026-07-25.md)
+[162](162-common-subgraph-algs-2026-07-25.md)
 
 ## Scope
 

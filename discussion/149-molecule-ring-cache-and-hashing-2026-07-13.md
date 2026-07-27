@@ -1,6 +1,8 @@
 # 149 · MoleculeAst ring cache placement & hashing semantics
 
-Status: Active — Part A (ring cache) implemented S0–S3; Part B (hashing) open
+Status: **In Progress** — Part A is complete; Part B hashing remains open.
+The unfinished `RingView` API cleanup moved to
+[165](165-ast-api-worklist-2026-07-27.md).
 Date: 2026-07-13
 Relates: 137 (Python-binding R1 audit — where this surfaced), 113/095 (lazy
 canonicalization; structural vs canonical equality), 114 (interning; the future
@@ -23,7 +25,7 @@ state, the decisions, and the next steps.
 
 ## A. Ring cache — remove it from the AST
 
-### Current state
+### Pre-change state
 
 - `MoleculeAst` carries `rings_cache: OnceLock<RingSet>`, filled lazily on the
   first call to `rings()` (Vismara relevant cycles, max ring size 22). Every other
@@ -118,7 +120,10 @@ Design note: `ring_valence` / `ring_degree` need the atom's incident bonds, so t
 sub-views hold `&MoleculeAst` alongside `&RingSet`; pure membership / count queries
 use the `RingSet` alone.
 
-### API shapes
+### Ring-view follow-up moved to doc 165
+
+The proposed shapes below motivated the remaining `RingView` cleanup. They are
+retained as design detail, but doc 165 is the task owner.
 
 `RingsView<'a>` — borrows `&mol`, owns the `RingSet`. Ring-collection surface
 mirrors `AtomsView`, plus per-entity sub-views and the ring-system queries:
@@ -130,7 +135,7 @@ mirrors `AtomsView`, plus per-entity sub-views and the ring-system queries:
     contains(RingId) -> bool
     atom(AtomId) -> RingAtomView<'_>
     bond(BondId) -> RingBondView<'_>
-    family() -> RingFamily · max_ring_size() -> usize
+    kind() -> RingSetKind · max_ring_size() -> usize
 
 There is no plural `atoms()` / `bonds()` on `RingsView` — per-atom/bond questions go
 through `atom(id)` / `bond(id)`. (No current caller wants "all atoms in some ring";
