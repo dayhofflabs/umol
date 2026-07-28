@@ -744,7 +744,7 @@ the shared storage. Remove projection/inversion code and migrate reaction
 parsing, tests, and public exports. Test lhs/delta lookup, continuation
 indices, cross-scope collisions, added-entity references, and tree/streaming
 metadata parity. This is breaking and goes red→green across the workspace.
-[dep: S3a, S2h]
+**Implemented (green).** [dep: S3a, S2h]
 
 **S3c — Reaction-span parsing.** Rewire `dsl/reaction_span.rs` to use
 `MoleculeContext` and to move the context's `MoleculeMetadata` into the

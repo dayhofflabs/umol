@@ -4,7 +4,6 @@ use bimap::BiBTreeMap;
 use thiserror::Error;
 
 use super::atom::AtomDsl;
-use super::reaction::ReactionNamespace;
 use crate::ast::correspondence::MoleculeCorrespondence;
 use crate::ast::entity::Entity;
 #[cfg(test)]
@@ -343,28 +342,6 @@ impl From<MoleculeMetadata> for ReactionMetadata {
             lhs,
             ..Self::default()
         }
-    }
-}
-
-impl From<&ReactionNamespace> for ReactionMetadata {
-    /// Project the roundtrip metadata: the lhs molecule's metadata, the delta-introduced entity
-    /// keywords (any delta that binds a name, not only `:add`), and the reaction's top-level aliases.
-    fn from(namespace: &ReactionNamespace) -> Self {
-        let mut metadata = ReactionMetadata {
-            lhs: namespace.lhs().metadata().clone(),
-            ..Default::default()
-        };
-        for (entity, name) in namespace.deltas().metadata().iter_keywords() {
-            metadata
-                .set_delta_keyword(entity, name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (name, dsl) in namespace.atom_aliases() {
-            metadata
-                .add_atom_alias(name, dsl.clone())
-                .expect("reaction namespace aliases are bijective and disjoint from keywords");
-        }
-        metadata
     }
 }
 

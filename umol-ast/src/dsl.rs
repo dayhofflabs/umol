@@ -62,7 +62,7 @@ pub use noncovalent::{
     parse_noncovalent_bond, parse_noncovalent_bond_update, NoncovalentBondConstraintDsl,
     NoncovalentBondDsl, NoncovalentBondUpdateDsl,
 };
-pub use reaction::{ReactionDsl, ReactionNamespace};
+pub use reaction::{ReactionContext, ReactionDsl};
 pub use reaction_span::ReactionSpanDsl;
 pub use refs::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondParticipants, DativeBondRef, MulticenterBondRef,
