@@ -640,6 +640,9 @@ fn metadata_parse_error(error: MetadataError) -> ParseError {
         MetadataError::EntityOutOfRange(entity) => {
             ParseError::InvalidValue(format!("metadata entity is out of range: {entity}"))
         }
+        MetadataError::EntityNotAdded(entity) => ParseError::InvalidValue(format!(
+            "metadata entity is not introduced by an add delta: {entity}"
+        )),
     }
 }
 

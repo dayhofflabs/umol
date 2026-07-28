@@ -769,7 +769,7 @@ kind, while reusing the intrinsic scope checks already enforced by
 `ReactionMetadata`. Add error variants only for failure modes not expressible
 after S4a. Test all eight add-delta kinds, wrong-kind and absent additions,
 lhs/delta scope errors, and coherent parsed parts. This is additive and stays
-green. [dep: S2h, S4a]
+green. **Implemented (green).** [dep: S2h, S4a]
 
 **S4c — `ReactionSpanDsl::new`.** Add the public fallible
 `ReactionSpanDsl::new(ast, metadata)` constructor and validate each keyword

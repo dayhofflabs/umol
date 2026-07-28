@@ -22,6 +22,8 @@ pub enum MetadataError {
     DuplicateAtomAlias(String),
     #[error("metadata entity is out of range: {0}")]
     EntityOutOfRange(Entity),
+    #[error("metadata entity is not introduced by an add delta: {0}")]
+    EntityNotAdded(Entity),
 }
 
 /// The rendering counterpart to [`crate::dsl::Namespace`].

@@ -25,7 +25,7 @@ use super::edn_utils::{
     read_single_key_map_header, read_vec, single_key_map,
 };
 use super::error::ParseError;
-use super::metadata::{MoleculeMetadata, ReactionMetadata};
+use super::metadata::{MetadataError, MoleculeMetadata, ReactionMetadata};
 use super::molecule::{
     parse_aromatic_system_entry, parse_atom_aliases, parse_atom_entry, parse_bond_entry,
     parse_dative_bond_entry, parse_molecule_input, parse_multicenter_bond_entry,
@@ -85,6 +85,63 @@ pub struct ReactionDsl {
 }
 
 impl ReactionDsl {
+    /// Pair a reaction AST with coherent lhs and delta surface metadata.
+    pub fn new(ast: ReactionAst, metadata: ReactionMetadata) -> Result<Self, MetadataError> {
+        for (entity, _) in metadata.lhs().iter_keywords() {
+            let contains = match entity {
+                Entity::Atom(id) => ast.lhs.atoms().contains(id),
+                Entity::Bond(id) => ast.lhs.bonds().contains(id),
+                Entity::DativeBond(id) => ast.lhs.dative_bonds().contains(id),
+                Entity::AromaticSystem(id) => ast.lhs.aromatic_systems().contains(id),
+                Entity::MulticenterBond(id) => ast.lhs.multicenter_bonds().contains(id),
+                Entity::NoncovalentBond(id) => ast.lhs.noncovalent_bonds().contains(id),
+                Entity::StereoAtom(id) => ast.lhs.stereo_atoms().contains(id),
+                Entity::StereoBond(id) => ast.lhs.stereo_bonds().contains(id),
+            };
+            if !contains {
+                return Err(MetadataError::EntityOutOfRange(entity));
+            }
+        }
+
+        for (entity, _) in metadata.iter_delta_keywords() {
+            let added = ast.deltas.iter().any(|delta| match (delta, entity) {
+                (Delta::Atom(AtomDelta::Add { id, .. }), Entity::Atom(expected)) => *id == expected,
+                (Delta::Bond(BondDelta::Add { id, .. }), Entity::Bond(expected)) => *id == expected,
+                (
+                    Delta::DativeBond(DativeBondDelta::Add { id, .. }),
+                    Entity::DativeBond(expected),
+                ) => *id == expected,
+                (
+                    Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }),
+                    Entity::AromaticSystem(expected),
+                ) => *id == expected,
+                (
+                    Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }),
+                    Entity::MulticenterBond(expected),
+                ) => *id == expected,
+                (
+                    Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }),
+                    Entity::NoncovalentBond(expected),
+                ) => *id == expected,
+                (
+                    Delta::StereoAtom(StereoAtomDelta::Add { id, .. }),
+                    Entity::StereoAtom(expected),
+                ) => *id == expected,
+                (
+                    Delta::StereoBond(StereoBondDelta::Add { id, .. }),
+                    Entity::StereoBond(expected),
+                ) => *id == expected,
+                _ => false,
+            });
+            if !added {
+                return Err(MetadataError::EntityNotAdded(entity));
+            }
+        }
+
+        Ok(Self::from_parts(ast, metadata))
+    }
+
+    /// Pair an AST and metadata without checking their coherence.
     pub fn from_parts(ast: ReactionAst, metadata: ReactionMetadata) -> Self {
         Self { ast, metadata }
     }
@@ -2788,6 +2845,97 @@ mod tests {
         AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     };
     use crate::mol_dsl;
+
+    #[fixture]
+    fn populated_reaction_dsl() -> ReactionDsl {
+        r#"{
+            :lhs {
+                :atoms [[:c "C"] "F" "Cl" "Br" "I"]
+                :bonds [
+                    {:id :double :atoms [0 1] :type "2"}
+                    [0 2 "1"]
+                    [0 3 "1"]
+                    [0 4 "1"]
+                ]
+                :atom-aliases [:lhs-o "O"]
+            }
+            :atom-aliases [:reaction-n "N"]
+            :deltas [
+                {:atom {:add [:new-atom :reaction-n]}}
+                {:bond {:add {:id :new-bond :atoms [0 :new-atom] :type "1"}}}
+                {:dative-bond {:add {:id :new-dative :donors [1] :acceptor 0 :type "1#R"}}}
+                {:aromatic-system {:add {:id :new-aromatic :atoms [0 1] :type "*#e2"}}}
+                {:multicenter-bond {:add {:id :new-multicenter :atoms [0 1] :type "*#e2"}}}
+                {:noncovalent-bond {:add {:id :new-noncovalent :atoms [0 1] :type "Hbd"}}}
+                {:stereo-atom {:add {:id :new-stereo-atom :site 0 :ligands [1 2 3 4] :type "Th1"}}}
+                {:stereo-bond {:add {:id :new-stereo-bond :site :double :ligands [2 3] :type "Ct1"}}}
+            ]
+        }"#
+        .parse()
+        .unwrap()
+    }
+
+    #[rstest]
+    #[case::empty(None)]
+    #[case::atom(Some(Entity::Atom(AtomId(5))))]
+    #[case::bond(Some(Entity::Bond(BondId(4))))]
+    #[case::dative_bond(Some(Entity::DativeBond(DativeBondId(0))))]
+    #[case::aromatic_system(Some(Entity::AromaticSystem(AromaticSystemId(0))))]
+    #[case::multicenter_bond(Some(Entity::MulticenterBond(MulticenterBondId(0))))]
+    #[case::noncovalent_bond(Some(Entity::NoncovalentBond(NoncovalentBondId(0))))]
+    #[case::stereo_atom(Some(Entity::StereoAtom(StereoAtomId(0))))]
+    #[case::stereo_bond(Some(Entity::StereoBond(StereoBondId(0))))]
+    fn test_reaction_dsl_new(populated_reaction_dsl: ReactionDsl, #[case] entity: Option<Entity>) {
+        let ast = populated_reaction_dsl.into_parts().0;
+        let mut metadata = ReactionMetadata::default();
+        if let Some(entity) = entity {
+            metadata.set_delta_keyword(entity, "key").unwrap();
+        }
+
+        let actual = ReactionDsl::new(ast.clone(), metadata.clone()).unwrap();
+
+        assert_eq!(actual.into_parts(), (ast, metadata));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wrong_kind({
+        let mut metadata = ReactionMetadata::default();
+        metadata.set_delta_keyword(Entity::Bond(BondId(5)), "key").unwrap();
+        metadata
+    }, MetadataError::EntityNotAdded(Entity::Bond(BondId(5))))]
+    #[case::absent_addition({
+        let mut metadata = ReactionMetadata::default();
+        metadata.set_delta_keyword(Entity::Atom(AtomId(6)), "key").unwrap();
+        metadata
+    }, MetadataError::EntityNotAdded(Entity::Atom(AtomId(6))))]
+    #[case::lhs_entity_in_delta_scope({
+        let mut metadata = ReactionMetadata::default();
+        metadata.set_delta_keyword(Entity::Atom(AtomId(0)), "key").unwrap();
+        metadata
+    }, MetadataError::EntityNotAdded(Entity::Atom(AtomId(0))))]
+    #[case::delta_entity_in_lhs_scope({
+        let mut lhs = MoleculeMetadata::new();
+        lhs.set_keyword(Entity::Atom(AtomId(5)), "key").unwrap();
+        ReactionMetadata::from(lhs)
+    }, MetadataError::EntityOutOfRange(Entity::Atom(AtomId(5))))]
+    fn test_reaction_dsl_new_error(
+        populated_reaction_dsl: ReactionDsl,
+        #[case] metadata: ReactionMetadata,
+        #[case] expected: MetadataError,
+    ) {
+        let ast = populated_reaction_dsl.into_parts().0;
+
+        assert_eq!(ReactionDsl::new(ast, metadata), Err(expected));
+    }
+
+    #[rstest]
+    fn test_reaction_dsl_new_parsed(populated_reaction_dsl: ReactionDsl) {
+        let expected = populated_reaction_dsl.clone();
+        let (ast, metadata) = populated_reaction_dsl.into_parts();
+
+        assert_eq!(ReactionDsl::new(ast, metadata).unwrap(), expected);
+    }
 
     #[rstest]
     #[case::sn2(ReactionAst::new(
