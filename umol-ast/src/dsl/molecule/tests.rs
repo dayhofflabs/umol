@@ -4,6 +4,7 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
 use umol_edn::read_string;
+use umol_graph_core::{Correspondence, NodeId};
 
 use super::*;
 use crate::ast::atom::AtomAst;
@@ -269,6 +270,241 @@ fn test_molecule_metadata_add_atom_alias_error(
 
     assert_eq!(result, Err(expected_error));
     assert_eq!(actual, expected);
+}
+
+#[rstest]
+fn test_molecule_metadata_remap() {
+    let input = MoleculeMetadata {
+        keywords: [
+            (Entity::Atom(AtomId(0)), "atom".to_string()),
+            (Entity::Bond(BondId(0)), "bond".to_string()),
+            (Entity::DativeBond(DativeBondId(0)), "dative".to_string()),
+            (
+                Entity::AromaticSystem(AromaticSystemId(0)),
+                "aromatic".to_string(),
+            ),
+            (
+                Entity::MulticenterBond(MulticenterBondId(0)),
+                "multicenter".to_string(),
+            ),
+            (
+                Entity::NoncovalentBond(NoncovalentBondId(0)),
+                "noncovalent".to_string(),
+            ),
+            (
+                Entity::StereoAtom(StereoAtomId(0)),
+                "stereo-atom".to_string(),
+            ),
+            (
+                Entity::StereoBond(StereoBondId(0)),
+                "stereo-bond".to_string(),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        atom_aliases: [(
+            "carbon".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let correspondence = MoleculeCorrespondence::new(
+        Correspondence::from_images(&[NodeId(1), NodeId(0)], 2),
+        Correspondence::from_images(&[BondId(1), BondId(0)], 2),
+        Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 2),
+        Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 2),
+        Correspondence::from_images(&[MulticenterBondId(1), MulticenterBondId(0)], 2),
+        Correspondence::from_images(&[NoncovalentBondId(1), NoncovalentBondId(0)], 2),
+        Correspondence::from_images(&[StereoAtomId(1), StereoAtomId(0)], 2),
+        Correspondence::from_images(&[StereoBondId(1), StereoBondId(0)], 2),
+    );
+    let expected = MoleculeMetadata {
+        keywords: [
+            (Entity::Atom(AtomId(1)), "atom".to_string()),
+            (Entity::Bond(BondId(1)), "bond".to_string()),
+            (Entity::DativeBond(DativeBondId(1)), "dative".to_string()),
+            (
+                Entity::AromaticSystem(AromaticSystemId(1)),
+                "aromatic".to_string(),
+            ),
+            (
+                Entity::MulticenterBond(MulticenterBondId(1)),
+                "multicenter".to_string(),
+            ),
+            (
+                Entity::NoncovalentBond(NoncovalentBondId(1)),
+                "noncovalent".to_string(),
+            ),
+            (
+                Entity::StereoAtom(StereoAtomId(1)),
+                "stereo-atom".to_string(),
+            ),
+            (
+                Entity::StereoBond(StereoBondId(1)),
+                "stereo-bond".to_string(),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        atom_aliases: [(
+            "carbon".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    assert_eq!(input.remap(&correspondence), expected);
+}
+
+#[rstest]
+fn test_molecule_metadata_remap_identity() {
+    let input = MoleculeMetadata {
+        keywords: [
+            (Entity::Atom(AtomId(0)), "atom".to_string()),
+            (Entity::Bond(BondId(0)), "bond".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+        atom_aliases: [(
+            "carbon".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let correspondence = MoleculeCorrespondence::new(
+        Correspondence::from_images(&[NodeId(0)], 1),
+        Correspondence::from_images(&[BondId(0)], 1),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+    );
+
+    assert_eq!(input.clone().remap(&correspondence), input);
+}
+
+#[rstest]
+fn test_molecule_metadata_remap_partial() {
+    let input = MoleculeMetadata {
+        keywords: [
+            (Entity::Atom(AtomId(0)), "removed-atom".to_string()),
+            (Entity::Atom(AtomId(1)), "retained-atom".to_string()),
+            (Entity::Bond(BondId(0)), "removed-bond".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+        atom_aliases: [(
+            "carbon".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 1),
+        Correspondence::new(Vec::new(), 1, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+    );
+    let expected = MoleculeMetadata {
+        keywords: [(Entity::Atom(AtomId(0)), "retained-atom".to_string())]
+            .into_iter()
+            .collect(),
+        atom_aliases: [(
+            "carbon".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    assert_eq!(input.remap(&correspondence), expected);
+}
+
+#[rstest]
+fn test_molecule_metadata_remap_roundtrip() {
+    let input = MoleculeMetadata {
+        keywords: [
+            (Entity::Atom(AtomId(0)), "first".to_string()),
+            (Entity::Atom(AtomId(1)), "second".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+        atom_aliases: [(
+            "carbon".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let correspondence = MoleculeCorrespondence::new(
+        Correspondence::from_images(&[NodeId(1), NodeId(0)], 2),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+    );
+
+    assert_eq!(
+        input
+            .clone()
+            .remap(&correspondence)
+            .remap(&correspondence.reverse()),
+        input
+    );
+}
+
+#[rstest]
+fn test_molecule_metadata_remap_composition() {
+    let input = MoleculeMetadata {
+        keywords: [(Entity::Atom(AtomId(0)), "atom".to_string())]
+            .into_iter()
+            .collect(),
+        atom_aliases: BiBTreeMap::new(),
+    };
+    let first = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+    );
+    let second = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+        Correspondence::new(Vec::new(), 0, 0),
+    );
+    let expected = MoleculeMetadata {
+        keywords: [(Entity::Atom(AtomId(2)), "atom".to_string())]
+            .into_iter()
+            .collect(),
+        atom_aliases: BiBTreeMap::new(),
+    };
+    let sequential = input.clone().remap(&first).remap(&second);
+    let composed = input.remap(&first.compose(&second));
+
+    assert_eq!(sequential, composed);
+    assert_eq!(composed, expected);
 }
 
 #[rstest]

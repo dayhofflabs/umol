@@ -482,7 +482,7 @@ entity-keyword bimap with matched targets mapped left-to-right, omit unmatched
 left entity bindings, and move the atom-alias bimap through unchanged.
 Test identity, a nontrivial permutation, partial restriction, total reverse
 roundtrip, composition, every entity kind, and alias invariance. This is
-additive and stays green. [dep: S0c, S2b]
+additive and stays green. **Implemented (green).** [dep: S0c, S2b]
 
 **S2d — `ReactionMetadata`.** Replace the eight delta maps with
 `delta_keywords: BiBTreeMap<Entity, String>`, retain

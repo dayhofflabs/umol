@@ -44,6 +44,7 @@ use super::stereo::{
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
+use crate::ast::correspondence::MoleculeCorrespondence;
 use crate::ast::dative::DativeBondAst;
 use crate::ast::entity::Entity;
 use crate::ast::id::{
@@ -369,6 +370,29 @@ impl MoleculeMetadata {
 
         self.atom_aliases.insert(name, atom);
         Ok(())
+    }
+
+    /// Move entity keywords from the left id space of `correspondence` to its
+    /// matched right entities. Keywords on unmatched left entities are omitted;
+    /// atom aliases are independent of molecule ids and remain unchanged.
+    pub fn remap(self, correspondence: &MoleculeCorrespondence) -> Self {
+        let Self {
+            keywords,
+            atom_aliases,
+        } = self;
+        let keywords = keywords
+            .into_iter()
+            .filter_map(|(entity, keyword)| {
+                correspondence
+                    .right_of(entity)
+                    .map(|right| (right, keyword))
+            })
+            .collect();
+
+        Self {
+            keywords,
+            atom_aliases,
+        }
     }
 
     fn set_keyword(
