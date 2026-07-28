@@ -27,7 +27,7 @@ macro_rules! define_ref {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
             Index(usize),
-            Id(String),
+            Keyword(String),
             $( Structural($payload), )?
         }
 
@@ -37,7 +37,7 @@ macro_rules! define_ref {
             /// id↔keyword bijection.
             pub fn denote<M: Metadata>(id: $id, metadata: &M) -> Self {
                 if let Some(name) = metadata.$accessor(id) {
-                    Self::Id(name.to_string())
+                    Self::Keyword(name.to_string())
                 } else {
                     Self::Index(id.index())
                 }
@@ -58,7 +58,7 @@ macro_rules! define_ref {
                             })
                         }
                     }
-                    Self::Id(keyword) => {
+                    Self::Keyword(keyword) => {
                         namespace
                             .$find_by_keyword(&keyword)
                             .ok_or(ParseError::InvalidRef {
@@ -84,7 +84,7 @@ macro_rules! define_ref {
                         })?;
                         Ok(Self::Index(i))
                     }
-                    Edn::Keyword(k) => Ok(Self::Id(k.name().to_string())),
+                    Edn::Keyword(k) => Ok(Self::Keyword(k.name().to_string())),
                     $( Edn::Map(m) => {
                         if m.get_keyword("type").is_some() || m.get_keyword("id").is_some() {
                             return Err(DeError::Custom(format!(
@@ -115,7 +115,7 @@ macro_rules! define_ref {
             fn to_edn(&self) -> Edn<'static> {
                 match self {
                     Self::Index(i) => Edn::Int(*i as i64),
-                    Self::Id(name) => Edn::Keyword(EdnKeyword::owned(name.clone())),
+                    Self::Keyword(name) => Edn::Keyword(EdnKeyword::owned(name.clone())),
                     $( Self::Structural(_) => {
                         let _phantom: fn($payload) = |_| {};
                         unreachable!(concat!(
@@ -129,7 +129,7 @@ macro_rules! define_ref {
 
         pub(super) fn $reader(de: &mut EdnStreamDeserializer<'_>) -> Result<$name, EdnError> {
             match de.peek_byte()?.ok_or_else(eof_err)? {
-                b':' => Ok($name::Id(de.read_keyword_name()?.into_owned())),
+                b':' => Ok($name::Keyword(de.read_keyword_name()?.into_owned())),
                 $( b'{' => Ok($name::Structural($read_structural(de)?)), )?
                 _ => {
                     let n = de.read_i64()?;
@@ -626,12 +626,12 @@ mod tests {
     use super::*;
 
     #[fixture]
-    fn meta_with_atom_id() -> MoleculeMetadata {
+    fn meta_with_atom_keyword() -> MoleculeMetadata {
         MoleculeMetadata::new().with_atom_keyword(AtomId(2), "c1")
     }
 
     #[fixture]
-    fn namespace_with_atom_id() -> MoleculeNamespace {
+    fn namespace_with_atom_keyword() -> MoleculeNamespace {
         let mut ns = MoleculeNamespace::default();
         for i in 0..5 {
             ns.register_atom((i == 2).then(|| "c1".to_string()))
@@ -642,7 +642,7 @@ mod tests {
 
     #[rstest]
     #[case::int(Edn::Int(3), AtomRef::Index(3))]
-    #[case::keyword(Edn::Keyword(EdnKeyword::owned("c1".into())), AtomRef::Id("c1".into()))]
+    #[case::keyword(Edn::Keyword(EdnKeyword::owned("c1".into())), AtomRef::Keyword("c1".into()))]
     fn test_atom_ref_from_edn(#[case] input: Edn<'static>, #[case] expected: AtomRef) {
         assert_eq!(AtomRef::from_edn(&input).unwrap(), expected);
     }
@@ -661,14 +661,17 @@ mod tests {
 
     #[rstest]
     #[case::index(AtomRef::Index(5), Edn::Int(5))]
-    #[case::id(AtomRef::Id("c1".into()), Edn::Keyword(EdnKeyword::owned("c1".into())))]
+    #[case::keyword(
+        AtomRef::Keyword("c1".into()),
+        Edn::Keyword(EdnKeyword::owned("c1".into()))
+    )]
     fn test_atom_ref_to_edn(#[case] input: AtomRef, #[case] expected: Edn<'static>) {
         assert_eq!(input.to_edn(), expected);
     }
 
     #[rstest]
     #[case::int("3", AtomRef::Index(3))]
-    #[case::keyword(":c1", AtomRef::Id("c1".into()))]
+    #[case::keyword(":c1", AtomRef::Keyword("c1".into()))]
     fn test_atom_ref_roundtrip_edn_string(#[case] input: &str, #[case] expected: AtomRef) {
         let tree = read_string(input).unwrap();
         let parsed = AtomRef::from_edn(&tree).unwrap();
@@ -679,37 +682,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::id_present(AtomId(2), AtomRef::Id("c1".into()))]
-    #[case::no_id(AtomId(4), AtomRef::Index(4))]
+    #[case::keyword_present(AtomId(2), AtomRef::Keyword("c1".into()))]
+    #[case::no_keyword(AtomId(4), AtomRef::Index(4))]
     fn test_atom_ref_denote(
-        meta_with_atom_id: MoleculeMetadata,
+        meta_with_atom_keyword: MoleculeMetadata,
         #[case] id: AtomId,
         #[case] expected: AtomRef,
     ) {
-        assert_eq!(AtomRef::denote(id, &meta_with_atom_id), expected);
+        assert_eq!(AtomRef::denote(id, &meta_with_atom_keyword), expected);
     }
 
     #[rstest]
-    #[case::id(AtomRef::Id("c1".into()), AtomId(2))]
+    #[case::keyword(AtomRef::Keyword("c1".into()), AtomId(2))]
     #[case::index(AtomRef::Index(3), AtomId(3))]
     fn test_atom_ref_resolve(
-        namespace_with_atom_id: MoleculeNamespace,
+        namespace_with_atom_keyword: MoleculeNamespace,
         #[case] r: AtomRef,
         #[case] expected: AtomId,
     ) {
-        assert_eq!(r.resolve(&namespace_with_atom_id).unwrap(), expected);
+        assert_eq!(r.resolve(&namespace_with_atom_keyword).unwrap(), expected);
     }
 
     #[rstest]
     #[case::out_of_range_index(AtomRef::Index(9), "9")]
-    #[case::unknown_id(AtomRef::Id("nope".into()), "nope")]
+    #[case::unknown_keyword(AtomRef::Keyword("nope".into()), "nope")]
     fn test_atom_ref_resolve_error(
-        namespace_with_atom_id: MoleculeNamespace,
+        namespace_with_atom_keyword: MoleculeNamespace,
         #[case] r: AtomRef,
         #[case] value: &str,
     ) {
         assert_eq!(
-            r.resolve(&namespace_with_atom_id).unwrap_err(),
+            r.resolve(&namespace_with_atom_keyword).unwrap_err(),
             ParseError::InvalidRef {
                 kind: "atom",
                 value: value.into(),
@@ -803,7 +806,7 @@ mod tests {
             AromaticSystemRef::Structural(vec![
                 AtomRef::Index(0),
                 AtomRef::Index(1),
-                AtomRef::Id("c2".into()),
+                AtomRef::Keyword("c2".into()),
             ])
         );
     }

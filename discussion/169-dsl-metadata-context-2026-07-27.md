@@ -430,7 +430,8 @@ string-bearing `Id` variant of each of the eight entity-reference enums to
 `Keyword`, then migrate parsing, resolution, denotation, rendering, fixtures,
 and property strategies in the same change. Numerical id variants and
 structural reference variants are unchanged. This is breaking and goes
-red→green while all enum consumers are migrated. [dep: none]
+red→green while all enum consumers are migrated. **Implemented (green).**
+[dep: none]
 
 **S1b — Parsed-entry fields and the literal `:id` helper.** Across the molecule,
 reaction, reaction-span, overlay, constraint, and delta DSL input structs,

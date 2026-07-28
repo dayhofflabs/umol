@@ -3051,12 +3051,12 @@ mod tests {
             spec: AtomSpecInput::Alias("foo".into()),
         })
     )]
-    #[case::remove_id("{:atom {:remove :br}}", DeltaInput::AtomRemove(AtomRef::Id("br".into())))]
+    #[case::remove_keyword("{:atom {:remove :br}}", DeltaInput::AtomRemove(AtomRef::Keyword("br".into())))]
     #[case::remove_index("{:atom {:remove 1}}", DeltaInput::AtomRemove(AtomRef::Index(1)))]
     #[case::modify(
         r##"{:atom {:modify [:br "#c-1"]}}"##,
         DeltaInput::AtomModify(
-            AtomRef::Id("br".into()),
+            AtomRef::Keyword("br".into()),
             AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() },
         )
     )]
@@ -3097,12 +3097,12 @@ mod tests {
             spec: AtomSpecInput::Alias("foo".into()),
         })
     )]
-    #[case::remove_id("{:atom {:remove :br}}", DeltaInput::AtomRemove(AtomRef::Id("br".into())))]
+    #[case::remove_keyword("{:atom {:remove :br}}", DeltaInput::AtomRemove(AtomRef::Keyword("br".into())))]
     #[case::remove_index("{:atom {:remove 1}}", DeltaInput::AtomRemove(AtomRef::Index(1)))]
     #[case::modify(
         r##"{:atom {:modify [:br "#c-1"]}}"##,
         DeltaInput::AtomModify(
-            AtomRef::Id("br".into()),
+            AtomRef::Keyword("br".into()),
             AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() },
         )
     )]
@@ -3127,24 +3127,24 @@ mod tests {
         r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
         DeltaInput::BondAdd(BondEntryInput {
             id: Some("b1".into()),
-            first: AtomRef::Id("c".into()),
-            second: AtomRef::Id("nu".into()),
+            first: AtomRef::Keyword("c".into()),
+            second: AtomRef::Keyword("nu".into()),
             bond: BondDsl(BondAst::from_order(2)),
         })
     )]
-    #[case::remove_id("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Id("b1".into())))]
+    #[case::remove_keyword("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Keyword("b1".into())))]
     #[case::remove_index("{:bond {:remove 0}}", DeltaInput::BondRemove(BondRef::Index(0)))]
     #[case::modify(
         r##"{:bond {:modify [:b1 "2"]}}"##,
         DeltaInput::BondModify(
-            BondRef::Id("b1".into()),
+            BondRef::Keyword("b1".into()),
             BondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() },
         )
     )]
     #[case::modify_undetermined(
         r##"{:bond {:modify [:b1 "*#c*#u*#s*"]}}"##,
         DeltaInput::BondModify(
-            BondRef::Id("b1".into()),
+            BondRef::Keyword("b1".into()),
             BondUpdate {
                 order: Some(ValueAst::Undetermined),
                 charge: Some(ValueAst::Undetermined),
@@ -3177,24 +3177,24 @@ mod tests {
         r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
         DeltaInput::BondAdd(BondEntryInput {
             id: Some("b1".into()),
-            first: AtomRef::Id("c".into()),
-            second: AtomRef::Id("nu".into()),
+            first: AtomRef::Keyword("c".into()),
+            second: AtomRef::Keyword("nu".into()),
             bond: BondDsl(BondAst::from_order(2)),
         })
     )]
-    #[case::remove_id("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Id("b1".into())))]
+    #[case::remove_keyword("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Keyword("b1".into())))]
     #[case::remove_index("{:bond {:remove 0}}", DeltaInput::BondRemove(BondRef::Index(0)))]
     #[case::modify(
         r##"{:bond {:modify [:b1 "2"]}}"##,
         DeltaInput::BondModify(
-            BondRef::Id("b1".into()),
+            BondRef::Keyword("b1".into()),
             BondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() },
         )
     )]
     #[case::modify_undetermined(
         r##"{:bond {:modify [:b1 "*#c*#u*#s*"]}}"##,
         DeltaInput::BondModify(
-            BondRef::Id("b1".into()),
+            BondRef::Keyword("b1".into()),
             BondUpdate {
                 order: Some(ValueAst::Undetermined),
                 charge: Some(ValueAst::Undetermined),
@@ -3215,9 +3215,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
-    #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
+    #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
+    #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_dative_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3230,9 +3230,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
-    #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
+    #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
+    #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_dative_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3245,8 +3245,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_aromatic_system(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3259,8 +3259,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_aromatic_system(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3273,8 +3273,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_multicenter_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3287,8 +3287,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_multicenter_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3301,8 +3301,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() }))]
+    #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_noncovalent_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3315,8 +3315,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() }))]
+    #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_noncovalent_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3329,22 +3329,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate::default()))]
-    #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
-    #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
-    #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_parse_delta_input_stereo_atom(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(parse_delta_input(&read_string(input).unwrap()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate::default()))]
-    #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
-    #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
-    #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Keyword("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_read_delta_input_stereo_atom(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
@@ -3354,22 +3354,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate::default()))]
-    #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
-    #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
-    #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_parse_delta_input_stereo_bond(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(parse_delta_input(&read_string(input).unwrap()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate::default()))]
-    #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
-    #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
-    #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Keyword("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_read_delta_input_stereo_bond(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
