@@ -46,7 +46,7 @@ pub(super) fn required_key<'e>(
     })
 }
 
-pub(super) fn optional_id(m: &EdnMap<'_>) -> Result<Option<String>, DeError> {
+pub(super) fn optional_id_keyword(m: &EdnMap<'_>) -> Result<Option<String>, DeError> {
     match m.get_keyword("id") {
         Some(Edn::Keyword(k)) => Ok(Some(k.name().to_string())),
         Some(other) => Err(DeError::TypeMismatch {
@@ -187,4 +187,48 @@ pub(super) fn parse_single_key_map<'a, 'de>(
         });
     };
     Ok((key.name(), v))
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use umol_edn::read_string;
+
+    use super::*;
+
+    #[rstest]
+    #[case::absent("{:atoms [0 1]}", None)]
+    #[case::valid("{:id :bond-1 :atoms [0 1]}", Some("bond-1".to_string()))]
+    fn test_optional_id_keyword(#[case] input: &str, #[case] expected: Option<String>) {
+        let Edn::Map(map) = read_string(input).unwrap() else {
+            panic!("expected map");
+        };
+
+        assert_eq!(optional_id_keyword(&map).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::string(
+        r#"{:id "bond-1"}"#,
+        DeError::TypeMismatch {
+            expected: "keyword id",
+            got: "string",
+            path: vec![":id".into()],
+        }
+    )]
+    #[case::integer(
+        "{:id 1}",
+        DeError::TypeMismatch {
+            expected: "keyword id",
+            got: "int",
+            path: vec![":id".into()],
+        }
+    )]
+    fn test_optional_id_keyword_error(#[case] input: &str, #[case] expected: DeError) {
+        let Edn::Map(map) = read_string(input).unwrap() else {
+            panic!("expected map");
+        };
+
+        assert_eq!(optional_id_keyword(&map).unwrap_err(), expected);
+    }
 }

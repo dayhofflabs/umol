@@ -833,7 +833,7 @@ impl ReactionInput {
             match delta {
                 DeltaInput::AtomAdd(entry) => {
                     let ast = resolve_atom_spec(entry.spec, &ns)?;
-                    let id = ns.register_atom(entry.id)?;
+                    let id = ns.register_atom(entry.keyword)?;
                     resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
                 }
                 DeltaInput::AtomRemove(r) => {
@@ -866,7 +866,7 @@ impl ReactionInput {
                 DeltaInput::BondAdd(entry) => {
                     let a = entry.first.resolve(&ns)?;
                     let b = entry.second.resolve(&ns)?;
-                    let id = ns.register_bond(entry.id, a, b)?;
+                    let id = ns.register_bond(entry.keyword, a, b)?;
                     resolved.push(Delta::Bond(BondDelta::Add {
                         id,
                         atoms: [a, b],
@@ -908,7 +908,7 @@ impl ReactionInput {
                         .map(|d| d.resolve(&ns))
                         .collect::<Result<Vec<_>, _>>()?;
                     let acceptor = entry.acceptor.resolve(&ns)?;
-                    let id = ns.register_dative_bond(entry.id, &donors, acceptor)?;
+                    let id = ns.register_dative_bond(entry.keyword, &donors, acceptor)?;
                     resolved.push(Delta::DativeBond(DativeBondDelta::Add {
                         id,
                         donors,
@@ -952,7 +952,7 @@ impl ReactionInput {
                         .into_iter()
                         .map(|a| a.resolve(&ns))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let id = ns.register_aromatic_system(entry.id, &atoms)?;
+                    let id = ns.register_aromatic_system(entry.keyword, &atoms)?;
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Add {
                         id,
                         atoms,
@@ -995,7 +995,7 @@ impl ReactionInput {
                         .into_iter()
                         .map(|a| a.resolve(&ns))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let id = ns.register_multicenter_bond(entry.id, &atoms)?;
+                    let id = ns.register_multicenter_bond(entry.keyword, &atoms)?;
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Add {
                         id,
                         atoms,
@@ -1036,7 +1036,7 @@ impl ReactionInput {
                 DeltaInput::NoncovalentBondAdd(entry) => {
                     let first = entry.first.resolve(&ns)?;
                     let second = entry.second.resolve(&ns)?;
-                    let id = ns.register_noncovalent_bond(entry.id, first, second)?;
+                    let id = ns.register_noncovalent_bond(entry.keyword, first, second)?;
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                         id,
                         atoms: [first, second],
@@ -1080,7 +1080,7 @@ impl ReactionInput {
                         .into_iter()
                         .map(|l| Ok(StereoLigand::new(l.atom.resolve(&ns)?, l.kind)))
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    let id = ns.register_stereo_atom(entry.id, site, &ligands)?;
+                    let id = ns.register_stereo_atom(entry.keyword, site, &ligands)?;
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Add {
                         id,
                         site,
@@ -1165,7 +1165,7 @@ impl ReactionInput {
                         .into_iter()
                         .map(|l| Ok(StereoLigand::new(l.atom.resolve(&ns)?, l.kind)))
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    let id = ns.register_stereo_bond(entry.id, site, &ligands)?;
+                    let id = ns.register_stereo_bond(entry.keyword, site, &ligands)?;
                     resolved.push(Delta::StereoBond(StereoBondDelta::Add {
                         id,
                         site,
@@ -3025,7 +3025,7 @@ mod tests {
     #[case::add_bare(
         r##"{:atom {:add "C#h3"}}"##,
         DeltaInput::AtomAdd(AtomEntryInput {
-            id: None,
+            keyword: None,
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
                 let mut a = AtomAst::new(ElementAst::Lit(Element::C));
                 a.implicit_hydrogens = ValueAst::Lit(3);
@@ -3033,10 +3033,10 @@ mod tests {
             }))),
         })
     )]
-    #[case::add_id(
+    #[case::add_keyword(
         r##"{:atom {:add [:nu "O#h1"]}}"##,
         DeltaInput::AtomAdd(AtomEntryInput {
-            id: Some("nu".into()),
+            keyword: Some("nu".into()),
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
                 let mut a = AtomAst::new(ElementAst::Lit(Element::O));
                 a.implicit_hydrogens = ValueAst::Lit(1);
@@ -3047,7 +3047,7 @@ mod tests {
     #[case::add_alias(
         "{:atom {:add :foo}}",
         DeltaInput::AtomAdd(AtomEntryInput {
-            id: None,
+            keyword: None,
             spec: AtomSpecInput::Alias("foo".into()),
         })
     )]
@@ -3071,7 +3071,7 @@ mod tests {
     #[case::add_bare(
         r##"{:atom {:add "C#h3"}}"##,
         DeltaInput::AtomAdd(AtomEntryInput {
-            id: None,
+            keyword: None,
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
                 let mut a = AtomAst::new(ElementAst::Lit(Element::C));
                 a.implicit_hydrogens = ValueAst::Lit(3);
@@ -3079,10 +3079,10 @@ mod tests {
             }))),
         })
     )]
-    #[case::add_id(
+    #[case::add_keyword(
         r##"{:atom {:add [:nu "O#h1"]}}"##,
         DeltaInput::AtomAdd(AtomEntryInput {
-            id: Some("nu".into()),
+            keyword: Some("nu".into()),
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
                 let mut a = AtomAst::new(ElementAst::Lit(Element::O));
                 a.implicit_hydrogens = ValueAst::Lit(1);
@@ -3093,7 +3093,7 @@ mod tests {
     #[case::add_alias(
         "{:atom {:add :foo}}",
         DeltaInput::AtomAdd(AtomEntryInput {
-            id: None,
+            keyword: None,
             spec: AtomSpecInput::Alias("foo".into()),
         })
     )]
@@ -3117,16 +3117,16 @@ mod tests {
     #[case::add_vec(
         r##"{:bond {:add [0 1 "1"]}}"##,
         DeltaInput::BondAdd(BondEntryInput {
-            id: None,
+            keyword: None,
             first: AtomRef::Index(0),
             second: AtomRef::Index(1),
             bond: BondDsl(BondAst::from_order(1)),
         })
     )]
-    #[case::add_map_id(
+    #[case::add_map_keyword(
         r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
         DeltaInput::BondAdd(BondEntryInput {
-            id: Some("b1".into()),
+            keyword: Some("b1".into()),
             first: AtomRef::Keyword("c".into()),
             second: AtomRef::Keyword("nu".into()),
             bond: BondDsl(BondAst::from_order(2)),
@@ -3167,16 +3167,16 @@ mod tests {
     #[case::add_vec(
         r##"{:bond {:add [0 1 "1"]}}"##,
         DeltaInput::BondAdd(BondEntryInput {
-            id: None,
+            keyword: None,
             first: AtomRef::Index(0),
             second: AtomRef::Index(1),
             bond: BondDsl(BondAst::from_order(1)),
         })
     )]
-    #[case::add_map_id(
+    #[case::add_map_keyword(
         r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
         DeltaInput::BondAdd(BondEntryInput {
-            id: Some("b1".into()),
+            keyword: Some("b1".into()),
             first: AtomRef::Keyword("c".into()),
             second: AtomRef::Keyword("nu".into()),
             bond: BondDsl(BondAst::from_order(2)),
@@ -3423,7 +3423,7 @@ mod tests {
         let expected = ReactionInput {
             lhs: MoleculeInput {
                 atoms: vec![AtomEntryInput {
-                    id: None,
+                    keyword: None,
                     spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
                 }],
                 ..Default::default()
@@ -3431,7 +3431,7 @@ mod tests {
             atom_aliases: Vec::new(),
             deltas: vec![
                 DeltaInput::AtomAdd(AtomEntryInput {
-                    id: None,
+                    keyword: None,
                     spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))),
                 }),
                 DeltaInput::BondRemove(BondRef::Index(0)),
@@ -3452,7 +3452,7 @@ mod tests {
         let expected = ReactionInput {
             lhs: MoleculeInput {
                 atoms: vec![AtomEntryInput {
-                    id: None,
+                    keyword: None,
                     spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
                 }],
                 ..Default::default()
@@ -3460,7 +3460,7 @@ mod tests {
             atom_aliases: Vec::new(),
             deltas: vec![
                 DeltaInput::AtomAdd(AtomEntryInput {
-                    id: None,
+                    keyword: None,
                     spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))),
                 }),
                 DeltaInput::BondRemove(BondRef::Index(0)),

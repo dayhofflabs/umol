@@ -27,7 +27,7 @@ use super::config::MoleculeDefaults;
 use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl};
 use super::dative::DativeBondDsl;
 use super::edn_utils::{
-    atoms_pair, atoms_vec, eof_err, missing, optional_id, parse_vec, read_map, read_vec,
+    atoms_pair, atoms_vec, eof_err, missing, optional_id_keyword, parse_vec, read_map, read_vec,
     required_key, two_atom_refs, unexpected_byte_kind,
 };
 use super::error::ParseError;
@@ -493,13 +493,16 @@ pub(super) fn read_atom_entry(
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'[' => {
             de.consume_byte(b'[')?;
-            let id = de.read_keyword_name()?.into_owned();
+            let keyword = de.read_keyword_name()?.into_owned();
             let spec = read_atom_spec(de)?;
             de.consume_byte(b']')?;
-            Ok(AtomEntryInput { id: Some(id), spec })
+            Ok(AtomEntryInput {
+                keyword: Some(keyword),
+                spec,
+            })
         }
         _ => Ok(AtomEntryInput {
-            id: None,
+            keyword: None,
             spec: read_atom_spec(de)?,
         }),
     }
@@ -572,19 +575,19 @@ pub(super) fn read_bond_entry(
             let bond = read_bond_dsl(de)?;
             de.consume_byte(b']')?;
             Ok(BondEntryInput {
-                id: None,
+                keyword: None,
                 first: a,
                 second: b,
                 bond,
             })
         }
         b'{' => {
-            let mut id = None;
+            let mut keyword = None;
             let mut atoms = None;
             let mut bond = None;
             read_map(de, |de, key| {
                 match key {
-                    "id" => id = Some(de.read_keyword_name()?.into_owned()),
+                    "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
                     "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
                     "type" => bond = Some(read_bond_dsl(de)?),
                     _ => de.read_skip_value()?,
@@ -594,7 +597,7 @@ pub(super) fn read_bond_entry(
             let atoms = atoms.ok_or_else(|| missing("atoms", "bond-entry"))?;
             let [a, b] = two_atom_refs(atoms, "bond-entry")?;
             Ok(BondEntryInput {
-                id,
+                keyword,
                 first: a,
                 second: b,
                 bond: bond.ok_or_else(|| missing("type", "bond-entry"))?,
@@ -612,13 +615,13 @@ pub(super) fn read_bond_entry(
 pub(super) fn read_dative_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<DativeBondEntryInput, EdnError> {
-    let mut id = None;
+    let mut keyword = None;
     let mut donors = None;
     let mut acceptor = None;
     let mut bond = None;
     read_map(de, |de, key| {
         match key {
-            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "donors" => donors = Some(read_vec(de, read_atom_ref)?),
             "acceptor" => acceptor = Some(read_atom_ref(de)?),
             "type" => bond = Some(read_dative_dsl(de)?),
@@ -627,7 +630,7 @@ pub(super) fn read_dative_bond_entry(
         Ok(())
     })?;
     Ok(DativeBondEntryInput {
-        id,
+        keyword,
         donors: donors.ok_or_else(|| missing("donors", "dative-bond-entry"))?,
         acceptor: acceptor.ok_or_else(|| missing("acceptor", "dative-bond-entry"))?,
         bond: bond.ok_or_else(|| missing("type", "dative-bond-entry"))?,
@@ -637,12 +640,12 @@ pub(super) fn read_dative_bond_entry(
 pub(super) fn read_aromatic_system_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<AromaticSystemEntryInput, EdnError> {
-    let mut id = None;
+    let mut keyword = None;
     let mut atoms = None;
     let mut system = None;
     read_map(de, |de, key| {
         match key {
-            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
             "type" => {
                 let s = de.read_string()?;
@@ -658,7 +661,7 @@ pub(super) fn read_aromatic_system_entry(
     })?;
     let system = system.ok_or_else(|| missing("type", "aromatic-system-entry"))?;
     Ok(AromaticSystemEntryInput {
-        id,
+        keyword,
         atoms: atoms.ok_or_else(|| missing("atoms", "aromatic-system-entry"))?,
         system,
     })
@@ -667,12 +670,12 @@ pub(super) fn read_aromatic_system_entry(
 pub(super) fn read_multicenter_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<MulticenterBondEntryInput, EdnError> {
-    let mut id = None;
+    let mut keyword = None;
     let mut atoms = None;
     let mut bond = None;
     read_map(de, |de, key| {
         match key {
-            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
             "type" => {
                 let s = de.read_string()?;
@@ -688,7 +691,7 @@ pub(super) fn read_multicenter_bond_entry(
     })?;
     let bond = bond.ok_or_else(|| missing("type", "multicenter-bond-entry"))?;
     Ok(MulticenterBondEntryInput {
-        id,
+        keyword,
         atoms: atoms.ok_or_else(|| missing("atoms", "multicenter-bond-entry"))?,
         bond,
     })
@@ -697,12 +700,12 @@ pub(super) fn read_multicenter_bond_entry(
 pub(super) fn read_noncovalent_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondEntryInput, EdnError> {
-    let mut id = None;
+    let mut keyword = None;
     let mut atoms = None;
     let mut bond = None;
     read_map(de, |de, key| {
         match key {
-            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
             "type" => {
                 let text = de.read_string_or_keyword()?;
@@ -719,7 +722,7 @@ pub(super) fn read_noncovalent_bond_entry(
     let atoms = atoms.ok_or_else(|| missing("atoms", "noncovalent-bond-entry"))?;
     let [a, b] = two_atom_refs(atoms, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
-        id,
+        keyword,
         first: a,
         second: b,
         bond: bond.ok_or_else(|| missing("type", "noncovalent-bond-entry"))?,
@@ -761,13 +764,13 @@ fn read_stereo_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoBond
 pub(super) fn read_stereo_atom_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<StereoAtomEntryInput, EdnError> {
-    let mut id = None;
+    let mut keyword = None;
     let mut site = None;
     let mut ligands = None;
     let mut stereo = None;
     read_map(de, |de, key| {
         match key {
-            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "site" => site = Some(read_atom_ref(de)?),
             "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
             "type" => stereo = Some(read_stereo_atom_dsl(de)?),
@@ -776,7 +779,7 @@ pub(super) fn read_stereo_atom_entry(
         Ok(())
     })?;
     Ok(StereoAtomEntryInput {
-        id,
+        keyword,
         site: site.ok_or_else(|| missing("site", "stereo-atom-entry"))?,
         ligands: ligands.ok_or_else(|| missing("ligands", "stereo-atom-entry"))?,
         stereo: stereo.ok_or_else(|| missing("type", "stereo-atom-entry"))?,
@@ -786,13 +789,13 @@ pub(super) fn read_stereo_atom_entry(
 pub(super) fn read_stereo_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<StereoBondEntryInput, EdnError> {
-    let mut id = None;
+    let mut keyword = None;
     let mut site = None;
     let mut ligands = None;
     let mut stereo = None;
     read_map(de, |de, key| {
         match key {
-            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "site" => site = Some(read_bond_ref(de)?),
             "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
             "type" => stereo = Some(read_stereo_bond_dsl(de)?),
@@ -801,7 +804,7 @@ pub(super) fn read_stereo_bond_entry(
         Ok(())
     })?;
     Ok(StereoBondEntryInput {
-        id,
+        keyword,
         site: site.ok_or_else(|| missing("site", "stereo-bond-entry"))?,
         ligands: ligands.ok_or_else(|| missing("ligands", "stereo-bond-entry"))?,
         stereo: stereo.ok_or_else(|| missing("type", "stereo-bond-entry"))?,
@@ -1318,7 +1321,7 @@ pub(crate) struct MoleculeInput {
 /// TODO: Fix pub(crate) visibility markers on the struct fields.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AtomEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) spec: AtomSpecInput,
 }
 
@@ -1347,7 +1350,7 @@ pub(super) fn resolve_atom_spec(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BondEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) first: AtomRef,
     pub(crate) second: AtomRef,
     pub(crate) bond: BondDsl,
@@ -1355,7 +1358,7 @@ pub(crate) struct BondEntryInput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DativeBondEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) donors: Vec<AtomRef>,
     pub(crate) acceptor: AtomRef,
     pub(crate) bond: DativeBondDsl,
@@ -1363,21 +1366,21 @@ pub(crate) struct DativeBondEntryInput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AromaticSystemEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) atoms: Vec<AtomRef>,
     pub(crate) system: AromaticSystemDsl,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct MulticenterBondEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) atoms: Vec<AtomRef>,
     pub(crate) bond: MulticenterBondDsl,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct NoncovalentBondEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) first: AtomRef,
     pub(crate) second: AtomRef,
     pub(crate) bond: NoncovalentBondDsl,
@@ -1385,7 +1388,7 @@ pub(crate) struct NoncovalentBondEntryInput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StereoAtomEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) site: AtomRef,
     pub(crate) ligands: Vec<StereoLigandRef>,
     pub(crate) stereo: StereoAtomDsl,
@@ -1393,7 +1396,7 @@ pub(crate) struct StereoAtomEntryInput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StereoBondEntryInput {
-    pub(crate) id: Option<String>,
+    pub(crate) keyword: Option<String>,
     pub(crate) site: BondRef,
     pub(crate) ligands: Vec<StereoLigandRef>,
     pub(crate) stereo: StereoBondDsl,
@@ -1422,7 +1425,7 @@ impl MoleculeInput {
         // there are no side tables; atom specs resolve against the namespace once it is complete.
         let mut namespace = MoleculeNamespace::default();
         for entry in &atom_entries {
-            namespace.register_atom(entry.id.clone())?;
+            namespace.register_atom(entry.keyword.clone())?;
         }
         for (name, dsl) in alias_entries {
             namespace.register_atom_alias(name, dsl)?;
@@ -1439,7 +1442,7 @@ impl MoleculeInput {
         for entry in bond_entries {
             let a = entry.first.resolve(&namespace)?;
             let b = entry.second.resolve(&namespace)?;
-            namespace.register_bond(entry.id, a, b)?;
+            namespace.register_bond(entry.keyword, a, b)?;
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1458,7 +1461,7 @@ impl MoleculeInput {
                 ));
             }
             let acceptor = entry.acceptor.resolve(&namespace)?;
-            namespace.register_dative_bond(entry.id, &donors, acceptor)?;
+            namespace.register_dative_bond(entry.keyword, &donors, acceptor)?;
             dative_list.push((donors, acceptor, entry.bond.0));
         }
 
@@ -1471,7 +1474,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
-            namespace.register_aromatic_system(entry.id, &atoms_resolved)?;
+            namespace.register_aromatic_system(entry.keyword, &atoms_resolved)?;
             aromatic_list.push((atoms_resolved, entry.system.0));
         }
 
@@ -1484,7 +1487,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
-            namespace.register_multicenter_bond(entry.id, &atoms_resolved)?;
+            namespace.register_multicenter_bond(entry.keyword, &atoms_resolved)?;
             multicenter_list.push((atoms_resolved, entry.bond.0));
         }
 
@@ -1494,7 +1497,7 @@ impl MoleculeInput {
         for entry in noncovalent_entries {
             let first = entry.first.resolve(&namespace)?;
             let second = entry.second.resolve(&namespace)?;
-            namespace.register_noncovalent_bond(entry.id, first, second)?;
+            namespace.register_noncovalent_bond(entry.keyword, first, second)?;
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
@@ -1508,7 +1511,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_atom(entry.id, site, &ligands)?;
+            namespace.register_stereo_atom(entry.keyword, site, &ligands)?;
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1522,7 +1525,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_bond(entry.id, site, &ligands)?;
+            namespace.register_stereo_bond(entry.keyword, site, &ligands)?;
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1609,16 +1612,16 @@ pub(super) fn parse_atom_entry(edn: &Edn<'_>) -> Result<AtomEntryInput, DeError>
         Edn::Str(s) => {
             let dsl: AtomDsl = s.parse().map_err(|e| DeError::subgrammar("atom", e))?;
             Ok(AtomEntryInput {
-                id: None,
+                keyword: None,
                 spec: AtomSpecInput::Bare(Box::new(dsl)),
             })
         }
         Edn::Keyword(k) => Ok(AtomEntryInput {
-            id: None,
+            keyword: None,
             spec: AtomSpecInput::Alias(k.name().to_string()),
         }),
         Edn::Vector(v) if v.len() == 2 => {
-            let Edn::Keyword(id_kw) = &v[0] else {
+            let Edn::Keyword(keyword) = &v[0] else {
                 return Err(DeError::TypeMismatch {
                     expected: "keyword id",
                     got: v[0].kind(),
@@ -1627,7 +1630,7 @@ pub(super) fn parse_atom_entry(edn: &Edn<'_>) -> Result<AtomEntryInput, DeError>
             };
             let spec = parse_atom_spec(&v[1])?;
             Ok(AtomEntryInput {
-                id: Some(id_kw.name().to_string()),
+                keyword: Some(keyword.name().to_string()),
                 spec,
             })
         }
@@ -1657,7 +1660,7 @@ fn parse_atom_spec(edn: &Edn<'_>) -> Result<AtomSpecInput, DeError> {
 pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError> {
     match edn {
         Edn::Vector(v) if v.len() == 3 => Ok(BondEntryInput {
-            id: None,
+            keyword: None,
             first: AtomRef::from_edn(&v[0])?,
             second: AtomRef::from_edn(&v[1])?,
             bond: BondDsl::from_edn(&v[2])?,
@@ -1665,7 +1668,7 @@ pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError>
         Edn::Map(m) => {
             let [a, b] = atoms_pair(m, "bond-entry")?;
             Ok(BondEntryInput {
-                id: optional_id(m)?,
+                keyword: optional_id_keyword(m)?,
                 first: a,
                 second: b,
                 bond: BondDsl::from_edn(required_key(m, "type", "bond-entry")?)?,
@@ -1687,7 +1690,7 @@ pub(super) fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryIn
         |e| AtomRef::from_edn(e),
     )?;
     Ok(DativeBondEntryInput {
-        id: optional_id(m)?,
+        keyword: optional_id_keyword(m)?,
         donors,
         acceptor: AtomRef::from_edn(required_key(m, "acceptor", "dative-bond-entry")?)?,
         bond: DativeBondDsl::from_edn(required_key(m, "type", "dative-bond-entry")?)?,
@@ -1700,7 +1703,7 @@ pub(super) fn parse_aromatic_system_entry(
     let m = expect_map(edn, "aromatic-system-entry")?;
     let system = AromaticSystemDsl::from_edn(required_key(m, "type", "aromatic-system-entry")?)?;
     Ok(AromaticSystemEntryInput {
-        id: optional_id(m)?,
+        keyword: optional_id_keyword(m)?,
         atoms: atoms_vec(m, "aromatic-system-entry")?,
         system,
     })
@@ -1712,7 +1715,7 @@ pub(super) fn parse_multicenter_bond_entry(
     let m = expect_map(edn, "multicenter-bond-entry")?;
     let bond = MulticenterBondDsl::from_edn(required_key(m, "type", "multicenter-bond-entry")?)?;
     Ok(MulticenterBondEntryInput {
-        id: optional_id(m)?,
+        keyword: optional_id_keyword(m)?,
         atoms: atoms_vec(m, "multicenter-bond-entry")?,
         bond,
     })
@@ -1724,7 +1727,7 @@ pub(super) fn parse_noncovalent_bond_entry(
     let m = expect_map(edn, "noncovalent-bond-entry")?;
     let [a, b] = atoms_pair(m, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
-        id: optional_id(m)?,
+        keyword: optional_id_keyword(m)?,
         first: a,
         second: b,
         bond: NoncovalentBondDsl::from_edn(required_key(m, "type", "noncovalent-bond-entry")?)?,
@@ -1734,7 +1737,7 @@ pub(super) fn parse_noncovalent_bond_entry(
 pub(super) fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryInput, DeError> {
     let m = expect_map(edn, "stereo-atom-entry")?;
     Ok(StereoAtomEntryInput {
-        id: optional_id(m)?,
+        keyword: optional_id_keyword(m)?,
         site: AtomRef::from_edn(required_key(m, "site", "stereo-atom-entry")?)?,
         ligands: parse_vec(
             required_key(m, "ligands", "stereo-atom-entry")?,
@@ -1748,7 +1751,7 @@ pub(super) fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryIn
 pub(super) fn parse_stereo_bond_entry(edn: &Edn<'_>) -> Result<StereoBondEntryInput, DeError> {
     let m = expect_map(edn, "stereo-bond-entry")?;
     Ok(StereoBondEntryInput {
-        id: optional_id(m)?,
+        keyword: optional_id_keyword(m)?,
         site: BondRef::from_edn(required_key(m, "site", "stereo-bond-entry")?)?,
         ligands: parse_vec(
             required_key(m, "ligands", "stereo-bond-entry")?,

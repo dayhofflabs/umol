@@ -440,7 +440,7 @@ Rename the helper that reads the literal `:id` field to
 `optional_id_keyword`; the surface key remains `:id`. Update focused parser
 tests for absent, valid, and malformed literal `:id` values. This is breaking
 and goes red→green with all constructors and pattern matches migrated.
-[dep: S1a]
+**Implemented (green).** [dep: S1a]
 
 **S1c — Namespace and parser vocabulary.** Rename `contains_id` to
 `contains_keyword`, `ParseError::DuplicateId` to `DuplicateKeyword`, and
