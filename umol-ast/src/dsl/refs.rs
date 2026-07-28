@@ -4,7 +4,7 @@
 //! bonds. `resolve` turns a ref into an AST id against any parse-time `Namespace`
 //! (count for index bounds, `find_by_keyword` for keyword references,
 //! `find_by_participants` for the structural form); `denote` renders an id back
-//! to a ref against the `MoleculeMetadata` roundtrip projection.
+//! to a ref against any `Metadata` view.
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 

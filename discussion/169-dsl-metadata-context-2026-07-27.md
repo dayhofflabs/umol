@@ -143,13 +143,11 @@ keyword atomically into the shared bindings.
 `ReactionMetadata` provides layered lookup over delta and lhs bindings and
 implements `Metadata` directly. Consumers that render constraints or overlay
 references can accept that view without constructing a combined
-`MoleculeMetadata`. The current `combined_metadata()` operation and its
-render-time cloning should disappear. The combined `keyword` and `entity`
-queries search delta bindings before lhs bindings. Scope-specific queries use
-`delta_keyword` and `delta_entity`, while `lhs()` exposes the immutable
-`MoleculeMetadata`. Mutation is explicit through `set_delta_keyword`; lhs
-metadata is constructed first and embedded through
-`From<MoleculeMetadata> for ReactionMetadata`.
+`MoleculeMetadata`. The combined `keyword` and `entity` queries search delta
+bindings before lhs bindings. Scope-specific queries use `delta_keyword` and
+`delta_entity`, while `lhs()` exposes the immutable `MoleculeMetadata`.
+Mutation is explicit through `set_delta_keyword`; lhs metadata is constructed
+first and embedded through `From<MoleculeMetadata> for ReactionMetadata`.
 
 Atom aliases have the same bidirectional query surface on both containers:
 `atom_alias(name)` returns the atom DSL and `atom_alias_name(dsl)` returns its
@@ -576,7 +574,8 @@ combined `Metadata` view, and top-level alias emission uses
 `iter_reaction_atom_aliases`. Add regression tests for positional, lhs,
 delta, combined constraint and overlay references, aliases in both scopes,
 and all eight entity kinds. This is a breaking removal and rewire that goes
-red→green with all rendering callers migrated. [dep: S2h]
+red→green with all rendering callers migrated. **Implemented (green).**
+[dep: S2h]
 
 **S2j — Exact-size iterator contracts.** Strengthen every opaque iterator
 return type whose remaining cardinality is structurally known from

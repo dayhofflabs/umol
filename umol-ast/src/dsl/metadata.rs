@@ -308,16 +308,6 @@ impl ReactionMetadata {
             .map(|(entity, keyword)| (*entity, keyword.as_str()))
     }
 
-    pub fn combined_metadata(&self) -> MoleculeMetadata {
-        let mut combined = self.lhs.clone();
-        for (entity, name) in self.iter_delta_keywords() {
-            combined
-                .set_keyword(entity, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        combined
-    }
-
     pub fn atom_alias(&self, name: &str) -> Option<&AtomDsl> {
         self.atom_aliases
             .get_by_left(name)
@@ -1273,43 +1263,6 @@ mod tests {
         );
         assert_eq!(keywords.len(), 0);
         assert_eq!(keywords.size_hint(), (0, Some(0)));
-    }
-
-    #[rstest]
-    fn test_reaction_metadata_combined_metadata() {
-        let metadata = ReactionMetadata {
-            lhs: MoleculeMetadata {
-                keywords: [(Entity::Atom(AtomId(0)), "lhs".to_string())]
-                    .into_iter()
-                    .collect(),
-                atom_aliases: [(
-                    "carbon".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
-                )]
-                .into_iter()
-                .collect(),
-            },
-            delta_keywords: [(Entity::Bond(BondId(0)), "delta".to_string())]
-                .into_iter()
-                .collect(),
-            atom_aliases: BiBTreeMap::new(),
-        };
-        let expected = MoleculeMetadata {
-            keywords: [
-                (Entity::Atom(AtomId(0)), "lhs".to_string()),
-                (Entity::Bond(BondId(0)), "delta".to_string()),
-            ]
-            .into_iter()
-            .collect(),
-            atom_aliases: [(
-                "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
-            )]
-            .into_iter()
-            .collect(),
-        };
-
-        assert_eq!(metadata.combined_metadata(), expected);
     }
 
     #[rstest]

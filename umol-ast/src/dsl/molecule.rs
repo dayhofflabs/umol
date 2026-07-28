@@ -740,15 +740,15 @@ fn render_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
 }
 
 // Overlay entries: `render_<entity>_entry` builds one entry map (`:id`? + participants + `:type`),
-// with `:type` = the caller-supplied `type_edn`. `render_<entity>` passes the ast's rendered type;
-// the span renderers (reaction_span) pass a `{:add|:modify|:remove}`-wrapped type over the same entry.
+// with `:type` = the caller-supplied `type_edn`. Molecule and reaction-delta rendering pass an
+// entity DSL value; reaction-span rendering passes a `{:add|:modify|:remove}`-wrapped value.
 
 pub(super) fn render_dative_entry(
     id: DativeBondId,
     donors: impl Iterator<Item = AtomId>,
     acceptor: AtomId,
     type_edn: Edn<'static>,
-    meta: &MoleculeMetadata,
+    meta: &impl Metadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
     if let Some(keyword) = meta.keyword(Entity::DativeBond(id)) {
@@ -792,7 +792,7 @@ pub(super) fn render_aromatic_entry(
     id: AromaticSystemId,
     atoms: impl Iterator<Item = AtomId>,
     type_edn: Edn<'static>,
-    meta: &MoleculeMetadata,
+    meta: &impl Metadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
     if let Some(keyword) = meta.keyword(Entity::AromaticSystem(id)) {
@@ -836,7 +836,7 @@ pub(super) fn render_multicenter_entry(
     id: MulticenterBondId,
     atoms: impl Iterator<Item = AtomId>,
     type_edn: Edn<'static>,
-    meta: &MoleculeMetadata,
+    meta: &impl Metadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
     if let Some(keyword) = meta.keyword(Entity::MulticenterBond(id)) {
@@ -880,7 +880,7 @@ pub(super) fn render_noncovalent_entry(
     id: NoncovalentBondId,
     [a, b]: [AtomId; 2],
     type_edn: Edn<'static>,
-    meta: &MoleculeMetadata,
+    meta: &impl Metadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
     if let Some(keyword) = meta.keyword(Entity::NoncovalentBond(id)) {
@@ -918,7 +918,7 @@ pub(super) fn render_stereo_atom_entry(
     site: AtomId,
     ligands: Vec<Edn<'static>>,
     type_edn: Edn<'static>,
-    meta: &MoleculeMetadata,
+    meta: &impl Metadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
     if let Some(keyword) = meta.keyword(Entity::StereoAtom(id)) {
@@ -958,7 +958,7 @@ pub(super) fn render_stereo_bond_entry(
     site: BondId,
     ligands: Vec<Edn<'static>>,
     type_edn: Edn<'static>,
-    meta: &MoleculeMetadata,
+    meta: &impl Metadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
     if let Some(keyword) = meta.keyword(Entity::StereoBond(id)) {
