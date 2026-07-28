@@ -2044,6 +2044,9 @@ default rather than introducing a one-field composition config.
   validity, determinism, canonical-delta, and overlay-uniqueness properties.
   The selector rename and direct-enumeration alternative are tracked in
   [doc 162](162-common-subgraph-algs-2026-07-25.md).
+  The later Python-only `ReactionCompositionConfig` migration is tracked in
+  [doc 170](170-reaction-smiles-python-2026-07-28.md) and supersedes only the
+  direct Python selector decision above.
   `[dep: S9j]`
 - **S9r — pattern-fingerprint matching configuration**
   (`umol-graph/src/fingerprint/pattern.rs`,

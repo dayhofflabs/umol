@@ -157,6 +157,9 @@ The current Python workflow round focuses on resolved SMILES. MOL, SDF, and CXSM
 Required work:
 
 - Bind ordinary SMILES config and errors for the current Python workflow.
+- Interpret reaction SMILES as `ReactionAst` through the Rust format and graph
+  boundaries as tracked in
+  [doc 170](170-reaction-smiles-python-2026-07-28.md).
 - Defer Python `CxSmiles`, `Mol`, and `Sdf` APIs until their Rust boundary objects and configs exist.
 - Keep parsing methods operation-specific, with separate config types for SMILES, MOL, SDF, and CXSMILES.
 - Avoid generic format-polymorphic parsing APIs unless a later design shows concrete value.

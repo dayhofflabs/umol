@@ -6,6 +6,7 @@ use thiserror::Error;
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
 use umol_io::smiles::{ParseError as SmilesParseError, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
+use umol_io::table_ir::Molecule as TableMolecule;
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 
@@ -46,6 +47,32 @@ impl UmolError for MoleculeInterpretationError {
     }
 }
 
+/// Failure while interpreting a parsed reaction representation.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ReactionInterpretationError {
+    #[error("reactants: {0}")]
+    Reactants(#[source] MoleculeInterpretationError),
+    #[error("products: {0}")]
+    Products(#[source] MoleculeInterpretationError),
+    #[error(
+        "atom-map class {class} cannot be projected into one correspondence \
+         (reactant atoms: {reactant_count}, product atoms: {product_count})"
+    )]
+    AmbiguousAtomMapClass {
+        class: u32,
+        reactant_count: usize,
+        product_count: usize,
+    },
+    #[error("reaction agents cannot be represented in ReactionAst")]
+    AgentsUnsupported,
+}
+
+impl UmolError for ReactionInterpretationError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// Failure while accepting SMILES text as a determined molecule.
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum SmilesInputError {
@@ -78,6 +105,34 @@ impl UmolError for SmilesInputError {
     }
 }
 
+/// Failure while accepting reaction SMILES text as a determined reaction.
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum ReactionSmilesInputError {
+    #[error("{0}")]
+    Syntax(#[from] SmilesParseError),
+    #[error("{0}")]
+    Interpretation(#[from] ReactionInterpretationError),
+}
+
+impl UmolError for ReactionSmilesInputError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+fn interpret_molecule(
+    molecule: &TableMolecule,
+    model: &ChemistryModel,
+    resolve_config: &ResolveConfig,
+) -> Result<MoleculeAst, MoleculeInterpretationError> {
+    let mut ast: MoleculeAst = molecule.try_into_ast(&())?;
+    match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
+        Solution::Determined(()) => Ok(ast),
+        Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),
+        Solution::Contradictory(error) => Err(error.into()),
+    }
+}
+
 impl Interpret for Smiles {
     type Output = MoleculeAst;
     type Error = MoleculeInterpretationError;
@@ -87,12 +142,7 @@ impl Interpret for Smiles {
         model: &ChemistryModel,
         resolve_config: &ResolveConfig,
     ) -> Result<Self::Output, Self::Error> {
-        let mut ast: MoleculeAst = self.as_table_ir().try_into_ast(&())?;
-        match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
-            Solution::Determined(()) => Ok(ast),
-            Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),
-            Solution::Contradictory(error) => Err(error.into()),
-        }
+        interpret_molecule(self.as_table_ir(), model, resolve_config)
     }
 }
 
@@ -184,6 +234,50 @@ mod tests {
     }
 
     #[rstest]
+    #[case::reactants(
+        ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::ModelConversion(
+                RaiseError::WedgeConflict { atom: 2 },
+            ),
+        ),
+        "reactants: inconsistent wedge bonds at atom 2",
+        Some("inconsistent wedge bonds at atom 2"),
+    )]
+    #[case::products(
+        ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
+            ResolveUnderdetermined
+        ),),
+        "products: resolution underdetermined",
+        Some("resolution underdetermined")
+    )]
+    #[case::ambiguous_atom_map_class(
+        ReactionInterpretationError::AmbiguousAtomMapClass {
+            class: 7,
+            reactant_count: 2,
+            product_count: 1,
+        },
+        "atom-map class 7 cannot be projected into one correspondence \
+         (reactant atoms: 2, product atoms: 1)",
+        None,
+    )]
+    #[case::agents_unsupported(
+        ReactionInterpretationError::AgentsUnsupported,
+        "reaction agents cannot be represented in ReactionAst",
+        None
+    )]
+    fn test_reaction_interpretation_error(
+        #[case] error: ReactionInterpretationError,
+        #[case] expected: &str,
+        #[case] expected_source: Option<&str>,
+    ) {
+        assert_eq!(error.to_string(), expected);
+        assert_eq!(
+            error.source().map(ToString::to_string).as_deref(),
+            expected_source
+        );
+    }
+
+    #[rstest]
     #[case::syntax(
         SmilesInputError::Syntax(SmilesParseError::LeadingWhitespace),
         "Leading whitespace"
@@ -246,6 +340,81 @@ mod tests {
         #[case] expected: SmilesInputError,
     ) {
         assert_eq!(SmilesInputError::from(input), expected);
+    }
+
+    #[rstest]
+    #[case::syntax(
+        ReactionSmilesInputError::Syntax(SmilesParseError::LeadingWhitespace),
+        "Leading whitespace",
+        vec!["Leading whitespace"],
+    )]
+    #[case::reactants(
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::ModelConversion(
+                RaiseError::WedgeConflict { atom: 2 },
+            ),
+        )),
+        "reactants: inconsistent wedge bonds at atom 2",
+        vec![
+            "reactants: inconsistent wedge bonds at atom 2",
+            "inconsistent wedge bonds at atom 2",
+            "inconsistent wedge bonds at atom 2",
+        ],
+    )]
+    #[case::products(
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Products(
+            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+        )),
+        "products: resolution underdetermined",
+        vec![
+            "products: resolution underdetermined",
+            "resolution underdetermined",
+            "resolution underdetermined",
+        ],
+    )]
+    #[case::ambiguous_atom_map_class(
+        ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::AmbiguousAtomMapClass {
+                class: 7,
+                reactant_count: 2,
+                product_count: 1,
+            },
+        ),
+        "atom-map class 7 cannot be projected into one correspondence \
+         (reactant atoms: 2, product atoms: 1)",
+        vec![
+            "atom-map class 7 cannot be projected into one correspondence \
+             (reactant atoms: 2, product atoms: 1)",
+        ],
+    )]
+    #[case::agents_unsupported(
+        ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::AgentsUnsupported,
+        ),
+        "reaction agents cannot be represented in ReactionAst",
+        vec!["reaction agents cannot be represented in ReactionAst"],
+    )]
+    fn test_reaction_smiles_input_error(
+        #[case] error: ReactionSmilesInputError,
+        #[case] expected: &str,
+        #[case] expected_sources: Vec<&str>,
+    ) {
+        assert_eq!(error.to_string(), expected);
+
+        let mut source = error.source();
+        let mut actual_sources = Vec::new();
+        while let Some(current) = source {
+            actual_sources.push(current.to_string());
+            source = current.source();
+        }
+
+        assert_eq!(
+            actual_sources,
+            expected_sources
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[rstest]
