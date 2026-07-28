@@ -129,7 +129,7 @@ pub struct Isotope {
 /// 1. half-life (value, unit)
 impl Isotope {
     /// Create a new isotope if it exists in ISOTOPE_DATA.  
-    pub fn checked_new(element: Element, mass_number: u32) -> Option<Self> {
+    pub fn new(element: Element, mass_number: u32) -> Option<Self> {
         if !Self::is_catalogued(element, mass_number) {
             return None;
         }
@@ -177,7 +177,7 @@ impl Isotope {
 
         let element = Element::from_symbol_bytes(element_symbol_bytes)?;
 
-        Self::checked_new(element, mass_number)
+        Self::new(element, mass_number)
     }
 
     /// Create a new isotope from symbol string
@@ -412,44 +412,37 @@ mod tests {
         assert_eq!(isotopes, deserialized);
     }
 
-    // Tests for Isotope struct and its implementations
     #[test]
-    fn test_isotope_checked_new() {
-        assert!(Isotope::checked_new(Element::H, 1).is_some());
-        assert!(Isotope::checked_new(Element::C, 12).is_some());
-        assert_eq!(
-            Isotope::checked_new(Element::H, 1).unwrap().element,
-            Element::H
-        );
-        assert_eq!(
-            Isotope::checked_new(Element::C, 12).unwrap().mass_number,
-            12
-        );
-        assert!(Isotope::checked_new(Element::C, 40).is_none()); // 40C not in ISOTOPE_DATA
-        assert!(Isotope::checked_new(Element::H, 0).is_none()); // Invalid mass number
+    fn test_isotope_new() {
+        assert!(Isotope::new(Element::H, 1).is_some());
+        assert!(Isotope::new(Element::C, 12).is_some());
+        assert_eq!(Isotope::new(Element::H, 1).unwrap().element, Element::H);
+        assert_eq!(Isotope::new(Element::C, 12).unwrap().mass_number, 12);
+        assert!(Isotope::new(Element::C, 40).is_none()); // 40C not in ISOTOPE_DATA
+        assert!(Isotope::new(Element::H, 0).is_none()); // Invalid mass number
     }
 
     #[test]
     fn test_isotope_from_symbol_bytes() {
         assert_eq!(
             Isotope::from_symbol_bytes(b"1H"),
-            Isotope::checked_new(Element::H, 1)
+            Isotope::new(Element::H, 1)
         );
         assert_eq!(
             Isotope::from_symbol_bytes(b"1h"),
-            Isotope::checked_new(Element::H, 1)
+            Isotope::new(Element::H, 1)
         );
         assert_eq!(
             Isotope::from_symbol_bytes(b"12C"),
-            Isotope::checked_new(Element::C, 12)
+            Isotope::new(Element::C, 12)
         );
         assert_eq!(
             Isotope::from_symbol_bytes(b"4He"),
-            Isotope::checked_new(Element::He, 4)
+            Isotope::new(Element::He, 4)
         );
         assert_eq!(
             Isotope::from_symbol_bytes(b"22Ne"),
-            Isotope::checked_new(Element::Ne, 22)
+            Isotope::new(Element::Ne, 22)
         );
 
         assert!(Isotope::from_symbol_bytes(b"H1").is_none()); // Invalid format
@@ -463,26 +456,11 @@ mod tests {
 
     #[test]
     fn test_isotope_from_symbol() {
-        assert_eq!(
-            Isotope::from_symbol("1H"),
-            Isotope::checked_new(Element::H, 1)
-        );
-        assert_eq!(
-            Isotope::from_symbol("1h"),
-            Isotope::checked_new(Element::H, 1)
-        );
-        assert_eq!(
-            Isotope::from_symbol("12C"),
-            Isotope::checked_new(Element::C, 12)
-        );
-        assert_eq!(
-            Isotope::from_symbol("4He"),
-            Isotope::checked_new(Element::He, 4)
-        );
-        assert_eq!(
-            Isotope::from_symbol("22Ne"),
-            Isotope::checked_new(Element::Ne, 22)
-        );
+        assert_eq!(Isotope::from_symbol("1H"), Isotope::new(Element::H, 1));
+        assert_eq!(Isotope::from_symbol("1h"), Isotope::new(Element::H, 1));
+        assert_eq!(Isotope::from_symbol("12C"), Isotope::new(Element::C, 12));
+        assert_eq!(Isotope::from_symbol("4He"), Isotope::new(Element::He, 4));
+        assert_eq!(Isotope::from_symbol("22Ne"), Isotope::new(Element::Ne, 22));
 
         assert!(Isotope::from_symbol("H1").is_none()); // Invalid format
         assert!(Isotope::from_symbol("H").is_none()); // Element only, not an isotope symbol

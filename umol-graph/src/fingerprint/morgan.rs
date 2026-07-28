@@ -82,7 +82,7 @@ fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let delta_mass: i32 = match atom.isotope_mass() {
         IsotopeMassAst::Natural => 0,
         IsotopeMassAst::Lit(mass_number) => {
-            let isotope = Isotope::checked_new(element, *mass_number).expect("valid isotope");
+            let isotope = Isotope::new(element, *mass_number).expect("valid isotope");
             (isotope.mass() - element.mass()) as i32
         }
         _ => unreachable!("ground atom isotope is Natural or Lit"),

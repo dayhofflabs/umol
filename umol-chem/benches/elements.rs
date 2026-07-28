@@ -69,9 +69,9 @@ fn elements(c: &mut Criterion) {
     {
         let mut group = c.benchmark_group("isotope/to_string");
         for (symbol, isotope) in &[
-            ("12C".to_string(), Isotope::checked_new(e!(C), 12)),
-            ("63Cu".to_string(), Isotope::checked_new(e!(Cu), 63)),
-            ("209Bi".to_string(), Isotope::checked_new(e!(Bi), 209)),
+            ("12C".to_string(), Isotope::new(e!(C), 12)),
+            ("63Cu".to_string(), Isotope::new(e!(Cu), 63)),
+            ("209Bi".to_string(), Isotope::new(e!(Bi), 209)),
         ] {
             group.bench_with_input(symbol, isotope, |b, isotope| {
                 b.iter(|| {
