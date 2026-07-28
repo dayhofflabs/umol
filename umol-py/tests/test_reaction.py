@@ -25,6 +25,7 @@ from umol import (
     ParseError,
     ReactionApplicationConfig,
     ReactionAst,
+    ReactionCompositionConfig,
     ReactionDefaults,
     ReactionDerivation,
     ReactionMetadata,
@@ -40,6 +41,60 @@ from umol import (
     ValenceTable,
     ValueAst,
 )
+
+
+def test_reaction_composition_config_default():
+    config = ReactionCompositionConfig()
+
+    assert config == ReactionCompositionConfig.default()
+    assert (
+        config.common_subgraph_enumeration_algorithm
+        == CommonSubgraphEnumerationAlgorithm.DirectBacktracking()
+    )
+    assert repr(config) == (
+        "ReactionCompositionConfig("
+        "common_subgraph_enumeration_algorithm="
+        "CommonSubgraphEnumerationAlgorithm.DirectBacktracking())"
+    )
+
+
+@pytest.mark.parametrize(
+    "algorithm",
+    [
+        pytest.param(
+            CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
+            id="direct-backtracking",
+        ),
+        pytest.param(
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            id="modular-product-backtracking",
+        ),
+    ],
+)
+def test_reaction_composition_config_value(algorithm):
+    config = ReactionCompositionConfig(
+        common_subgraph_enumeration_algorithm=algorithm,
+    )
+    equal = ReactionCompositionConfig(
+        common_subgraph_enumeration_algorithm=algorithm,
+    )
+
+    assert config == equal
+    assert config.common_subgraph_enumeration_algorithm == algorithm
+    assert repr(config) == (
+        "ReactionCompositionConfig("
+        f"common_subgraph_enumeration_algorithm={algorithm!r})"
+    )
+    assert config != ReactionCompositionConfig(
+        common_subgraph_enumeration_algorithm=(
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()
+            if algorithm
+            == CommonSubgraphEnumerationAlgorithm.DirectBacktracking()
+            else CommonSubgraphEnumerationAlgorithm.DirectBacktracking()
+        )
+    )
+    with pytest.raises(AttributeError):
+        config.common_subgraph_enumeration_algorithm = algorithm
 
 
 def test_reactionapplicationconfig_default():
@@ -1032,14 +1087,22 @@ def test_reactionast_reverse():
 
 
 @pytest.mark.parametrize(
-    "algorithm",
+    "config",
     [
         pytest.param(
-            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            ReactionCompositionConfig(
+                common_subgraph_enumeration_algorithm=(
+                    CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()
+                )
+            ),
             id="modular-product-backtracking",
         ),
         pytest.param(
-            CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
+            ReactionCompositionConfig(
+                common_subgraph_enumeration_algorithm=(
+                    CommonSubgraphEnumerationAlgorithm.DirectBacktracking()
+                )
+            ),
             id="direct-backtracking",
         ),
     ],
@@ -1081,19 +1144,19 @@ def test_reactionast_reverse():
         ),
     ],
 )
-def test_reactionast_compose(algorithm, first, second, expected):
+def test_reaction_ast_compose(config, first, second, expected):
     first = ReactionAst.parse(first)
     second = ReactionAst.parse(second)
 
     composites = first.compose(
         second,
-        algorithm=algorithm,
+        config=config,
     )
 
     assert composites == [ReactionAst.parse(reaction) for reaction in expected]
 
 
-def test_reactionast_compose_default():
+def test_reaction_ast_compose_default():
     first = ReactionAst.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
@@ -1112,19 +1175,32 @@ def test_reactionast_compose_default():
     omitted = first.compose(second)
     explicit = first.compose(
         second,
-        algorithm=CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+        config=ReactionCompositionConfig(
+            common_subgraph_enumeration_algorithm=(
+                CommonSubgraphEnumerationAlgorithm.DirectBacktracking()
+            )
+        ),
     )
 
     assert omitted == [disjoint, fused]
     assert explicit == [disjoint, fused]
-    with pytest.raises(TypeError):
+
+
+def test_reaction_ast_compose_error():
+    first = ReactionAst()
+    second = ReactionAst()
+
+    with pytest.raises(
+        TypeError,
+        match="^ReactionAst.compose\\(\\) got an unexpected keyword argument 'algorithm'$",
+    ):
         first.compose(
             second,
-            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            algorithm=CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
         )
 
 
-def test_reactionast_compose_snapshot():
+def test_reaction_ast_compose_snapshot():
     first = ReactionAst.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )

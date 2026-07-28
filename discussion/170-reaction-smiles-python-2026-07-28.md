@@ -1,6 +1,6 @@
 # Reaction SMILES import in Python
 
-Status: **In Progress**
+Status: **Completed**
 Date: 2026-07-28
 Relates: [151](151-python-molecule-workflows-2026-07-13.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
@@ -387,12 +387,12 @@ the two reaction sides.
   arguments; and ownership after the source/config objects leave scope. Update
   the import/signature inventory with a fixed expected signature.
 
-### S3 — Python reaction composition configuration
+### S3 — Python reaction composition configuration **Done**
 
 This stage is independent of S0--S2 and may be implemented in parallel with
 the reaction-ingestion path.
 
-#### S3a — Add `ReactionCompositionConfig`
+#### S3a — Add `ReactionCompositionConfig` **Done**
 
 - **Modules:** `umol-py/src/reaction.rs`, `umol-py/src/lib.rs`,
   `umol-py/tests/test_reaction.py`, `umol-py/tests/test_import.py`
@@ -408,7 +408,7 @@ the reaction-ingestion path.
   getter, exact repr, both Rust conversion directions, module export, and the
   direct-backtracking default.
 
-#### S3b — Migrate `ReactionAst.compose` to the config
+#### S3b — Migrate `ReactionAst.compose` to the config **Done**
 
 - **Modules:** `umol-py/src/reaction.rs`,
   `umol-py/tests/test_reaction.py`, `umol-py/tests/test_import.py`, and all

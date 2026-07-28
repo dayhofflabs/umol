@@ -122,6 +122,7 @@ PUBLIC_EXPORTS = frozenset(
     ReactionAst
     ReactionCombinedFingerprint
     ReactionCombinedFingerprintConfig
+    ReactionCompositionConfig
     ReactionDefaults
     ReactionDerivation
     ReactionMetadata
@@ -284,7 +285,7 @@ def test_deferred_member(owner, name):
         ),
         (
             umol.ReactionAst.compose,
-            "(self, /, other, *, algorithm=Ellipsis)",
+            "(self, /, other, *, config=None)",
         ),
         (umol.ReactionAst.apply, "(self, /, host, *, config=None)"),
         (umol.ReactionAst.combined_fingerprint, "(self, /, *, config)"),
@@ -355,6 +356,10 @@ def test_public_operation_signature(operation, expected):
         (
             umol.ReactionApplicationConfig,
             "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis)",
+        ),
+        (
+            umol.ReactionCompositionConfig,
+            "(*, common_subgraph_enumeration_algorithm=Ellipsis)",
         ),
         (
             umol.SubstructureSearchConfig,

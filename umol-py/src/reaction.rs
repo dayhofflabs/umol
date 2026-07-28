@@ -19,6 +19,7 @@ use umol_graph::ingest::ingest_reaction_smiles_with;
 use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_core::{
+    CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
     Correspondence, NodeId, SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
@@ -42,6 +43,67 @@ use crate::model::ChemistryModel;
 use crate::molecule::MoleculeAst;
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
+
+/// Algorithm used to enumerate common subgraphs during reaction composition.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReactionCompositionConfig {
+    common_subgraph_enumeration_algorithm: CommonSubgraphEnumerationAlgorithm,
+}
+
+impl Default for ReactionCompositionConfig {
+    fn default() -> Self {
+        Self::from_rust(GraphCoreCommonSubgraphEnumerationAlgorithm::DirectBacktracking)
+    }
+}
+
+#[pymethods]
+impl ReactionCompositionConfig {
+    #[new]
+    #[pyo3(signature = (
+        *,
+        common_subgraph_enumeration_algorithm=
+            CommonSubgraphEnumerationAlgorithm::DirectBacktracking(),
+    ))]
+    fn new(common_subgraph_enumeration_algorithm: CommonSubgraphEnumerationAlgorithm) -> Self {
+        Self {
+            common_subgraph_enumeration_algorithm,
+        }
+    }
+
+    #[staticmethod]
+    fn default() -> Self {
+        Default::default()
+    }
+
+    #[getter]
+    fn common_subgraph_enumeration_algorithm(&self) -> CommonSubgraphEnumerationAlgorithm {
+        self.common_subgraph_enumeration_algorithm
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ReactionCompositionConfig(common_subgraph_enumeration_algorithm={})",
+            self.common_subgraph_enumeration_algorithm.repr(),
+        )
+    }
+}
+
+impl ReactionCompositionConfig {
+    pub(crate) fn from_rust(
+        common_subgraph_enumeration_algorithm: GraphCoreCommonSubgraphEnumerationAlgorithm,
+    ) -> Self {
+        Self {
+            common_subgraph_enumeration_algorithm: CommonSubgraphEnumerationAlgorithm::from_rust(
+                common_subgraph_enumeration_algorithm,
+            ),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphCoreCommonSubgraphEnumerationAlgorithm {
+        self.common_subgraph_enumeration_algorithm.to_rust()
+    }
+}
 
 /// Algorithms used to enumerate matches for reaction application.
 #[pyclass(eq, frozen, from_py_object)]
@@ -349,22 +411,19 @@ impl ReactionAst {
     }
 
     /// Return the sequential composites with another reaction.
-    #[pyo3(signature = (
-        other,
-        *,
-        algorithm=CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
-    ))]
+    #[pyo3(signature = (other, *, config=None))]
     fn compose(
         &self,
         py: Python<'_>,
         other: &Self,
-        algorithm: CommonSubgraphEnumerationAlgorithm,
+        config: Option<ReactionCompositionConfig>,
     ) -> PyResult<Vec<Self>> {
         let first = self.to_rust(py);
         let second = other.to_rust(py);
+        let algorithm = config.unwrap_or_default().to_rust();
 
         first
-            .compose(&second, algorithm.to_rust())
+            .compose(&second, algorithm)
             .into_iter()
             .map(|reaction| Self::from_rust(py, reaction))
             .collect()
@@ -605,6 +664,87 @@ mod tests {
         ReactionSide, RoleTaggedHashedFeatureSet, SignedHashedFeatureSet,
     };
     use crate::ring::RingConfig;
+
+    #[rstest]
+    #[case::direct(
+        CommonSubgraphEnumerationAlgorithm::DirectBacktracking(),
+        "CommonSubgraphEnumerationAlgorithm.DirectBacktracking()"
+    )]
+    #[case::modular_product(
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
+        "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()"
+    )]
+    fn test_reaction_composition_config_new(
+        #[case] algorithm: CommonSubgraphEnumerationAlgorithm,
+        #[case] expected_algorithm_repr: &str,
+    ) {
+        let config = ReactionCompositionConfig::new(algorithm);
+
+        assert_eq!(config.common_subgraph_enumeration_algorithm(), algorithm);
+        assert_eq!(
+            config.__repr__(),
+            format!(
+                "ReactionCompositionConfig(\
+                 common_subgraph_enumeration_algorithm={expected_algorithm_repr})"
+            )
+        );
+        assert_eq!(config, ReactionCompositionConfig::new(algorithm));
+        assert_ne!(
+            config,
+            ReactionCompositionConfig::new(match algorithm {
+                CommonSubgraphEnumerationAlgorithm::DirectBacktracking() => {
+                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking()
+                }
+                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking() => {
+                    CommonSubgraphEnumerationAlgorithm::DirectBacktracking()
+                }
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_composition_config_default() {
+        assert_eq!(
+            ReactionCompositionConfig::default(),
+            ReactionCompositionConfig::new(CommonSubgraphEnumerationAlgorithm::DirectBacktracking())
+        );
+    }
+
+    #[rstest]
+    #[case::direct(
+        GraphCoreCommonSubgraphEnumerationAlgorithm::DirectBacktracking,
+        ReactionCompositionConfig::new(CommonSubgraphEnumerationAlgorithm::DirectBacktracking())
+    )]
+    #[case::modular_product(
+        GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
+        ReactionCompositionConfig::new(
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking()
+        )
+    )]
+    fn test_reaction_composition_config_from_rust(
+        #[case] input: GraphCoreCommonSubgraphEnumerationAlgorithm,
+        #[case] expected: ReactionCompositionConfig,
+    ) {
+        assert_eq!(ReactionCompositionConfig::from_rust(input), expected);
+    }
+
+    #[rstest]
+    #[case::direct(
+        ReactionCompositionConfig::new(CommonSubgraphEnumerationAlgorithm::DirectBacktracking()),
+        GraphCoreCommonSubgraphEnumerationAlgorithm::DirectBacktracking
+    )]
+    #[case::modular_product(
+        ReactionCompositionConfig::new(
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking()
+        ),
+        GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking
+    )]
+    fn test_reaction_composition_config_to_rust(
+        #[case] input: ReactionCompositionConfig,
+        #[case] expected: GraphCoreCommonSubgraphEnumerationAlgorithm,
+    ) {
+        assert_eq!(input.to_rust(), expected);
+    }
 
     #[rstest]
     fn test_reaction_application_config_default() {
@@ -1716,17 +1856,56 @@ mod tests {
                 .collect();
 
             let actual: Vec<AstReactionAst> = first
-                .compose(
-                    py,
-                    &second,
-                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
-                )
+                .compose(py, &second, None)
                 .unwrap()
                 .iter()
                 .map(|reaction| reaction.to_rust(py))
                 .collect();
 
             assert_eq!(actual, expected);
+        });
+    }
+
+    #[rstest]
+    #[case::direct(ReactionCompositionConfig::new(
+        CommonSubgraphEnumerationAlgorithm::DirectBacktracking()
+    ))]
+    #[case::modular_product(ReactionCompositionConfig::new(
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking()
+    ))]
+    fn test_reaction_ast_compose_config(#[case] config: ReactionCompositionConfig) {
+        Python::attach(|py| {
+            let first = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+                None,
+            )
+            .unwrap();
+            let second = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                None,
+            )
+            .unwrap();
+
+            assert_eq!(
+                first
+                    .compose(py, &second, Some(config))
+                    .unwrap()
+                    .into_iter()
+                    .map(|reaction| reaction.to_rust(py))
+                    .collect::<Vec<_>>(),
+                vec![
+                    AstReactionAst::from_str(
+                        r##"{:lhs {:atoms ["C#c0" "C#c+"]} :deltas [{:atom {:modify [0 "#c+"]}} {:atom {:modify [1 "#c+2"]}}]}"##,
+                    )
+                    .unwrap(),
+                    AstReactionAst::from_str(
+                        r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                    )
+                    .unwrap(),
+                ]
+            );
         });
     }
 
@@ -1753,13 +1932,15 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            let algorithm = Py::new(
+            let config = Py::new(
                 py,
-                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
+                ReactionCompositionConfig::new(
+                    CommonSubgraphEnumerationAlgorithm::DirectBacktracking(),
+                ),
             )
             .unwrap();
             let kwargs = PyDict::new(py);
-            kwargs.set_item("algorithm", algorithm).unwrap();
+            kwargs.set_item("config", config).unwrap();
 
             let omitted: Vec<Py<ReactionAst>> = first
                 .bind(py)
@@ -1817,20 +1998,8 @@ mod tests {
             let first_before = first.to_rust(py);
             let second_before = second.to_rust(py);
 
-            let _self_composites = first
-                .compose(
-                    py,
-                    &first,
-                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
-                )
-                .unwrap();
-            let composites = first
-                .compose(
-                    py,
-                    &second,
-                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
-                )
-                .unwrap();
+            let _self_composites = first.compose(py, &first, None).unwrap();
+            let composites = first.compose(py, &second, None).unwrap();
 
             assert_eq!(first.to_rust(py), first_before);
             assert_eq!(second.to_rust(py), second_before);

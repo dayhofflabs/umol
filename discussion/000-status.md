@@ -22,9 +22,6 @@ Do not use `In Progress` merely because a document is still relevant.
 
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
-- [170 — Reaction SMILES import in Python](170-reaction-smiles-python-2026-07-28.md)
-  tracks reaction-format interpretation and the Python reaction-composition
-  config migration.
 - [163 — Release preparation](163-release-preparation-2026-07-26.md) is the
   upcoming workstream; implementation has not started.
 
@@ -201,4 +198,4 @@ Do not use `In Progress` merely because a document is still relevant.
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Proposed      | 2026-07-27   | Visitor, eager, and resumable graph-algorithm execution APIs.                                              |
 | [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-07-27   | Crate boundaries, visibility, re-exports, errors, and diagnostic representations.                          |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
-| [170-reaction-smiles-python-2026-07-28.md](170-reaction-smiles-python-2026-07-28.md)                             | In Progress   | 2026-07-28   | Reaction SMILES interpretation and Python reaction-composition configuration.                              |
+| [170-reaction-smiles-python-2026-07-28.md](170-reaction-smiles-python-2026-07-28.md)                             | Completed     | 2026-07-28   |                                                                                                            |
