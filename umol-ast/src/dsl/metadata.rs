@@ -1,9 +1,21 @@
 //! Shared query surface for rendering entity references.
 
+use thiserror::Error;
+
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+
+/// Error raised when metadata would no longer define disjoint entity keywords
+/// and bijective atom aliases.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum MetadataError {
+    #[error("duplicate keyword: {0}")]
+    DuplicateKeyword(String),
+    #[error("atom DSL already has alias: {0}")]
+    DuplicateAtomAlias(String),
+}
 
 /// The rendering counterpart to [`crate::dsl::Namespace`].
 ///

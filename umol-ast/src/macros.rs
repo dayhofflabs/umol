@@ -255,7 +255,13 @@ mod tests {
                 bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
                 ..Default::default()
             }),
-            MoleculeMetadata::new().with_atom_alias("c", "C".parse::<AtomDsl>().unwrap()),
+            {
+                let mut metadata = MoleculeMetadata::new();
+                metadata
+                    .add_atom_alias("c", "C".parse::<AtomDsl>().unwrap())
+                    .unwrap();
+                metadata
+            },
         ),
     )]
     #[case::with_atom_ids(
@@ -266,7 +272,12 @@ mod tests {
                 bonds: vec![],
                 ..Default::default()
             }),
-            MoleculeMetadata::new().with_atom_keyword(AtomId(0), "a").with_atom_keyword(AtomId(1), "b"),
+            {
+                let mut metadata = MoleculeMetadata::new();
+                metadata.set_atom_keyword(AtomId(0), "a").unwrap();
+                metadata.set_atom_keyword(AtomId(1), "b").unwrap();
+                metadata
+            },
         ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {

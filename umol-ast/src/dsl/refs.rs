@@ -627,7 +627,9 @@ mod tests {
 
     #[fixture]
     fn meta_with_atom_keyword() -> MoleculeMetadata {
-        MoleculeMetadata::new().with_atom_keyword(AtomId(2), "c1")
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_atom_keyword(AtomId(2), "c1").unwrap();
+        metadata
     }
 
     #[fixture]

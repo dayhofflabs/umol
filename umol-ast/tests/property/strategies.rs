@@ -2279,17 +2279,20 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 let mut meta = MoleculeMetadata::new();
                 for (i, atom) in atoms.iter().enumerate() {
                     if atom.is_some() {
-                        meta.set_atom_keyword(AtomId(i as u32), format!("atom{i}"));
+                        meta.set_atom_keyword(AtomId(i as u32), format!("atom{i}"))
+                            .unwrap();
                     }
                 }
                 for (i, bond) in bonds.iter().enumerate() {
                     if bond.is_some() {
-                        meta.set_bond_keyword(BondId(i as u32), format!("bond{i}"));
+                        meta.set_bond_keyword(BondId(i as u32), format!("bond{i}"))
+                            .unwrap();
                     }
                 }
                 for (i, dative) in datives.iter().enumerate() {
                     if dative.is_some() {
-                        meta.set_dative_bond_keyword(DativeBondId(i as u32), format!("dative{i}"));
+                        meta.set_dative_bond_keyword(DativeBondId(i as u32), format!("dative{i}"))
+                            .unwrap();
                     }
                 }
                 for (i, aromatic) in aromatics.iter().enumerate() {
@@ -2297,7 +2300,8 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                         meta.set_aromatic_system_keyword(
                             AromaticSystemId(i as u32),
                             format!("aromatic{i}"),
-                        );
+                        )
+                        .unwrap();
                     }
                 }
                 for (i, multicenter) in multicenters.iter().enumerate() {
@@ -2305,7 +2309,8 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                         meta.set_multicenter_bond_keyword(
                             MulticenterBondId(i as u32),
                             format!("multicenter{i}"),
-                        );
+                        )
+                        .unwrap();
                     }
                 }
                 for (i, noncovalent) in noncovalents.iter().enumerate() {
@@ -2313,11 +2318,13 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                         meta.set_noncovalent_bond_keyword(
                             NoncovalentBondId(i as u32),
                             format!("noncovalent{i}"),
-                        );
+                        )
+                        .unwrap();
                     }
                 }
                 for (i, element) in ALIAS_ELEMENTS.iter().enumerate() {
-                    meta.add_atom_alias(format!("al{i}"), AtomAst::from_element(*element));
+                    meta.add_atom_alias(format!("al{i}"), AtomAst::from_element(*element))
+                        .unwrap();
                 }
                 meta
             },

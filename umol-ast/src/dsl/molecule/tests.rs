@@ -45,209 +45,280 @@ fn test_fuzz_molecule_seeds_valid() {
 }
 
 #[rstest]
-fn test_metadata_new() {
-    let m = MoleculeMetadata::new();
-    assert_eq!(m, MoleculeMetadata::default());
-    assert!(m.atom_keyword(AtomId(0)).is_none());
-    assert!(m.bond_keyword(BondId(0)).is_none());
-    assert!(m.dative_bond_keyword(DativeBondId(0)).is_none());
-    assert!(m.aromatic_system_keyword(AromaticSystemId(0)).is_none());
-    assert!(m.multicenter_bond_keyword(MulticenterBondId(0)).is_none());
-    assert!(m.noncovalent_bond_keyword(NoncovalentBondId(0)).is_none());
-    assert!(!m.has_atom_aliases());
-    assert_eq!(m.atom_aliases_len(), 0);
+fn test_molecule_metadata_new() {
+    let actual = MoleculeMetadata::new();
+
+    assert_eq!(actual, MoleculeMetadata::default());
+    assert!(actual.is_empty());
 }
 
 #[rstest]
-#[case::atom("a", true)]
-#[case::bond("b", true)]
-#[case::dative_bond("d", true)]
-#[case::aromatic_system("ar", true)]
-#[case::multicenter_bond("m", true)]
-#[case::noncovalent_bond("n", true)]
-#[case::stereo_atom("sa", true)]
-#[case::stereo_bond("sb", true)]
+#[case::atom(Entity::Atom(AtomId(1)))]
+#[case::bond(Entity::Bond(BondId(1)))]
+#[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
+#[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(1)))]
+#[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(1)))]
+#[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(1)))]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(1)))]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(1)))]
+fn test_molecule_metadata_keyword_lookup(#[case] entity: Entity) {
+    let metadata = MoleculeMetadata {
+        keywords: [(entity, "key".to_string())].into_iter().collect(),
+        atom_aliases: BiBTreeMap::new(),
+    };
+    let actual = match entity {
+        Entity::Atom(id) => metadata.atom_keyword(id),
+        Entity::Bond(id) => metadata.bond_keyword(id),
+        Entity::DativeBond(id) => metadata.dative_bond_keyword(id),
+        Entity::AromaticSystem(id) => metadata.aromatic_system_keyword(id),
+        Entity::MulticenterBond(id) => metadata.multicenter_bond_keyword(id),
+        Entity::NoncovalentBond(id) => metadata.noncovalent_bond_keyword(id),
+        Entity::StereoAtom(id) => metadata.stereo_atom_keyword(id),
+        Entity::StereoBond(id) => metadata.stereo_bond_keyword(id),
+    };
+
+    assert_eq!(actual, Some("key"));
+}
+
+#[rstest]
+#[case::atom(Entity::Atom(AtomId(1)))]
+#[case::bond(Entity::Bond(BondId(1)))]
+#[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
+#[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(1)))]
+#[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(1)))]
+#[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(1)))]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(1)))]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(1)))]
+fn test_molecule_metadata_id_lookup(#[case] entity: Entity) {
+    let metadata = MoleculeMetadata {
+        keywords: [(entity, "key".to_string())].into_iter().collect(),
+        atom_aliases: BiBTreeMap::new(),
+    };
+    let actual = match entity {
+        Entity::Atom(_) => metadata.atom_id("key").map(Entity::Atom),
+        Entity::Bond(_) => metadata.bond_id("key").map(Entity::Bond),
+        Entity::DativeBond(_) => metadata.dative_bond_id("key").map(Entity::DativeBond),
+        Entity::AromaticSystem(_) => metadata
+            .aromatic_system_id("key")
+            .map(Entity::AromaticSystem),
+        Entity::MulticenterBond(_) => metadata
+            .multicenter_bond_id("key")
+            .map(Entity::MulticenterBond),
+        Entity::NoncovalentBond(_) => metadata
+            .noncovalent_bond_id("key")
+            .map(Entity::NoncovalentBond),
+        Entity::StereoAtom(_) => metadata.stereo_atom_id("key").map(Entity::StereoAtom),
+        Entity::StereoBond(_) => metadata.stereo_bond_id("key").map(Entity::StereoBond),
+    };
+
+    assert_eq!(actual, Some(entity));
+    assert_eq!(metadata.atom_id("missing"), None);
+}
+
+#[rstest]
+#[case::present("key", true)]
 #[case::absent("other", false)]
 fn test_molecule_metadata_contains_keyword(#[case] keyword: &str, #[case] expected: bool) {
-    let metadata = MoleculeMetadata::new()
-        .with_atom_keyword(AtomId(0), "a")
-        .with_bond_keyword(BondId(0), "b")
-        .with_dative_bond_keyword(DativeBondId(0), "d")
-        .with_aromatic_system_keyword(AromaticSystemId(0), "ar")
-        .with_multicenter_bond_keyword(MulticenterBondId(0), "m")
-        .with_noncovalent_bond_keyword(NoncovalentBondId(0), "n")
-        .with_stereo_atom_keyword(StereoAtomId(0), "sa")
-        .with_stereo_bond_keyword(StereoBondId(0), "sb");
+    let metadata = MoleculeMetadata {
+        keywords: [(Entity::Atom(AtomId(0)), "key".to_string())]
+            .into_iter()
+            .collect(),
+        atom_aliases: BiBTreeMap::new(),
+    };
 
     assert_eq!(metadata.contains_keyword(keyword), expected);
 }
 
 #[rstest]
-#[case::set(&["c1"], "c1")]
-#[case::last_wins(&["old", "new"], "new")]
-fn test_metadata_set_atom_keyword(#[case] names: &[&str], #[case] expected: &str) {
-    let mut m = MoleculeMetadata::new();
-    for name in names {
-        m.set_atom_keyword(AtomId(0), *name);
-    }
-    assert_eq!(m.atom_keyword(AtomId(0)), Some(expected));
+#[case::atom(Entity::Atom(AtomId(1)))]
+#[case::bond(Entity::Bond(BondId(1)))]
+#[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
+#[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(1)))]
+#[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(1)))]
+#[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(1)))]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(1)))]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(1)))]
+fn test_molecule_metadata_set_keyword(#[case] entity: Entity) {
+    let mut actual = MoleculeMetadata::new();
+    let result = match entity {
+        Entity::Atom(id) => actual.set_atom_keyword(id, "key"),
+        Entity::Bond(id) => actual.set_bond_keyword(id, "key"),
+        Entity::DativeBond(id) => actual.set_dative_bond_keyword(id, "key"),
+        Entity::AromaticSystem(id) => actual.set_aromatic_system_keyword(id, "key"),
+        Entity::MulticenterBond(id) => actual.set_multicenter_bond_keyword(id, "key"),
+        Entity::NoncovalentBond(id) => actual.set_noncovalent_bond_keyword(id, "key"),
+        Entity::StereoAtom(id) => actual.set_stereo_atom_keyword(id, "key"),
+        Entity::StereoBond(id) => actual.set_stereo_bond_keyword(id, "key"),
+    };
+    let expected = MoleculeMetadata {
+        keywords: [(entity, "key".to_string())].into_iter().collect(),
+        atom_aliases: BiBTreeMap::new(),
+    };
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(actual, expected);
 }
 
 #[rstest]
-fn test_metadata_set_bond_keyword() {
-    let mut m = MoleculeMetadata::new();
-    m.set_bond_keyword(BondId(2), "b1");
-    assert_eq!(m.bond_keyword(BondId(2)), Some("b1"));
+fn test_molecule_metadata_set_keyword_idempotent() {
+    let mut actual = MoleculeMetadata::new();
+    actual.set_atom_keyword(AtomId(0), "key").unwrap();
+    let expected = actual.clone();
+
+    let result = actual.set_atom_keyword(AtomId(0), "key");
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(actual, expected);
 }
 
 #[rstest]
-fn test_metadata_set_dative_bond_keyword() {
-    let mut m = MoleculeMetadata::new();
-    m.set_dative_bond_keyword(DativeBondId(1), "d1");
-    assert_eq!(m.dative_bond_keyword(DativeBondId(1)), Some("d1"));
+fn test_molecule_metadata_set_keyword_rebinding() {
+    let mut actual = MoleculeMetadata::new();
+    actual.set_atom_keyword(AtomId(0), "old").unwrap();
+
+    let result = actual.set_atom_keyword(AtomId(0), "new");
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(actual.atom_keyword(AtomId(0)), Some("new"));
+    assert!(!actual.contains_keyword("old"));
 }
 
 #[rstest]
-fn test_metadata_set_aromatic_system_keyword() {
-    let mut m = MoleculeMetadata::new();
-    m.set_aromatic_system_keyword(AromaticSystemId(0), "ring1");
+fn test_molecule_metadata_set_keyword_error() {
+    let mut actual = MoleculeMetadata::new();
+    actual.set_atom_keyword(AtomId(0), "key").unwrap();
+    let expected = actual.clone();
+
+    let result = actual.set_bond_keyword(BondId(0), "key");
+
     assert_eq!(
-        m.aromatic_system_keyword(AromaticSystemId(0)),
-        Some("ring1")
+        result,
+        Err(MetadataError::DuplicateKeyword("key".to_string()))
+    );
+    assert_eq!(actual, expected);
+}
+
+#[rstest]
+fn test_molecule_metadata_atom_alias_for() {
+    let atom = AtomDsl(AtomAst::from_element(Element::C));
+    let metadata = MoleculeMetadata {
+        keywords: BiBTreeMap::new(),
+        atom_aliases: [("carbon".to_string(), Box::new(atom.clone()))]
+            .into_iter()
+            .collect(),
+    };
+
+    assert_eq!(metadata.atom_alias_for(&atom), Some("carbon"));
+}
+
+#[rstest]
+fn test_molecule_metadata_add_atom_alias() {
+    let atom = AtomDsl(AtomAst::from_element(Element::C));
+    let mut actual = MoleculeMetadata::new();
+
+    let result = actual.add_atom_alias("carbon", atom.clone());
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        actual,
+        MoleculeMetadata {
+            keywords: BiBTreeMap::new(),
+            atom_aliases: [("carbon".to_string(), Box::new(atom))]
+                .into_iter()
+                .collect(),
+        }
     );
 }
 
 #[rstest]
-fn test_metadata_set_multicenter_bond_keyword() {
-    let mut m = MoleculeMetadata::new();
-    m.set_multicenter_bond_keyword(MulticenterBondId(0), "mc1");
+fn test_molecule_metadata_add_atom_alias_idempotent() {
+    let atom = AtomDsl(AtomAst::from_element(Element::C));
+    let mut actual = MoleculeMetadata::new();
+    actual.add_atom_alias("carbon", atom.clone()).unwrap();
+    let expected = actual.clone();
+
+    let result = actual.add_atom_alias("carbon", atom);
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(actual, expected);
+}
+
+#[rstest]
+#[case::keyword(
+    MetadataError::DuplicateKeyword("carbon".to_string()),
+    AtomDsl(AtomAst::from_element(Element::N)),
+    "carbon"
+)]
+#[case::atom(
+    MetadataError::DuplicateAtomAlias("carbon".to_string()),
+    AtomDsl(AtomAst::from_element(Element::C)),
+    "other"
+)]
+fn test_molecule_metadata_add_atom_alias_error(
+    #[case] expected_error: MetadataError,
+    #[case] atom: AtomDsl,
+    #[case] alias: &str,
+) {
+    let mut actual = MoleculeMetadata::new();
+    actual
+        .add_atom_alias("carbon", AtomAst::from_element(Element::C))
+        .unwrap();
+    let expected = actual.clone();
+
+    let result = actual.add_atom_alias(alias, atom);
+
+    assert_eq!(result, Err(expected_error));
+    assert_eq!(actual, expected);
+}
+
+#[rstest]
+#[case::keyword_then_alias(false)]
+#[case::alias_then_keyword(true)]
+fn test_molecule_metadata_keyword_alias_collision(#[case] alias_first: bool) {
+    let atom = AtomAst::from_element(Element::C);
+    let mut actual = MoleculeMetadata::new();
+    let result = if alias_first {
+        actual.add_atom_alias("carbon", atom).unwrap();
+        actual.set_atom_keyword(AtomId(0), "carbon")
+    } else {
+        actual.set_atom_keyword(AtomId(0), "carbon").unwrap();
+        actual.add_atom_alias("carbon", atom)
+    };
+
     assert_eq!(
-        m.multicenter_bond_keyword(MulticenterBondId(0)),
-        Some("mc1")
+        result,
+        Err(MetadataError::DuplicateKeyword("carbon".to_string()))
     );
+    assert_eq!(actual.contains_keyword("carbon"), !alias_first);
+    assert_eq!(actual.has_atom_alias("carbon"), alias_first);
 }
 
 #[rstest]
-fn test_metadata_set_noncovalent_bond_keyword() {
-    let mut m = MoleculeMetadata::new();
-    m.set_noncovalent_bond_keyword(NoncovalentBondId(0), "h1");
-    assert_eq!(m.noncovalent_bond_keyword(NoncovalentBondId(0)), Some("h1"));
-}
+fn test_molecule_metadata_iter_atom_aliases() {
+    let metadata = MoleculeMetadata {
+        keywords: BiBTreeMap::new(),
+        atom_aliases: [
+            (
+                "carbon".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            ),
+            (
+                "nitrogen".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let actual: Vec<(&str, &AtomDsl)> = metadata.iter_atom_aliases().collect();
 
-#[rstest]
-fn test_metadata_add_atom_alias() {
-    let mut m = MoleculeMetadata::new();
-    let atom = AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64);
-    m.add_atom_alias("HC2", atom.clone());
-    assert!(m.has_atom_alias("HC2"));
-    assert_eq!(m.atom_aliases_len(), 1);
-    assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("HC2"));
-}
-
-#[rstest]
-fn test_metadata_add_atom_alias_duplicate_name_replaces_atom() {
-    let mut m = MoleculeMetadata::new();
-    let first = AtomAst::from_element(Element::C);
-    let second = AtomAst::from_element(Element::N);
-    m.add_atom_alias("X", first.clone());
-    m.add_atom_alias("X", second.clone());
-    assert_eq!(m.atom_aliases_len(), 1);
-    assert_eq!(m.atom_alias_for(&AtomDsl(second)), Some("X"));
-    assert_eq!(m.atom_alias_for(&AtomDsl(first)), None);
-}
-
-#[rstest]
-fn test_metadata_add_atom_alias_duplicate_atom_replaces_name() {
-    let mut m = MoleculeMetadata::new();
-    let atom = AtomAst::from_element(Element::C);
-    m.add_atom_alias("first", atom.clone());
-    m.add_atom_alias("second", atom.clone());
-    assert_eq!(m.atom_aliases_len(), 1);
-    assert!(!m.has_atom_alias("first"));
-    assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("second"));
-}
-
-#[rstest]
-fn test_metadata_iter_atom_aliases() {
-    let m = MoleculeMetadata::new()
-        .with_atom_alias("a", AtomAst::from_element(Element::C))
-        .with_atom_alias("b", AtomAst::from_element(Element::N));
-    let collected: Vec<(&str, AtomAst)> = m
-        .iter_atom_aliases()
-        .map(|(name, dsl)| (name, dsl.0.clone()))
-        .collect();
-    assert_eq!(collected.len(), 2);
-    assert!(collected.contains(&("a", AtomAst::from_element(Element::C))));
-    assert!(collected.contains(&("b", AtomAst::from_element(Element::N))));
-}
-
-#[rstest]
-fn test_metadata_with_atom_keyword() {
-    let m = MoleculeMetadata::new()
-        .with_atom_keyword(AtomId(0), "a")
-        .with_atom_keyword(AtomId(1), "b");
-    assert_eq!(m.atom_keyword(AtomId(0)), Some("a"));
-    assert_eq!(m.atom_keyword(AtomId(1)), Some("b"));
-}
-
-#[rstest]
-fn test_metadata_with_bond_keyword() {
-    let m = MoleculeMetadata::new().with_bond_keyword(BondId(0), "b");
-    assert_eq!(m.bond_keyword(BondId(0)), Some("b"));
-}
-
-#[rstest]
-fn test_metadata_with_dative_bond_keyword() {
-    let m = MoleculeMetadata::new().with_dative_bond_keyword(DativeBondId(0), "d");
-    assert_eq!(m.dative_bond_keyword(DativeBondId(0)), Some("d"));
-}
-
-#[rstest]
-fn test_metadata_with_aromatic_system_keyword() {
-    let m = MoleculeMetadata::new().with_aromatic_system_keyword(AromaticSystemId(0), "r");
-    assert_eq!(m.aromatic_system_keyword(AromaticSystemId(0)), Some("r"));
-}
-
-#[rstest]
-fn test_metadata_with_multicenter_bond_keyword() {
-    let m = MoleculeMetadata::new().with_multicenter_bond_keyword(MulticenterBondId(0), "mc");
-    assert_eq!(m.multicenter_bond_keyword(MulticenterBondId(0)), Some("mc"));
-}
-
-#[rstest]
-fn test_metadata_with_noncovalent_bond_keyword() {
-    let m = MoleculeMetadata::new().with_noncovalent_bond_keyword(NoncovalentBondId(0), "h");
-    assert_eq!(m.noncovalent_bond_keyword(NoncovalentBondId(0)), Some("h"));
-}
-
-#[rstest]
-fn test_metadata_with_stereo_atom_keyword() {
-    let m = MoleculeMetadata::new().with_stereo_atom_keyword(StereoAtomId(0), "s");
-    assert_eq!(m.stereo_atom_keyword(StereoAtomId(0)), Some("s"));
-}
-
-#[rstest]
-fn test_metadata_with_stereo_bond_keyword() {
-    let m = MoleculeMetadata::new().with_stereo_bond_keyword(StereoBondId(0), "sb");
-    assert_eq!(m.stereo_bond_keyword(StereoBondId(0)), Some("sb"));
-}
-
-#[rstest]
-fn test_metadata_with_atom_alias() {
-    let atom = AtomAst::from_element(Element::C);
-    let m = MoleculeMetadata::new().with_atom_alias("c", atom.clone());
-    assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("c"));
-}
-
-#[rstest]
-fn test_metadata_mixed_chain() {
-    let m = MoleculeMetadata::new()
-        .with_atom_keyword(AtomId(0), "c1")
-        .with_bond_keyword(BondId(0), "b1")
-        .with_atom_alias("X", AtomAst::from_element(Element::C));
-    assert_eq!(m.atom_keyword(AtomId(0)), Some("c1"));
-    assert_eq!(m.bond_keyword(BondId(0)), Some("b1"));
-    assert!(m.has_atom_alias("X"));
+    assert_eq!(
+        actual,
+        vec![
+            ("carbon", &AtomDsl(AtomAst::from_element(Element::C))),
+            ("nitrogen", &AtomDsl(AtomAst::from_element(Element::N))),
+        ]
+    );
 }
 
 #[rstest]
@@ -1079,7 +1150,7 @@ fn test_render_atom_value(#[case] alias: bool, #[case] expected: &str) {
     let atom = AtomAst::from_element(Element::C);
     let mut meta = MoleculeMetadata::new();
     if alias {
-        meta.add_atom_alias("x", atom.clone());
+        meta.add_atom_alias("x", atom.clone()).unwrap();
     }
     assert_eq!(
         render_atom_value(&atom, &meta),
@@ -1093,7 +1164,7 @@ fn test_render_atom_value(#[case] alias: bool, #[case] expected: &str) {
 fn test_render_atom_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_atom_keyword(AtomId(0), keyword);
+        meta.set_atom_keyword(AtomId(0), keyword).unwrap();
     }
     let entry = render_atom_entry(AtomId(0), &AtomAst::from_element(Element::C), &meta);
     assert_eq!(entry, read_string(expected).unwrap());
@@ -1102,7 +1173,11 @@ fn test_render_atom_entry(#[case] keyword: Option<&str>, #[case] expected: &str)
 #[rstest]
 #[case::positional(MoleculeMetadata::new(), AtomId(2), "2")]
 #[case::keyword(
-    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    {
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_atom_keyword(AtomId(2), "carbon").unwrap();
+        metadata
+    },
     AtomId(2),
     ":carbon",
 )]
@@ -1123,7 +1198,7 @@ fn test_render_atom_ref(
 fn test_render_bond_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_bond_keyword(BondId(0), keyword);
+        meta.set_bond_keyword(BondId(0), keyword).unwrap();
     }
     let entry = render_bond_entry(BondId(0), [AtomId(0), AtomId(1)], Edn::string("1"), &meta);
     assert_eq!(entry, read_string(expected).unwrap());
@@ -1140,7 +1215,8 @@ fn test_render_bond_entry(#[case] keyword: Option<&str>, #[case] expected: &str)
 fn test_render_dative_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_dative_bond_keyword(DativeBondId(0), keyword);
+        meta.set_dative_bond_keyword(DativeBondId(0), keyword)
+            .unwrap();
     }
     let entry = render_dative_entry(
         DativeBondId(0),
@@ -1158,7 +1234,8 @@ fn test_render_dative_entry(#[case] keyword: Option<&str>, #[case] expected: &st
 fn test_render_aromatic_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_aromatic_system_keyword(AromaticSystemId(0), keyword);
+        meta.set_aromatic_system_keyword(AromaticSystemId(0), keyword)
+            .unwrap();
     }
     let entry = render_aromatic_entry(
         AromaticSystemId(0),
@@ -1175,7 +1252,8 @@ fn test_render_aromatic_entry(#[case] keyword: Option<&str>, #[case] expected: &
 fn test_render_multicenter_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_multicenter_bond_keyword(MulticenterBondId(0), keyword);
+        meta.set_multicenter_bond_keyword(MulticenterBondId(0), keyword)
+            .unwrap();
     }
     let entry = render_multicenter_entry(
         MulticenterBondId(0),
@@ -1192,7 +1270,8 @@ fn test_render_multicenter_entry(#[case] keyword: Option<&str>, #[case] expected
 fn test_render_noncovalent_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_noncovalent_bond_keyword(NoncovalentBondId(0), keyword);
+        meta.set_noncovalent_bond_keyword(NoncovalentBondId(0), keyword)
+            .unwrap();
     }
     let entry = render_noncovalent_entry(
         NoncovalentBondId(0),
@@ -1209,7 +1288,8 @@ fn test_render_noncovalent_entry(#[case] keyword: Option<&str>, #[case] expected
 fn test_render_stereo_atom_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_stereo_atom_keyword(StereoAtomId(0), keyword);
+        meta.set_stereo_atom_keyword(StereoAtomId(0), keyword)
+            .unwrap();
     }
     let entry = render_stereo_atom_entry(
         StereoAtomId(0),
@@ -1227,7 +1307,8 @@ fn test_render_stereo_atom_entry(#[case] keyword: Option<&str>, #[case] expected
 fn test_render_stereo_bond_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
     if let Some(keyword) = keyword {
-        meta.set_stereo_bond_keyword(StereoBondId(0), keyword);
+        meta.set_stereo_bond_keyword(StereoBondId(0), keyword)
+            .unwrap();
     }
     let entry = render_stereo_bond_entry(
         StereoBondId(0),
@@ -1246,7 +1327,11 @@ fn test_render_stereo_bond_entry(#[case] keyword: Option<&str>, #[case] expected
     "2"
 )]
 #[case::atom_keyword(
-    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    {
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_atom_keyword(AtomId(2), "carbon").unwrap();
+        metadata
+    },
     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
     ":carbon",
 )]
@@ -1256,7 +1341,11 @@ fn test_render_stereo_bond_entry(#[case] keyword: Option<&str>, #[case] expected
     "[:h 2]"
 )]
 #[case::implicit_hydrogen_keyword(
-    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    {
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_atom_keyword(AtomId(2), "carbon").unwrap();
+        metadata
+    },
     StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
     "[:h :carbon]",
 )]
@@ -1266,7 +1355,11 @@ fn test_render_stereo_bond_entry(#[case] keyword: Option<&str>, #[case] expected
     "[:lp 2]"
 )]
 #[case::lone_pair_keyword(
-    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    {
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_atom_keyword(AtomId(2), "carbon").unwrap();
+        metadata
+    },
     StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
     "[:lp :carbon]",
 )]
@@ -1284,7 +1377,11 @@ fn test_render_stereo_ligand(
 #[rstest]
 #[case::positional(MoleculeMetadata::new(), BondId(2), "2")]
 #[case::keyword(
-    MoleculeMetadata::new().with_bond_keyword(BondId(2), "bond"),
+    {
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_bond_keyword(BondId(2), "bond").unwrap();
+        metadata
+    },
     BondId(2),
     ":bond",
 )]

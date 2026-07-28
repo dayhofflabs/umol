@@ -17,7 +17,6 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use bimap::BiBTreeMap;
-use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::aromatic::AromaticSystemDsl;
@@ -31,7 +30,7 @@ use super::edn_utils::{
     required_key, two_atom_refs, unexpected_byte_kind,
 };
 use super::error::ParseError;
-use super::metadata::Metadata;
+use super::metadata::{Metadata, MetadataError};
 use super::multicenter::MulticenterBondDsl;
 use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
@@ -46,6 +45,7 @@ use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::dative::DativeBondAst;
+use crate::ast::entity::Entity;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -132,18 +132,10 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
 /// Surface-form metadata paired with a `MoleculeAst`. Records entity keywords and atom aliases.
 /// `MoleculeDsl` keeps both fields private and rewraps atomically
 /// through `from_parts`.
-/// TODO: Review API, harmonize with `MoleculeNamespace`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoleculeMetadata {
-    atom_ids: IndexMap<AtomId, String>,
+    keywords: BiBTreeMap<Entity, String>,
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
-    bond_ids: IndexMap<BondId, String>,
-    dative_bond_ids: IndexMap<DativeBondId, String>,
-    aromatic_system_ids: IndexMap<AromaticSystemId, String>,
-    multicenter_bond_ids: IndexMap<MulticenterBondId, String>,
-    noncovalent_bond_ids: IndexMap<NoncovalentBondId, String>,
-    stereo_atom_ids: IndexMap<StereoAtomId, String>,
-    stereo_bond_ids: IndexMap<StereoBondId, String>,
 }
 
 impl MoleculeMetadata {
@@ -154,59 +146,116 @@ impl MoleculeMetadata {
     /// Whether this metadata binds no entity keywords and no atom aliases — the shape an anonymous
     /// molecule (e.g. a sub-pattern) projects.
     pub fn is_empty(&self) -> bool {
-        self.atom_ids.is_empty()
-            && self.bond_ids.is_empty()
-            && self.dative_bond_ids.is_empty()
-            && self.aromatic_system_ids.is_empty()
-            && self.multicenter_bond_ids.is_empty()
-            && self.noncovalent_bond_ids.is_empty()
-            && self.stereo_atom_ids.is_empty()
-            && self.stereo_bond_ids.is_empty()
-            && self.atom_aliases.is_empty()
+        self.keywords.is_empty() && self.atom_aliases.is_empty()
     }
 
     pub fn atom_keyword(&self, id: AtomId) -> Option<&str> {
-        self.atom_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::Atom(id))
+            .map(String::as_str)
     }
 
     pub fn bond_keyword(&self, id: BondId) -> Option<&str> {
-        self.bond_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::Bond(id))
+            .map(String::as_str)
     }
 
     pub fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str> {
-        self.dative_bond_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::DativeBond(id))
+            .map(String::as_str)
     }
 
     pub fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str> {
-        self.aromatic_system_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::AromaticSystem(id))
+            .map(String::as_str)
     }
 
     pub fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str> {
-        self.multicenter_bond_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::MulticenterBond(id))
+            .map(String::as_str)
     }
 
     pub fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str> {
-        self.noncovalent_bond_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::NoncovalentBond(id))
+            .map(String::as_str)
     }
 
     pub fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str> {
-        self.stereo_atom_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::StereoAtom(id))
+            .map(String::as_str)
     }
 
     pub fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str> {
-        self.stereo_bond_ids.get(&id).map(String::as_str)
+        self.keywords
+            .get_by_left(&Entity::StereoBond(id))
+            .map(String::as_str)
     }
 
-    /// Whether `name` is already bound as an entity keyword (across all kinds). Linear scan.
+    pub fn atom_id(&self, keyword: &str) -> Option<AtomId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::Atom(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn bond_id(&self, keyword: &str) -> Option<BondId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::Bond(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn dative_bond_id(&self, keyword: &str) -> Option<DativeBondId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::DativeBond(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn aromatic_system_id(&self, keyword: &str) -> Option<AromaticSystemId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::AromaticSystem(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn multicenter_bond_id(&self, keyword: &str) -> Option<MulticenterBondId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::MulticenterBond(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn noncovalent_bond_id(&self, keyword: &str) -> Option<NoncovalentBondId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::NoncovalentBond(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn stereo_atom_id(&self, keyword: &str) -> Option<StereoAtomId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::StereoAtom(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn stereo_bond_id(&self, keyword: &str) -> Option<StereoBondId> {
+        match self.keywords.get_by_right(keyword) {
+            Some(Entity::StereoBond(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    /// Whether `name` is already bound as an entity keyword.
     pub fn contains_keyword(&self, name: &str) -> bool {
-        self.atom_ids.values().any(|n| n == name)
-            || self.bond_ids.values().any(|n| n == name)
-            || self.dative_bond_ids.values().any(|n| n == name)
-            || self.aromatic_system_ids.values().any(|n| n == name)
-            || self.multicenter_bond_ids.values().any(|n| n == name)
-            || self.noncovalent_bond_ids.values().any(|n| n == name)
-            || self.stereo_atom_ids.values().any(|n| n == name)
-            || self.stereo_bond_ids.values().any(|n| n == name)
+        self.keywords.contains_right(name)
     }
 
     /// Name of the alias bound to this atom DSL, if any.
@@ -232,101 +281,114 @@ impl MoleculeMetadata {
             .map(|(k, v)| (k.as_str(), v.as_ref()))
     }
 
-    pub fn set_atom_keyword(&mut self, id: AtomId, name: impl Into<String>) {
-        self.atom_ids.insert(id, name.into());
+    pub fn set_atom_keyword(
+        &mut self,
+        id: AtomId,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::Atom(id), name)
     }
 
-    pub fn set_bond_keyword(&mut self, id: BondId, name: impl Into<String>) {
-        self.bond_ids.insert(id, name.into());
+    pub fn set_bond_keyword(
+        &mut self,
+        id: BondId,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::Bond(id), name)
     }
 
-    pub fn set_dative_bond_keyword(&mut self, id: DativeBondId, name: impl Into<String>) {
-        self.dative_bond_ids.insert(id, name.into());
+    pub fn set_dative_bond_keyword(
+        &mut self,
+        id: DativeBondId,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::DativeBond(id), name)
     }
 
-    pub fn set_aromatic_system_keyword(&mut self, id: AromaticSystemId, name: impl Into<String>) {
-        self.aromatic_system_ids.insert(id, name.into());
-    }
-
-    pub fn set_multicenter_bond_keyword(&mut self, id: MulticenterBondId, name: impl Into<String>) {
-        self.multicenter_bond_ids.insert(id, name.into());
-    }
-
-    pub fn set_noncovalent_bond_keyword(&mut self, id: NoncovalentBondId, name: impl Into<String>) {
-        self.noncovalent_bond_ids.insert(id, name.into());
-    }
-
-    pub fn set_stereo_atom_keyword(&mut self, id: StereoAtomId, name: impl Into<String>) {
-        self.stereo_atom_ids.insert(id, name.into());
-    }
-
-    pub fn set_stereo_bond_keyword(&mut self, id: StereoBondId, name: impl Into<String>) {
-        self.stereo_bond_ids.insert(id, name.into());
-    }
-
-    /// Insert an atom alias. Last-wins on either side of the bijection: a
-    /// duplicate name displaces its prior atom-dsl mapping, and a duplicate
-    /// atom-dsl displaces its prior name. Callers that need collision
-    /// detection check upstream.
-    pub fn add_atom_alias(&mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) {
-        self.atom_aliases.insert(name.into(), Box::new(atom.into()));
-    }
-
-    pub fn with_atom_keyword(mut self, id: AtomId, name: impl Into<String>) -> Self {
-        self.set_atom_keyword(id, name);
-        self
-    }
-
-    pub fn with_bond_keyword(mut self, id: BondId, name: impl Into<String>) -> Self {
-        self.set_bond_keyword(id, name);
-        self
-    }
-
-    pub fn with_dative_bond_keyword(mut self, id: DativeBondId, name: impl Into<String>) -> Self {
-        self.set_dative_bond_keyword(id, name);
-        self
-    }
-
-    pub fn with_aromatic_system_keyword(
-        mut self,
+    pub fn set_aromatic_system_keyword(
+        &mut self,
         id: AromaticSystemId,
         name: impl Into<String>,
-    ) -> Self {
-        self.set_aromatic_system_keyword(id, name);
-        self
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::AromaticSystem(id), name)
     }
 
-    pub fn with_multicenter_bond_keyword(
-        mut self,
+    pub fn set_multicenter_bond_keyword(
+        &mut self,
         id: MulticenterBondId,
         name: impl Into<String>,
-    ) -> Self {
-        self.set_multicenter_bond_keyword(id, name);
-        self
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::MulticenterBond(id), name)
     }
 
-    pub fn with_noncovalent_bond_keyword(
-        mut self,
+    pub fn set_noncovalent_bond_keyword(
+        &mut self,
         id: NoncovalentBondId,
         name: impl Into<String>,
-    ) -> Self {
-        self.set_noncovalent_bond_keyword(id, name);
-        self
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::NoncovalentBond(id), name)
     }
 
-    pub fn with_stereo_atom_keyword(mut self, id: StereoAtomId, name: impl Into<String>) -> Self {
-        self.set_stereo_atom_keyword(id, name);
-        self
+    pub fn set_stereo_atom_keyword(
+        &mut self,
+        id: StereoAtomId,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::StereoAtom(id), name)
     }
 
-    pub fn with_stereo_bond_keyword(mut self, id: StereoBondId, name: impl Into<String>) -> Self {
-        self.set_stereo_bond_keyword(id, name);
-        self
+    pub fn set_stereo_bond_keyword(
+        &mut self,
+        id: StereoBondId,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        self.set_keyword(Entity::StereoBond(id), name)
     }
 
-    pub fn with_atom_alias(mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) -> Self {
-        self.add_atom_alias(name, atom);
-        self
+    pub fn add_atom_alias(
+        &mut self,
+        name: impl Into<String>,
+        atom: impl Into<AtomDsl>,
+    ) -> Result<(), MetadataError> {
+        let name = name.into();
+        let atom = Box::new(atom.into());
+
+        if self.keywords.contains_right(name.as_str()) {
+            return Err(MetadataError::DuplicateKeyword(name));
+        }
+        if let Some(existing) = self.atom_aliases.get_by_left(name.as_str()) {
+            return if existing == &atom {
+                Ok(())
+            } else {
+                Err(MetadataError::DuplicateKeyword(name))
+            };
+        }
+        if let Some(existing) = self.atom_aliases.get_by_right(atom.as_ref()) {
+            return Err(MetadataError::DuplicateAtomAlias(existing.clone()));
+        }
+
+        self.atom_aliases.insert(name, atom);
+        Ok(())
+    }
+
+    fn set_keyword(
+        &mut self,
+        entity: Entity,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        let name = name.into();
+
+        if self.keywords.get_by_left(&entity) == Some(&name) {
+            return Ok(());
+        }
+        if self.keywords.contains_right(name.as_str())
+            || self.atom_aliases.contains_left(name.as_str())
+        {
+            return Err(MetadataError::DuplicateKeyword(name));
+        }
+
+        self.keywords.insert(entity, name);
+        Ok(())
     }
 }
 
@@ -364,31 +426,49 @@ impl From<&MoleculeNamespace> for MoleculeMetadata {
     fn from(namespace: &MoleculeNamespace) -> Self {
         let mut metadata = MoleculeMetadata::new();
         for (id, keyword) in namespace.atom_keywords() {
-            metadata.set_atom_keyword(id, keyword);
+            metadata
+                .set_atom_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.bond_keywords() {
-            metadata.set_bond_keyword(id, keyword);
+            metadata
+                .set_bond_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.dative_bond_keywords() {
-            metadata.set_dative_bond_keyword(id, keyword);
+            metadata
+                .set_dative_bond_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.aromatic_system_keywords() {
-            metadata.set_aromatic_system_keyword(id, keyword);
+            metadata
+                .set_aromatic_system_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.multicenter_bond_keywords() {
-            metadata.set_multicenter_bond_keyword(id, keyword);
+            metadata
+                .set_multicenter_bond_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.noncovalent_bond_keywords() {
-            metadata.set_noncovalent_bond_keyword(id, keyword);
+            metadata
+                .set_noncovalent_bond_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.stereo_atom_keywords() {
-            metadata.set_stereo_atom_keyword(id, keyword);
+            metadata
+                .set_stereo_atom_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (id, keyword) in namespace.stereo_bond_keywords() {
-            metadata.set_stereo_bond_keyword(id, keyword);
+            metadata
+                .set_stereo_bond_keyword(id, keyword)
+                .expect("namespace keywords are disjoint");
         }
         for (name, dsl) in namespace.atom_aliases() {
-            metadata.add_atom_alias(name, dsl.clone());
+            metadata
+                .add_atom_alias(name, dsl.clone())
+                .expect("namespace aliases are bijective and disjoint from keywords");
         }
         metadata
     }

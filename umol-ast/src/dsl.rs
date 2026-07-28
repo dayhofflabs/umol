@@ -51,7 +51,7 @@ pub use dative::{
     DativeBondPredicate, DativeBondUpdateDsl,
 };
 pub use error::ParseError;
-pub use metadata::Metadata;
+pub use metadata::{Metadata, MetadataError};
 pub use molecule::{MoleculeDsl, MoleculeMetadata};
 pub use multicenter::{
     parse_multicenter_bond, parse_multicenter_bond_update, MulticenterBondConstraintDsl,

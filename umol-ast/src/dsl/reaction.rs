@@ -228,28 +228,44 @@ impl ReactionMetadata {
     pub fn combined_metadata(&self) -> MoleculeMetadata {
         let mut combined = self.lhs.clone();
         for (&id, name) in &self.atom_ids {
-            combined.set_atom_keyword(id, name);
+            combined
+                .set_atom_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.bond_ids {
-            combined.set_bond_keyword(id, name);
+            combined
+                .set_bond_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.dative_bond_ids {
-            combined.set_dative_bond_keyword(id, name);
+            combined
+                .set_dative_bond_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.aromatic_system_ids {
-            combined.set_aromatic_system_keyword(id, name);
+            combined
+                .set_aromatic_system_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.multicenter_bond_ids {
-            combined.set_multicenter_bond_keyword(id, name);
+            combined
+                .set_multicenter_bond_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.noncovalent_bond_ids {
-            combined.set_noncovalent_bond_keyword(id, name);
+            combined
+                .set_noncovalent_bond_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.stereo_atom_ids {
-            combined.set_stereo_atom_keyword(id, name);
+            combined
+                .set_stereo_atom_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         for (&id, name) in &self.stereo_bond_ids {
-            combined.set_stereo_bond_keyword(id, name);
+            combined
+                .set_stereo_bond_keyword(id, name)
+                .expect("reaction metadata keywords are disjoint");
         }
         combined
     }
@@ -4100,18 +4116,23 @@ mod tests {
     /// Shared render metadata for existing and created test entities.
     #[fixture]
     fn meta() -> ReactionMetadata {
+        let mut lhs = MoleculeMetadata::new();
+        lhs.set_atom_keyword(AtomId(0), "br").unwrap();
+        lhs.set_atom_keyword(AtomId(1), "c").unwrap();
+        lhs.set_bond_keyword(BondId(0), "b1").unwrap();
+        lhs.set_bond_keyword(BondId(1), "bx").unwrap();
+        lhs.set_dative_bond_keyword(DativeBondId(0), "d1").unwrap();
+        lhs.set_aromatic_system_keyword(AromaticSystemId(0), "a1")
+            .unwrap();
+        lhs.set_multicenter_bond_keyword(MulticenterBondId(0), "m1")
+            .unwrap();
+        lhs.set_noncovalent_bond_keyword(NoncovalentBondId(0), "n1")
+            .unwrap();
+        lhs.set_stereo_atom_keyword(StereoAtomId(0), "s1").unwrap();
+        lhs.set_stereo_bond_keyword(StereoBondId(0), "t1").unwrap();
+
         ReactionMetadata {
-            lhs: MoleculeMetadata::new()
-                .with_atom_keyword(AtomId(0), "br")
-                .with_atom_keyword(AtomId(1), "c")
-                .with_bond_keyword(BondId(0), "b1")
-                .with_bond_keyword(BondId(1), "bx")
-                .with_dative_bond_keyword(DativeBondId(0), "d1")
-                .with_aromatic_system_keyword(AromaticSystemId(0), "a1")
-                .with_multicenter_bond_keyword(MulticenterBondId(0), "m1")
-                .with_noncovalent_bond_keyword(NoncovalentBondId(0), "n1")
-                .with_stereo_atom_keyword(StereoAtomId(0), "s1")
-                .with_stereo_bond_keyword(StereoBondId(0), "t1"),
+            lhs,
             ..Default::default()
         }
         .with_atom_keyword(AtomId(2), "n")

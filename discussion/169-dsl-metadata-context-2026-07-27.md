@@ -467,12 +467,13 @@ forms. This is an internal rewire and stays green after its caller migration.
 `keywords: BiBTreeMap<Entity, String>`, retaining the atom-alias bimap.
 Introduce and re-export `MetadataError` with only the variants needed by this
 subitem. Add efficient `*_keyword(id)` and `*_id(keyword)` methods for all
-eight entity kinds. Make the existing setter and builder mutation surfaces
-fallible and atomic, enforce keyword/alias disjointness and alias bijectivity,
-and test all eight `Entity` variants, idempotence, rebinding, cross-kind
-collisions, collision rollback, and empty/default construction. Migrate unit
-tests, fixtures, macros, and property strategies to the fallible API. This is
-breaking and goes red→green with every Rust caller migrated. [dep: S0a, S2a]
+eight entity kinds. Make the existing setter mutation surfaces fallible and
+atomic, remove the consuming `with_*` builders, enforce
+keyword/alias disjointness and alias bijectivity, and test all eight `Entity`
+variants, idempotence, rebinding, cross-kind collisions, collision rollback,
+and empty/default construction. Migrate unit tests, fixtures, macros, and
+property strategies to the fallible API. This is breaking and goes red→green
+with every Rust caller migrated. **Implemented (green).** [dep: S0a, S2a]
 
 **S2c — Molecule metadata remapping.** In `dsl/metadata.rs` and
 `dsl/molecule.rs`, add public consuming
