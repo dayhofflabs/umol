@@ -14,6 +14,7 @@ use super::edn_utils::{
 use super::error::ParseError;
 use super::metadata::Metadata;
 use super::namespace::Namespace;
+use crate::ast::entity::Entity;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -21,7 +22,7 @@ use crate::ast::id::{
 use crate::ast::ligand::{StereoLigand, StereoLigandKind};
 
 macro_rules! define_ref {
-    ($name:ident, $id:ident, $accessor:ident, $kind:literal, $reader:ident,
+    ($name:ident, $id:ident, $variant:ident, $kind:literal, $reader:ident,
         $count:ident, $find_by_keyword:ident
         $(, structural = $payload:ty, $parse_structural:ident, $read_structural:ident, $resolve_structural:ident)?) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -36,7 +37,7 @@ macro_rules! define_ref {
             /// this id, else the bare index. The `id → ref` inverse of `resolve` over the
             /// id↔keyword bijection.
             pub fn denote<M: Metadata>(id: $id, metadata: &M) -> Self {
-                if let Some(name) = metadata.$accessor(id) {
+                if let Some(name) = metadata.keyword(Entity::$variant(id)) {
                     Self::Keyword(name.to_string())
                 } else {
                     Self::Index(id.index())
@@ -148,7 +149,7 @@ macro_rules! define_ref {
 define_ref!(
     AtomRef,
     AtomId,
-    atom_keyword,
+    Atom,
     "atom",
     read_atom_ref,
     atom_count,
@@ -157,7 +158,7 @@ define_ref!(
 define_ref!(
     BondRef,
     BondId,
-    bond_keyword,
+    Bond,
     "bond",
     read_bond_ref,
     bond_count,
@@ -170,7 +171,7 @@ define_ref!(
 define_ref!(
     DativeBondRef,
     DativeBondId,
-    dative_bond_keyword,
+    DativeBond,
     "dative-bond",
     read_dative_bond_ref,
     dative_bond_count,
@@ -181,19 +182,19 @@ define_ref!(
     resolve_dative_structural
 );
 define_ref!(
-    AromaticSystemRef, AromaticSystemId, aromatic_system_keyword, "aromatic-system",
+    AromaticSystemRef, AromaticSystemId, AromaticSystem, "aromatic-system",
     read_aromatic_system_ref, aromatic_system_count, find_aromatic_system_by_keyword,
     structural = Vec<AtomRef>, parse_aromatic_structural, read_aromatic_structural, resolve_aromatic_structural
 );
 define_ref!(
-    MulticenterBondRef, MulticenterBondId, multicenter_bond_keyword, "multicenter-bond",
+    MulticenterBondRef, MulticenterBondId, MulticenterBond, "multicenter-bond",
     read_multicenter_bond_ref, multicenter_bond_count, find_multicenter_bond_by_keyword,
     structural = Vec<AtomRef>, parse_multicenter_structural, read_multicenter_structural, resolve_multicenter_structural
 );
 define_ref!(
     NoncovalentBondRef,
     NoncovalentBondId,
-    noncovalent_bond_keyword,
+    NoncovalentBond,
     "noncovalent-bond",
     read_noncovalent_bond_ref,
     noncovalent_bond_count,
@@ -206,7 +207,7 @@ define_ref!(
 define_ref!(
     StereoAtomRef,
     StereoAtomId,
-    stereo_atom_keyword,
+    StereoAtom,
     "stereo-atom",
     read_stereo_atom_ref,
     stereo_atom_count,
@@ -219,7 +220,7 @@ define_ref!(
 define_ref!(
     StereoBondRef,
     StereoBondId,
-    stereo_bond_keyword,
+    StereoBond,
     "stereo-bond",
     read_stereo_bond_ref,
     stereo_bond_count,
@@ -621,14 +622,14 @@ mod tests {
     use rstest::*;
     use umol_edn::{read_string, EdnKeyword};
 
-    use super::super::molecule::MoleculeMetadata;
+    use super::super::metadata::MoleculeMetadata;
     use super::super::namespace::MoleculeNamespace;
     use super::*;
 
     #[fixture]
     fn meta_with_atom_keyword() -> MoleculeMetadata {
         let mut metadata = MoleculeMetadata::new();
-        metadata.set_atom_keyword(AtomId(2), "c1").unwrap();
+        metadata.set_keyword(Entity::Atom(AtomId(2)), "c1").unwrap();
         metadata
     }
 

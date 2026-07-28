@@ -51,8 +51,8 @@ pub use dative::{
     DativeBondPredicate, DativeBondUpdateDsl,
 };
 pub use error::ParseError;
-pub use metadata::{Metadata, MetadataError};
-pub use molecule::{MoleculeDsl, MoleculeMetadata};
+pub use metadata::{Metadata, MetadataError, MoleculeMetadata, ReactionMetadata};
+pub use molecule::MoleculeDsl;
 pub use multicenter::{
     parse_multicenter_bond, parse_multicenter_bond_update, MulticenterBondConstraintDsl,
     MulticenterBondDsl, MulticenterBondPredicate, MulticenterBondUpdateDsl,
@@ -62,7 +62,7 @@ pub use noncovalent::{
     parse_noncovalent_bond, parse_noncovalent_bond_update, NoncovalentBondConstraintDsl,
     NoncovalentBondDsl, NoncovalentBondUpdateDsl,
 };
-pub use reaction::{ReactionDsl, ReactionMetadata, ReactionNamespace};
+pub use reaction::{ReactionDsl, ReactionNamespace};
 pub use reaction_span::ReactionSpanDsl;
 pub use refs::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondParticipants, DativeBondRef, MulticenterBondRef,

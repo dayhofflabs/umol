@@ -237,12 +237,11 @@ mod tests {
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst,
         AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
-        BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, MoleculeAst,
-        MoleculeParts, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst,
-        StereoBondAst, StereoCoset, StereoKind, ValueAst,
+        BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, Entity,
+        MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
+        StereoAtomAst, StereoBondAst, StereoCoset, StereoKind, ValueAst,
     };
-    use crate::dsl::molecule::MoleculeMetadata;
-    use crate::dsl::{AtomDsl, MoleculeDsl};
+    use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
 
     #[rustfmt::skip]
     #[rstest]
@@ -274,8 +273,8 @@ mod tests {
             }),
             {
                 let mut metadata = MoleculeMetadata::new();
-                metadata.set_atom_keyword(AtomId(0), "a").unwrap();
-                metadata.set_atom_keyword(AtomId(1), "b").unwrap();
+                metadata.set_keyword(Entity::Atom(AtomId(0)), "a").unwrap();
+                metadata.set_keyword(Entity::Atom(AtomId(1)), "b").unwrap();
                 metadata
             },
         ),

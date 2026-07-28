@@ -21,7 +21,7 @@ pub(crate) use umol_ast::ast::{
     Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
     DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst, DativeBondDelta,
     DativeBondFieldChange, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas,
-    DpoValidator, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, FromAst, IntoAst,
+    DpoValidator, Edit, ElectronCountsAst, ElementAst, Entity, FluxionalityAst, FromAst, IntoAst,
     IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
     MoleculeConstraint, MoleculeCorrespondence, MoleculeParts, MulticenterBondAst,
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
@@ -2279,26 +2279,29 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 let mut meta = MoleculeMetadata::new();
                 for (i, atom) in atoms.iter().enumerate() {
                     if atom.is_some() {
-                        meta.set_atom_keyword(AtomId(i as u32), format!("atom{i}"))
+                        meta.set_keyword(Entity::Atom(AtomId(i as u32)), format!("atom{i}"))
                             .unwrap();
                     }
                 }
                 for (i, bond) in bonds.iter().enumerate() {
                     if bond.is_some() {
-                        meta.set_bond_keyword(BondId(i as u32), format!("bond{i}"))
+                        meta.set_keyword(Entity::Bond(BondId(i as u32)), format!("bond{i}"))
                             .unwrap();
                     }
                 }
                 for (i, dative) in datives.iter().enumerate() {
                     if dative.is_some() {
-                        meta.set_dative_bond_keyword(DativeBondId(i as u32), format!("dative{i}"))
-                            .unwrap();
+                        meta.set_keyword(
+                            Entity::DativeBond(DativeBondId(i as u32)),
+                            format!("dative{i}"),
+                        )
+                        .unwrap();
                     }
                 }
                 for (i, aromatic) in aromatics.iter().enumerate() {
                     if aromatic.is_some() {
-                        meta.set_aromatic_system_keyword(
-                            AromaticSystemId(i as u32),
+                        meta.set_keyword(
+                            Entity::AromaticSystem(AromaticSystemId(i as u32)),
                             format!("aromatic{i}"),
                         )
                         .unwrap();
@@ -2306,8 +2309,8 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 }
                 for (i, multicenter) in multicenters.iter().enumerate() {
                     if multicenter.is_some() {
-                        meta.set_multicenter_bond_keyword(
-                            MulticenterBondId(i as u32),
+                        meta.set_keyword(
+                            Entity::MulticenterBond(MulticenterBondId(i as u32)),
                             format!("multicenter{i}"),
                         )
                         .unwrap();
@@ -2315,8 +2318,8 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 }
                 for (i, noncovalent) in noncovalents.iter().enumerate() {
                     if noncovalent.is_some() {
-                        meta.set_noncovalent_bond_keyword(
-                            NoncovalentBondId(i as u32),
+                        meta.set_keyword(
+                            Entity::NoncovalentBond(NoncovalentBondId(i as u32)),
                             format!("noncovalent{i}"),
                         )
                         .unwrap();

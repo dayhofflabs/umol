@@ -1045,7 +1045,7 @@ mod tests {
     use rstest::*;
     use umol_edn::read_string;
 
-    use super::super::molecule::MoleculeMetadata;
+    use super::super::metadata::MoleculeMetadata;
     use super::super::namespace::MoleculeNamespace;
     use super::*;
     use crate::ast::constraint::AtomConstraintAst;

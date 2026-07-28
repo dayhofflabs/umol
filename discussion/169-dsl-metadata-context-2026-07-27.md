@@ -117,12 +117,15 @@ of the context instead of reconstructing it by inverting eight maps.
 Metadata supports both directions:
 
 ```rust
-metadata.atom_keyword(AtomId(3)) // -> Option<&str>
-metadata.atom_id("carbonyl")     // -> Option<AtomId>
+metadata.keyword(Entity::Atom(AtomId(3))) // -> Option<&str>
+metadata.entity("carbonyl")               // -> Option<Entity>
 ```
 
 Here `AtomId` is the numerical AST identifier, while `"carbonyl"` is a DSL
-keyword. The same pair of operations is required for every entity kind.
+keyword. `Entity` already carries the entity kind, so the public API does not
+repeat these operations for all eight variants. `MoleculeMetadata` also
+provides the checked generic mutation
+`set_keyword(Entity, impl Into<String>)`.
 
 Insertion must preserve the DSL namespace invariants. It is fallible when it
 would violate:
@@ -141,7 +144,19 @@ keyword atomically into the shared bindings.
 implements `Metadata` directly. Consumers that render constraints or overlay
 references can accept that view without constructing a combined
 `MoleculeMetadata`. The current `combined_metadata()` operation and its
-render-time cloning should disappear.
+render-time cloning should disappear. The combined `keyword` and `entity`
+queries search delta bindings before lhs bindings. Scope-specific queries use
+`delta_keyword` and `delta_entity`, while `lhs()` exposes the immutable
+`MoleculeMetadata`. Mutation is explicit through `set_delta_keyword`; lhs
+metadata is constructed first and embedded through
+`From<MoleculeMetadata> for ReactionMetadata`.
+
+Atom aliases have the same bidirectional query surface on both containers:
+`atom_alias(name)` returns the atom DSL and `atom_alias_name(dsl)` returns its
+name. `add_atom_alias` remains fallible and atomic. Reaction alias lookup is
+reaction-then-lhs, while reaction serialization uses a separately named
+reaction-scope iterator so lhs aliases are emitted only inside the lhs
+molecule.
 
 ## Metadata remapping
 
@@ -484,25 +499,84 @@ Test identity, a nontrivial permutation, partial restriction, total reverse
 roundtrip, composition, every entity kind, and alias invariance. This is
 additive and stays green. **Implemented (green).** [dep: S0c, S2b]
 
-**S2d — `ReactionMetadata`.** Replace the eight delta maps with
-`delta_keywords: BiBTreeMap<Entity, String>`, retain
-`lhs: MoleculeMetadata` and the reaction alias bimap, and implement `Metadata`
-directly with unambiguous delta-then-lhs lookup. Provide explicit lhs/delta
-mutation operations rather than exposing either physical field as the public
-mapping API. Enforce keyword and alias uniqueness over the complete reaction
-scope and test all eight entity kinds in both scopes, including collisions
-across the scope boundary. Extend `MetadataError` only for newly introduced
-reaction-scope failures. This is breaking and goes red→green with all callers
-migrated. [dep: S2b]
+**S2d — Metadata module consolidation.** Move `MoleculeMetadata`,
+`ReactionMetadata`, their inherent and trait implementations, namespace
+projections, and metadata-specific unit tests into `dsl/metadata.rs`.
+Re-export both containers from `dsl`; update internal imports without retaining
+compatibility re-exports from `dsl/molecule.rs` or `dsl/reaction.rs`. Replace
+the reaction test's former private-field construction with the generally useful
+infallible `From<MoleculeMetadata> for ReactionMetadata`. This is an
+organizational move and stays green. **Implemented (green).** [dep: S2c]
 
-**S2e — Clone-free reaction rendering.** In `dsl/reaction.rs`, pass
+**S2e — Generic entity-keyword API.** In `dsl/metadata.rs`, replace the eight
+typed methods on `Metadata` with
+`keyword(Entity) -> Option<&str>` and
+`entity(&str) -> Option<Entity>`. Add the same inherent query methods and the
+public checked `set_keyword(Entity, impl Into<String>)` operation to
+`MoleculeMetadata`; remove the eight `*_keyword`, eight `*_id`, and eight
+`set_*_keyword` methods. Migrate reference denotation, molecule and
+reaction-span rendering, constraint and relational DSL conversion, namespace
+projection, macros, fixtures, and property strategies in the same subitem.
+Test both directions for every `Entity` variant, idempotent insertion,
+rebinding, cross-kind collisions, and rollback after failure. This is breaking
+and goes red→green with all Rust callers migrated. **Implemented (green).**
+[dep: S2d]
+
+**S2f — Molecule atom-alias API.** In `dsl/metadata.rs`, complete the
+bidirectional alias surface with
+`atom_alias(&str) -> Option<&AtomDsl>` and
+`atom_alias_name(&AtomDsl) -> Option<&str>`, retaining checked
+`add_atom_alias`. Make `iter_atom_aliases` return an exact-size iterator for
+serialization and remove the redundant `contains_keyword`, `has_atom_alias`,
+`has_atom_aliases`, and `atom_aliases_len` methods. Migrate molecule and
+reaction-span renderers and metadata consumers. Test both alias directions,
+empty and populated iteration, idempotence, name and target collisions,
+keyword/alias collisions in both insertion orders, and atomic failure. This is
+breaking and goes red→green with all callers migrated. [dep: S2e]
+
+**S2g — Reaction entity-keyword storage and API.** In `dsl/metadata.rs`,
+replace the eight reaction `IndexMap<Id, String>` fields with
+`delta_keywords: BiBTreeMap<Entity, String>`, retaining
+`lhs: MoleculeMetadata`. Implement the generic inherent and `Metadata`
+`keyword`/`entity` operations as delta-then-lhs lookup. Add explicit
+`delta_keyword`, `delta_entity`, and checked `set_delta_keyword`; remove the
+typed reaction getters and setters and the unused consuming `with_*` builders.
+Check delta insertion against lhs and reaction keywords and aliases without
+exposing mutable physical fields. Migrate reaction namespace projection,
+fixtures, and ordinary callers. Test every entity kind in both scopes,
+combined and scope-specific lookup, idempotence, rebinding, cross-kind and
+cross-scope collision rollback, and empty-delta construction from lhs
+metadata. This is breaking and goes red→green with all callers migrated.
+[dep: S2f]
+
+**S2h — Reaction atom-alias API.** In `dsl/metadata.rs`, add the same
+combined `atom_alias` and `atom_alias_name` queries to `ReactionMetadata`,
+searching reaction aliases before lhs aliases. Make `add_atom_alias` checked
+and atomic across lhs keywords, delta keywords, lhs aliases, and reaction
+aliases. Replace the ambiguously scoped reaction alias iterator and count
+helpers with
+`iter_reaction_atom_aliases() -> impl ExactSizeIterator`, which exposes only
+the aliases emitted at reaction scope. Migrate parsing projection and
+rendering callers. Test both combined lookup directions, lhs fallback,
+reaction-scope lookup, all cross-scope collision combinations, bijectivity,
+idempotence, rollback, and reaction-only iteration. This is breaking and goes
+red→green with all callers migrated. [dep: S2g]
+
+**S2i — Clone-free reaction rendering.** In `dsl/reaction.rs`, pass
 `&ReactionMetadata` through the generic reference-rendering helpers and remove
 `combined_metadata()` together with the lazy combined clone in
-`render_reaction_edn`. Preserve exact reaction rendering for positional,
-lhs-keyword, delta-keyword, constraint, and overlay references. Add regression
-tests that exercise each reference scope. This is a breaking removal of an
-obsolete public method and goes red→green with all callers migrated.
-[dep: S2d]
+`render_deltas`. Preserve the distinct lookup rules: delta targets use
+`lhs()`, added entities use the delta scope, endpoints and constraints use the
+combined `Metadata` view, and top-level alias emission uses
+`iter_reaction_atom_aliases`. Add regression tests for positional, lhs,
+delta, combined constraint and overlay references, aliases in both scopes,
+and all eight entity kinds. This is a breaking removal and rewire that goes
+red→green with all rendering callers migrated. [dep: S2h]
+
+The S2 critical path is `S2d → S2e → S2f → S2g → S2h → S2i`. None of the
+remaining S2 subitems is deferrable: S3 contexts and the checked wrappers must
+consume one stable metadata API, and leaving clone-based combined rendering
+would preserve a second reaction lookup path.
 
 ### S3 — Parse-time contexts
 
@@ -516,7 +590,7 @@ the already-built metadata. Migrate molecule and subpattern parsing, public
 exports, tests, and documentation in the same change. Test count allocation,
 participant lookup, keyword lookup, collision rollback, and parsed metadata
 equivalence between tree and streaming parsers. This is breaking and goes
-red→green across the workspace. [dep: S2b]
+red→green across the workspace. [dep: S2f]
 
 **S3b — `ReactionContext`.** In `dsl/reaction.rs`, rename
 `ReactionNamespace` to `ReactionContext`. Build `ReactionMetadata` directly
@@ -526,7 +600,7 @@ the shared storage. Remove projection/inversion code and migrate reaction
 parsing, tests, and public exports. Test lhs/delta lookup, continuation
 indices, cross-scope collisions, added-entity references, and tree/streaming
 metadata parity. This is breaking and goes red→green across the workspace.
-[dep: S3a, S2d]
+[dep: S3a, S2h]
 
 **S3c — Reaction-span parsing.** Rewire `dsl/reaction_span.rs` to use
 `MoleculeContext` and to move the context's `MoleculeMetadata` into the
@@ -542,7 +616,7 @@ binding names an existing entity of the corresponding kind; add only the
 required out-of-range `MetadataError` representation. Keep `from_parts`
 temporarily available so the additive constructor can land green. Test every
 entity kind, boundary indices, empty metadata, and parsed coherent parts.
-This is additive and stays green. [dep: S2b]
+This is additive and stays green. [dep: S2f]
 
 **S4b — `ReactionDsl::new`.** Add the public fallible
 `ReactionDsl::new(ast, metadata)` constructor. Validate lhs metadata against
@@ -551,13 +625,13 @@ kind, while reusing the intrinsic scope checks already enforced by
 `ReactionMetadata`. Add error variants only for failure modes not expressible
 after S4a. Test all eight add-delta kinds, wrong-kind and absent additions,
 lhs/delta scope errors, and coherent parsed parts. This is additive and stays
-green. [dep: S2d, S4a]
+green. [dep: S2h, S4a]
 
 **S4c — `ReactionSpanDsl::new`.** Add the public fallible
 `ReactionSpanDsl::new(ast, metadata)` constructor and validate each keyword
 against the corresponding span entity collection. Reuse the S4a error
 representation where possible. Test all eight kinds, empty metadata, and
-coherent parsed parts. This is additive and stays green. [dep: S2b, S4a]
+coherent parsed parts. This is additive and stays green. [dep: S2f, S4a]
 
 **S4d — Privatize unchecked construction.** Make all three `from_parts`
 constructors private. Keep parser paths on private `from_parts`, because their
@@ -587,15 +661,15 @@ stays green. [dep: S0c]
 **S5b — Metadata wrappers and exception mapping.** Add
 `umol-py/src/metadata.rs` with Python `MoleculeMetadata` and
 `ReactionMetadata` wrappers over the reconciled Rust types, and register them
-in `_native`. Expose per-kind id-to-keyword and keyword-to-id operations and
-collision-aware mutation methods without exposing Rust fields. Preserve atom
+in `_native`. Expose generic entity-to-keyword and keyword-to-entity operations
+and collision-aware mutation methods without exposing Rust fields. Preserve atom
 aliases inside the wrappers for roundtripping; do not add a separate,
 half-designed alias-authoring surface in this stage. Add a Python
-`MetadataError` exception and map Rust `MetadataError` values to it. Test all
-eight lookup pairs, lhs/delta reaction scope, mutation collisions, exception
+`MetadataError` exception and map Rust `MetadataError` values to it. Test every
+entity kind, lhs/delta reaction scope, mutation collisions, exception
 types/messages, repr, and molecule metadata remapping through the existing
 Python `MoleculeCorrespondence`. This is additive and stays green.
-[dep: S2c, S4d, S5a]
+[dep: S2i, S4d, S5a]
 
 ### S6 — Python DSL parse and render operations
 
@@ -632,7 +706,7 @@ parse/render/reparse preservation for molecule, reaction, and reaction-span
 DSLs. Add metadata-remapping properties for identity, composition, total
 reverse roundtrip, partial restriction, and alias invariance. Keep intentional
 overlap with unit tests documented beside the property modules. This is
-additive and stays green. [dep: S2c, S4d]
+additive and stays green. [dep: S2i, S4d]
 
 **S7b — Terminology and API audit.** Update the DSL module documentation,
 `umol-ast/spec/umol-dsl-spec.md`, Python docstrings, and related discussion
@@ -641,7 +715,7 @@ names, symbolic `Id` variants, `contains_id`, `DuplicateId`, one-way metadata
 maps, public `from_parts` constructors, and `combined_metadata`. Run Rust
 formatting, focused and workspace tests, property tests, clippy, the Python
 3.13 binding build, and Python tests before marking this document complete.
-This is documentation plus verification and stays green. [dep: S1c, S2e,
+This is documentation plus verification and stays green. [dep: S1c, S2i,
 S3b, S3c, S4d, S6b, S7a]
 
 The critical path is

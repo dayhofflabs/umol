@@ -11,7 +11,6 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use bimap::BiBTreeMap;
-use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use umol_perm::Permutation;
 
@@ -26,6 +25,7 @@ use super::edn_utils::{
     read_single_key_map_header, read_vec, single_key_map,
 };
 use super::error::ParseError;
+use super::metadata::{MoleculeMetadata, ReactionMetadata};
 use super::molecule::{
     parse_aromatic_system_entry, parse_atom_aliases, parse_atom_entry, parse_bond_entry,
     parse_dative_bond_entry, parse_molecule_input, parse_multicenter_bond_entry,
@@ -36,9 +36,8 @@ use super::molecule::{
     render_aromatic_entry, render_dative_entry, render_molecule_edn, render_multicenter_entry,
     render_noncovalent_entry, render_stereo_atom_entry, render_stereo_bond_entry,
     render_stereo_ligand, resolve_atom_spec, AromaticSystemEntryInput, AtomEntryInput,
-    BondEntryInput, DativeBondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
-    MulticenterBondEntryInput, NoncovalentBondEntryInput, StereoAtomEntryInput,
-    StereoBondEntryInput,
+    BondEntryInput, DativeBondEntryInput, MoleculeDsl, MoleculeInput, MulticenterBondEntryInput,
+    NoncovalentBondEntryInput, StereoAtomEntryInput, StereoBondEntryInput,
 };
 use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
 use super::namespace::{MoleculeNamespace, Namespace};
@@ -64,6 +63,7 @@ use crate::ast::edit::{
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
+use crate::ast::entity::Entity;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -195,189 +195,6 @@ fn raise_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
             StereoBondDelta::Add { ast, .. } | StereoBondDelta::Remove { ast, .. },
         ) => *ast = StereoBondDsl(ast.clone()).into_ast(&cfg.stereo_bond),
         _ => {}
-    }
-}
-
-/// Surface-form metadata paired with a `ReactionAst`: the lhs molecule metadata plus the
-/// created-entity keyword bindings and atom aliases introduced by the deltas. Mirrors
-/// `MoleculeMetadata` for the atom/bond entities (the reaction admits the `[:C "C#h3"]`
-/// alias notation for added atoms).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ReactionMetadata {
-    lhs: MoleculeMetadata,
-    atom_ids: IndexMap<AtomId, String>,
-    atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
-    bond_ids: IndexMap<BondId, String>,
-    dative_bond_ids: IndexMap<DativeBondId, String>,
-    aromatic_system_ids: IndexMap<AromaticSystemId, String>,
-    multicenter_bond_ids: IndexMap<MulticenterBondId, String>,
-    noncovalent_bond_ids: IndexMap<NoncovalentBondId, String>,
-    stereo_atom_ids: IndexMap<StereoAtomId, String>,
-    stereo_bond_ids: IndexMap<StereoBondId, String>,
-}
-
-impl ReactionMetadata {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn lhs(&self) -> &MoleculeMetadata {
-        &self.lhs
-    }
-
-    pub fn combined_metadata(&self) -> MoleculeMetadata {
-        let mut combined = self.lhs.clone();
-        for (&id, name) in &self.atom_ids {
-            combined
-                .set_atom_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.bond_ids {
-            combined
-                .set_bond_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.dative_bond_ids {
-            combined
-                .set_dative_bond_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.aromatic_system_ids {
-            combined
-                .set_aromatic_system_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.multicenter_bond_ids {
-            combined
-                .set_multicenter_bond_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.noncovalent_bond_ids {
-            combined
-                .set_noncovalent_bond_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.stereo_atom_ids {
-            combined
-                .set_stereo_atom_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.stereo_bond_ids {
-            combined
-                .set_stereo_bond_keyword(id, name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        combined
-    }
-
-    pub fn atom_keyword(&self, id: AtomId) -> Option<&str> {
-        self.atom_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn bond_keyword(&self, id: BondId) -> Option<&str> {
-        self.bond_ids.get(&id).map(String::as_str)
-    }
-
-    /// Name of the alias bound to this atom DSL, if any.
-    pub fn atom_alias_for(&self, dsl: &AtomDsl) -> Option<&str> {
-        self.atom_aliases.get_by_right(dsl).map(String::as_str)
-    }
-
-    pub fn has_atom_alias(&self, name: &str) -> bool {
-        self.atom_aliases.contains_left(name)
-    }
-
-    pub fn has_atom_aliases(&self) -> bool {
-        !self.atom_aliases.is_empty()
-    }
-
-    pub fn atom_aliases_len(&self) -> usize {
-        self.atom_aliases.len()
-    }
-
-    pub fn iter_atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
-        self.atom_aliases
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_ref()))
-    }
-
-    pub fn set_atom_keyword(&mut self, id: AtomId, name: impl Into<String>) {
-        self.atom_ids.insert(id, name.into());
-    }
-
-    pub fn set_bond_keyword(&mut self, id: BondId, name: impl Into<String>) {
-        self.bond_ids.insert(id, name.into());
-    }
-
-    pub fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str> {
-        self.dative_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_dative_bond_keyword(&mut self, id: DativeBondId, name: impl Into<String>) {
-        self.dative_bond_ids.insert(id, name.into());
-    }
-
-    pub fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str> {
-        self.aromatic_system_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_aromatic_system_keyword(&mut self, id: AromaticSystemId, name: impl Into<String>) {
-        self.aromatic_system_ids.insert(id, name.into());
-    }
-
-    pub fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str> {
-        self.multicenter_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_multicenter_bond_keyword(&mut self, id: MulticenterBondId, name: impl Into<String>) {
-        self.multicenter_bond_ids.insert(id, name.into());
-    }
-
-    pub fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str> {
-        self.noncovalent_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_noncovalent_bond_keyword(&mut self, id: NoncovalentBondId, name: impl Into<String>) {
-        self.noncovalent_bond_ids.insert(id, name.into());
-    }
-
-    pub fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str> {
-        self.stereo_atom_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_stereo_atom_keyword(&mut self, id: StereoAtomId, name: impl Into<String>) {
-        self.stereo_atom_ids.insert(id, name.into());
-    }
-
-    pub fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str> {
-        self.stereo_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_stereo_bond_keyword(&mut self, id: StereoBondId, name: impl Into<String>) {
-        self.stereo_bond_ids.insert(id, name.into());
-    }
-
-    /// Insert an atom alias. Last-wins on either side of the bijection: a
-    /// duplicate name displaces its prior atom-dsl mapping, and a duplicate
-    /// atom-dsl displaces its prior name. Callers that need collision
-    /// detection check upstream.
-    pub fn add_atom_alias(&mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) {
-        self.atom_aliases.insert(name.into(), Box::new(atom.into()));
-    }
-
-    pub fn with_atom_keyword(mut self, id: AtomId, name: impl Into<String>) -> Self {
-        self.set_atom_keyword(id, name);
-        self
-    }
-
-    pub fn with_bond_keyword(mut self, id: BondId, name: impl Into<String>) -> Self {
-        self.set_bond_keyword(id, name);
-        self
-    }
-
-    pub fn with_atom_alias(mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) -> Self {
-        self.add_atom_alias(name, atom);
-        self
     }
 }
 
@@ -552,13 +369,13 @@ impl ReactionNamespace {
             || self.lhs.atom_aliases().any(|(_, existing)| existing == dsl)
     }
 
-    fn lhs(&self) -> &MoleculeNamespace {
+    pub(super) fn lhs(&self) -> &MoleculeNamespace {
         &self.lhs
     }
-    fn deltas(&self) -> &MoleculeNamespace {
+    pub(super) fn deltas(&self) -> &MoleculeNamespace {
         &self.deltas
     }
-    fn atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
+    pub(super) fn atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
         self.atom_aliases
             .iter()
             .map(|(name, dsl)| (name.as_str(), dsl.as_ref()))
@@ -732,45 +549,6 @@ impl Namespace for ReactionNamespace {
             .get_by_left(name)
             .map(|dsl| dsl.as_ref())
             .or_else(|| self.lhs.find_atom_alias(name))
-    }
-}
-
-impl From<&ReactionNamespace> for ReactionMetadata {
-    /// Project the roundtrip metadata: the lhs molecule's metadata, the delta-introduced entity
-    /// keywords (any delta that binds a name, not only `:add`), and the reaction's top-level aliases.
-    fn from(ns: &ReactionNamespace) -> Self {
-        let mut metadata = ReactionMetadata {
-            lhs: MoleculeMetadata::from(ns.lhs()),
-            ..Default::default()
-        };
-        for (id, name) in ns.deltas().atom_keywords() {
-            metadata.set_atom_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().bond_keywords() {
-            metadata.set_bond_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().dative_bond_keywords() {
-            metadata.set_dative_bond_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().aromatic_system_keywords() {
-            metadata.set_aromatic_system_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().multicenter_bond_keywords() {
-            metadata.set_multicenter_bond_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().noncovalent_bond_keywords() {
-            metadata.set_noncovalent_bond_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().stereo_atom_keywords() {
-            metadata.set_stereo_atom_keyword(id, name);
-        }
-        for (id, name) in ns.deltas().stereo_bond_keywords() {
-            metadata.set_stereo_bond_keyword(id, name);
-        }
-        for (name, dsl) in ns.atom_aliases() {
-            metadata.add_atom_alias(name.to_string(), dsl.clone());
-        }
-        metadata
     }
 }
 
@@ -2894,7 +2672,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
 
 /// A delta ref (`:remove` / `:modify`) names an existing lhs entity — resolved against the lhs frame.
 fn render_atom_ref(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
-    match meta.lhs().atom_keyword(id) {
+    match meta.lhs().keyword(Entity::Atom(id)) {
         Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
         None => Edn::Int(id.index() as i64),
     }
@@ -2924,7 +2702,7 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn
 fn render_atom_endpoint(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
     match meta
         .atom_keyword(id)
-        .or_else(|| meta.lhs().atom_keyword(id))
+        .or_else(|| meta.lhs().keyword(Entity::Atom(id)))
     {
         Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
         None => Edn::Int(id.index() as i64),
@@ -2933,7 +2711,7 @@ fn render_atom_endpoint(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
 
 /// A bond delta target (`:remove` / `:modify`) names an existing lhs bond — resolved lhs-frame only.
 fn render_bond_ref(id: BondId, meta: &ReactionMetadata) -> Edn<'static> {
-    match meta.lhs().bond_keyword(id) {
+    match meta.lhs().keyword(Entity::Bond(id)) {
         Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
         None => Edn::Int(id.index() as i64),
     }
@@ -4117,26 +3895,27 @@ mod tests {
     #[fixture]
     fn meta() -> ReactionMetadata {
         let mut lhs = MoleculeMetadata::new();
-        lhs.set_atom_keyword(AtomId(0), "br").unwrap();
-        lhs.set_atom_keyword(AtomId(1), "c").unwrap();
-        lhs.set_bond_keyword(BondId(0), "b1").unwrap();
-        lhs.set_bond_keyword(BondId(1), "bx").unwrap();
-        lhs.set_dative_bond_keyword(DativeBondId(0), "d1").unwrap();
-        lhs.set_aromatic_system_keyword(AromaticSystemId(0), "a1")
+        lhs.set_keyword(Entity::Atom(AtomId(0)), "br").unwrap();
+        lhs.set_keyword(Entity::Atom(AtomId(1)), "c").unwrap();
+        lhs.set_keyword(Entity::Bond(BondId(0)), "b1").unwrap();
+        lhs.set_keyword(Entity::Bond(BondId(1)), "bx").unwrap();
+        lhs.set_keyword(Entity::DativeBond(DativeBondId(0)), "d1")
             .unwrap();
-        lhs.set_multicenter_bond_keyword(MulticenterBondId(0), "m1")
+        lhs.set_keyword(Entity::AromaticSystem(AromaticSystemId(0)), "a1")
             .unwrap();
-        lhs.set_noncovalent_bond_keyword(NoncovalentBondId(0), "n1")
+        lhs.set_keyword(Entity::MulticenterBond(MulticenterBondId(0)), "m1")
             .unwrap();
-        lhs.set_stereo_atom_keyword(StereoAtomId(0), "s1").unwrap();
-        lhs.set_stereo_bond_keyword(StereoBondId(0), "t1").unwrap();
+        lhs.set_keyword(Entity::NoncovalentBond(NoncovalentBondId(0)), "n1")
+            .unwrap();
+        lhs.set_keyword(Entity::StereoAtom(StereoAtomId(0)), "s1")
+            .unwrap();
+        lhs.set_keyword(Entity::StereoBond(StereoBondId(0)), "t1")
+            .unwrap();
 
-        ReactionMetadata {
-            lhs,
-            ..Default::default()
-        }
-        .with_atom_keyword(AtomId(2), "n")
-        .with_bond_keyword(BondId(2), "b2")
+        let mut metadata = ReactionMetadata::from(lhs);
+        metadata.set_atom_keyword(AtomId(2), "n");
+        metadata.set_bond_keyword(BondId(2), "b2");
+        metadata
     }
 
     #[rustfmt::skip]
