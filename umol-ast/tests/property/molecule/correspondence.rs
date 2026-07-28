@@ -36,7 +36,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_correspondence_compose(
+    fn test_molecule_correspondence_compose_identity(
         (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
     ) {
         let correspondence = ast.induced_subgraph(&atoms);
@@ -76,5 +76,36 @@ proptest! {
             let id = StereoBondId(index as u32);
             prop_assert_eq!(remapping.map_stereo_bond(id), id);
         }
+    }
+
+    #[test]
+    fn test_molecule_correspondence_compose_associativity(
+        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+    ) {
+        let correspondence = ast.induced_subgraph(&atoms);
+        let reverse = correspondence.reverse();
+
+        prop_assert_eq!(
+            correspondence.compose(&reverse).compose(&correspondence),
+            correspondence.compose(&reverse.compose(&correspondence)),
+        );
+    }
+
+    #[test]
+    fn test_molecule_correspondence_compose_all(
+        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+    ) {
+        let correspondence = ast.induced_subgraph(&atoms);
+        let reverse = correspondence.reverse();
+        let expected = correspondence.compose(&reverse).compose(&correspondence);
+
+        prop_assert_eq!(
+            MoleculeCorrespondence::compose_all([
+                correspondence.clone(),
+                reverse,
+                correspondence,
+            ]),
+            Some(expected),
+        );
     }
 }

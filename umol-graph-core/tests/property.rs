@@ -8,6 +8,8 @@
 mod common_subgraph;
 #[path = "property/corpus.rs"]
 mod corpus;
+#[path = "property/correspondence.rs"]
+mod correspondence;
 #[path = "property/cycles.rs"]
 mod cycles;
 #[path = "property/graph.rs"]

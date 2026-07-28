@@ -131,6 +131,14 @@ impl MoleculeCorrespondence {
         )
     }
 
+    /// Compose molecule correspondences in iteration order. Returns `None` for an empty input and
+    /// the value itself for a singleton.
+    pub fn compose_all(correspondences: impl IntoIterator<Item = Self>) -> Option<Self> {
+        correspondences
+            .into_iter()
+            .reduce(|left, right| left.compose(&right))
+    }
+
     /// The inverse correspondence (rhs↔lhs), per entity family: each family's `reverse`.
     pub fn reverse(&self) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
@@ -463,6 +471,42 @@ mod tests {
         )
     }
 
+    #[fixture]
+    fn composition_chain() -> [MoleculeCorrespondence; 3] {
+        [
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
+                Correspondence::new(vec![(BondId(0), BondId(1))], 1, 2),
+                Correspondence::new(vec![(DativeBondId(0), DativeBondId(1))], 1, 2),
+                Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(1))], 1, 2),
+                Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(1))], 1, 2),
+                Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(1))], 1, 2),
+                Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(1))], 1, 2),
+                Correspondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2),
+            ),
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3),
+                Correspondence::new(vec![(BondId(1), BondId(2))], 2, 3),
+                Correspondence::new(vec![(DativeBondId(1), DativeBondId(2))], 2, 3),
+                Correspondence::new(vec![(AromaticSystemId(1), AromaticSystemId(2))], 2, 3),
+                Correspondence::new(vec![(MulticenterBondId(1), MulticenterBondId(2))], 2, 3),
+                Correspondence::new(vec![(NoncovalentBondId(1), NoncovalentBondId(2))], 2, 3),
+                Correspondence::new(vec![(StereoAtomId(1), StereoAtomId(2))], 2, 3),
+                Correspondence::new(vec![(StereoBondId(1), StereoBondId(2))], 2, 3),
+            ),
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(NodeId(2), NodeId(0))], 3, 1),
+                Correspondence::new(vec![(BondId(2), BondId(0))], 3, 1),
+                Correspondence::new(vec![(DativeBondId(2), DativeBondId(0))], 3, 1),
+                Correspondence::new(vec![(AromaticSystemId(2), AromaticSystemId(0))], 3, 1),
+                Correspondence::new(vec![(MulticenterBondId(2), MulticenterBondId(0))], 3, 1),
+                Correspondence::new(vec![(NoncovalentBondId(2), NoncovalentBondId(0))], 3, 1),
+                Correspondence::new(vec![(StereoAtomId(2), StereoAtomId(0))], 3, 1),
+                Correspondence::new(vec![(StereoBondId(2), StereoBondId(0))], 3, 1),
+            ),
+        ]
+    }
+
     #[rstest]
     fn test_molecule_correspondence_accessors(correspondence: MoleculeCorrespondence) {
         assert_eq!(
@@ -553,56 +597,51 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_correspondence_compose() {
-        // Every family: self maps 0→1, other maps 1→2, so the composite maps 0→2.
-        let ab = MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
-            Correspondence::new(vec![(BondId(0), BondId(1))], 1, 2),
-            Correspondence::new(vec![(DativeBondId(0), DativeBondId(1))], 1, 2),
-            Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(1))], 1, 2),
-            Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(1))], 1, 2),
-            Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(1))], 1, 2),
-            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(1))], 1, 2),
-            Correspondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2),
-        );
-        let bc = MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3),
-            Correspondence::new(vec![(BondId(1), BondId(2))], 2, 3),
-            Correspondence::new(vec![(DativeBondId(1), DativeBondId(2))], 2, 3),
-            Correspondence::new(vec![(AromaticSystemId(1), AromaticSystemId(2))], 2, 3),
-            Correspondence::new(vec![(MulticenterBondId(1), MulticenterBondId(2))], 2, 3),
-            Correspondence::new(vec![(NoncovalentBondId(1), NoncovalentBondId(2))], 2, 3),
-            Correspondence::new(vec![(StereoAtomId(1), StereoAtomId(2))], 2, 3),
-            Correspondence::new(vec![(StereoBondId(1), StereoBondId(2))], 2, 3),
-        );
+    fn test_molecule_correspondence_compose(composition_chain: [MoleculeCorrespondence; 3]) {
+        let [left, right, _] = composition_chain;
 
-        let ac = ab.compose(&bc);
+        assert_eq!(
+            left.compose(&right),
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(2))], 1, 3),
+                Correspondence::new(vec![(BondId(0), BondId(2))], 1, 3),
+                Correspondence::new(vec![(DativeBondId(0), DativeBondId(2))], 1, 3),
+                Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(2))], 1, 3),
+                Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(2))], 1, 3),
+                Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(2))], 1, 3),
+                Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(2))], 1, 3),
+                Correspondence::new(vec![(StereoBondId(0), StereoBondId(2))], 1, 3),
+            ),
+        );
+    }
 
-        assert_eq!(ac.atoms().matched_pairs(), &[(NodeId(0), NodeId(2))]);
-        assert_eq!(ac.bonds().matched_pairs(), &[(BondId(0), BondId(2))]);
+    #[rstest]
+    #[case::empty(0)]
+    #[case::singleton(1)]
+    #[case::multiple(3)]
+    fn test_molecule_correspondence_compose_all(
+        composition_chain: [MoleculeCorrespondence; 3],
+        #[case] count: usize,
+    ) {
+        let expected = match count {
+            0 => None,
+            1 => Some(composition_chain[0].clone()),
+            3 => Some(MoleculeCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1),
+                Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1),
+                Correspondence::new(vec![(DativeBondId(0), DativeBondId(0))], 1, 1),
+                Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(0))], 1, 1),
+                Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(0))], 1, 1),
+                Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1),
+                Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1),
+                Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1),
+            )),
+            _ => unreachable!(),
+        };
+
         assert_eq!(
-            ac.dative_bonds().matched_pairs(),
-            &[(DativeBondId(0), DativeBondId(2))]
-        );
-        assert_eq!(
-            ac.aromatic_systems().matched_pairs(),
-            &[(AromaticSystemId(0), AromaticSystemId(2))]
-        );
-        assert_eq!(
-            ac.multicenter_bonds().matched_pairs(),
-            &[(MulticenterBondId(0), MulticenterBondId(2))]
-        );
-        assert_eq!(
-            ac.noncovalent_bonds().matched_pairs(),
-            &[(NoncovalentBondId(0), NoncovalentBondId(2))]
-        );
-        assert_eq!(
-            ac.stereo_atoms().matched_pairs(),
-            &[(StereoAtomId(0), StereoAtomId(2))]
-        );
-        assert_eq!(
-            ac.stereo_bonds().matched_pairs(),
-            &[(StereoBondId(0), StereoBondId(2))]
+            MoleculeCorrespondence::compose_all(composition_chain.into_iter().take(count)),
+            expected,
         );
     }
 

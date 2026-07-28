@@ -112,7 +112,10 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
 
     /// Relational composition: `self` (left↔middle) followed by `other` (middle↔right), yielding a
     /// left↔right correspondence. A left id matched to a middle id that `other` leaves unmatched
-    /// becomes unmatched. `self`'s right space and `other`'s left space must be the same.
+    /// becomes unmatched.
+    ///
+    /// Composition matches numerical middle ids even when the declared intermediate counts differ.
+    /// Ids outside the shorter space have no pair and therefore behave as absent or unmatched.
     pub fn compose(&self, other: &Correspondence<Id>) -> Correspondence<Id> {
         let matched_pairs = self
             .matched_pairs
@@ -120,6 +123,14 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
             .filter_map(|&(left, middle)| other.right_of(middle).map(|right| (left, right)))
             .collect();
         Correspondence::new(matched_pairs, self.left_count, other.right_count)
+    }
+
+    /// Compose correspondences in iteration order. Returns `None` for an empty input and the value
+    /// itself for a singleton.
+    pub fn compose_all(correspondences: impl IntoIterator<Item = Self>) -> Option<Self> {
+        correspondences
+            .into_iter()
+            .reduce(|left, right| left.compose(&right))
     }
 
     /// The inverse correspondence (right↔left): each matched pair swapped and the two id-space sizes
@@ -191,6 +202,22 @@ impl GraphCorrespondence {
         &self.edges
     }
 
+    /// Relational composition of the node and edge correspondences.
+    pub fn compose(&self, other: &GraphCorrespondence) -> GraphCorrespondence {
+        GraphCorrespondence::new(
+            self.nodes.compose(&other.nodes),
+            self.edges.compose(&other.edges),
+        )
+    }
+
+    /// Compose graph correspondences in iteration order. Returns `None` for an empty input and the
+    /// value itself for a singleton.
+    pub fn compose_all(correspondences: impl IntoIterator<Item = Self>) -> Option<Self> {
+        correspondences
+            .into_iter()
+            .reduce(|left, right| left.compose(&right))
+    }
+
     /// This correspondence as a [`Remapping`] — a dense old→new relabel of both id spaces. Requires
     /// it be **total on the left** (every left id matched), as a pushout's coprojection is: left id `i`
     /// maps to its partner.
@@ -259,6 +286,24 @@ mod tests {
         )
     }
 
+    #[fixture]
+    fn graph_correspondences() -> [GraphCorrespondence; 3] {
+        [
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+            ),
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2),
+            ),
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(2), NodeId(0))], 3, 1),
+                Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1),
+            ),
+        ]
+    }
+
     #[rstest]
     fn test_correspondence_matched_pairs() {
         let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
@@ -297,6 +342,43 @@ mod tests {
         );
         assert_eq!(c.nodes().matched_pairs(), &[(n(0), n(1)), (n(1), n(0))]);
         assert_eq!(c.edges().matched_pairs(), &[(e(0), e(2))]);
+    }
+
+    #[rstest]
+    fn test_graph_correspondence_compose(graph_correspondences: [GraphCorrespondence; 3]) {
+        let [left, right, _] = graph_correspondences;
+
+        assert_eq!(
+            left.compose(&right),
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(2))], 1, 3),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2),
+            ),
+        );
+    }
+
+    #[rstest]
+    #[case::empty(0)]
+    #[case::singleton(1)]
+    #[case::multiple(3)]
+    fn test_graph_correspondence_compose_all(
+        graph_correspondences: [GraphCorrespondence; 3],
+        #[case] count: usize,
+    ) {
+        let expected = match count {
+            0 => None,
+            1 => Some(graph_correspondences[0].clone()),
+            3 => Some(GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+            )),
+            _ => unreachable!(),
+        };
+
+        assert_eq!(
+            GraphCorrespondence::compose_all(graph_correspondences.into_iter().take(count)),
+            expected,
+        );
     }
 
     #[rstest]
@@ -376,13 +458,115 @@ mod tests {
     }
 
     #[rstest]
-    fn test_correspondence_compose() {
-        // A⇌B then B⇌C; A-node 2 maps to B-node 12, which B⇌C leaves unmatched, so 2 drops out.
-        let ab = Correspondence::new(vec![(n(0), n(10)), (n(1), n(11)), (n(2), n(12))], 3, 13);
-        let bc = Correspondence::new(vec![(n(10), n(100)), (n(11), n(101))], 13, 102);
-        let ac = ab.compose(&bc);
-        assert_eq!(ac.matched_pairs(), &[(n(0), n(100)), (n(1), n(101))]);
-        assert_eq!(ac.left_unmatched(), vec![n(2)]);
+    #[case::same_intermediate(
+        Correspondence::new(
+            vec![
+                (NodeId(0), NodeId(10)),
+                (NodeId(1), NodeId(11)),
+                (NodeId(2), NodeId(12)),
+            ],
+            3,
+            13,
+        ),
+        Correspondence::new(
+            vec![
+                (NodeId(10), NodeId(100)),
+                (NodeId(11), NodeId(101)),
+            ],
+            13,
+            102,
+        ),
+        Correspondence::new(
+            vec![
+                (NodeId(0), NodeId(100)),
+                (NodeId(1), NodeId(101)),
+            ],
+            3,
+            102,
+        ),
+    )]
+    #[case::mismatched_intermediate(
+        Correspondence::new(
+            vec![
+                (NodeId(0), NodeId(0)),
+                (NodeId(1), NodeId(2)),
+            ],
+            2,
+            3,
+        ),
+        Correspondence::new(
+            vec![(NodeId(0), NodeId(1))],
+            1,
+            2,
+        ),
+        Correspondence::new(
+            vec![(NodeId(0), NodeId(1))],
+            2,
+            2,
+        ),
+    )]
+    #[case::deletion_then_addition(
+        Correspondence::new(vec![], 1, 0),
+        Correspondence::new(vec![], 0, 1),
+        Correspondence::new(vec![], 1, 1),
+    )]
+    fn test_correspondence_compose(
+        #[case] left: Correspondence<NodeId>,
+        #[case] right: Correspondence<NodeId>,
+        #[case] expected: Correspondence<NodeId>,
+    ) {
+        assert_eq!(left.compose(&right), expected);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], None)]
+    #[case::singleton(
+        vec![Correspondence::new(
+            vec![(NodeId(0), NodeId(1))],
+            1,
+            2,
+        )],
+        Some(Correspondence::new(
+            vec![(NodeId(0), NodeId(1))],
+            1,
+            2,
+        )),
+    )]
+    #[case::multiple(
+        vec![
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(0)),
+                    (NodeId(1), NodeId(2)),
+                ],
+                2,
+                3,
+            ),
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(1)),
+                    (NodeId(2), NodeId(0)),
+                ],
+                3,
+                2,
+            ),
+            Correspondence::new(
+                vec![(NodeId(0), NodeId(2))],
+                1,
+                3,
+            ),
+        ],
+        Some(Correspondence::new(
+            vec![(NodeId(1), NodeId(2))],
+            2,
+            3,
+        )),
+    )]
+    fn test_correspondence_compose_all(
+        #[case] correspondences: Vec<Correspondence<NodeId>>,
+        #[case] expected: Option<Correspondence<NodeId>>,
+    ) {
+        assert_eq!(Correspondence::compose_all(correspondences), expected);
     }
 
     #[rstest]

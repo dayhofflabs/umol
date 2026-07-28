@@ -198,6 +198,45 @@ existing molecule correspondence. Reaction metadata remapping should be added
 only together with a corresponding reaction reindexing operation and mapping
 type, rather than assigning molecule-correspondence semantics to it.
 
+## Correspondence composition
+
+Composition is ordinary relational composition over numerical ids. For
+`left: A ↔ B` and `right: B' ↔ C`, a pair `(a, c)` belongs to the composite
+exactly when `(a, b)` belongs to `left` and `(b, c)` belongs to `right` for
+some numerical id `b`. The result retains `left.left_count()` and
+`right.right_count()`.
+
+The operation is defined even when `left.right_count()` and
+`right.left_count()` differ. Ids outside the shorter intermediate space have
+no pairs and therefore behave as absent or unmatched; they are not padded
+with identity pairs. This is the intentional consequence of using simple
+local numerical ids rather than object-bound ids. It preserves partial
+bijectivity and makes composition associative. For correspondences produced
+by consecutive operations on the same object, the intermediate counts agree
+and this extension reduces to the ordinary same-object case.
+
+Deletion and addition remain distinct even when they reuse the same numerical
+id. Composing `1 ↔ 0` with no pairs and `0 ↔ 1` with no pairs yields `1 ↔ 1`
+with no pairs: the old entity is left-unmatched and the new entity is
+right-unmatched rather than being identified by their shared index.
+
+`Correspondence<T>`, `GraphCorrespondence`, and `MoleculeCorrespondence` all
+provide the same composition surface:
+
+```rust
+c.compose(&other)
+
+C::compose_all(correspondences)
+    // IntoIterator<Item = Self> -> Option<Self>
+```
+
+`compose_all` is the nonempty associative reduction in iteration order. An
+empty input returns `None`, a singleton returns that value unchanged, and a
+longer input returns the repeated composition. Correspondence identities are
+specific to an id-space shape; an empty sequence supplies no shape from which
+to construct one. At the `Option` level, `None` is the neutral result for an
+empty reduction.
+
 ## Python correspondence operations
 
 The current Python `Correspondence` and `MoleculeCorrespondence` values are
@@ -215,10 +254,12 @@ correspondence.left_of(right)
 correspondence.is_total()
 correspondence.reverse()
 correspondence.compose(other)
+Correspondence.compose_all(correspondences)
 
 molecule_correspondence.is_total()
 molecule_correspondence.reverse()
 molecule_correspondence.compose(other)
+MoleculeCorrespondence.compose_all(correspondences)
 ```
 
 `Correspondence` should wrap `umol_graph_core::Correspondence<usize>`
@@ -227,13 +268,12 @@ representation. Expose the properties as `matched_pairs`, `left_count`,
 `right_count`, `left_unmatched`, and `right_unmatched`. A separate iterator is
 unnecessary because `matched_pairs` already supplies the natural iterable.
 
-Python composition validates that the intermediate id-space sizes agree and
-raises `ValueError` when they do not. For `MoleculeCorrespondence`, this check
-applies to all eight families before composition. This is boundary validation
-of the Rust operation's documented precondition. Construction remains
-unexposed: no current Python operation needs it, and accepting arbitrary
-matched-pair lists or eight independently constructed family correspondences
-would require additional coherence validation.
+Python composition uses the same infallible relational semantics as Rust.
+`compose_all` accepts any iterable of the corresponding Python value, returns
+`None` for an empty iterable, and otherwise returns the associative reduction.
+Construction remains unexposed: no current Python operation needs it, and
+accepting arbitrary matched-pair lists or eight independently constructed
+family correspondences would require additional coherence validation.
 
 These operations make metadata remapping usable for all existing molecule
 operations. In particular, `split()` returns component-to-source
@@ -392,8 +432,10 @@ validation path.
   kinds.
 - `MoleculeMetadata` remaps entity keywords through a
   `MoleculeCorrespondence` while preserving aliases.
-- Python correspondence values support the lookup, reversal, composition, and
-  totality operations required to transport metadata.
+- Correspondence values support associative binary and n-ary composition at
+  the generic, graph, molecule, and Python layers.
+- Python correspondence values support the lookup, reversal, and totality
+  operations required to transport metadata.
 - Metadata and context construction enforce the same keyword and alias
   invariants.
 - The three metadata-bearing DSL wrappers have private non-validating
@@ -435,6 +477,23 @@ to the existing per-family correspondences and preserving the input entity
 kind. Test both directions for all eight variants and unmatched entities on
 both sides. This is additive and stays green. **Implemented (green).**
 [dep: S0a, S0b]
+
+**S0d — Correspondence composition algebra.** In
+`umol-graph-core/src/correspondence.rs`, retain the existing infallible
+`Correspondence<T>::compose` implementation but document mismatched
+intermediate counts as intentional relational composition over numerical ids,
+rather than as an unenforced precondition. Add the parallel
+`GraphCorrespondence::compose` operation over its node and edge
+correspondences. Add
+`compose_all(impl IntoIterator<Item = Self>) -> Option<Self>` to
+`Correspondence<T>`, `GraphCorrespondence`, and `MoleculeCorrespondence`;
+consume values in iteration order without cloning and return `None` only for
+an empty input. Add direct tests for empty, singleton, multi-step,
+mismatched-intermediate, deletion-then-addition, and every graph/molecule
+family. Add property tests for associativity, shape-specific left/right
+identities, equivalence of `compose_all` with pairwise reduction, and the
+concatenation law with `None` as the empty reduction. This is additive and
+stays green. **Implemented (green).** [dep: S0b]
 
 ### S1 — DSL keyword terminology
 
@@ -734,14 +793,14 @@ and goes red→green with all external callers migrated in the same subitem.
 `umol-py/src/correspondence.rs`, replace the copied-field representation of
 Python `Correspondence` with a wrapper over
 `umol_graph_core::Correspondence<usize>`. Preserve the existing properties and
-add `__len__`, `right_of`, `left_of`, `is_total`, `reverse`, and `compose`.
-Add `is_total`, `reverse`, and `compose` to `MoleculeCorrespondence`.
-Composition checks intermediate counts and raises `ValueError` on mismatch;
-the molecule-level operation validates all eight families before composing.
-Keep both classes frozen and return-only. Test empty, partial, total, reversed,
-composed, and dimension-mismatched correspondences, plus every molecule entity
-family. This is additive apart from the internal representation change and
-stays green. [dep: S0c]
+add `__len__`, `right_of`, `left_of`, `is_total`, `reverse`, `compose`, and
+`compose_all`. Add `is_total`, `reverse`, `compose`, and `compose_all` to
+`MoleculeCorrespondence`. Composition follows the Rust relational semantics;
+`compose_all` returns `None` for an empty iterable. Keep both classes frozen
+and return-only. Test empty, partial, total, reversed, pairwise-composed,
+n-ary-composed, and mismatched-intermediate correspondences, plus every
+molecule entity family. This is additive apart from the internal
+representation change and stays green. [dep: S0c, S0d]
 
 **S5b — Metadata wrappers and exception mapping.** Add
 `umol-py/src/metadata.rs` with Python `MoleculeMetadata` and
