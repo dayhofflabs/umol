@@ -318,24 +318,21 @@ impl ReactionMetadata {
         combined
     }
 
-    /// Name of the alias bound to this atom DSL, if any.
-    pub fn atom_alias_for(&self, dsl: &AtomDsl) -> Option<&str> {
-        self.atom_aliases.get_by_right(dsl).map(String::as_str)
+    pub fn atom_alias(&self, name: &str) -> Option<&AtomDsl> {
+        self.atom_aliases
+            .get_by_left(name)
+            .map(Box::as_ref)
+            .or_else(|| self.lhs.atom_alias(name))
     }
 
-    pub fn has_atom_alias(&self, name: &str) -> bool {
-        self.atom_aliases.contains_left(name)
+    pub fn atom_alias_name(&self, dsl: &AtomDsl) -> Option<&str> {
+        self.atom_aliases
+            .get_by_right(dsl)
+            .map(String::as_str)
+            .or_else(|| self.lhs.atom_alias_name(dsl))
     }
 
-    pub fn has_atom_aliases(&self) -> bool {
-        !self.atom_aliases.is_empty()
-    }
-
-    pub fn atom_aliases_len(&self) -> usize {
-        self.atom_aliases.len()
-    }
-
-    pub fn iter_atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
+    pub fn iter_reaction_atom_aliases(&self) -> impl ExactSizeIterator<Item = (&str, &AtomDsl)> {
         self.atom_aliases
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_ref()))
@@ -363,12 +360,36 @@ impl ReactionMetadata {
         Ok(())
     }
 
-    /// Insert an atom alias. Last-wins on either side of the bijection: a
-    /// duplicate name displaces its prior atom-dsl mapping, and a duplicate
-    /// atom-dsl displaces its prior name. Callers that need collision
-    /// detection check upstream.
-    pub fn add_atom_alias(&mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) {
-        self.atom_aliases.insert(name.into(), Box::new(atom.into()));
+    pub fn add_atom_alias(
+        &mut self,
+        name: impl Into<String>,
+        atom: impl Into<AtomDsl>,
+    ) -> Result<(), MetadataError> {
+        let name = name.into();
+        let atom = Box::new(atom.into());
+
+        if self.entity(name.as_str()).is_some() {
+            return Err(MetadataError::DuplicateKeyword(name));
+        }
+        if let Some(existing) = self.atom_aliases.get_by_left(name.as_str()) {
+            return if existing == &atom {
+                Ok(())
+            } else {
+                Err(MetadataError::DuplicateKeyword(name))
+            };
+        }
+        if self.lhs.atom_alias(name.as_str()).is_some() {
+            return Err(MetadataError::DuplicateKeyword(name));
+        }
+        if let Some(existing) = self.atom_aliases.get_by_right(atom.as_ref()) {
+            return Err(MetadataError::DuplicateAtomAlias(existing.clone()));
+        }
+        if let Some(existing) = self.lhs.atom_alias_name(atom.as_ref()) {
+            return Err(MetadataError::DuplicateAtomAlias(existing.to_string()));
+        }
+
+        self.atom_aliases.insert(name, atom);
+        Ok(())
     }
 }
 
@@ -440,7 +461,9 @@ impl From<&ReactionNamespace> for ReactionMetadata {
                 .expect("reaction namespace keywords are disjoint");
         }
         for (name, dsl) in ns.atom_aliases() {
-            metadata.add_atom_alias(name.to_string(), dsl.clone());
+            metadata
+                .add_atom_alias(name, dsl.clone())
+                .expect("reaction namespace aliases are bijective and disjoint from keywords");
         }
         metadata
     }
@@ -1290,6 +1313,119 @@ mod tests {
     }
 
     #[rstest]
+    #[case::reaction("reaction", Some(AtomDsl(AtomAst::from_element(Element::C))))]
+    #[case::lhs("lhs", Some(AtomDsl(AtomAst::from_element(Element::N))))]
+    #[case::missing("missing", None)]
+    fn test_reaction_metadata_atom_alias(#[case] name: &str, #[case] expected: Option<AtomDsl>) {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: BiBTreeMap::new(),
+                atom_aliases: [(
+                    "lhs".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                )]
+                .into_iter()
+                .collect(),
+            },
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "reaction".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(metadata.atom_alias(name), expected.as_ref());
+    }
+
+    #[rstest]
+    #[case::reaction(AtomDsl(AtomAst::from_element(Element::C)), Some("reaction"))]
+    #[case::lhs(AtomDsl(AtomAst::from_element(Element::N)), Some("lhs"))]
+    #[case::missing(AtomDsl(AtomAst::from_element(Element::O)), None)]
+    fn test_reaction_metadata_atom_alias_name(
+        #[case] atom: AtomDsl,
+        #[case] expected: Option<&str>,
+    ) {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: BiBTreeMap::new(),
+                atom_aliases: [(
+                    "lhs".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                )]
+                .into_iter()
+                .collect(),
+            },
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "reaction".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(metadata.atom_alias_name(&atom), expected);
+    }
+
+    #[rstest]
+    #[case::empty(ReactionMetadata::default(), Vec::new())]
+    #[case::populated(
+        ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: BiBTreeMap::new(),
+                atom_aliases: [(
+                    "lhs".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::O))),
+                )]
+                .into_iter()
+                .collect(),
+            },
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: [
+                (
+                    "carbon".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                ),
+                (
+                    "nitrogen".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        },
+        vec![
+            ("carbon", AtomDsl(AtomAst::from_element(Element::C))),
+            ("nitrogen", AtomDsl(AtomAst::from_element(Element::N))),
+        ]
+    )]
+    fn test_reaction_metadata_iter_reaction_atom_aliases(
+        #[case] metadata: ReactionMetadata,
+        #[case] expected: Vec<(&str, AtomDsl)>,
+    ) {
+        let mut aliases = metadata.iter_reaction_atom_aliases();
+
+        assert_eq!(aliases.len(), expected.len());
+        assert_eq!(aliases.size_hint(), (expected.len(), Some(expected.len())));
+        assert_eq!(
+            aliases.next().map(|(name, atom)| (name, atom.clone())),
+            expected.first().cloned()
+        );
+        assert_eq!(aliases.len(), expected.len().saturating_sub(1));
+        assert_eq!(
+            aliases
+                .by_ref()
+                .map(|(name, atom)| (name, atom.clone()))
+                .collect::<Vec<_>>(),
+            expected.get(1..).unwrap_or_default()
+        );
+        assert_eq!(aliases.len(), 0);
+        assert_eq!(aliases.size_hint(), (0, Some(0)));
+    }
+
+    #[rstest]
     #[case::atom(Entity::Atom(AtomId(1)))]
     #[case::bond(Entity::Bond(BondId(1)))]
     #[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
@@ -1401,6 +1537,152 @@ mod tests {
             result,
             Err(MetadataError::DuplicateKeyword("used".to_string()))
         );
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_add_atom_alias() {
+        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let mut actual = ReactionMetadata::default();
+
+        let result = actual.add_atom_alias("carbon", atom.clone());
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            actual,
+            ReactionMetadata {
+                lhs: MoleculeMetadata::new(),
+                delta_keywords: BiBTreeMap::new(),
+                atom_aliases: [("carbon".to_string(), Box::new(atom))]
+                    .into_iter()
+                    .collect(),
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_add_atom_alias_identity() {
+        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let mut actual = ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: [("carbon".to_string(), Box::new(atom.clone()))]
+                .into_iter()
+                .collect(),
+        };
+        let expected = actual.clone();
+
+        let result = actual.add_atom_alias("carbon", atom);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::lhs_keyword(
+        ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(Entity::Atom(AtomId(0)), "used".to_string())]
+                    .into_iter()
+                    .collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        "used",
+        AtomDsl(AtomAst::from_element(Element::C)),
+        MetadataError::DuplicateKeyword("used".to_string())
+    )]
+    #[case::delta_keyword(
+        ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: [(Entity::Atom(AtomId(1)), "used".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        "used",
+        AtomDsl(AtomAst::from_element(Element::C)),
+        MetadataError::DuplicateKeyword("used".to_string())
+    )]
+    #[case::lhs_alias_name(
+        ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: BiBTreeMap::new(),
+                atom_aliases: [(
+                    "used".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                )]
+                .into_iter()
+                .collect(),
+            },
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        "used",
+        AtomDsl(AtomAst::from_element(Element::C)),
+        MetadataError::DuplicateKeyword("used".to_string())
+    )]
+    #[case::reaction_alias_name(
+        ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "used".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        },
+        "used",
+        AtomDsl(AtomAst::from_element(Element::N)),
+        MetadataError::DuplicateKeyword("used".to_string())
+    )]
+    #[case::lhs_alias_target(
+        ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: BiBTreeMap::new(),
+                atom_aliases: [(
+                    "used".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                )]
+                .into_iter()
+                .collect(),
+            },
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        "other",
+        AtomDsl(AtomAst::from_element(Element::C)),
+        MetadataError::DuplicateAtomAlias("used".to_string())
+    )]
+    #[case::reaction_alias_target(
+        ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "used".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        },
+        "other",
+        AtomDsl(AtomAst::from_element(Element::C)),
+        MetadataError::DuplicateAtomAlias("used".to_string())
+    )]
+    fn test_reaction_metadata_add_atom_alias_error(
+        #[case] mut actual: ReactionMetadata,
+        #[case] name: &str,
+        #[case] atom: AtomDsl,
+        #[case] expected_error: MetadataError,
+    ) {
+        let expected = actual.clone();
+
+        let result = actual.add_atom_alias(name, atom);
+
+        assert_eq!(result, Err(expected_error));
         assert_eq!(actual, expected);
     }
 

@@ -565,7 +565,7 @@ the aliases emitted at reaction scope. Migrate parsing projection and
 rendering callers. Test both combined lookup directions, lhs fallback,
 reaction-scope lookup, all cross-scope collision combinations, bijectivity,
 idempotence, rollback, and reaction-only iteration. This is breaking and goes
-red→green with all callers migrated. [dep: S2g]
+red→green with all callers migrated. **Implemented (green).** [dep: S2g]
 
 **S2i — Clone-free reaction rendering.** In `dsl/reaction.rs`, pass
 `&ReactionMetadata` through the generic reference-rendering helpers and remove

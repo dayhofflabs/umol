@@ -1914,9 +1914,10 @@ fn render_reaction_edn(ast: &ReactionAst, meta: &ReactionMetadata) -> Edn<'stati
         Edn::keyword("deltas"),
         Edn::Vector(render_deltas(&ast.deltas, meta).into()),
     );
-    if meta.has_atom_aliases() {
-        let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
-        for (name, dsl) in meta.iter_atom_aliases() {
+    let aliases = meta.iter_reaction_atom_aliases();
+    if aliases.len() != 0 {
+        let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(aliases.len() * 2);
+        for (name, dsl) in aliases {
             pairs.push(Edn::Keyword(EdnKeyword::owned(name.to_string())));
             pairs.push(dsl.to_edn());
         }
@@ -2682,10 +2683,7 @@ fn render_atom_ref(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
 /// is the lhs ∪ reaction union). Renders `<atom-dsl>` or `[<keyword> <atom-dsl>]`.
 fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
-    let spec = match meta
-        .atom_alias_for(dsl)
-        .or_else(|| meta.lhs().atom_alias_name(dsl))
-    {
+    let spec = match meta.atom_alias_name(dsl) {
         Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
         None => dsl.to_edn(),
     };
@@ -3293,7 +3291,14 @@ mod tests {
         );
         assert_eq!(meta.delta_keyword(Entity::Atom(AtomId(1))), Some("nu"));
         assert_eq!(meta.delta_keyword(Entity::Atom(AtomId(2))), None);
-        assert!(meta.has_atom_alias("me"));
+        assert_eq!(
+            meta.atom_alias("me"),
+            Some(&AtomDsl({
+                let mut atom = AtomAst::new(ElementAst::Lit(Element::C));
+                atom.implicit_hydrogens = ValueAst::Lit(3);
+                atom
+            }))
+        );
     }
 
     #[rstest]
@@ -3323,11 +3328,30 @@ mod tests {
             ]),
         );
         assert_eq!(
-            meta.lhs().atom_alias("lo"),
+            meta.atom_alias("lo"),
             Some(&AtomDsl(AtomAst::from_element(Element::N)))
         );
-        assert_eq!(meta.atom_aliases_len(), 1);
-        assert!(meta.has_atom_alias("hi"));
+        assert_eq!(
+            meta.atom_alias("hi"),
+            Some(&AtomDsl({
+                let mut atom = AtomAst::new(ElementAst::Lit(Element::C));
+                atom.implicit_hydrogens = ValueAst::Lit(3);
+                atom
+            }))
+        );
+        assert_eq!(
+            meta.iter_reaction_atom_aliases()
+                .map(|(name, dsl)| (name, dsl.clone()))
+                .collect::<Vec<_>>(),
+            vec![(
+                "hi",
+                AtomDsl({
+                    let mut atom = AtomAst::new(ElementAst::Lit(Element::C));
+                    atom.implicit_hydrogens = ValueAst::Lit(3);
+                    atom
+                })
+            )]
+        );
     }
 
     #[rstest]
