@@ -801,7 +801,8 @@ add `__len__`, `right_of`, `left_of`, `is_total`, `reverse`, `compose`, and
 and return-only. Test empty, partial, total, reversed, pairwise-composed,
 n-ary-composed, and mismatched-intermediate correspondences, plus every
 molecule entity family. This is additive apart from the internal
-representation change and stays green. [dep: S0c, S0d]
+representation change and stays green. **Implemented (green).**
+[dep: S0c, S0d]
 
 **S5b — Metadata wrappers and exception mapping.** Add
 `umol-py/src/metadata.rs` with Python `MoleculeMetadata` and

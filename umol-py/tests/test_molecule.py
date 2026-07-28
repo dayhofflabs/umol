@@ -14,6 +14,7 @@ from umol import (
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     ContradictionError,
+    Correspondence,
     ElectronCountsAst,
     Element,
     ElementAst,
@@ -560,6 +561,71 @@ def test_molecule_ast_combine_all():
 
 def test_molecule_ast_combine_all_empty():
     assert MoleculeAst.combine_all([]) == (MoleculeAst(), [])
+
+
+def test_correspondence_value():
+    _, molecule_correspondence = MoleculeAst.from_parts(
+        [AtomAst(Element("C"))]
+    ).combine(
+        MoleculeAst.from_parts(
+            [AtomAst(Element("O")), AtomAst(Element("N"))],
+            bonds=[(0, 1, BondAst(2))],
+        )
+    )
+    correspondence = molecule_correspondence.atoms
+
+    assert isinstance(correspondence, Correspondence)
+    assert len(correspondence) == 2
+    assert correspondence.matched_pairs == [(0, 1), (1, 2)]
+    assert correspondence.left_count == 2
+    assert correspondence.right_count == 3
+    assert correspondence.left_unmatched == []
+    assert correspondence.right_unmatched == [0]
+    assert correspondence.right_of(0) == 1
+    assert correspondence.right_of(2) is None
+    assert correspondence.left_of(2) == 1
+    assert correspondence.left_of(0) is None
+    assert not correspondence.is_total()
+
+    reverse = correspondence.reverse()
+    composite = correspondence.compose(reverse)
+
+    assert reverse.matched_pairs == [(1, 0), (2, 1)]
+    assert reverse.left_count == 3
+    assert reverse.right_count == 2
+    assert composite.matched_pairs == [(0, 0), (1, 1)]
+    assert composite.is_total()
+    assert Correspondence.compose_all(
+        item for item in [correspondence, reverse]
+    ) == composite
+    assert Correspondence.compose_all(iter(())) is None
+
+
+def test_molecule_correspondence_value():
+    _, correspondence = MoleculeAst.from_parts(
+        [AtomAst(Element("C"))]
+    ).combine(
+        MoleculeAst.from_parts(
+            [AtomAst(Element("O")), AtomAst(Element("N"))],
+            bonds=[(0, 1, BondAst(2))],
+        )
+    )
+
+    assert not correspondence.is_total()
+
+    reverse = correspondence.reverse()
+    composite = correspondence.compose(reverse)
+
+    assert reverse.atoms.matched_pairs == [(1, 0), (2, 1)]
+    assert reverse.bonds.matched_pairs == [(0, 0)]
+    assert not reverse.is_total()
+    assert composite.atoms.matched_pairs == [(0, 0), (1, 1)]
+    assert composite.bonds.matched_pairs == [(0, 0)]
+    assert composite.is_total()
+    assert MoleculeCorrespondence.compose_all(
+        item for item in [correspondence, reverse]
+    ) == composite
+    assert MoleculeCorrespondence.compose_all(iter(())) is None
 
 
 def test_molecule_ast_split():

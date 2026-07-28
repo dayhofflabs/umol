@@ -1,7 +1,5 @@
 //! Read-only Python values for reaction correspondences.
 
-use std::collections::HashSet;
-
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemId, BondId, DativeBondId, MoleculeCorrespondence as AstMoleculeCorrespondence,
@@ -40,48 +38,81 @@ correspondence_ids!(
 /// A read-only partial bijection between two integer id spaces.
 #[pyclass(eq, frozen, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Correspondence {
-    matched_pairs: Vec<(usize, usize)>,
-    left_count: usize,
-    right_count: usize,
-}
+pub struct Correspondence(GraphCoreCorrespondence<usize>);
 
 #[pymethods]
 impl Correspondence {
     /// Matched `(left, right)` id pairs, ordered by left id.
     #[getter]
     fn matched_pairs(&self) -> Vec<(usize, usize)> {
-        self.matched_pairs.clone()
+        self.0.matched_pairs().to_vec()
     }
 
     /// Size of the left id space.
     #[getter]
     fn left_count(&self) -> usize {
-        self.left_count
+        self.0.left_count()
     }
 
     /// Size of the right id space.
     #[getter]
     fn right_count(&self) -> usize {
-        self.right_count
+        self.0.right_count()
     }
 
     /// Left ids without a match.
     #[getter]
     fn left_unmatched(&self) -> Vec<usize> {
-        unmatched_ids(
-            self.left_count,
-            self.matched_pairs.iter().map(|&(left, _)| left),
-        )
+        self.0.left_unmatched()
     }
 
     /// Right ids without a match.
     #[getter]
     fn right_unmatched(&self) -> Vec<usize> {
-        unmatched_ids(
-            self.right_count,
-            self.matched_pairs.iter().map(|&(_, right)| right),
-        )
+        self.0.right_unmatched()
+    }
+
+    /// Number of matched pairs.
+    fn __len__(&self) -> usize {
+        self.0.matched_pair_count()
+    }
+
+    /// Right id matched to `left`, if any.
+    fn right_of(&self, left: usize) -> Option<usize> {
+        self.0.right_of(left)
+    }
+
+    /// Left id matched to `right`, if any.
+    fn left_of(&self, right: usize) -> Option<usize> {
+        self.0.left_of(right)
+    }
+
+    /// Whether every id on both sides is matched.
+    fn is_total(&self) -> bool {
+        self.0.is_total()
+    }
+
+    /// Invert the correspondence.
+    fn reverse(&self) -> Self {
+        Self(self.0.reverse())
+    }
+
+    /// Relational composition with a following correspondence.
+    fn compose(&self, other: &Self) -> Self {
+        Self(self.0.compose(&other.0))
+    }
+
+    /// Compose an iterable of correspondences in iteration order.
+    #[staticmethod]
+    fn compose_all(correspondences: &Bound<'_, PyAny>) -> PyResult<Option<Self>> {
+        let correspondences = correspondences
+            .try_iter()?
+            .map(|item| {
+                let item = item?.cast_into::<Correspondence>()?;
+                Ok(item.borrow().0.clone())
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(GraphCoreCorrespondence::compose_all(correspondences).map(Self))
     }
 
     fn __repr__(&self) -> String {
@@ -93,21 +124,23 @@ impl Correspondence {
     pub(crate) fn from_rust<Id: CorrespondenceId>(
         correspondence: &GraphCoreCorrespondence<Id>,
     ) -> Self {
-        Self {
-            matched_pairs: correspondence
+        Self(GraphCoreCorrespondence::new(
+            correspondence
                 .matched_pairs()
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index()))
                 .collect(),
-            left_count: correspondence.left_count(),
-            right_count: correspondence.right_count(),
-        }
+            correspondence.left_count(),
+            correspondence.right_count(),
+        ))
     }
 
     fn repr(&self) -> String {
         format!(
             "Correspondence(matched_pairs={:?}, left_count={}, right_count={})",
-            self.matched_pairs, self.left_count, self.right_count
+            self.0.matched_pairs(),
+            self.0.left_count(),
+            self.0.right_count()
         )
     }
 }
@@ -167,6 +200,34 @@ impl MoleculeCorrespondence {
         Correspondence::from_rust(self.0.stereo_bonds())
     }
 
+    /// Whether every id in every entity family is matched.
+    fn is_total(&self) -> bool {
+        self.0.is_total()
+    }
+
+    /// Invert every per-family correspondence.
+    fn reverse(&self) -> Self {
+        Self(self.0.reverse())
+    }
+
+    /// Relational composition with a following molecule correspondence.
+    fn compose(&self, other: &Self) -> Self {
+        Self(self.0.compose(&other.0))
+    }
+
+    /// Compose an iterable of molecule correspondences in iteration order.
+    #[staticmethod]
+    fn compose_all(correspondences: &Bound<'_, PyAny>) -> PyResult<Option<Self>> {
+        let correspondences = correspondences
+            .try_iter()?
+            .map(|item| {
+                let item = item?.cast_into::<MoleculeCorrespondence>()?;
+                Ok(item.borrow().0.clone())
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(AstMoleculeCorrespondence::compose_all(correspondences).map(Self))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             concat!(
@@ -195,11 +256,6 @@ impl MoleculeCorrespondence {
     pub(crate) fn from_rust(correspondence: AstMoleculeCorrespondence) -> Self {
         Self(correspondence)
     }
-}
-
-fn unmatched_ids(count: usize, matched: impl Iterator<Item = usize>) -> Vec<usize> {
-    let present: HashSet<_> = matched.collect();
-    (0..count).filter(|id| !present.contains(id)).collect()
 }
 
 #[cfg(test)]
@@ -233,11 +289,11 @@ mod tests {
     #[rstest]
     #[case::empty(
         GraphCoreCorrespondence::new(vec![], 2, 3),
-        Correspondence { matched_pairs: vec![], left_count: 2, right_count: 3 },
+        Correspondence(GraphCoreCorrespondence::new(vec![], 2, 3)),
     )]
     #[case::partial(
         GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
-        Correspondence { matched_pairs: vec![(0, 2)], left_count: 2, right_count: 3 },
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 2)], 2, 3)),
     )]
     #[case::total(
         GraphCoreCorrespondence::new(
@@ -245,11 +301,11 @@ mod tests {
             2,
             2,
         ),
-        Correspondence {
-            matched_pairs: vec![(0, 1), (1, 0)],
-            left_count: 2,
-            right_count: 2,
-        },
+        Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 1), (1, 0)],
+            2,
+            2,
+        )),
     )]
     #[case::unsorted(
         GraphCoreCorrespondence::new(
@@ -257,11 +313,11 @@ mod tests {
             3,
             3,
         ),
-        Correspondence {
-            matched_pairs: vec![(0, 2), (2, 0)],
-            left_count: 3,
-            right_count: 3,
-        },
+        Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 2), (2, 0)],
+            3,
+            3,
+        )),
     )]
     fn test_correspondence_from_rust(
         #[case] correspondence: GraphCoreCorrespondence<NodeId>,
@@ -278,6 +334,7 @@ mod tests {
         3,
         vec![0, 1],
         vec![0, 1, 2],
+        0,
     )]
     #[case::partial(
         GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
@@ -286,6 +343,7 @@ mod tests {
         3,
         vec![1],
         vec![0, 1],
+        1,
     )]
     #[case::total(
         GraphCoreCorrespondence::new(
@@ -298,6 +356,7 @@ mod tests {
         2,
         vec![],
         vec![],
+        2,
     )]
     fn test_correspondence_accessors(
         #[case] correspondence: GraphCoreCorrespondence<NodeId>,
@@ -306,6 +365,7 @@ mod tests {
         #[case] right_count: usize,
         #[case] left_unmatched: Vec<usize>,
         #[case] right_unmatched: Vec<usize>,
+        #[case] matched_pair_count: usize,
     ) {
         let correspondence = Correspondence::from_rust(&correspondence);
         assert_eq!(correspondence.matched_pairs(), matched_pairs);
@@ -313,6 +373,168 @@ mod tests {
         assert_eq!(correspondence.right_count(), right_count);
         assert_eq!(correspondence.left_unmatched(), left_unmatched);
         assert_eq!(correspondence.right_unmatched(), right_unmatched);
+        assert_eq!(correspondence.__len__(), matched_pair_count);
+    }
+
+    #[rstest]
+    #[case::empty(
+        GraphCoreCorrespondence::new(vec![], 2, 3),
+        0,
+        None,
+        0,
+        None,
+    )]
+    #[case::partial(
+        GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
+        0,
+        Some(2),
+        2,
+        Some(0),
+    )]
+    #[case::total(
+        GraphCoreCorrespondence::new(
+            vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+            2,
+            2,
+        ),
+        0,
+        Some(1),
+        1,
+        Some(0),
+    )]
+    fn test_correspondence_lookup(
+        #[case] correspondence: GraphCoreCorrespondence<NodeId>,
+        #[case] left: usize,
+        #[case] right_of_left: Option<usize>,
+        #[case] right: usize,
+        #[case] left_of_right: Option<usize>,
+    ) {
+        let correspondence = Correspondence::from_rust(&correspondence);
+        assert_eq!(correspondence.right_of(left), right_of_left);
+        assert_eq!(correspondence.left_of(right), left_of_right);
+    }
+
+    #[rstest]
+    #[case::empty(GraphCoreCorrespondence::new(vec![], 0, 0), true)]
+    #[case::partial(
+        GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
+        false,
+    )]
+    #[case::total(
+        GraphCoreCorrespondence::new(
+            vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+            2,
+            2,
+        ),
+        true,
+    )]
+    fn test_correspondence_is_total(
+        #[case] correspondence: GraphCoreCorrespondence<NodeId>,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            Correspondence::from_rust(&correspondence).is_total(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::partial(
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 2), (2, 0)], 3, 4)),
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 2), (2, 0)], 4, 3)),
+    )]
+    #[case::total(
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 1), (1, 0)], 2, 2)),
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 1), (1, 0)], 2, 2)),
+    )]
+    fn test_correspondence_reverse(
+        #[case] correspondence: Correspondence,
+        #[case] expected: Correspondence,
+    ) {
+        assert_eq!(correspondence.reverse(), expected);
+    }
+
+    #[rstest]
+    #[case::ordinary(
+        Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 1), (1, 0)],
+            2,
+            2,
+        )),
+        Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 2), (1, 1)],
+            2,
+            3,
+        )),
+        Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 1), (1, 2)],
+            2,
+            3,
+        )),
+    )]
+    #[case::mismatched_intermediate(
+        Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 2), (1, 0)],
+            2,
+            3,
+        )),
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 4)], 1, 5)),
+        Correspondence(GraphCoreCorrespondence::new(vec![(1, 4)], 2, 5)),
+    )]
+    fn test_correspondence_compose(
+        #[case] left: Correspondence,
+        #[case] right: Correspondence,
+        #[case] expected: Correspondence,
+    ) {
+        assert_eq!(left.compose(&right), expected);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], None)]
+    #[case::singleton(
+        vec![Correspondence(GraphCoreCorrespondence::new(vec![(0, 1)], 1, 2))],
+        Some(Correspondence(GraphCoreCorrespondence::new(vec![(0, 1)], 1, 2))),
+    )]
+    #[case::multiple(
+        vec![
+            Correspondence(GraphCoreCorrespondence::new(
+                vec![(0, 1), (1, 0)],
+                2,
+                2,
+            )),
+            Correspondence(GraphCoreCorrespondence::new(
+                vec![(0, 2), (1, 1)],
+                2,
+                3,
+            )),
+            Correspondence(GraphCoreCorrespondence::new(
+                vec![(1, 0), (2, 1)],
+                3,
+                2,
+            )),
+        ],
+        Some(Correspondence(GraphCoreCorrespondence::new(
+            vec![(0, 0), (1, 1)],
+            2,
+            2,
+        ))),
+    )]
+    fn test_correspondence_compose_all(
+        #[case] correspondences: Vec<Correspondence>,
+        #[case] expected: Option<Correspondence>,
+    ) {
+        Python::attach(|py| {
+            let correspondences = correspondences
+                .into_iter()
+                .map(|correspondence| Py::new(py, correspondence).unwrap())
+                .collect::<Vec<_>>();
+            let correspondences = PyList::new(py, correspondences).unwrap();
+
+            assert_eq!(
+                Correspondence::compose_all(correspondences.as_any()).unwrap(),
+                expected
+            );
+        });
     }
 
     #[rstest]
@@ -361,68 +583,158 @@ mod tests {
 
         assert_eq!(
             correspondence.atoms(),
-            Correspondence {
-                matched_pairs: vec![(0, 1)],
-                left_count: 2,
-                right_count: 3,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(0, 1)], 2, 3))
         );
         assert_eq!(
             correspondence.bonds(),
-            Correspondence {
-                matched_pairs: vec![(0, 2)],
-                left_count: 1,
-                right_count: 3,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(0, 2)], 1, 3))
         );
         assert_eq!(
             correspondence.dative_bonds(),
-            Correspondence {
-                matched_pairs: vec![(1, 0)],
-                left_count: 2,
-                right_count: 1,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(1, 0)], 2, 1))
         );
         assert_eq!(
             correspondence.aromatic_systems(),
-            Correspondence {
-                matched_pairs: vec![],
-                left_count: 1,
-                right_count: 2,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![], 1, 2))
         );
         assert_eq!(
             correspondence.multicenter_bonds(),
-            Correspondence {
-                matched_pairs: vec![(0, 0)],
-                left_count: 1,
-                right_count: 1,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(0, 0)], 1, 1))
         );
         assert_eq!(
             correspondence.noncovalent_bonds(),
-            Correspondence {
-                matched_pairs: vec![(0, 1)],
-                left_count: 2,
-                right_count: 2,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(0, 1)], 2, 2))
         );
         assert_eq!(
             correspondence.stereo_atoms(),
-            Correspondence {
-                matched_pairs: vec![(0, 0), (1, 1)],
-                left_count: 2,
-                right_count: 2,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(0, 0), (1, 1)], 2, 2,))
         );
         assert_eq!(
             correspondence.stereo_bonds(),
-            Correspondence {
-                matched_pairs: vec![(0, 1)],
-                left_count: 1,
-                right_count: 2,
-            }
+            Correspondence(GraphCoreCorrespondence::new(vec![(0, 1)], 1, 2))
         );
+    }
+
+    #[rstest]
+    #[case::empty_spaces(AstMoleculeCorrespondence::new(
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+        GraphCoreCorrespondence::new(vec![], 0, 0),
+    ))]
+    fn test_molecule_correspondence_is_total(#[case] correspondence: AstMoleculeCorrespondence) {
+        assert!(MoleculeCorrespondence::from_rust(correspondence).is_total());
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_is_total_partial(
+        molecule_correspondence: AstMoleculeCorrespondence,
+    ) {
+        assert!(!MoleculeCorrespondence::from_rust(molecule_correspondence).is_total());
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_reverse(molecule_correspondence: AstMoleculeCorrespondence) {
+        assert_eq!(
+            MoleculeCorrespondence::from_rust(molecule_correspondence).reverse(),
+            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
+                GraphCoreCorrespondence::new(vec![(NodeId(1), NodeId(0))], 3, 2),
+                GraphCoreCorrespondence::new(vec![(BondId(2), BondId(0))], 3, 1),
+                GraphCoreCorrespondence::new(vec![(DativeBondId(0), DativeBondId(1))], 1, 2,),
+                GraphCoreCorrespondence::new(vec![], 2, 1),
+                GraphCoreCorrespondence::new(
+                    vec![(MulticenterBondId(0), MulticenterBondId(0))],
+                    1,
+                    1,
+                ),
+                GraphCoreCorrespondence::new(
+                    vec![(NoncovalentBondId(1), NoncovalentBondId(0))],
+                    2,
+                    2,
+                ),
+                GraphCoreCorrespondence::new(
+                    vec![
+                        (StereoAtomId(0), StereoAtomId(0)),
+                        (StereoAtomId(1), StereoAtomId(1)),
+                    ],
+                    2,
+                    2,
+                ),
+                GraphCoreCorrespondence::new(vec![(StereoBondId(1), StereoBondId(0))], 2, 1,),
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_compose(molecule_correspondence: AstMoleculeCorrespondence) {
+        let left = MoleculeCorrespondence::from_rust(molecule_correspondence.clone());
+        let right = left.reverse();
+
+        assert_eq!(
+            left.compose(&right),
+            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
+                GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(0))], 2, 2),
+                GraphCoreCorrespondence::new(vec![(BondId(0), BondId(0))], 1, 1),
+                GraphCoreCorrespondence::new(vec![(DativeBondId(1), DativeBondId(1))], 2, 2,),
+                GraphCoreCorrespondence::new(vec![], 1, 1),
+                GraphCoreCorrespondence::new(
+                    vec![(MulticenterBondId(0), MulticenterBondId(0))],
+                    1,
+                    1,
+                ),
+                GraphCoreCorrespondence::new(
+                    vec![(NoncovalentBondId(0), NoncovalentBondId(0))],
+                    2,
+                    2,
+                ),
+                GraphCoreCorrespondence::new(
+                    vec![
+                        (StereoAtomId(0), StereoAtomId(0)),
+                        (StereoAtomId(1), StereoAtomId(1)),
+                    ],
+                    2,
+                    2,
+                ),
+                GraphCoreCorrespondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1,),
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_compose_all(
+        molecule_correspondence: AstMoleculeCorrespondence,
+    ) {
+        Python::attach(|py| {
+            let left = MoleculeCorrespondence::from_rust(molecule_correspondence);
+            let right = left.reverse();
+            let expected = left.compose(&right);
+            let correspondences = PyList::new(
+                py,
+                [Py::new(py, left).unwrap(), Py::new(py, right).unwrap()],
+            )
+            .unwrap();
+
+            assert_eq!(
+                MoleculeCorrespondence::compose_all(correspondences.as_any()).unwrap(),
+                Some(expected)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_compose_all_empty() {
+        Python::attach(|py| {
+            let correspondences = PyList::empty(py);
+
+            assert_eq!(
+                MoleculeCorrespondence::compose_all(correspondences.as_any()).unwrap(),
+                None
+            );
+        });
     }
 
     #[rstest]
