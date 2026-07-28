@@ -9,7 +9,7 @@ use super::id::{
 
 /// A typed reference to any entity in a molecule — the variant is the kind, the
 /// payload its id. General-purpose (coloring, symmetry analysis, constraints).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(EntityKind))]
 #[strum_discriminants(derive(Hash, EnumCount, FromRepr))]
 pub enum Entity {
@@ -74,5 +74,43 @@ impl TryFrom<u8> for EntityKind {
             7 => Ok(EntityKind::StereoBond),
             _ => Err(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::variant_and_id(
+        vec![
+            Entity::StereoBond(StereoBondId(0)),
+            Entity::Atom(AtomId(2)),
+            Entity::StereoAtom(StereoAtomId(0)),
+            Entity::NoncovalentBond(NoncovalentBondId(0)),
+            Entity::MulticenterBond(MulticenterBondId(0)),
+            Entity::AromaticSystem(AromaticSystemId(0)),
+            Entity::DativeBond(DativeBondId(0)),
+            Entity::Bond(BondId(0)),
+            Entity::Atom(AtomId(1)),
+        ],
+        vec![
+            Entity::Atom(AtomId(1)),
+            Entity::Atom(AtomId(2)),
+            Entity::Bond(BondId(0)),
+            Entity::DativeBond(DativeBondId(0)),
+            Entity::AromaticSystem(AromaticSystemId(0)),
+            Entity::MulticenterBond(MulticenterBondId(0)),
+            Entity::NoncovalentBond(NoncovalentBondId(0)),
+            Entity::StereoAtom(StereoAtomId(0)),
+            Entity::StereoBond(StereoBondId(0)),
+        ],
+    )]
+    fn test_entity_cmp(#[case] mut input: Vec<Entity>, #[case] expected: Vec<Entity>) {
+        input.sort();
+
+        assert_eq!(input, expected);
     }
 }
