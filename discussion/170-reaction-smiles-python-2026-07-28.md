@@ -354,7 +354,7 @@ the two reaction sides.
 
 ### S2 — Python reaction-SMILES ingestion
 
-#### S2a — Map reaction input errors to Python exceptions
+#### S2a — Map reaction input errors to Python exceptions **Done**
 
 - **Module:** `umol-py/src/error.rs`
 - **Work:** Add the conversion from `ReactionSmilesInputError` to the existing

@@ -5,7 +5,12 @@ use pyo3::{create_exception, PyErr};
 use umol_ast::ast::Contradiction as AstContradiction;
 use umol_ast::dsl::{MetadataError as AstMetadataError, ParseError as AstParseError};
 use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
-use umol_graph::ingest::SmilesInputError as GraphSmilesInputError;
+use umol_graph::ingest::{
+    MoleculeInterpretationError as GraphMoleculeInterpretationError,
+    ReactionInterpretationError as GraphReactionInterpretationError,
+    ReactionSmilesInputError as GraphReactionSmilesInputError,
+    SmilesInputError as GraphSmilesInputError,
+};
 
 create_exception!(
     umol,
@@ -81,6 +86,47 @@ pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
     }
 }
 
+/// Map the resolved reaction-SMILES operation error onto the public Python taxonomy.
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) fn reaction_smiles_input_error(error: GraphReactionSmilesInputError) -> PyErr {
+    match error {
+        GraphReactionSmilesInputError::Syntax(error) => ParseError::new_err(error.to_string()),
+        GraphReactionSmilesInputError::Interpretation(error) => {
+            let message = error.to_string();
+            match error {
+                GraphReactionInterpretationError::Reactants(
+                    GraphMoleculeInterpretationError::ModelConversion(_),
+                )
+                | GraphReactionInterpretationError::Products(
+                    GraphMoleculeInterpretationError::ModelConversion(_),
+                )
+                | GraphReactionInterpretationError::AmbiguousAtomMapClass { .. }
+                | GraphReactionInterpretationError::AgentsUnsupported => {
+                    ModelConversionError::new_err(message)
+                }
+                GraphReactionInterpretationError::Reactants(
+                    GraphMoleculeInterpretationError::Contradiction(_),
+                )
+                | GraphReactionInterpretationError::Products(
+                    GraphMoleculeInterpretationError::Contradiction(_),
+                ) => ContradictionError::new_err(message),
+                GraphReactionInterpretationError::Reactants(
+                    GraphMoleculeInterpretationError::Underdetermined(_),
+                )
+                | GraphReactionInterpretationError::Products(
+                    GraphMoleculeInterpretationError::Underdetermined(_),
+                ) => UnderdeterminedError::new_err(message),
+                GraphReactionInterpretationError::Reactants(
+                    GraphMoleculeInterpretationError::Execution(_),
+                )
+                | GraphReactionInterpretationError::Products(
+                    GraphMoleculeInterpretationError::Execution(_),
+                ) => PyRuntimeError::new_err(message),
+            }
+        }
+    }
+}
+
 /// Map a fingerprint operation error onto the public Python taxonomy.
 pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
     match error {
@@ -109,8 +155,11 @@ mod tests {
         AromaticityError as GraphAromaticityError,
     };
     use umol_graph::ops::resolve::{
+        ResolveUnderdetermined as GraphResolveUnderdetermined,
         ResolverContradiction as GraphResolverContradiction, ResolverError as GraphResolverError,
     };
+    use umol_io::smiles::ParseError as SmilesParseError;
+    use umol_io::table_ir::raise::RaiseError;
 
     use super::*;
 
@@ -203,6 +252,131 @@ mod tests {
     ) {
         Python::attach(|py| {
             let error = smiles_input_error(input);
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::syntax(
+        GraphReactionSmilesInputError::Syntax(SmilesParseError::LeadingWhitespace),
+        "ParseError",
+        "Leading whitespace"
+    )]
+    #[case::reactant_model_conversion(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::Reactants(
+                GraphMoleculeInterpretationError::ModelConversion(
+                    RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+                ),
+            ),
+        ),
+        "ModelConversionError",
+        "reactants: tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
+    )]
+    #[case::product_model_conversion(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::Products(
+                GraphMoleculeInterpretationError::ModelConversion(
+                    RaiseError::TetrahedralLigandCount { atom: 2, count: 3 },
+                ),
+            ),
+        ),
+        "ModelConversionError",
+        "products: tetrahedral stereo at atom 2 with 3 ligands, expected 3 or 4 ligands"
+    )]
+    #[case::reactant_contradiction(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::Reactants(
+                GraphMoleculeInterpretationError::Contradiction(
+                    GraphResolverContradiction::Aromaticity(
+                        GraphAromaticityContradiction::HmoInvalidInput(String::from(
+                            "invalid reactant",
+                        )),
+                    ),
+                ),
+            ),
+        ),
+        "ContradictionError",
+        "reactants: hmo: invalid input: invalid reactant"
+    )]
+    #[case::product_contradiction(
+        GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
+            GraphMoleculeInterpretationError::Contradiction(
+                GraphResolverContradiction::Aromaticity(
+                    GraphAromaticityContradiction::HmoInvalidInput(String::from(
+                        "invalid product",
+                    )),
+                ),
+            ),
+        ),),
+        "ContradictionError",
+        "products: hmo: invalid input: invalid product"
+    )]
+    #[case::reactant_underdetermined(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::Reactants(
+                GraphMoleculeInterpretationError::Underdetermined(GraphResolveUnderdetermined,),
+            ),
+        ),
+        "UnderdeterminedError",
+        "reactants: resolution underdetermined"
+    )]
+    #[case::product_underdetermined(
+        GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
+            GraphMoleculeInterpretationError::Underdetermined(GraphResolveUnderdetermined,),
+        ),),
+        "UnderdeterminedError",
+        "products: resolution underdetermined"
+    )]
+    #[case::reactant_execution(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::Reactants(
+                GraphMoleculeInterpretationError::Execution(GraphResolverError::Aromaticity(
+                    GraphAromaticityError::HmoMissingParameters(String::from("reactant atom",)),
+                ),),
+            ),
+        ),
+        "RuntimeError",
+        "reactants: hmo: missing parameters: reactant atom"
+    )]
+    #[case::product_execution(
+        GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
+            GraphMoleculeInterpretationError::Execution(GraphResolverError::Aromaticity(
+                GraphAromaticityError::HmoMissingParameters(String::from("product atom",)),
+            ),),
+        ),),
+        "RuntimeError",
+        "products: hmo: missing parameters: product atom"
+    )]
+    #[case::ambiguous_atom_map_class(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::AmbiguousAtomMapClass {
+                class: 7,
+                reactant_count: 2,
+                product_count: 1,
+            },
+        ),
+        "ModelConversionError",
+        "atom-map class 7 cannot be projected into one correspondence (reactant atoms: 2, product atoms: 1)"
+    )]
+    #[case::agents(
+        GraphReactionSmilesInputError::Interpretation(
+            GraphReactionInterpretationError::AgentsUnsupported,
+        ),
+        "ModelConversionError",
+        "reaction agents cannot be represented in ReactionAst"
+    )]
+    fn test_reaction_smiles_input_error(
+        #[case] input: GraphReactionSmilesInputError,
+        #[case] expected_type: &str,
+        #[case] expected_message: &str,
+    ) {
+        Python::attach(|py| {
+            let error = reaction_smiles_input_error(input);
             assert_eq!(error.get_type(py).name().unwrap(), expected_type);
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
