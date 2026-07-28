@@ -197,6 +197,67 @@ impl MoleculeAst {
             .map_err(smiles_input_error)
     }
 
+    /// Combine this molecule and `other` by disjoint concatenation without modifying either input.
+    /// The correspondence maps `other` into the combined molecule.
+    fn combine(&self, other: &Self) -> (Self, MoleculeCorrespondence) {
+        let (combined, correspondence) = self.0.combine(&other.0);
+        (
+            Self::from_inner(combined),
+            MoleculeCorrespondence::from_rust(correspondence),
+        )
+    }
+
+    /// Append `other` by disjoint concatenation. Existing ids in this molecule remain stable; the
+    /// returned correspondence maps `other` into this molecule.
+    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) -> MoleculeCorrespondence {
+        let other = other.bind(py).borrow().inner().clone();
+        let correspondence = slf.borrow_mut(py).inner_mut().combine_from(&other);
+        MoleculeCorrespondence::from_rust(correspondence)
+    }
+
+    /// Combine an iterable of molecules by disjoint concatenation. Returns one correspondence per
+    /// input, in input order, mapping that input into the combined molecule.
+    #[staticmethod]
+    fn combine_all(
+        py: Python<'_>,
+        molecules: &Bound<'_, PyAny>,
+    ) -> PyResult<(Self, Vec<MoleculeCorrespondence>)> {
+        let molecules = molecules
+            .try_iter()?
+            .map(|item| -> PyResult<Py<MoleculeAst>> {
+                Ok(item?.cast_into::<MoleculeAst>()?.unbind())
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let borrowed = molecules
+            .iter()
+            .map(|molecule| molecule.bind(py).borrow())
+            .collect::<Vec<_>>();
+        let (combined, correspondences) =
+            AstMoleculeAst::combine_all(borrowed.iter().map(|molecule| molecule.inner()));
+        Ok((
+            Self::from_inner(combined),
+            correspondences
+                .into_iter()
+                .map(MoleculeCorrespondence::from_rust)
+                .collect(),
+        ))
+    }
+
+    /// Decompose this molecule into components connected by any relation. Each correspondence maps
+    /// the returned component into this molecule.
+    fn split(&self) -> Vec<(Self, MoleculeCorrespondence)> {
+        self.0
+            .split()
+            .into_iter()
+            .map(|(component, correspondence)| {
+                (
+                    Self::from_inner(component),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .collect()
+    }
+
     /// Find occurrences of this pattern in `host`.
     #[pyo3(signature = (host, *, config=None))]
     fn substructure_matches(

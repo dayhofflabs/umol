@@ -22,6 +22,7 @@ from umol import (
     MaximumIndependentSetAlgorithm,
     ModelConversionError,
     MoleculeAst,
+    MoleculeCorrespondence,
     MoleculeDefaults,
     NoncovalentBondAst,
     NoncovalentBondKind,
@@ -435,6 +436,161 @@ def test_molecule_ast_from_smiles_ownership():
     assert io_config == SmilesIoConfig.opensmiles()
     assert chemistry_model == ChemistryModel.default()
     assert resolve_config == ResolveConfig.default()
+
+
+def test_molecule_ast_combine():
+    left = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    right = MoleculeAst.from_parts(
+        [AtomAst(Element("O")), AtomAst(Element("N"))],
+        bonds=[(0, 1, BondAst(2))],
+    )
+    left_before = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    right_before = MoleculeAst.from_parts(
+        [AtomAst(Element("O")), AtomAst(Element("N"))],
+        bonds=[(0, 1, BondAst(2))],
+    )
+
+    combined, correspondence = left.combine(right)
+
+    assert combined == MoleculeAst.from_parts(
+        [
+            AtomAst(Element("C")),
+            AtomAst(Element("O")),
+            AtomAst(Element("N")),
+        ],
+        bonds=[(1, 2, BondAst(2))],
+    )
+    assert isinstance(correspondence, MoleculeCorrespondence)
+    assert correspondence.atoms.mates == [(0, 1), (1, 2)]
+    assert correspondence.bonds.mates == [(0, 0)]
+    assert left == left_before
+    assert right == right_before
+
+
+def test_molecule_ast_combine_from():
+    recipient = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    other = MoleculeAst.from_parts(
+        [AtomAst(Element("O")), AtomAst(Element("N"))],
+        bonds=[(0, 1, BondAst(2))],
+    )
+    other_before = MoleculeAst.from_parts(
+        [AtomAst(Element("O")), AtomAst(Element("N"))],
+        bonds=[(0, 1, BondAst(2))],
+    )
+
+    correspondence = recipient.combine_from(other)
+
+    assert recipient == MoleculeAst.from_parts(
+        [
+            AtomAst(Element("C")),
+            AtomAst(Element("O")),
+            AtomAst(Element("N")),
+        ],
+        bonds=[(1, 2, BondAst(2))],
+    )
+    assert correspondence.atoms.mates == [(0, 1), (1, 2)]
+    assert correspondence.bonds.mates == [(0, 0)]
+    assert other == other_before
+
+
+def test_molecule_ast_combine_from_alias():
+    molecule = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("O"))],
+        bonds=[(0, 1, BondAst(1))],
+    )
+
+    correspondence = molecule.combine_from(molecule)
+
+    assert molecule == MoleculeAst.from_parts(
+        [
+            AtomAst(Element("C")),
+            AtomAst(Element("O")),
+            AtomAst(Element("C")),
+            AtomAst(Element("O")),
+        ],
+        bonds=[(0, 1, BondAst(1)), (2, 3, BondAst(1))],
+    )
+    assert correspondence.atoms.mates == [(0, 2), (1, 3)]
+    assert correspondence.bonds.mates == [(0, 1)]
+
+
+def test_molecule_ast_combine_all():
+    molecules = [
+        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_parts(
+            [AtomAst(Element("O")), AtomAst(Element("N"))],
+            bonds=[(0, 1, BondAst(2))],
+        ),
+        MoleculeAst.from_parts([AtomAst(Element("F"))]),
+    ]
+    snapshots = [
+        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_parts(
+            [AtomAst(Element("O")), AtomAst(Element("N"))],
+            bonds=[(0, 1, BondAst(2))],
+        ),
+        MoleculeAst.from_parts([AtomAst(Element("F"))]),
+    ]
+
+    combined, correspondences = MoleculeAst.combine_all(
+        molecule for molecule in molecules
+    )
+
+    assert combined == MoleculeAst.from_parts(
+        [
+            AtomAst(Element("C")),
+            AtomAst(Element("O")),
+            AtomAst(Element("N")),
+            AtomAst(Element("F")),
+        ],
+        bonds=[(1, 2, BondAst(2))],
+    )
+    assert [correspondence.atoms.mates for correspondence in correspondences] == [
+        [(0, 0)],
+        [(0, 1), (1, 2)],
+        [(0, 3)],
+    ]
+    assert [correspondence.bonds.mates for correspondence in correspondences] == [
+        [],
+        [(0, 0)],
+        [],
+    ]
+    assert molecules == snapshots
+
+
+def test_molecule_ast_combine_all_empty():
+    assert MoleculeAst.combine_all([]) == (MoleculeAst(), [])
+
+
+def test_molecule_ast_split():
+    molecule = MoleculeAst.from_parts(
+        [
+            AtomAst(Element("C")),
+            AtomAst(Element("O")),
+            AtomAst(Element("N")),
+        ],
+        bonds=[(1, 2, BondAst(2))],
+    )
+
+    components = molecule.split()
+
+    assert [component for component, _ in components] == [
+        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_parts(
+            [AtomAst(Element("O")), AtomAst(Element("N"))],
+            bonds=[(0, 1, BondAst(2))],
+        ),
+    ]
+    assert [
+        correspondence.atoms.mates for _, correspondence in components
+    ] == [[(0, 0)], [(0, 1), (1, 2)]]
+    assert [
+        correspondence.bonds.mates for _, correspondence in components
+    ] == [[], [(0, 0)]]
+
+
+def test_molecule_ast_split_empty():
+    assert MoleculeAst().split() == []
 
 
 def test_molecule_ast_bonds_error():
