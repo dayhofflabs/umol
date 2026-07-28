@@ -221,7 +221,7 @@ impl AromaticSystemConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = AromaticSystemConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = AromaticSystemConstraintAst> {
         mem::take(&mut self.0).into_iter()
     }
 
@@ -618,13 +618,25 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_system_constraints_ast_take() {
+        let mut empty = AromaticSystemConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
         let mut cs =
             AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
-        let drained: Vec<_> = cs.take().collect();
+        let mut taken = cs.take();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
         assert_eq!(
-            drained,
-            vec![AromaticSystemConstraintAst::electron_count(6)]
+            taken.next(),
+            Some(AromaticSystemConstraintAst::electron_count(6)),
         );
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.size_hint(), (0, Some(0)));
+        assert_eq!(taken.next(), None);
+        drop(taken);
         assert_eq!(cs, AromaticSystemConstraintsAst::new());
     }
 

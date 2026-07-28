@@ -210,15 +210,15 @@ impl<'a> EdnMap<'a> {
         self.0.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&Edn<'a>, &Edn<'a>)> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&Edn<'a>, &Edn<'a>)> {
         self.0.iter()
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &Edn<'a>> {
+    pub fn keys(&self) -> impl ExactSizeIterator<Item = &Edn<'a>> {
         self.0.keys()
     }
 
-    pub fn values(&self) -> impl Iterator<Item = &Edn<'a>> {
+    pub fn values(&self) -> impl ExactSizeIterator<Item = &Edn<'a>> {
         self.0.values()
     }
 
@@ -416,7 +416,7 @@ impl<'a> EdnSet<'a> {
         self.0.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Edn<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &Edn<'a>> {
         self.0.iter()
     }
 
@@ -598,6 +598,7 @@ impl Hash for EdnSeq<'_> {
 mod tests {
     use std::borrow::Cow;
     use std::cmp::Ordering;
+    use std::fmt::Debug;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
     use hashbrown::Equivalent;
@@ -616,6 +617,24 @@ mod tests {
         let mut h = DefaultHasher::new();
         v.hash(&mut h);
         h.finish()
+    }
+
+    fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
+    where
+        T: Debug + PartialEq,
+    {
+        assert_eq!(iterator.len(), expected.len());
+        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+        while let Some(expected_item) = expected.get(expected.len() - iterator.len()) {
+            let previous = iterator.len();
+            assert_eq!(iterator.next().as_ref(), Some(expected_item));
+            let remaining = iterator.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(iterator.next(), None);
+        assert_eq!(iterator.len(), 0);
+        assert_eq!(iterator.size_hint(), (0, Some(0)));
     }
 
     #[rstest]
@@ -784,12 +803,34 @@ mod tests {
         assert!(!m.contains_ref(EdnKeyRef::keyword("y")));
     }
 
-    #[test]
-    fn test_edn_map_keys_values() {
+    #[rstest]
+    fn test_edn_map_iter() {
+        let empty = EdnMap::new();
+        assert_exact_size(empty.iter(), vec![]);
+
         let mut m = EdnMap::new();
         m.insert(Edn::Int(1), Edn::Bool(true));
-        assert_eq!(m.keys().count(), 1);
-        assert_eq!(m.values().count(), 1);
+        assert_exact_size(m.iter(), vec![(&Edn::Int(1), &Edn::Bool(true))]);
+    }
+
+    #[rstest]
+    fn test_edn_map_keys() {
+        let empty = EdnMap::new();
+        assert_exact_size(empty.keys(), vec![]);
+
+        let mut m = EdnMap::new();
+        m.insert(Edn::Int(1), Edn::Bool(true));
+        assert_exact_size(m.keys(), vec![&Edn::Int(1)]);
+    }
+
+    #[rstest]
+    fn test_edn_map_values() {
+        let empty = EdnMap::new();
+        assert_exact_size(empty.values(), vec![]);
+
+        let mut m = EdnMap::new();
+        m.insert(Edn::Int(1), Edn::Bool(true));
+        assert_exact_size(m.values(), vec![&Edn::Bool(true)]);
     }
 
     #[test]
@@ -835,13 +876,23 @@ mod tests {
         assert_eq!(m1.partial_cmp(&m2), Some(Ordering::Less));
     }
 
-    #[test]
+    #[rstest]
     fn test_edn_set_is_empty() {
         let s = EdnSet::new();
         assert!(s.is_empty());
         let mut s2 = EdnSet::new();
         s2.insert(Edn::Int(1));
         assert!(!s2.is_empty());
+    }
+
+    #[rstest]
+    fn test_edn_set_iter() {
+        let empty = EdnSet::new();
+        assert_exact_size(empty.iter(), vec![]);
+
+        let mut set = EdnSet::new();
+        set.insert(Edn::Int(1));
+        assert_exact_size(set.iter(), vec![&Edn::Int(1)]);
     }
 
     #[test]

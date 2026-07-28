@@ -654,7 +654,7 @@ change mutation or `take` semantics. Implement and verify this in green
 crate-local batches in dependency order: `umol-graph-core`, `umol-ast`,
 `umol-edn`, `umol-ast-macros`, then `umol-msym`. This is an additive public
 contract plus a nontrivial verification pass, and stays green after each
-batch. [dep: S2i]
+batch. **Implemented (green).** [dep: S2i]
 
 The S2 critical path is `S2d → S2e → S2f → S2g → S2h → S2i`. None of the
 remaining S2 metadata subitems is deferrable: S3 contexts and the checked

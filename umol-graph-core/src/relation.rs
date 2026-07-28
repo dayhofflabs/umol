@@ -420,7 +420,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -481,7 +481,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -700,7 +700,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -762,7 +762,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -977,7 +977,7 @@ where
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -1056,7 +1056,7 @@ where
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -1322,7 +1322,7 @@ where
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -1403,7 +1403,7 @@ where
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -1679,7 +1679,7 @@ where
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -1762,7 +1762,7 @@ where
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -1911,6 +1911,8 @@ impl<L1, O1, L2, O2, D> Default for VarVarBirelationSet<L1, O1, L2, O2, D> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -1937,6 +1939,44 @@ mod tests {
 
     fn n(i: u32) -> NodeId {
         NodeId(i)
+    }
+
+    fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
+    where
+        T: Debug + PartialEq,
+    {
+        assert_eq!(iterator.len(), expected.len());
+        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+        while let Some(expected_item) = expected.get(expected.len() - iterator.len()) {
+            let previous = iterator.len();
+            assert_eq!(iterator.next().as_ref(), Some(expected_item));
+            let remaining = iterator.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(iterator.next(), None);
+        assert_eq!(iterator.len(), 0);
+        assert_eq!(iterator.size_hint(), (0, Some(0)));
+    }
+
+    fn assert_data_iter_mut<'a>(
+        mut iterator: impl ExactSizeIterator<Item = &'a mut i32>,
+        expected: &[i32],
+    ) {
+        assert_eq!(iterator.len(), expected.len());
+        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+        for expected_item in expected {
+            let previous = iterator.len();
+            let item = iterator.next().expect("expected another data item");
+            assert_eq!(*item, *expected_item);
+            *item *= 10;
+            let remaining = iterator.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(iterator.next(), None);
+        assert_eq!(iterator.len(), 0);
+        assert_eq!(iterator.size_hint(), (0, Some(0)));
     }
 
     #[rstest]
@@ -2046,14 +2086,15 @@ mod tests {
 
     #[rstest]
     fn test_fixed_relation_set_data_iter_mut() {
+        let mut empty = FixedRelationSet::<NodeId, Unordered, i32, 2>::default();
+        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+
         let mut rs: FixedRelationSet<NodeId, Unordered, i32, 2> = FixedRelationSet::new(vec![
             ([n(0), n(1)], 1),
             ([n(1), n(2)], 2),
             ([n(2), n(3)], 3),
         ]);
-        for d in rs.data_iter_mut() {
-            *d *= 10;
-        }
+        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2, 3]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
         assert_eq!(rs.data(RelationId(2)), &30);
@@ -2102,10 +2143,13 @@ mod tests {
 
     #[rstest]
     fn test_fixed_relation_set_relation_ids() {
+        assert_exact_size(
+            FixedRelationSet::<NodeId, Unordered, (), 2>::default().relation_ids(),
+            vec![],
+        );
         let rs: FixedRelationSet<NodeId, Unordered, (), 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(1), n(2)], ())]);
-        let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -2182,14 +2226,15 @@ mod tests {
 
     #[rstest]
     fn test_var_relation_set_data_iter_mut() {
+        let mut empty = VarRelationSet::<NodeId, Unordered, i32>::default();
+        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+
         let mut rs: VarRelationSet<NodeId, Unordered, i32> = VarRelationSet::new(vec![
             (vec![n(0), n(1)], 1),
             (vec![n(2), n(3), n(4)], 2),
             (vec![n(5)], 3),
         ]);
-        for d in rs.data_iter_mut() {
-            *d *= 10;
-        }
+        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2, 3]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
         assert_eq!(rs.data(RelationId(2)), &30);
@@ -2265,10 +2310,13 @@ mod tests {
 
     #[rstest]
     fn test_var_relation_set_relation_ids() {
+        assert_exact_size(
+            VarRelationSet::<NodeId, Unordered, ()>::default().relation_ids(),
+            vec![],
+        );
         let rs: VarRelationSet<NodeId, Unordered, ()> =
             VarRelationSet::new(vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())]);
-        let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -2350,11 +2398,13 @@ mod tests {
 
     #[rstest]
     fn test_fixed_fixed_birelation_set_data_iter_mut() {
+        let mut empty =
+            FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, i32>::default();
+        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+
         let mut rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
             FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1), ([n(2)], [n(3)], 2)]);
-        for d in rs.data_iter_mut() {
-            *d *= 10;
-        }
+        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
     }
@@ -2381,10 +2431,14 @@ mod tests {
 
     #[rstest]
     fn test_fixed_fixed_birelation_set_relation_ids() {
+        assert_exact_size(
+            FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, &str>::default()
+                .relation_ids(),
+            vec![],
+        );
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, &str> =
             FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], "a"), ([n(2)], [n(3)], "b")]);
-        let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -2464,14 +2518,16 @@ mod tests {
 
     #[rstest]
     fn test_fixed_var_birelation_set_data_iter_mut() {
+        let mut empty =
+            FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, i32>::default();
+        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+
         let mut rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, i32> =
             FixedVarBirelationSet::new(vec![
                 ([EdgeId(0)], vec![n(1)], 1),
                 ([EdgeId(1)], vec![n(2)], 2),
             ]);
-        for d in rs.data_iter_mut() {
-            *d *= 10;
-        }
+        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
     }
@@ -2499,13 +2555,17 @@ mod tests {
 
     #[rstest]
     fn test_fixed_var_birelation_set_relation_ids() {
+        assert_exact_size(
+            FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, &str>::default()
+                .relation_ids(),
+            vec![],
+        );
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![
                 ([EdgeId(0)], vec![n(1)], "a"),
                 ([EdgeId(1)], vec![n(2)], "b"),
             ]);
-        let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -2583,14 +2643,15 @@ mod tests {
 
     #[rstest]
     fn test_var_var_birelation_set_data_iter_mut() {
+        let mut empty = VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, i32>::default();
+        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+
         let mut rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, i32> =
             VarVarBirelationSet::new(vec![
                 (vec![n(0)], vec![EdgeId(1)], 1),
                 (vec![n(2)], vec![EdgeId(3)], 2),
             ]);
-        for d in rs.data_iter_mut() {
-            *d *= 10;
-        }
+        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
     }
@@ -2617,13 +2678,17 @@ mod tests {
 
     #[rstest]
     fn test_var_var_birelation_set_relation_ids() {
+        assert_exact_size(
+            VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, &str>::default()
+                .relation_ids(),
+            vec![],
+        );
         let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, &str> =
             VarVarBirelationSet::new(vec![
                 (vec![n(0)], vec![EdgeId(1)], "a"),
                 (vec![n(2)], vec![EdgeId(3)], "b"),
             ]);
-        let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]

@@ -1,7 +1,6 @@
 //! Dative bond views.
 
 use std::collections::{HashMap, HashSet};
-use std::iter;
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
@@ -42,11 +41,11 @@ impl<'a> DativeBondViews<'a> {
         self.dative_bonds.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = DativeBondId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> {
         self.dative_bonds.relation_ids().map(DativeBondId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = DativeBondView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = DativeBondView<'a>> {
         let molecule = self.molecule;
         let set = self.dative_bonds;
         set.relation_ids().map(move |rid| DativeBondView {
@@ -100,7 +99,7 @@ impl<'a> DativeBondViews<'a> {
     }
 
     /// Ids of dative bonds incident on `atom`.
-    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = DativeBondId> + 'a {
+    pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondId> + 'a {
         self.dative_bonds
             .incident(NodeId::from(atom))
             .iter()
@@ -113,7 +112,7 @@ impl<'a> DativeBondViews<'a> {
     }
 
     /// Views of dative bonds incident on `atom`.
-    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
+    pub fn incident(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.dative_bonds;
         self.incident_ids(atom).map(move |id| {
@@ -199,7 +198,7 @@ impl<'a> DativeBondView<'a> {
     }
 
     /// Donor atom ids.
-    pub fn donor_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+    pub fn donor_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
         self.donors.iter().map(|&n| AtomId::from(n))
     }
 
@@ -208,16 +207,20 @@ impl<'a> DativeBondView<'a> {
     }
 
     /// All atoms in this dative bond: the donors followed by the acceptor.
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        self.donors
-            .iter()
-            .copied()
-            .chain(iter::once(self.acceptor_id))
-            .map(AtomId::from)
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
+        let donors = self.donors;
+        let acceptor = self.acceptor_id;
+        (0..donors.len() + 1).map(move |index| {
+            AtomId::from(if index < donors.len() {
+                donors[index]
+            } else {
+                acceptor
+            })
+        })
     }
 
     /// Donor atom views.
-    pub fn donors(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+    pub fn donors(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.donor_ids().map(move |id| molecule.atom(id))
     }
@@ -228,7 +231,7 @@ impl<'a> DativeBondView<'a> {
     }
 
     /// Views of all atoms in this dative bond (donors then acceptor).
-    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+    pub fn atoms(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.atom_ids().map(move |id| molecule.atom(id))
     }
@@ -287,12 +290,16 @@ impl<'a> DativeBondEditorView<'a> {
     }
 
     /// All atoms: donors followed by the acceptor.
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
+        let donors = self.donors;
         let acceptor = self.acceptor;
-        self.donors
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .chain(iter::once(acceptor))
+        (0..donors.len() + 1).map(move |index| {
+            if index < donors.len() {
+                AtomId::from(donors[index])
+            } else {
+                acceptor
+            }
+        })
     }
 }
 
@@ -319,12 +326,16 @@ impl<'a> DativeBondEditorViewMut<'a> {
     }
 
     /// All atoms: donors followed by the acceptor.
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        let donors = self.donors;
         let acceptor = self.acceptor;
-        self.donors
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .chain(iter::once(acceptor))
+        (0..donors.len() + 1).map(move |index| {
+            if index < donors.len() {
+                AtomId::from(donors[index])
+            } else {
+                acceptor
+            }
+        })
     }
 }
 
@@ -333,7 +344,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::NodeId;
 
+    use super::super::assert_exact_size_by;
+    use super::{DativeBondEditorView, DativeBondEditorViewMut};
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -382,23 +396,42 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.dative_bonds().ids().collect::<Vec<_>>(),
-            vec![DativeBondId(0)],
-        );
+        assert_exact_size_by(MoleculeAst::default().dative_bonds().ids(), vec![], |id| id);
+        assert_exact_size_by(molecule.dative_bonds().ids(), vec![DativeBondId(0)], |id| {
+            id
+        });
     }
 
     #[rstest]
     fn test_dative_bond_views_iter(molecule: MoleculeAst) {
-        let collected: Vec<(DativeBondId, AtomId, DativeBondAst)> = molecule
-            .dative_bonds()
-            .iter()
-            .map(|v| (v.id, v.acceptor_id(), v.ast.clone()))
-            .collect();
-        assert_eq!(
-            collected,
-            vec![(DativeBondId(0), AtomId(3), DativeBondAst::from_order(1))],
+        assert_exact_size_by(
+            MoleculeAst::default().dative_bonds().iter(),
+            vec![],
+            |view| (view.id, view.acceptor_id(), view.ast.clone()),
         );
+        assert_exact_size_by(
+            molecule.dative_bonds().iter(),
+            vec![(DativeBondId(0), AtomId(3), DativeBondAst::from_order(1))],
+            |view| (view.id, view.acceptor_id(), view.ast.clone()),
+        );
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(2), vec![DativeBondId(0)])]
+    #[case::uninvolved(AtomId(0), vec![])]
+    fn test_dative_bond_views_incident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<DativeBondId>,
+    ) {
+        assert_exact_size_by(
+            molecule.dative_bonds().incident_ids(atom),
+            expected.clone(),
+            |id| id,
+        );
+        assert_exact_size_by(molecule.dative_bonds().incident(atom), expected, |view| {
+            view.id
+        });
     }
 
     #[rstest]
@@ -429,23 +462,19 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_view_atom_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule
-                .dative_bond(DativeBondId(0))
-                .atom_ids()
-                .collect::<Vec<_>>(),
+        assert_exact_size_by(
+            molecule.dative_bond(DativeBondId(0)).atom_ids(),
             vec![AtomId(2), AtomId(3)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_dative_bond_view_donor_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule
-                .dative_bond(DativeBondId(0))
-                .donor_ids()
-                .collect::<Vec<_>>(),
+        assert_exact_size_by(
+            molecule.dative_bond(DativeBondId(0)).donor_ids(),
             vec![AtomId(2)],
+            |id| id,
         );
     }
 
@@ -459,22 +488,20 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_view_atoms(molecule: MoleculeAst) {
-        let ids: Vec<AtomId> = molecule
-            .dative_bond(DativeBondId(0))
-            .atoms()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, vec![AtomId(2), AtomId(3)]);
+        assert_exact_size_by(
+            molecule.dative_bond(DativeBondId(0)).atoms(),
+            vec![AtomId(2), AtomId(3)],
+            |atom| atom.id,
+        );
     }
 
     #[rstest]
     fn test_dative_bond_view_donors(molecule: MoleculeAst) {
-        let ids: Vec<AtomId> = molecule
-            .dative_bond(DativeBondId(0))
-            .donors()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, vec![AtomId(2)]);
+        assert_exact_size_by(
+            molecule.dative_bond(DativeBondId(0)).donors(),
+            vec![AtomId(2)],
+            |atom| atom.id,
+        );
     }
 
     #[rstest]
@@ -488,5 +515,29 @@ mod tests {
     #[rstest]
     fn test_dative_bond_view_atom_count(molecule: MoleculeAst) {
         assert_eq!(molecule.dative_bond(DativeBondId(0)).atom_count(), 2);
+    }
+
+    #[rstest]
+    fn test_dative_bond_editor_view_atom_ids() {
+        let donors = [NodeId(1), NodeId(2)];
+        let ast = DativeBondAst::from_order(1);
+        let view = DativeBondEditorView::new(DativeBondId(0), &donors, AtomId(3), &ast);
+        assert_exact_size_by(
+            view.atom_ids(),
+            vec![AtomId(1), AtomId(2), AtomId(3)],
+            |id| id,
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_editor_view_mut_atom_ids() {
+        let donors = [NodeId(1), NodeId(2)];
+        let mut ast = DativeBondAst::from_order(1);
+        let view = DativeBondEditorViewMut::new(DativeBondId(0), &donors, AtomId(3), &mut ast);
+        assert_exact_size_by(
+            view.atom_ids(),
+            vec![AtomId(1), AtomId(2), AtomId(3)],
+            |id| id,
+        );
     }
 }

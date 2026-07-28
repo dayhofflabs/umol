@@ -10,7 +10,7 @@ use super::id::{AtomId, BondId};
 pub struct BondMatching(pub(crate) Matching);
 
 impl BondMatching {
-    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+    pub fn bonds(&self) -> impl ExactSizeIterator<Item = BondId> + '_ {
         self.0.edges().iter().map(|&e| BondId::from(e))
     }
 
@@ -107,11 +107,21 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_matching_bonds(chain_4_matching: BondMatching) {
-        assert_eq!(
-            chain_4_matching.bonds().collect::<Vec<_>>(),
-            vec![BondId(0), BondId(2)],
-        );
+    #[case::empty(singleton_matching(), vec![])]
+    #[case::populated(chain_4_matching(), vec![BondId(0), BondId(2)])]
+    fn test_bond_matching_bonds(#[case] matching: BondMatching, #[case] expected: Vec<BondId>) {
+        let mut bonds = matching.bonds();
+        assert_eq!(bonds.len(), expected.len());
+        assert_eq!(bonds.size_hint(), (expected.len(), Some(expected.len())));
+        while let Some(expected_bond) = expected.get(expected.len() - bonds.len()) {
+            let previous = bonds.len();
+            assert_eq!(bonds.next(), Some(*expected_bond));
+            let remaining = bonds.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(bonds.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(bonds.next(), None);
+        assert_eq!(bonds.len(), 0);
     }
 
     #[rstest]

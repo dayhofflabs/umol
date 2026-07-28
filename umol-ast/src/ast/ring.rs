@@ -172,11 +172,11 @@ impl RingSet {
         self.rings.len()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = RingId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RingId> {
         (0..self.rings.len()).map(|i| RingId(i as u32))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = RingView<'_>> + '_ {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = RingView<'_>> + '_ {
         self.rings
             .iter()
             .enumerate()
@@ -816,13 +816,36 @@ mod tests {
 
     #[rstest]
     fn test_ring_set_ids(triangle_set: RingSet) {
-        assert_eq!(triangle_set.ids().collect::<Vec<_>>(), vec![RingId(0)]);
+        let empty = RingSet::from_parts(RingSetKind::Simple, 6, vec![]);
+        let mut empty_ids = empty.ids();
+        assert_eq!(empty_ids.len(), 0);
+        assert_eq!(empty_ids.size_hint(), (0, Some(0)));
+        assert_eq!(empty_ids.next(), None);
+
+        let mut ids = triangle_set.ids();
+        assert_eq!(ids.len(), 1);
+        assert_eq!(ids.size_hint(), (1, Some(1)));
+        assert_eq!(ids.next(), Some(RingId(0)));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.size_hint(), (0, Some(0)));
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]
     fn test_ring_set_iter(triangle_set: RingSet) {
-        let views: Vec<RingId> = triangle_set.iter().map(|v| v.id).collect();
-        assert_eq!(views, vec![RingId(0)]);
+        let empty = RingSet::from_parts(RingSetKind::Simple, 6, vec![]);
+        let mut empty_iter = empty.iter();
+        assert_eq!(empty_iter.len(), 0);
+        assert_eq!(empty_iter.size_hint(), (0, Some(0)));
+        assert_eq!(empty_iter.next().map(|view| view.id), None);
+
+        let mut iter = triangle_set.iter();
+        assert_eq!(iter.len(), 1);
+        assert_eq!(iter.size_hint(), (1, Some(1)));
+        assert_eq!(iter.next().map(|view| view.id), Some(RingId(0)));
+        assert_eq!(iter.len(), 0);
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+        assert_eq!(iter.next().map(|view| view.id), None);
     }
 
     #[rstest]

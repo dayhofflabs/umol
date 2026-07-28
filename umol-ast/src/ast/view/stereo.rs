@@ -43,11 +43,11 @@ impl<'a> StereoAtomViews<'a> {
         self.stereo_atoms.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = StereoAtomId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoAtomId> {
         self.stereo_atoms.relation_ids().map(StereoAtomId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = StereoAtomView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = StereoAtomView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
         set.relation_ids().map(move |rid| StereoAtomView {
@@ -87,7 +87,7 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     /// Ids of stereo atoms incident on `atom` (site or ligand).
-    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomId> + 'a {
+    pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomId> + 'a {
         self.stereo_atoms
             .incident(NodeId::from(atom))
             .iter()
@@ -108,7 +108,7 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     /// Views of stereo atoms incident on `atom` (site or ligand).
-    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomView<'a>> + 'a {
+    pub fn incident(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
         self.incident_ids(atom).map(move |id| {
@@ -253,7 +253,7 @@ impl<'a> StereoAtomView<'a> {
     }
 
     /// The ordered ligands occupying the site's coordination positions.
-    pub fn ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+    pub fn ligands(&self) -> impl ExactSizeIterator<Item = StereoLigandView<'a>> + 'a {
         let molecule = self.molecule;
         let ligands = self.ligands;
         ligands
@@ -362,7 +362,7 @@ impl<'a> StereoBondViews<'a> {
         self.stereo_bonds.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = StereoBondId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoBondId> {
         self.stereo_bonds.relation_ids().map(StereoBondId::from)
     }
 
@@ -374,7 +374,7 @@ impl<'a> StereoBondViews<'a> {
             .map(StereoBondId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = StereoBondView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = StereoBondView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
         set.relation_ids().map(move |rid| StereoBondView {
@@ -605,7 +605,7 @@ impl<'a> StereoBondView<'a> {
     }
 
     /// The ordered ligands defining the bond's configuration.
-    pub fn ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+    pub fn ligands(&self) -> impl ExactSizeIterator<Item = StereoLigandView<'a>> + 'a {
         let molecule = self.molecule;
         let ligands = self.ligands;
         ligands
@@ -854,6 +854,7 @@ mod tests {
     use umol_graph_core::AutomorphismAlgorithm;
     use umol_perm::Permutation;
 
+    use super::super::assert_exact_size_by;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::coloring::ConstitutionColoring;
@@ -977,9 +978,23 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.stereo_atoms().ids().collect::<Vec<_>>(),
-            vec![StereoAtomId(0)],
+        assert_exact_size_by(MoleculeAst::default().stereo_atoms().ids(), vec![], |id| id);
+        assert_exact_size_by(molecule.stereo_atoms().ids(), vec![StereoAtomId(0)], |id| {
+            id
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_views_iter(molecule: MoleculeAst) {
+        assert_exact_size_by(
+            MoleculeAst::default().stereo_atoms().iter(),
+            vec![],
+            |view| (view.id, view.site_id()),
+        );
+        assert_exact_size_by(
+            molecule.stereo_atoms().iter(),
+            vec![(StereoAtomId(0), AtomId(0))],
+            |view| (view.id, view.site_id()),
         );
     }
 
@@ -1034,13 +1049,14 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Vec<StereoAtomId>,
     ) {
-        assert_eq!(
-            molecule
-                .stereo_atoms()
-                .incident_ids(atom)
-                .collect::<Vec<_>>(),
-            expected,
+        assert_exact_size_by(
+            molecule.stereo_atoms().incident_ids(atom),
+            expected.clone(),
+            |id| id,
         );
+        assert_exact_size_by(molecule.stereo_atoms().incident(atom), expected, |view| {
+            view.id
+        });
     }
 
     #[rstest]
@@ -1100,18 +1116,29 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_view_ligands(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule
-                .stereo_atom(StereoAtomId(0))
-                .ligands()
-                .map(|ligand| (ligand.kind(), ligand.atom_id()))
-                .collect::<Vec<_>>(),
+        let empty = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        });
+        assert_exact_size_by(
+            empty.stereo_atom(StereoAtomId(0)).ligands(),
+            vec![],
+            |ligand| (ligand.kind(), ligand.atom_id()),
+        );
+        assert_exact_size_by(
+            molecule.stereo_atom(StereoAtomId(0)).ligands(),
             vec![
                 (StereoLigandKind::Atom, AtomId(1)),
                 (StereoLigandKind::Atom, AtomId(2)),
                 (StereoLigandKind::Atom, AtomId(3)),
                 (StereoLigandKind::Atom, AtomId(4)),
             ],
+            |ligand| (ligand.kind(), ligand.atom_id()),
         );
     }
 
@@ -1406,9 +1433,23 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.stereo_bonds().ids().collect::<Vec<_>>(),
-            vec![StereoBondId(0)],
+        assert_exact_size_by(MoleculeAst::default().stereo_bonds().ids(), vec![], |id| id);
+        assert_exact_size_by(molecule.stereo_bonds().ids(), vec![StereoBondId(0)], |id| {
+            id
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_bond_views_iter(molecule: MoleculeAst) {
+        assert_exact_size_by(
+            MoleculeAst::default().stereo_bonds().iter(),
+            vec![],
+            |view| (view.id, view.site_id()),
+        );
+        assert_exact_size_by(
+            molecule.stereo_bonds().iter(),
+            vec![(StereoBondId(0), BondId(1))],
+            |view| (view.id, view.site_id()),
         );
     }
 
@@ -1535,18 +1576,33 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_view_ligands(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule
-                .stereo_bond(StereoBondId(0))
-                .ligands()
-                .map(|ligand| (ligand.kind(), ligand.atom_id()))
-                .collect::<Vec<_>>(),
+        let empty = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        });
+        assert_exact_size_by(
+            empty.stereo_bond(StereoBondId(0)).ligands(),
+            vec![],
+            |ligand| (ligand.kind(), ligand.atom_id()),
+        );
+        assert_exact_size_by(
+            molecule.stereo_bond(StereoBondId(0)).ligands(),
             vec![
                 (StereoLigandKind::Atom, AtomId(4)),
                 (StereoLigandKind::Atom, AtomId(5)),
                 (StereoLigandKind::Atom, AtomId(0)),
                 (StereoLigandKind::Atom, AtomId(1)),
             ],
+            |ligand| (ligand.kind(), ligand.atom_id()),
         );
     }
 

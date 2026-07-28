@@ -36,13 +36,13 @@ impl<'a> MulticenterBondViews<'a> {
         self.multicenter_bonds.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = MulticenterBondId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = MulticenterBondId> {
         self.multicenter_bonds
             .relation_ids()
             .map(MulticenterBondId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = MulticenterBondView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = MulticenterBondView<'a>> {
         let molecule = self.molecule;
         let set = self.multicenter_bonds;
         set.relation_ids().map(move |rid| MulticenterBondView {
@@ -90,7 +90,10 @@ impl<'a> MulticenterBondViews<'a> {
     }
 
     /// Ids of multicenter bonds incident on `atom`.
-    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondId> + 'a {
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + 'a {
         self.multicenter_bonds
             .incident(NodeId::from(atom))
             .iter()
@@ -103,7 +106,10 @@ impl<'a> MulticenterBondViews<'a> {
     }
 
     /// Views of multicenter bonds incident on `atom`.
-    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
+    pub fn incident(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = MulticenterBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.multicenter_bonds;
         self.incident_ids(atom).map(move |id| {
@@ -193,11 +199,11 @@ impl<'a> MulticenterBondView<'a> {
         &self.ast.constraints
     }
 
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 
-    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+    pub fn atoms(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.atoms
             .iter()
@@ -270,7 +276,7 @@ impl<'a> MulticenterBondEditorView<'a> {
         Self { id, atoms, ast }
     }
 
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
@@ -290,7 +296,7 @@ impl<'a> MulticenterBondEditorViewMut<'a> {
         Self { id, atoms, ast }
     }
 
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
@@ -300,7 +306,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::NodeId;
 
+    use super::super::assert_exact_size_by;
+    use super::{MulticenterBondEditorView, MulticenterBondEditorViewMut};
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -350,22 +359,49 @@ mod tests {
 
     #[rstest]
     fn test_multicenter_bond_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.multicenter_bonds().ids().collect::<Vec<_>>(),
+        assert_exact_size_by(
+            MoleculeAst::default().multicenter_bonds().ids(),
+            vec![],
+            |id| id,
+        );
+        assert_exact_size_by(
+            molecule.multicenter_bonds().ids(),
             vec![MulticenterBondId(0)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_multicenter_bond_views_iter(molecule: MoleculeAst) {
-        let collected: Vec<(MulticenterBondId, Vec<AtomId>)> = molecule
-            .multicenter_bonds()
-            .iter()
-            .map(|v| (v.id, v.atom_ids().collect()))
-            .collect();
-        assert_eq!(
-            collected,
-            vec![(MulticenterBondId(0), vec![AtomId(0), AtomId(1), AtomId(2)],)],
+        assert_exact_size_by(
+            MoleculeAst::default().multicenter_bonds().iter(),
+            vec![],
+            |view| (view.id, view.atom_ids().collect::<Vec<_>>()),
+        );
+        assert_exact_size_by(
+            molecule.multicenter_bonds().iter(),
+            vec![(MulticenterBondId(0), vec![AtomId(0), AtomId(1), AtomId(2)])],
+            |view| (view.id, view.atom_ids().collect::<Vec<_>>()),
+        );
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(0), vec![MulticenterBondId(0)])]
+    #[case::uninvolved(AtomId(3), vec![])]
+    fn test_multicenter_bond_views_incident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<MulticenterBondId>,
+    ) {
+        assert_exact_size_by(
+            molecule.multicenter_bonds().incident_ids(atom),
+            expected.clone(),
+            |id| id,
+        );
+        assert_exact_size_by(
+            molecule.multicenter_bonds().incident(atom),
+            expected,
+            |view| view.id,
         );
     }
 
@@ -400,23 +436,20 @@ mod tests {
 
     #[rstest]
     fn test_multicenter_bond_view_atom_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule
-                .multicenter_bond(MulticenterBondId(0))
-                .atom_ids()
-                .collect::<Vec<_>>(),
+        assert_exact_size_by(
+            molecule.multicenter_bond(MulticenterBondId(0)).atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_multicenter_bond_view_atoms(molecule: MoleculeAst) {
-        let ids: Vec<AtomId> = molecule
-            .multicenter_bond(MulticenterBondId(0))
-            .atoms()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
+        assert_exact_size_by(
+            molecule.multicenter_bond(MulticenterBondId(0)).atoms(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            |atom| atom.id,
+        );
     }
 
     #[rstest]
@@ -452,5 +485,29 @@ mod tests {
             .map(|v| v.id)
             .collect();
         assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_editor_view_atom_ids() {
+        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
+        let ast = MulticenterBondAst::default();
+        let view = MulticenterBondEditorView::new(MulticenterBondId(0), &atoms, &ast);
+        assert_exact_size_by(
+            view.atom_ids(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            |id| id,
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_editor_view_mut_atom_ids() {
+        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
+        let mut ast = MulticenterBondAst::default();
+        let view = MulticenterBondEditorViewMut::new(MulticenterBondId(0), &atoms, &mut ast);
+        assert_exact_size_by(
+            view.atom_ids(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            |id| id,
+        );
     }
 }

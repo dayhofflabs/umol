@@ -5,6 +5,9 @@
 //! types group per-relation accessors (`count`, `ids`, `iter`, `get`,
 //! and `Index`) without burying them on `MoleculeAst` itself.
 
+#[cfg(test)]
+use std::fmt::Debug;
+
 mod aromatic;
 mod atom;
 mod bond;
@@ -44,3 +47,26 @@ pub use stereo::{
     StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,
     StereoBondViewMut, StereoBondViews,
 };
+
+#[cfg(test)]
+fn assert_exact_size_by<I, T, U>(mut iterator: I, expected: Vec<U>, mut project: impl FnMut(T) -> U)
+where
+    I: ExactSizeIterator<Item = T>,
+    U: Debug + PartialEq,
+{
+    assert_eq!(iterator.len(), expected.len());
+    assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+    while let Some(expected_item) = expected.get(expected.len() - iterator.len()) {
+        let previous = iterator.len();
+        assert_eq!(
+            iterator.next().map(&mut project).as_ref(),
+            Some(expected_item),
+        );
+        let remaining = iterator.len();
+        assert_eq!(remaining, previous - 1);
+        assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+    }
+    assert_eq!(iterator.next().map(project), None);
+    assert_eq!(iterator.len(), 0);
+    assert_eq!(iterator.size_hint(), (0, Some(0)));
+}

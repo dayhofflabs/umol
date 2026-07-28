@@ -290,7 +290,7 @@ impl BondConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = BondConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = BondConstraintAst> {
         mem::take(&mut self.0).into_iter()
     }
 
@@ -723,18 +723,32 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraints_ast_take() {
+        let mut empty = BondConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
         let mut cs = BondConstraintsAst::from_iter([
             BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             BondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
-        let drained: Vec<_> = cs.take().collect();
+        let mut taken = cs.take();
+        assert_eq!(taken.len(), 2);
+        assert_eq!(taken.size_hint(), (2, Some(2)));
         assert_eq!(
-            drained,
-            vec![
-                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
-                BondConstraintAst::ring_membership(RingScope::Size(6), 1),
-            ],
+            taken.next(),
+            Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         );
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
+        assert_eq!(
+            taken.next(),
+            Some(BondConstraintAst::ring_membership(RingScope::Size(6), 1)),
+        );
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.next(), None);
+        drop(taken);
         assert_eq!(cs, BondConstraintsAst::new());
     }
 

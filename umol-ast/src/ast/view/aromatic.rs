@@ -38,13 +38,13 @@ impl<'a> AromaticSystemViews<'a> {
         self.aromatic_systems.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = AromaticSystemId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
         self.aromatic_systems
             .relation_ids()
             .map(AromaticSystemId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = AromaticSystemView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> {
         let molecule = self.molecule;
         let set = self.aromatic_systems;
         set.relation_ids().map(move |rid| AromaticSystemView {
@@ -87,7 +87,10 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     /// Ids of aromatic systems incident on `atom`.
-    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemId> + 'a {
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + 'a {
         self.aromatic_systems
             .incident(NodeId::from(atom))
             .iter()
@@ -100,7 +103,10 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     /// Views of aromatic systems incident on `atom`.
-    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemView<'a>> + 'a {
+    pub fn incident(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.aromatic_systems;
         self.incident_ids(atom).map(move |id| {
@@ -191,11 +197,11 @@ impl<'a> AromaticSystemView<'a> {
         &self.ast.constraints
     }
 
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 
-    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+    pub fn atoms(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.atoms
             .iter()
@@ -310,7 +316,7 @@ impl<'a> AromaticSystemEditorView<'a> {
         Self { id, atoms, ast }
     }
 
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
@@ -330,7 +336,7 @@ impl<'a> AromaticSystemEditorViewMut<'a> {
         Self { id, atoms, ast }
     }
 
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
@@ -342,6 +348,8 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::NodeId;
 
+    use super::super::assert_exact_size_by;
+    use super::{AromaticSystemEditorView, AromaticSystemEditorViewMut};
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -391,22 +399,49 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_system_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.aromatic_systems().ids().collect::<Vec<_>>(),
+        assert_exact_size_by(
+            MoleculeAst::default().aromatic_systems().ids(),
+            vec![],
+            |id| id,
+        );
+        assert_exact_size_by(
+            molecule.aromatic_systems().ids(),
             vec![AromaticSystemId(0)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_aromatic_system_views_iter(molecule: MoleculeAst) {
-        let collected: Vec<(AromaticSystemId, Vec<AtomId>)> = molecule
-            .aromatic_systems()
-            .iter()
-            .map(|v| (v.id, v.atom_ids().collect()))
-            .collect();
-        assert_eq!(
-            collected,
+        assert_exact_size_by(
+            MoleculeAst::default().aromatic_systems().iter(),
+            vec![],
+            |view| (view.id, view.atom_ids().collect::<Vec<_>>()),
+        );
+        assert_exact_size_by(
+            molecule.aromatic_systems().iter(),
             vec![(AromaticSystemId(0), vec![AtomId(0), AtomId(1), AtomId(2)])],
+            |view| (view.id, view.atom_ids().collect::<Vec<_>>()),
+        );
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(0), vec![AromaticSystemId(0)])]
+    #[case::uninvolved(AtomId(3), vec![])]
+    fn test_aromatic_system_views_incident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<AromaticSystemId>,
+    ) {
+        assert_exact_size_by(
+            molecule.aromatic_systems().incident_ids(atom),
+            expected.clone(),
+            |id| id,
+        );
+        assert_exact_size_by(
+            molecule.aromatic_systems().incident(atom),
+            expected,
+            |view| view.id,
         );
     }
 
@@ -441,23 +476,20 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_system_view_atom_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule
-                .aromatic_system(AromaticSystemId(0))
-                .atom_ids()
-                .collect::<Vec<_>>(),
+        assert_exact_size_by(
+            molecule.aromatic_system(AromaticSystemId(0)).atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
-        let ids: Vec<AtomId> = molecule
-            .aromatic_system(AromaticSystemId(0))
-            .atoms()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
+        assert_exact_size_by(
+            molecule.aromatic_system(AromaticSystemId(0)).atoms(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            |atom| atom.id,
+        );
     }
 
     #[rstest]
@@ -558,5 +590,29 @@ mod tests {
             .map(|v| v.id)
             .collect();
         assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_editor_view_atom_ids() {
+        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
+        let ast = AromaticSystemAst::default();
+        let view = AromaticSystemEditorView::new(AromaticSystemId(0), &atoms, &ast);
+        assert_exact_size_by(
+            view.atom_ids(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            |id| id,
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_editor_view_mut_atom_ids() {
+        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
+        let mut ast = AromaticSystemAst::default();
+        let view = AromaticSystemEditorViewMut::new(AromaticSystemId(0), &atoms, &mut ast);
+        assert_exact_size_by(
+            view.atom_ids(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            |id| id,
+        );
     }
 }

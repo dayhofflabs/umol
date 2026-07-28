@@ -149,12 +149,14 @@ fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool)
 #[case::hub(AtomId(0), vec![(AtomId(1), BondId(0)), (AtomId(2), BondId(1))])]
 #[case::leaf_o(AtomId(1), vec![(AtomId(0), BondId(0))])]
 #[case::leaf_n(AtomId(2), vec![(AtomId(0), BondId(1))])]
+#[case::isolated(AtomId(3), vec![])]
 fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(AtomId, BondId)>) {
     let ast = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
             AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::C),
         ],
         bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -162,11 +164,24 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(Atom
         ],
         ..Default::default()
     });
-    let nbrs: Vec<(AtomId, BondId)> = ast
-        .neighbors(atom)
-        .map(|n| (n.atom_id(), n.bond_id()))
-        .collect();
-    assert_eq!(nbrs, expected);
+    let mut neighbors = ast.neighbors(atom);
+    assert_eq!(neighbors.len(), expected.len());
+    assert_eq!(
+        neighbors.size_hint(),
+        (expected.len(), Some(expected.len())),
+    );
+    while let Some(expected_neighbor) = expected.get(expected.len() - neighbors.len()) {
+        let previous = neighbors.len();
+        assert_eq!(
+            neighbors.next().map(|n| (n.atom_id(), n.bond_id())),
+            Some(*expected_neighbor),
+        );
+        let remaining = neighbors.len();
+        assert_eq!(remaining, previous - 1);
+        assert_eq!(neighbors.size_hint(), (remaining, Some(remaining)));
+    }
+    assert_eq!(neighbors.next().map(|n| (n.atom_id(), n.bond_id())), None,);
+    assert_eq!(neighbors.len(), 0);
 }
 
 #[rstest]

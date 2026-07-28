@@ -249,7 +249,7 @@ impl UniqueRingFamilies {
     }
 
     /// Iterate over all valid family identifiers.
-    pub fn ids(&self) -> impl Iterator<Item = UniqueRingFamilyId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = UniqueRingFamilyId> {
         (0..self.families.len()).map(|index| UniqueRingFamilyId(index as u32))
     }
 
@@ -632,6 +632,7 @@ impl Graph {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::fmt::Debug;
     use std::ops::ControlFlow;
 
     use num_bigint::BigUint;
@@ -647,6 +648,24 @@ mod tests {
     use crate::graph::{EdgeId, Graph, NodeId};
 
     type ExpectedUniqueRingFamily = (Vec<NodeId>, Vec<EdgeId>, usize, u64, Vec<Cycle>);
+
+    fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
+    where
+        T: Debug + PartialEq,
+    {
+        assert_eq!(iterator.len(), expected.len());
+        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+        while let Some(expected_item) = expected.get(expected.len() - iterator.len()) {
+            let previous = iterator.len();
+            assert_eq!(iterator.next().as_ref(), Some(expected_item));
+            let remaining = iterator.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(iterator.next(), None);
+        assert_eq!(iterator.len(), 0);
+        assert_eq!(iterator.size_hint(), (0, Some(0)));
+    }
 
     #[rstest]
     #[case::self_loop(
@@ -1895,6 +1914,20 @@ mod tests {
             assert_eq!(flow, ControlFlow::Continue(()));
             assert_eq!(cycles, expected_cycles);
         }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::new(0, &[]), vec![])]
+    #[case::triangle(
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
+        vec![UniqueRingFamilyId(0)],
+    )]
+    fn test_unique_ring_families_ids(
+        #[case] graph: Graph,
+        #[case] expected: Vec<UniqueRingFamilyId>,
+    ) {
+        let families = graph.unique_ring_families(Kolodzik);
+        assert_exact_size(families.ids(), expected);
     }
 
     #[rstest]

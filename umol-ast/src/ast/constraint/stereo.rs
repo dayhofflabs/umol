@@ -339,7 +339,7 @@ macro_rules! stereo_constraint {
             }
 
             /// Move the entries out of the store, leaving it empty.
-            pub fn take(&mut self) -> impl Iterator<Item = $constraint> {
+            pub fn take(&mut self) -> impl ExactSizeIterator<Item = $constraint> {
                 mem::take(&mut self.entries).into_iter()
             }
 
@@ -1579,6 +1579,29 @@ mod tests {
         assert_eq!(cs, StereoAtomConstraintsAst::from_iter(expected));
     }
 
+    #[rstest]
+    fn test_stereo_atom_constraints_ast_take() {
+        let mut empty = StereoAtomConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
+        let constraint = StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(
+            Stereogenicity::Stereogenic,
+        ));
+        let mut constraints = StereoAtomConstraintsAst::from(constraint.clone());
+        let mut taken = constraints.take();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
+        assert_eq!(taken.next(), Some(constraint));
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.size_hint(), (0, Some(0)));
+        assert_eq!(taken.next(), None);
+        drop(taken);
+        assert_eq!(constraints, StereoAtomConstraintsAst::new());
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::drop_vacuous(
@@ -1849,6 +1872,29 @@ mod tests {
         let mut cs = StereoBondConstraintsAst::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
         assert_eq!(cs, StereoBondConstraintsAst::from_iter(expected_state));
+    }
+
+    #[rstest]
+    fn test_stereo_bond_constraints_ast_take() {
+        let mut empty = StereoBondConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
+        let constraint = StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(
+            Stereogenicity::Stereogenic,
+        ));
+        let mut constraints = StereoBondConstraintsAst::from(constraint.clone());
+        let mut taken = constraints.take();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
+        assert_eq!(taken.next(), Some(constraint));
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.size_hint(), (0, Some(0)));
+        assert_eq!(taken.next(), None);
+        drop(taken);
+        assert_eq!(constraints, StereoBondConstraintsAst::new());
     }
 
     #[rustfmt::skip]

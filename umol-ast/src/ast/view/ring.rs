@@ -22,11 +22,11 @@ impl<'a> RingViews<'a> {
         self.rings.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = RingId> + '_ {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RingId> + '_ {
         self.rings.ids()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = RingView<'_>> + '_ {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = RingView<'_>> + '_ {
         self.rings.iter()
     }
 
@@ -223,6 +223,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::assert_exact_size_by;
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -260,20 +261,33 @@ mod tests {
 
     #[rstest]
     fn test_ring_views_ids(ring_with_chain: MoleculeAst) {
-        assert_eq!(
+        let empty = MoleculeAst::default();
+        assert_exact_size_by(
+            empty
+                .rings(RingModel::default(), RingConfig::default())
+                .ids(),
+            vec![],
+            |id| id,
+        );
+        assert_exact_size_by(
             ring_with_chain
                 .rings(RingModel::default(), RingConfig::default())
-                .ids()
-                .collect::<Vec<_>>(),
+                .ids(),
             vec![RingId(0)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_ring_views_iter(ring_with_chain: MoleculeAst) {
+        let empty = MoleculeAst::default();
+        let empty_rings = empty.rings(RingModel::default(), RingConfig::default());
+        assert_exact_size_by(empty_rings.iter(), vec![], |ring| (ring.id, ring.len()));
+
         let rings = ring_with_chain.rings(RingModel::default(), RingConfig::default());
-        let rings: Vec<(RingId, usize)> = rings.iter().map(|r| (r.id, r.len())).collect();
-        assert_eq!(rings, vec![(RingId(0), 6)]);
+        assert_exact_size_by(rings.iter(), vec![(RingId(0), 6)], |ring| {
+            (ring.id, ring.len())
+        });
     }
 
     #[rstest]

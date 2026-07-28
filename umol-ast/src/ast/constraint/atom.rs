@@ -536,11 +536,11 @@ impl AtomConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = AtomConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = AtomConstraintAst> {
         mem::take(&mut self.entries).into_iter()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &AtomConstraintAst> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &AtomConstraintAst> {
         self.entries.iter()
     }
 
@@ -1640,34 +1640,55 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraints_ast_take() {
+        let mut empty = AtomConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
         let mut cs = AtomConstraintsAst::from_iter([
             AtomConstraintAst::valence(4),
             AtomConstraintAst::degree(3),
         ]);
-        let drained: Vec<_> = cs.take().collect();
-        assert_eq!(
-            drained,
-            vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)],
-        );
+        let mut taken = cs.take();
+        assert_eq!(taken.len(), 2);
+        assert_eq!(taken.size_hint(), (2, Some(2)));
+        assert_eq!(taken.next(), Some(AtomConstraintAst::valence(4)));
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
+        assert_eq!(taken.next(), Some(AtomConstraintAst::degree(3)));
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.next(), None);
+        drop(taken);
         assert_eq!(cs, AtomConstraintsAst::new());
     }
 
     #[rstest]
     fn test_atom_constraints_ast_iter() {
+        let empty = AtomConstraintsAst::new();
+        let mut empty_iter = empty.iter();
+        assert_eq!(empty_iter.len(), 0);
+        assert_eq!(empty_iter.size_hint(), (0, Some(0)));
+        assert_eq!(empty_iter.next(), None);
+
         let cs = AtomConstraintsAst::from_iter([
             AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
             AtomConstraintAst::valence(4),
             AtomConstraintAst::degree(3),
         ]);
-        let collected: Vec<_> = cs.iter().cloned().collect();
+        let mut iter = cs.iter();
+        assert_eq!(iter.len(), 3);
+        assert_eq!(iter.size_hint(), (3, Some(3)));
+        assert_eq!(iter.next(), Some(&AtomConstraintAst::valence(4)));
+        assert_eq!(iter.len(), 2);
+        assert_eq!(iter.size_hint(), (2, Some(2)));
+        assert_eq!(iter.next(), Some(&AtomConstraintAst::degree(3)));
         assert_eq!(
-            collected,
-            vec![
-                AtomConstraintAst::valence(4),
-                AtomConstraintAst::degree(3),
-                AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
-            ],
+            iter.next(),
+            Some(&AtomConstraintAst::ring_membership(RingScope::Size(6), 1)),
         );
+        assert_eq!(iter.len(), 0);
+        assert_eq!(iter.next(), None);
     }
 
     #[rstest]

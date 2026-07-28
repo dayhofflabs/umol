@@ -1,7 +1,40 @@
 use proptest::prelude::*;
+use proptest::test_runner::TestCaseResult;
 use rstest::rstest;
 
 use crate::strategies::*;
+
+fn assert_exact_values<T>(
+    mut iterator: impl ExactSizeIterator<Item = T>,
+    expected: &[T],
+    prefix: usize,
+) -> TestCaseResult
+where
+    T: Debug + PartialEq,
+{
+    let prefix = prefix.min(expected.len());
+    prop_assert_eq!(iterator.len(), expected.len());
+    prop_assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())),);
+    for expected_item in &expected[..prefix] {
+        let previous = iterator.len();
+        let actual = iterator.next();
+        prop_assert_eq!(actual.as_ref(), Some(expected_item));
+        let remaining = iterator.len();
+        prop_assert_eq!(remaining, previous - 1);
+        prop_assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+    }
+    for expected_item in &expected[prefix..] {
+        let previous = iterator.len();
+        let actual = iterator.next();
+        prop_assert_eq!(actual.as_ref(), Some(expected_item));
+        let remaining = iterator.len();
+        prop_assert_eq!(remaining, previous - 1);
+        prop_assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+    }
+    prop_assert_eq!(iterator.next(), None);
+    prop_assert_eq!(iterator.len(), 0);
+    Ok(())
+}
 
 proptest! {
     // The entity DSL types carry a compact string form (Display) parsed by their
@@ -241,6 +274,89 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
+}
+
+proptest! {
+    #[test]
+    fn test_atom_constraints_ast_iterators_exact_size(
+        mut constraints in atom_constraints_strategy(),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.iter().cloned(), &expected, prefix)?;
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, AtomConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_bond_constraints_ast_take_exact_size(
+        mut constraints in bond_constraints_strategy(),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, BondConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_dative_bond_constraints_ast_take_exact_size(
+        mut constraints in dative_bond_constraints_strategy(),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, DativeBondConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_aromatic_system_constraints_ast_take_exact_size(
+        mut constraints in aromatic_system_ast_strategy().prop_map(|ast| ast.constraints),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, AromaticSystemConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_multicenter_bond_constraints_ast_take_exact_size(
+        mut constraints in multicenter_bond_ast_strategy().prop_map(|ast| ast.constraints),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, MulticenterBondConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_noncovalent_bond_constraints_ast_take_exact_size(
+        mut constraints in noncovalent_bond_constraints_strategy(),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, NoncovalentBondConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_stereo_atom_constraints_ast_take_exact_size(
+        mut constraints in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, StereoAtomConstraintsAst::new());
+    }
+
+    #[test]
+    fn test_stereo_bond_constraints_ast_take_exact_size(
+        mut constraints in stereo_bond_constraints_strategy(StereoKind::CisTrans),
+        prefix in any::<usize>(),
+    ) {
+        let expected = constraints.iter().cloned().collect::<Vec<_>>();
+        assert_exact_values(constraints.take(), &expected, prefix)?;
+        prop_assert_eq!(constraints, StereoBondConstraintsAst::new());
+    }
 }
 
 /// Vacuous-payload `AtomConstraintAst` variants render to nothing in the

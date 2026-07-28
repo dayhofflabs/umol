@@ -41,11 +41,11 @@ impl<'a> AtomViews<'a> {
         self.molecule.raw_graph().node_count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = AtomId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = AtomId> {
         self.molecule.raw_graph().node_ids().map(AtomId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> {
         let molecule = self.molecule;
         let atoms = self.atoms;
         let graph = molecule.raw_graph();
@@ -127,12 +127,12 @@ impl<'a> AtomView<'a> {
     /// that take `&AtomView` (e.g. perception electron-counting) can inspect
     /// bonds without reaching back to the molecule.
     /// Incident neighbors, ordered by ascending neighbor atom id.
-    pub fn neighbors(&self) -> impl Iterator<Item = NeighborView<'a>> {
+    pub fn neighbors(&self) -> impl ExactSizeIterator<Item = NeighborView<'a>> {
         self.molecule.neighbors(self.id)
     }
 
     /// Ids of incident bonds, in iteration order of `neighbors`.
-    pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
+    pub fn bond_ids(&self) -> impl ExactSizeIterator<Item = BondId> + 'a {
         self.molecule.neighbors(self.id).map(|n| n.bond_id())
     }
 
@@ -302,11 +302,11 @@ impl<'a> AtomView<'a> {
         self.molecule.dative_bonds().has_incident(self.id)
     }
 
-    pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
+    pub fn dative_bonds(&self) -> impl ExactSizeIterator<Item = DativeBondView<'a>> + 'a {
         self.molecule.dative_bonds().incident(self.id)
     }
 
-    pub fn dative_bond_ids(&self) -> impl Iterator<Item = DativeBondId> + 'a {
+    pub fn dative_bond_ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> + 'a {
         self.molecule.dative_bonds().incident_ids(self.id)
     }
 
@@ -331,11 +331,11 @@ impl<'a> AtomView<'a> {
         self.molecule.multicenter_bonds().has_incident(self.id)
     }
 
-    pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
+    pub fn multicenter_bonds(&self) -> impl ExactSizeIterator<Item = MulticenterBondView<'a>> + 'a {
         self.molecule.multicenter_bonds().incident(self.id)
     }
 
-    pub fn multicenter_bond_ids(&self) -> impl Iterator<Item = MulticenterBondId> + 'a {
+    pub fn multicenter_bond_ids(&self) -> impl ExactSizeIterator<Item = MulticenterBondId> + 'a {
         self.molecule.multicenter_bonds().incident_ids(self.id)
     }
 
@@ -343,11 +343,11 @@ impl<'a> AtomView<'a> {
         self.molecule.noncovalent_bonds().has_incident(self.id)
     }
 
-    pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
+    pub fn noncovalent_bonds(&self) -> impl ExactSizeIterator<Item = NoncovalentBondView<'a>> + 'a {
         self.molecule.noncovalent_bonds().incident(self.id)
     }
 
-    pub fn noncovalent_bond_ids(&self) -> impl Iterator<Item = NoncovalentBondId> + 'a {
+    pub fn noncovalent_bond_ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> + 'a {
         self.molecule.noncovalent_bonds().incident_ids(self.id)
     }
 
@@ -468,6 +468,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::assert_exact_size_by;
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -527,25 +528,28 @@ mod tests {
 
     #[rstest]
     fn test_atom_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.atoms().ids().collect::<Vec<_>>(),
+        assert_exact_size_by(MoleculeAst::default().atoms().ids(), vec![], |id| id);
+        assert_exact_size_by(
+            molecule.atoms().ids(),
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_atom_views_iter(molecule: MoleculeAst) {
-        let views = molecule.atoms();
-        let collected: Vec<(AtomId, AtomAst)> =
-            views.iter().map(|v| (v.id, v.ast.clone())).collect();
-        assert_eq!(
-            collected,
+        assert_exact_size_by(MoleculeAst::default().atoms().iter(), vec![], |view| {
+            (view.id, view.ast.clone())
+        });
+        assert_exact_size_by(
+            molecule.atoms().iter(),
             vec![
                 (AtomId(0), AtomAst::from_element(Element::C)),
                 (AtomId(1), AtomAst::from_element(Element::C)),
                 (AtomId(2), AtomAst::from_element(Element::N)),
                 (AtomId(3), AtomAst::from_element(Element::O)),
             ],
+            |view| (view.id, view.ast.clone()),
         );
     }
 
@@ -573,17 +577,42 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_neighbors(molecule: MoleculeAst) {
+        let isolated = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        assert_exact_size_by(isolated.atom(AtomId(0)).neighbors(), vec![], |neighbor| {
+            neighbor.atom_id()
+        });
+
         let view = molecule.atom(AtomId(1));
-        let collected: Vec<(BondId, AtomId, BondAst)> = view
-            .neighbors()
-            .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))
-            .collect();
-        assert_eq!(
-            collected,
+        assert_exact_size_by(
+            view.neighbors(),
             vec![
                 (BondId(0), AtomId(0), BondAst::from_order(1)),
                 (BondId(1), AtomId(2), BondAst::from_order(2)),
             ],
+            |neighbor| {
+                (
+                    neighbor.bond_id(),
+                    neighbor.atom_id(),
+                    neighbor.bond().ast.clone(),
+                )
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_bond_ids(molecule: MoleculeAst) {
+        let isolated = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        assert_exact_size_by(isolated.atom(AtomId(0)).bond_ids(), vec![], |id| id);
+        assert_exact_size_by(
+            molecule.atom(AtomId(1)).bond_ids(),
+            vec![BondId(0), BondId(1)],
+            |id| id,
         );
     }
 
@@ -741,8 +770,12 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Vec<DativeBondId>,
     ) {
-        let ids: Vec<DativeBondId> = molecule.atom(atom).dative_bonds().map(|v| v.id).collect();
-        assert_eq!(ids, expected);
+        assert_exact_size_by(
+            molecule.atom(atom).dative_bonds(),
+            expected.clone(),
+            |view| view.id,
+        );
+        assert_exact_size_by(molecule.atom(atom).dative_bond_ids(), expected, |id| id);
     }
 
     #[rstest]
@@ -753,12 +786,14 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Vec<MulticenterBondId>,
     ) {
-        let ids: Vec<MulticenterBondId> = molecule
-            .atom(atom)
-            .multicenter_bonds()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, expected);
+        assert_exact_size_by(
+            molecule.atom(atom).multicenter_bonds(),
+            expected.clone(),
+            |view| view.id,
+        );
+        assert_exact_size_by(molecule.atom(atom).multicenter_bond_ids(), expected, |id| {
+            id
+        });
     }
 
     #[rstest]
@@ -770,12 +805,14 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Vec<NoncovalentBondId>,
     ) {
-        let ids: Vec<NoncovalentBondId> = molecule
-            .atom(atom)
-            .noncovalent_bonds()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, expected);
+        assert_exact_size_by(
+            molecule.atom(atom).noncovalent_bonds(),
+            expected.clone(),
+            |view| view.id,
+        );
+        assert_exact_size_by(molecule.atom(atom).noncovalent_bond_ids(), expected, |id| {
+            id
+        });
     }
 
     #[fixture]

@@ -657,7 +657,7 @@ impl MoleculeAst {
     }
 
     /// Neighbors of `atom`, ordered by ascending neighbor atom id.
-    pub fn neighbors(&self, atom: AtomId) -> impl Iterator<Item = NeighborView<'_>> {
+    pub fn neighbors(&self, atom: AtomId) -> impl ExactSizeIterator<Item = NeighborView<'_>> {
         self.graph
             .neighbors(NodeId::from(atom))
             .iter()

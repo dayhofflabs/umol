@@ -12,6 +12,8 @@ mod corpus;
 mod cycles;
 #[path = "property/graph.rs"]
 mod graph;
+#[path = "property/relation.rs"]
+mod relation;
 #[path = "property/strategy.rs"]
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]

@@ -221,7 +221,7 @@ impl MulticenterBondConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = MulticenterBondConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = MulticenterBondConstraintAst> {
         mem::take(&mut self.0).into_iter()
     }
 
@@ -619,13 +619,25 @@ mod tests {
 
     #[rstest]
     fn test_multicenter_bond_constraints_ast_take() {
+        let mut empty = MulticenterBondConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
         let mut cs =
             MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
-        let drained: Vec<_> = cs.take().collect();
+        let mut taken = cs.take();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
         assert_eq!(
-            drained,
-            vec![MulticenterBondConstraintAst::electron_count(6)]
+            taken.next(),
+            Some(MulticenterBondConstraintAst::electron_count(6)),
         );
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.size_hint(), (0, Some(0)));
+        assert_eq!(taken.next(), None);
+        drop(taken);
         assert_eq!(cs, MulticenterBondConstraintsAst::new());
     }
 

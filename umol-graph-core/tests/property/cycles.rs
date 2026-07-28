@@ -24,7 +24,7 @@ use rstest::rstest;
 use umol_graph_core::{
     Cycle, EdgeId, Graph, MinimumCycleBasisAlgorithm, NonSimpleGraphError,
     RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource,
-    UniqueRingFamilyAlgorithm,
+    UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
 };
 
 use self::exhaustive::{
@@ -327,8 +327,29 @@ proptest! {
     }
 
     #[test]
-    fn test_graph_unique_ring_families(graph in multigraph(5, 5)) {
+    fn test_graph_unique_ring_families(
+        graph in multigraph(5, 5),
+        prefix in any::<usize>(),
+    ) {
         let result = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
+        let count = result.count();
+        let prefix = prefix.min(count);
+        let mut ids = result.ids();
+        prop_assert_eq!(ids.len(), count);
+        prop_assert_eq!(ids.size_hint(), (count, Some(count)));
+        for index in 0..prefix {
+            prop_assert_eq!(ids.next(), Some(UniqueRingFamilyId(index as u32)));
+            let remaining = count - index - 1;
+            prop_assert_eq!(ids.len(), remaining);
+            prop_assert_eq!(ids.size_hint(), (remaining, Some(remaining)));
+        }
+        prop_assert_eq!(
+            ids.collect::<Vec<_>>(),
+            (prefix..count)
+                .map(|index| UniqueRingFamilyId(index as u32))
+                .collect::<Vec<_>>(),
+        );
+
         let mut actual = Vec::new();
         for id in result.ids() {
             let family = result.get(id).expect("a returned family id must be valid");

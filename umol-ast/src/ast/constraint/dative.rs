@@ -262,7 +262,7 @@ impl DativeBondConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = DativeBondConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = DativeBondConstraintAst> {
         mem::take(&mut self.0).into_iter()
     }
 
@@ -685,18 +685,35 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_constraints_ast_take() {
+        let mut empty = DativeBondConstraintsAst::new();
+        let mut empty_taken = empty.take();
+        assert_eq!(empty_taken.len(), 0);
+        assert_eq!(empty_taken.size_hint(), (0, Some(0)));
+        assert_eq!(empty_taken.next(), None);
+
         let mut cs = DativeBondConstraintsAst::from_iter([
             DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
-        let drained: Vec<_> = cs.take().collect();
+        let mut taken = cs.take();
+        assert_eq!(taken.len(), 2);
+        assert_eq!(taken.size_hint(), (2, Some(2)));
         assert_eq!(
-            drained,
-            vec![
-                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
-            ],
+            taken.next(),
+            Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         );
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.size_hint(), (1, Some(1)));
+        assert_eq!(
+            taken.next(),
+            Some(DativeBondConstraintAst::ring_membership(
+                RingScope::Size(6),
+                1,
+            )),
+        );
+        assert_eq!(taken.len(), 0);
+        assert_eq!(taken.next(), None);
+        drop(taken);
         assert_eq!(cs, DativeBondConstraintsAst::new());
     }
 

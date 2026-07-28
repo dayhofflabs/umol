@@ -92,7 +92,9 @@ impl MatrixRep {
         &self.axes
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (SymmetryOp, &Matrix3<f64>, &Vector3<f64>)> + '_ {
+    pub fn iter(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (SymmetryOp, &Matrix3<f64>, &Vector3<f64>)> + '_ {
         self.group
             .ops()
             .into_iter()
@@ -228,14 +230,28 @@ mod tests {
 
     #[rstest]
     fn test_matrix_rep_iter() {
+        let empty = MatrixRep::new(group!(Coov), vec![], vec![]);
+        let mut empty_iter = empty.iter();
+        assert_eq!(empty_iter.len(), 0);
+        assert_eq!(empty_iter.size_hint(), (0, Some(0)));
+        assert_eq!(empty_iter.next().map(|(op, _, _)| op.index()), None,);
+
         let rep = water_rep();
-        let items: Vec<_> = rep.iter().collect();
-        assert_eq!(items.len(), 4);
-        for (i, (op, m, a)) in items.iter().enumerate() {
-            assert_eq!(op.index(), i);
-            assert!(ptr::eq(*m, &rep.matrices()[i]));
-            assert!(ptr::eq(*a, &rep.axes()[i]));
+        let mut iter = rep.iter();
+        assert_eq!(iter.len(), 4);
+        assert_eq!(iter.size_hint(), (4, Some(4)));
+        for index in 0..rep.order() {
+            let previous = iter.len();
+            let (op, matrix, axis) = iter.next().expect("expected symmetry operation");
+            assert_eq!(op.index(), index);
+            assert!(ptr::eq(matrix, &rep.matrices()[index]));
+            assert!(ptr::eq(axis, &rep.axes()[index]));
+            let remaining = iter.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iter.size_hint(), (remaining, Some(remaining)));
         }
+        assert_eq!(iter.next().map(|(op, _, _)| op.index()), None);
+        assert_eq!(iter.len(), 0);
     }
 
     #[rstest]

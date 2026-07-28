@@ -5,7 +5,6 @@
 //! ops are `-` / `=` / `#` / `-[ "spec" ]-`. (`*` is left free for a future Kleene-star operator.)
 
 use std::collections::HashMap;
-use std::iter;
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -91,8 +90,14 @@ pub(crate) struct Path {
 }
 
 impl Path {
-    pub(crate) fn atoms(&self) -> impl Iterator<Item = &Atom> {
-        iter::once(&self.first).chain(self.rest.iter().map(|(_, atom)| atom))
+    pub(crate) fn atoms(&self) -> impl ExactSizeIterator<Item = &Atom> {
+        (0..self.rest.len() + 1).map(|index| {
+            if index == 0 {
+                &self.first
+            } else {
+                &self.rest[index - 1].1
+            }
+        })
     }
 }
 
@@ -615,4 +620,34 @@ fn overlay_ligands(
             Ligand::LonePair => Ok(quote! { StereoLigandArg::LonePair }),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::single("C", vec!["C"])]
+    #[case::chain("C-O=N", vec!["C", "O", "N"])]
+    fn test_path_atoms(#[case] input: &str, #[case] expected: Vec<&str>) {
+        let path = syn::parse_str::<Path>(input).expect("path fixture must parse");
+        let mut atoms = path.atoms();
+        assert_eq!(atoms.len(), expected.len());
+        assert_eq!(atoms.size_hint(), (expected.len(), Some(expected.len())),);
+        for expected_atom in expected {
+            let previous = atoms.len();
+            let actual = atoms.next().map(|atom| match atom {
+                Atom::Declaration { spec, .. } | Atom::Anonymous { spec } => spec.as_lit().value(),
+                Atom::Reference { name } | Atom::Port { name } => name.to_string(),
+            });
+            assert_eq!(actual.as_deref(), Some(expected_atom));
+            let remaining = atoms.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(atoms.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(atoms.next().map(|_| ()), None);
+        assert_eq!(atoms.len(), 0);
+    }
 }

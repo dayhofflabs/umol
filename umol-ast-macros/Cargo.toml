@@ -12,3 +12,6 @@ proc-macro = true
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
+rstest = "0.26.1"

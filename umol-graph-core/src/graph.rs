@@ -179,11 +179,11 @@ impl Graph {
         id.index() < self.csr.edge_count
     }
 
-    pub fn node_ids(&self) -> impl Iterator<Item = NodeId> {
+    pub fn node_ids(&self) -> impl ExactSizeIterator<Item = NodeId> {
         (0..self.csr.node_count as u32).map(NodeId)
     }
 
-    pub fn edge_ids(&self) -> impl Iterator<Item = EdgeId> {
+    pub fn edge_ids(&self) -> impl ExactSizeIterator<Item = EdgeId> {
         (0..self.csr.edge_count as u32).map(EdgeId)
     }
 
@@ -654,10 +654,30 @@ impl Remapping {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+
+    fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
+    where
+        T: Debug + PartialEq,
+    {
+        assert_eq!(iterator.len(), expected.len());
+        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+        while let Some(expected_item) = expected.get(expected.len() - iterator.len()) {
+            let previous = iterator.len();
+            assert_eq!(iterator.next().as_ref(), Some(expected_item));
+            let remaining = iterator.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(iterator.next(), None);
+        assert_eq!(iterator.len(), 0);
+        assert_eq!(iterator.size_hint(), (0, Some(0)));
+    }
 
     #[test]
     fn test_graph_default() {
@@ -939,18 +959,24 @@ mod tests {
         assert_eq!(g.degree(NodeId(0)), 2);
     }
 
-    #[test]
-    fn test_graph_node_ids() {
-        let g = Graph::new(3, &[]);
-        let ids: Vec<NodeId> = g.node_ids().collect();
-        assert_eq!(ids, vec![NodeId(0), NodeId(1), NodeId(2)]);
+    #[rstest]
+    #[case::empty(Graph::new(0, &[]), vec![])]
+    #[case::populated(
+        Graph::new(3, &[]),
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+    )]
+    fn test_graph_node_ids(#[case] graph: Graph, #[case] expected: Vec<NodeId>) {
+        assert_exact_size(graph.node_ids(), expected);
     }
 
-    #[test]
-    fn test_graph_edge_ids() {
-        let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let ids: Vec<EdgeId> = g.edge_ids().collect();
-        assert_eq!(ids, vec![EdgeId(0), EdgeId(1)]);
+    #[rstest]
+    #[case::empty(Graph::new(0, &[]), vec![])]
+    #[case::populated(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![EdgeId(0), EdgeId(1)],
+    )]
+    fn test_graph_edge_ids(#[case] graph: Graph, #[case] expected: Vec<EdgeId>) {
+        assert_exact_size(graph.edge_ids(), expected);
     }
 
     #[test]

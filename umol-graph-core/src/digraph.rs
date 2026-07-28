@@ -43,7 +43,7 @@ impl DiGraph {
         self.node_count
     }
 
-    pub fn node_ids(&self) -> impl Iterator<Item = NodeId> {
+    pub fn node_ids(&self) -> impl ExactSizeIterator<Item = NodeId> {
         (0..self.node_count as u32).map(NodeId)
     }
 
@@ -57,9 +57,39 @@ impl DiGraph {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use rstest::*;
 
     use super::*;
+
+    fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
+    where
+        T: Debug + PartialEq,
+    {
+        assert_eq!(iterator.len(), expected.len());
+        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
+        while let Some(expected_item) = expected.get(expected.len() - iterator.len()) {
+            let previous = iterator.len();
+            assert_eq!(iterator.next().as_ref(), Some(expected_item));
+            let remaining = iterator.len();
+            assert_eq!(remaining, previous - 1);
+            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
+        }
+        assert_eq!(iterator.next(), None);
+        assert_eq!(iterator.len(), 0);
+        assert_eq!(iterator.size_hint(), (0, Some(0)));
+    }
+
+    #[rstest]
+    #[case::empty(DiGraph::new(0, &[]), vec![])]
+    #[case::populated(
+        DiGraph::new(3, &[[0, 1], [0, 2], [1, 2]]),
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+    )]
+    fn test_digraph_node_ids(#[case] graph: DiGraph, #[case] expected: Vec<NodeId>) {
+        assert_exact_size(graph.node_ids(), expected);
+    }
 
     #[rstest]
     #[case(NodeId(0), vec![NodeId(1), NodeId(2)])]

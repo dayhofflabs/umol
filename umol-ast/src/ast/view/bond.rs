@@ -33,11 +33,11 @@ impl<'a> BondViews<'a> {
         self.molecule.raw_graph().edge_count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = BondId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = BondId> {
         self.molecule.raw_graph().edge_ids().map(BondId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = BondView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = BondView<'a>> {
         let molecule = self.molecule;
         let bonds = self.bonds;
         let graph = molecule.raw_graph();
@@ -154,7 +154,7 @@ impl<'a> BondView<'a> {
     }
 
     /// Views of the two atoms incident to this bond.
-    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+    pub fn atoms(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.atoms
             .into_iter()
@@ -244,6 +244,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::assert_exact_size_by;
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -295,26 +296,27 @@ mod tests {
 
     #[rstest]
     fn test_bond_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.bonds().ids().collect::<Vec<_>>(),
+        assert_exact_size_by(MoleculeAst::default().bonds().ids(), vec![], |id| id);
+        assert_exact_size_by(
+            molecule.bonds().ids(),
             vec![BondId(0), BondId(1), BondId(2)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_bond_views_iter(molecule: MoleculeAst) {
-        let collected: Vec<(BondId, [AtomId; 2], BondAst)> = molecule
-            .bonds()
-            .iter()
-            .map(|v| (v.id, v.atom_ids(), v.ast.clone()))
-            .collect();
-        assert_eq!(
-            collected,
+        assert_exact_size_by(MoleculeAst::default().bonds().iter(), vec![], |view| {
+            (view.id, view.atom_ids(), view.ast.clone())
+        });
+        assert_exact_size_by(
+            molecule.bonds().iter(),
             vec![
                 (BondId(0), [AtomId(0), AtomId(1)], BondAst::from_order(1)),
                 (BondId(1), [AtomId(1), AtomId(2)], BondAst::from_order(2)),
                 (BondId(2), [AtomId(2), AtomId(3)], BondAst::from_order(1)),
             ],
+            |view| (view.id, view.atom_ids(), view.ast.clone()),
         );
     }
 
@@ -348,8 +350,11 @@ mod tests {
 
     #[rstest]
     fn test_bond_view_atoms(molecule: MoleculeAst) {
-        let ids: Vec<AtomId> = molecule.bond(BondId(1)).atoms().map(|a| a.id).collect();
-        assert_eq!(ids, vec![AtomId(1), AtomId(2)]);
+        assert_exact_size_by(
+            molecule.bond(BondId(1)).atoms(),
+            vec![AtomId(1), AtomId(2)],
+            |atom| atom.id,
+        );
     }
 
     #[rstest]

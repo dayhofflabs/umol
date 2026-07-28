@@ -33,13 +33,13 @@ impl<'a> NoncovalentBondViews<'a> {
         self.noncovalent_bonds.count()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = NoncovalentBondId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> {
         self.noncovalent_bonds
             .relation_ids()
             .map(NoncovalentBondId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = NoncovalentBondView<'a>> {
         let molecule = self.molecule;
         let set = self.noncovalent_bonds;
         set.relation_ids().map(move |rid| NoncovalentBondView {
@@ -82,7 +82,10 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     /// Ids of noncovalent bonds incident on `atom`.
-    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = NoncovalentBondId> + 'a {
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + 'a {
         self.noncovalent_bonds
             .incident(NodeId::from(atom))
             .iter()
@@ -95,7 +98,10 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     /// Views of noncovalent bonds incident on `atom`.
-    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
+    pub fn incident(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = NoncovalentBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.noncovalent_bonds;
         self.incident_ids(atom).map(move |id| {
@@ -225,6 +231,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::assert_exact_size_by;
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
@@ -273,26 +280,53 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_views_ids(molecule: MoleculeAst) {
-        assert_eq!(
-            molecule.noncovalent_bonds().ids().collect::<Vec<_>>(),
+        assert_exact_size_by(
+            MoleculeAst::default().noncovalent_bonds().ids(),
+            vec![],
+            |id| id,
+        );
+        assert_exact_size_by(
+            molecule.noncovalent_bonds().ids(),
             vec![NoncovalentBondId(0)],
+            |id| id,
         );
     }
 
     #[rstest]
     fn test_noncovalent_bond_views_iter(molecule: MoleculeAst) {
-        let collected: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondAst)> = molecule
-            .noncovalent_bonds()
-            .iter()
-            .map(|v| (v.id, v.atom_ids(), v.ast.clone()))
-            .collect();
-        assert_eq!(
-            collected,
+        assert_exact_size_by(
+            MoleculeAst::default().noncovalent_bonds().iter(),
+            vec![],
+            |view| (view.id, view.atom_ids(), view.ast.clone()),
+        );
+        assert_exact_size_by(
+            molecule.noncovalent_bonds().iter(),
             vec![(
                 NoncovalentBondId(0),
                 [AtomId(0), AtomId(3)],
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
+            |view| (view.id, view.atom_ids(), view.ast.clone()),
+        );
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(0), vec![NoncovalentBondId(0)])]
+    #[case::uninvolved(AtomId(1), vec![])]
+    fn test_noncovalent_bond_views_incident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<NoncovalentBondId>,
+    ) {
+        assert_exact_size_by(
+            molecule.noncovalent_bonds().incident_ids(atom),
+            expected.clone(),
+            |id| id,
+        );
+        assert_exact_size_by(
+            molecule.noncovalent_bonds().incident(atom),
+            expected,
+            |view| view.id,
         );
     }
 
