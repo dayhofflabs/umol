@@ -62,7 +62,8 @@ impl MoleculeAst {
         Ok(Self::from_inner(molecule))
     }
 
-    /// Parse a molecule and retain its persistent DSL metadata.
+    /// Parse a molecule and return `(molecule, metadata)`, retaining entity
+    /// keywords and atom aliases for metadata-preserving rendering.
     #[staticmethod]
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse_with_metadata(
@@ -75,14 +76,18 @@ impl MoleculeAst {
         Ok((Self::from_inner(dsl.into_ast(&defaults)), metadata))
     }
 
-    /// Render a canonical positional DSL representation without persistent metadata.
+    /// Render a canonical positional DSL representation without entity
+    /// keywords or atom aliases.
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         AstMoleculeDsl::from_ast(&self.0, &defaults).to_string()
     }
 
-    /// Render a canonical DSL representation with coherent persistent metadata.
+    /// Render a canonical DSL representation with persistent metadata.
+    ///
+    /// Raises `MetadataError` if the detached metadata is not coherent with
+    /// this molecule.
     #[pyo3(signature = (metadata, *, defaults=None))]
     fn render_with_metadata(
         &self,

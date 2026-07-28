@@ -1,5 +1,9 @@
 # 133 — Reaction EDN surface syntax (design)
 
+**Metadata terminology and APIs.** The implemented persistent-metadata and
+parse-time-context model, including the replacement of the concrete namespace
+names used below, is specified by [doc 169](169-dsl-metadata-context-2026-07-27.md).
+
 Design round for an EDN surface syntax for reactions. We have two reaction AST forms and a
 lossless bidirectional conversion between them (doc 131/132): `ReactionAst` (operational —
 `lhs` molecule + `Deltas`) and `ReactionSpanAst` (declarative — the superimposed `L ∪_K R`

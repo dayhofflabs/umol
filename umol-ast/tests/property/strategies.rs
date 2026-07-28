@@ -44,9 +44,9 @@ pub(crate) use umol_ast::dsl::{
     BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MetadataError,
     MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata, MulticenterBondDsl,
     MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError,
-    ReactionDefaults, ReactionDsl, ReactionSpanDsl, StereoAtomConstraintDsl, StereoAtomDsl,
-    StereoAtomParticipants, StereoAtomUpdateDsl, StereoBondConstraintDsl, StereoBondDsl,
-    StereoBondParticipants, StereoBondUpdateDsl, StereoLigandRef, ValueDsl,
+    ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl, StereoAtomConstraintDsl,
+    StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl, StereoBondConstraintDsl,
+    StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl, StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -2406,6 +2406,134 @@ pub(crate) fn invalid_molecule_dsl_parts_strategy(
         invalid_metadata_for(counts)
             .prop_map(move |(metadata, entity)| (ast.clone(), metadata, entity))
     })
+}
+
+pub(crate) fn molecule_metadata_with_atom_subset_strategy(
+) -> impl Strategy<Value = (MoleculeAst, MoleculeMetadata, Vec<AtomId>)> {
+    molecule_ast_with_atom_subset_strategy().prop_flat_map(|(ast, atoms)| {
+        metadata_for(ConstraintCounts::from_ast(&ast))
+            .prop_map(move |metadata| (ast.clone(), metadata, atoms.clone()))
+    })
+}
+
+fn added_entities(reaction: &ReactionAst) -> Vec<Entity> {
+    reaction
+        .deltas
+        .iter()
+        .filter_map(|delta| match delta {
+            Delta::Atom(AtomDelta::Add { id, .. }) => Some(Entity::Atom(*id)),
+            Delta::Bond(BondDelta::Add { id, .. }) => Some(Entity::Bond(*id)),
+            Delta::DativeBond(DativeBondDelta::Add { id, .. }) => Some(Entity::DativeBond(*id)),
+            Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }) => {
+                Some(Entity::AromaticSystem(*id))
+            }
+            Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }) => {
+                Some(Entity::MulticenterBond(*id))
+            }
+            Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => {
+                Some(Entity::NoncovalentBond(*id))
+            }
+            Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => Some(Entity::StereoAtom(*id)),
+            Delta::StereoBond(StereoBondDelta::Add { id, .. }) => Some(Entity::StereoBond(*id)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn delta_keyword(entity: Entity) -> String {
+    let kind = match entity {
+        Entity::Atom(_) => "atom",
+        Entity::Bond(_) => "bond",
+        Entity::DativeBond(_) => "dative",
+        Entity::AromaticSystem(_) => "aromatic",
+        Entity::MulticenterBond(_) => "multicenter",
+        Entity::NoncovalentBond(_) => "noncovalent",
+        Entity::StereoAtom(_) => "stereo_atom",
+        Entity::StereoBond(_) => "stereo_bond",
+    };
+    format!("delta_{kind}_{}", entity.id_index())
+}
+
+pub(crate) fn reaction_dsl_strategy() -> impl Strategy<Value = ReactionDsl> {
+    comprehensive_reaction_strategy().prop_flat_map(|reaction| {
+        metadata_for(ConstraintCounts::from_ast(&reaction.lhs)).prop_map(move |lhs| {
+            let mut metadata = ReactionMetadata::from(lhs);
+            for entity in added_entities(&reaction) {
+                metadata
+                    .set_delta_keyword(entity, delta_keyword(entity))
+                    .expect("generated delta keywords are disjoint");
+            }
+            metadata
+                .add_atom_alias("reaction_alias", AtomAst::from_element(Element::F))
+                .expect("generated reaction alias is disjoint and bijective");
+            ReactionDsl::new(reaction.clone(), metadata)
+                .expect("generated reaction metadata is coherent")
+        })
+    })
+}
+
+pub(crate) fn invalid_reaction_dsl_parts_strategy(
+) -> impl Strategy<Value = (ReactionAst, ReactionMetadata, MetadataError)> {
+    prop_oneof![
+        comprehensive_reaction_strategy().prop_flat_map(|reaction| {
+            invalid_metadata_for(ConstraintCounts::from_ast(&reaction.lhs)).prop_map(
+                move |(lhs, entity)| {
+                    (
+                        reaction.clone(),
+                        ReactionMetadata::from(lhs),
+                        MetadataError::EntityOutOfRange(entity),
+                    )
+                },
+            )
+        }),
+        (comprehensive_reaction_strategy(), 0u8..8).prop_map(|(reaction, kind)| {
+            let entity = EntityKind::try_from(kind).unwrap().with_id(u32::MAX);
+            let mut metadata = ReactionMetadata::default();
+            metadata
+                .set_delta_keyword(entity, "invalid")
+                .expect("fresh invalid keyword is unique");
+            (reaction, metadata, MetadataError::EntityNotAdded(entity))
+        }),
+    ]
+}
+
+pub(crate) fn reaction_span_dsl_strategy() -> impl Strategy<Value = ReactionSpanDsl> {
+    comprehensive_reaction_strategy()
+        .prop_filter_map("reaction must have a materializable span", |reaction| {
+            reaction.to_reaction_span().ok()
+        })
+        .prop_flat_map(|span| {
+            metadata_for(ConstraintCounts {
+                atom: span.atoms().len(),
+                bond: span.bonds().len(),
+                dative: 0,
+                aromatic: 0,
+                multicenter: 0,
+                noncovalent: 0,
+                stereo_atom: 0,
+                stereo_bond: 0,
+            })
+            .prop_map(move |metadata| {
+                ReactionSpanDsl::new(span.clone(), metadata)
+                    .expect("generated reaction-span metadata is coherent")
+            })
+        })
+}
+
+pub(crate) fn invalid_reaction_span_dsl_parts_strategy(
+) -> impl Strategy<Value = (ReactionSpanAst, MoleculeMetadata, Entity)> {
+    comprehensive_reaction_strategy()
+        .prop_filter_map("reaction must have a materializable span", |reaction| {
+            reaction.to_reaction_span().ok()
+        })
+        .prop_map(|span| {
+            let entity = Entity::Atom(AtomId(span.atoms().len() as u32));
+            let mut metadata = MoleculeMetadata::new();
+            metadata
+                .set_keyword(entity, "invalid")
+                .expect("fresh invalid keyword is unique");
+            (span, metadata, entity)
+        })
 }
 
 pub(crate) fn transaction_atom_count_strategy() -> impl Strategy<Value = usize> {

@@ -4,7 +4,8 @@ Status: **Proposed**
 Date: 2026-07-27
 Relates: [105](105-dsl-fixes-2026-06-06.md),
 [115](115-variable-facility-2026-06-16.md),
-[153](153-format-parsing-outstanding-tasks-2026-07-18.md)
+[153](153-format-parsing-outstanding-tasks-2026-07-18.md),
+[169](169-dsl-metadata-context-2026-07-27.md)
 
 ## Scope
 
@@ -21,6 +22,10 @@ The three relevant layers are distinct:
 
 Changes must preserve this separation. A streaming parser is another execution
 path for the same language, not a second DSL.
+
+Persistent metadata, parse-time contexts, and metadata-preserving Python
+parse/render operations are owned by doc 169 rather than this remaining-work
+inventory.
 
 ## Language and specification
 

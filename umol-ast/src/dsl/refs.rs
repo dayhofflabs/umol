@@ -33,9 +33,9 @@ macro_rules! define_ref {
         }
 
         impl $name {
-            /// Render an AST id back to a ref: its keyword from `metadata` if one is recorded for
-            /// this id, else the bare index. The `id → ref` inverse of `resolve` over the
-            /// id↔keyword bijection.
+            /// Render a numerical AST id back to a ref: its keyword from `metadata` if one is
+            /// recorded for this id, else the bare index. This is the `id → ref` inverse of
+            /// `resolve` over the entity-keyword bijection.
             pub fn denote<M: Metadata>(id: $id, metadata: &M) -> Self {
                 if let Some(name) = metadata.keyword(Entity::$variant(id)) {
                     Self::Keyword(name.to_string())

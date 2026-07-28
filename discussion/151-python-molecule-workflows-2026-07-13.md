@@ -139,6 +139,11 @@ add/remove snapshots for all eight entity families. Partial update payloads are
 not defaulted. `zeroed()` is deliberately not exposed on the Python side and is
 not used by these construction paths.
 
+Metadata-preserving DSL parsing and rendering, including persistent
+`MoleculeMetadata` / `ReactionMetadata` values and parse-time context
+semantics, are specified and implemented in
+[doc 169](169-dsl-metadata-context-2026-07-27.md).
+
 ## Current reaction deliverable
 
 The reaction half of the workflow is implemented through doc 150:

@@ -1,6 +1,6 @@
 # DSL metadata and context
 
-Status: **Proposed**
+Status: **Completed**
 Date: 2026-07-27
 Relates: [133](133-reaction-edn-surface-2026-06-26.md),
 [134](134-reaction-application-overlays-2026-06-26.md),
@@ -854,7 +854,7 @@ parse/render/reparse preservation for molecule, reaction, and reaction-span
 DSLs. Add metadata-remapping properties for identity, composition, total
 reverse roundtrip, partial restriction, and alias invariance. Keep intentional
 overlap with unit tests documented beside the property modules. This is
-additive and stays green. [dep: S2i, S4d]
+additive and stays green. **Implemented (green).** [dep: S2i, S4d]
 
 **S7b — Terminology and API audit.** Update the DSL module documentation,
 `umol-ast/spec/umol-dsl-spec.md`, Python docstrings, and related discussion
@@ -863,8 +863,8 @@ names, symbolic `Id` variants, `contains_id`, `DuplicateId`, one-way metadata
 maps, public `from_parts` constructors, and `combined_metadata`. Run Rust
 formatting, focused and workspace tests, property tests, clippy, the Python
 3.13 binding build, and Python tests before marking this document complete.
-This is documentation plus verification and stays green. [dep: S1c, S2i,
-S3b, S3c, S4d, S6b, S7a]
+This is documentation plus verification and stays green.
+**Implemented (green).** [dep: S1c, S2i, S3b, S3c, S4d, S6b, S7a]
 
 The critical path is
 `S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7`.

@@ -50,16 +50,6 @@ proptest! {
         prop_assert_eq!(via_stream, via_tree);
     }
 
-    #[test]
-    fn test_molecule_dsl_new_rejects_out_of_range_metadata(
-        (ast, metadata, entity) in invalid_molecule_dsl_parts_strategy(),
-    ) {
-        prop_assert_eq!(
-            MoleculeDsl::new(ast, metadata),
-            Err(MetadataError::EntityOutOfRange(entity)),
-        );
-    }
-
     /// Direct `MoleculeAst::ToEdn` / `FromEdn` round-trips are the identity.
     /// Refs render as positional integers (no id keywords); the AST carries
     /// no metadata, so canonical EDN parses back to an equal AST.
@@ -118,7 +108,7 @@ proptest! {
 /// EDN must carry the keyword form, never the integer index, and must
 /// roundtrip back through both the tree and streaming parsers.
 #[rstest]
-fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
+fn test_constraint_ref_uses_keyword_when_metadata_binding_present() {
     let atoms = vec![AtomAst::default(), AtomAst::default()];
     let mut cs = Constraints::new();
     cs.push(Constraint::Atom(

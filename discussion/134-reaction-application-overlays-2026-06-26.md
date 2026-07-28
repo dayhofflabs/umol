@@ -1,5 +1,9 @@
 # 134 — Reaction-application: overlays
 
+**Metadata terminology and APIs.** The implemented persistent-metadata and
+parse-time-context model, including the replacement of the concrete namespace
+names used below, is specified by [doc 169](169-dsl-metadata-context-2026-07-27.md).
+
 Five items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
 (`Add`/`Modify`/`Remove` ↔ `Added`/`Modified`/`Removed`, key-based `ModifyConstraint`, by-value
 molecule `Add`/`Remove`, `CascadedConstraints`) and designing the reaction EDN surface (doc 133) —

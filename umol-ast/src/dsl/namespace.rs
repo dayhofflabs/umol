@@ -39,10 +39,12 @@ pub struct MoleculeContext {
 }
 
 /// The parse-time **resolution** query surface — everything `ref::resolve` and the constraint /
-/// relational resolvers read to turn a surface ref into an AST id (keyword / index / participants →
-/// id). Written once, generic over this trait; implemented for [`MoleculeContext`] (a molecule),
-/// a reaction's `ReactionContext`, and sub-pattern contexts. The inverse
-/// direction (id → keyword, for rendering) is the separate `Metadata` trait.
+/// relational resolvers read to turn a surface ref into a numerical AST id
+/// (keyword / index / participants → id). Written once, generic over this
+/// trait; implemented for [`MoleculeContext`] (a molecule), a reaction's
+/// `ReactionContext`, and sub-pattern contexts. The inverse direction
+/// (numerical AST id → keyword, for rendering) is the separate `Metadata`
+/// trait.
 pub trait Namespace {
     fn atom_count(&self) -> usize;
     fn bond_count(&self) -> usize;

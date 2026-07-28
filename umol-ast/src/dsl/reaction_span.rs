@@ -53,8 +53,9 @@ use crate::ast::{
     NoncovalentBondAst, ReactionSpanAst, StereoAtomAst, StereoBondAst,
 };
 
-/// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the `MoleculeMetadata` recording
-/// its span-frame id↔keyword bindings; fields private so metadata cannot drift onto a different AST.
+/// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the
+/// `MoleculeMetadata` recording its span-frame entity-keyword bindings; fields
+/// are private so metadata cannot drift onto a different AST.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionSpanDsl {
     ast: ReactionSpanAst,

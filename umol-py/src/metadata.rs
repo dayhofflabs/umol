@@ -96,7 +96,11 @@ impl Entity {
     }
 }
 
-/// Persistent keyword and atom-alias metadata for a molecule DSL value.
+/// Persistent entity-keyword and atom-alias metadata for a molecule DSL value.
+///
+/// The metadata may be detached from its molecule for transport, but
+/// `MoleculeAst.render_with_metadata` checks that every keyword still names an
+/// entity present in the molecule.
 #[pyclass(eq, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeMetadata(AstMoleculeMetadata);
@@ -154,6 +158,10 @@ impl MoleculeMetadata {
 }
 
 /// Persistent lhs, delta-keyword, and atom-alias metadata for a reaction DSL value.
+///
+/// Combined lookup searches delta metadata before lhs metadata. Rendering
+/// checks that lhs keywords name lhs entities and delta keywords name entities
+/// introduced by matching add deltas.
 #[pyclass(eq, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionMetadata(AstReactionMetadata);

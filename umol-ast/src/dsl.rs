@@ -1,4 +1,10 @@
-//! Molecule DSL implementation.
+//! Surface DSLs for molecule, reaction, and reaction-span ASTs.
+//!
+//! Whole-value DSL wrappers pair an AST with persistent surface metadata:
+//! entity keywords and atom aliases used for lossless DSL rendering. Parsing
+//! uses short-lived molecule and reaction contexts that additionally maintain
+//! entity counts and participant indexes while resolving positional, keyword,
+//! and structural references.
 
 pub(crate) mod aromatic;
 pub(crate) mod atom;

@@ -19,6 +19,8 @@ mod correspondence;
 mod iterators;
 #[path = "molecule/meet_pushout.rs"]
 mod meet_pushout;
+#[path = "molecule/metadata.rs"]
+mod metadata;
 #[path = "molecule/references.rs"]
 mod references;
 #[path = "molecule/ring.rs"]

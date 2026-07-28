@@ -26,20 +26,21 @@ pub enum MetadataError {
     EntityNotAdded(Entity),
 }
 
-/// The rendering counterpart to [`crate::dsl::Namespace`].
+/// The persistent rendering counterpart to [`crate::dsl::Namespace`].
 ///
-/// Entity-keyword lookup renders an AST id as a keyword reference when one is
-/// available, or as its positional index otherwise. Rendering never emits
-/// structural references, so this surface needs neither counts nor participant
-/// indexes.
+/// Entity-keyword lookup renders a numerical AST identifier as a keyword
+/// reference when one is available, or as its positional index otherwise.
+/// Rendering never emits structural references, so this surface needs neither
+/// counts nor participant indexes.
 pub trait Metadata {
     fn keyword(&self, entity: Entity) -> Option<&str>;
     fn entity(&self, keyword: &str) -> Option<Entity>;
 }
 
-/// Surface-form metadata paired with a `MoleculeAst`. Records entity keywords and atom aliases.
-/// `MoleculeDsl` keeps both fields private and validates their coherence during
-/// checked construction.
+/// Persistent surface-form metadata paired with a `MoleculeAst`.
+///
+/// Records entity keywords and atom aliases. `MoleculeDsl` keeps both fields
+/// private and validates their coherence during checked construction.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoleculeMetadata {
     keywords: BiBTreeMap<Entity, String>,
@@ -131,9 +132,10 @@ impl MoleculeMetadata {
         Ok(())
     }
 
-    /// Move entity keywords from the left id space of `correspondence` to its
-    /// matched right entities. Keywords on unmatched left entities are omitted;
-    /// atom aliases are independent of molecule ids and remain unchanged.
+    /// Move entity keywords from the left numerical id space of
+    /// `correspondence` to its matched right entities. Keywords on unmatched
+    /// left entities are omitted; atom aliases are independent of molecule ids
+    /// and remain unchanged.
     pub fn remap(self, correspondence: &MoleculeCorrespondence) -> Self {
         let Self {
             keywords,
@@ -165,8 +167,11 @@ impl Metadata for MoleculeMetadata {
     }
 }
 
-/// Surface-form metadata paired with a `ReactionAst`: lhs molecule metadata,
-/// entity keywords introduced by deltas, and reaction-scope atom aliases.
+/// Persistent surface-form metadata paired with a `ReactionAst`.
+///
+/// Contains lhs molecule metadata, entity keywords introduced by deltas, and
+/// reaction-scope atom aliases. Combined lookups search the delta scope before
+/// the lhs scope.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionMetadata {
     lhs: MoleculeMetadata,

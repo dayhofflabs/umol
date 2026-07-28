@@ -26,8 +26,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_dsl_to_edn_from_edn_roundtrip(reaction in comprehensive_reaction_strategy()) {
-        let dsl = ReactionDsl::from_ast(&reaction, &ReactionDefaults::new());
+    fn test_reaction_dsl_to_edn_from_edn_roundtrip(dsl in reaction_dsl_strategy()) {
         let via_tree = ReactionDsl::from_edn(&dsl.to_edn())
             .map_err(|error| TestCaseError::fail(format!("tree parse failed: {error}")))?;
         let rendered = dsl.to_edn().to_string();
@@ -63,20 +62,14 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_span_dsl_to_edn_from_edn_roundtrip(
-        reaction in comprehensive_reaction_strategy(),
-    ) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let dsl = ReactionSpanDsl::from_ast(&span, &MoleculeDefaults::new());
-            let via_tree = ReactionSpanDsl::from_edn(&dsl.to_edn())
-                .map_err(|error| TestCaseError::fail(format!("tree parse failed: {error}")))?;
-            let rendered = dsl.to_edn().to_string();
-            let via_stream = ReactionSpanDsl::from_edn_str(&rendered).map_err(|error| {
-                TestCaseError::fail(format!("streaming parse failed: {error}"))
-            })?;
-            prop_assert_eq!(&via_tree, &dsl);
-            prop_assert_eq!(via_stream, dsl);
-        }
+    fn test_reaction_span_dsl_to_edn_from_edn_roundtrip(dsl in reaction_span_dsl_strategy()) {
+        let via_tree = ReactionSpanDsl::from_edn(&dsl.to_edn())
+            .map_err(|error| TestCaseError::fail(format!("tree parse failed: {error}")))?;
+        let rendered = dsl.to_edn().to_string();
+        let via_stream = ReactionSpanDsl::from_edn_str(&rendered)
+            .map_err(|error| TestCaseError::fail(format!("streaming parse failed: {error}")))?;
+        prop_assert_eq!(&via_tree, &dsl);
+        prop_assert_eq!(via_stream, dsl);
     }
 
     #[test]

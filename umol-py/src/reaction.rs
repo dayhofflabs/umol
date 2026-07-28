@@ -201,7 +201,9 @@ impl ReactionAst {
         Self::from_rust(py, reaction)
     }
 
-    /// Parse a reaction and retain its persistent DSL metadata.
+    /// Parse a reaction and return `(reaction, metadata)`, retaining lhs and
+    /// delta entity keywords and atom aliases for metadata-preserving
+    /// rendering.
     #[staticmethod]
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse_with_metadata(
@@ -215,14 +217,18 @@ impl ReactionAst {
         Ok((Self::from_rust(py, dsl.into_ast(&defaults))?, metadata))
     }
 
-    /// Render a canonical positional DSL representation without persistent metadata.
+    /// Render a canonical positional DSL representation without entity
+    /// keywords or atom aliases.
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, py: Python<'_>, defaults: Option<ReactionDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
         AstReactionDsl::from_ast(&self.to_rust(py), &defaults).to_string()
     }
 
-    /// Render a canonical DSL representation with coherent persistent metadata.
+    /// Render a canonical DSL representation with persistent metadata.
+    ///
+    /// Raises `MetadataError` if the detached lhs or delta metadata is not
+    /// coherent with this reaction.
     #[pyo3(signature = (metadata, *, defaults=None))]
     fn render_with_metadata(
         &self,
