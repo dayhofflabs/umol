@@ -140,10 +140,6 @@ impl MoleculeMetadata {
         Self(metadata)
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API used by metadata-aware DSL operations"
-    )]
     pub(crate) fn to_rust(&self) -> AstMoleculeMetadata {
         self.0.clone()
     }

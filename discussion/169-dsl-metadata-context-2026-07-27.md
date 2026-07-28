@@ -830,7 +830,7 @@ requested defaults, then constructs `MoleculeDsl` through checked `new`.
 Test keyword- and alias-bearing roundtrips, explicit defaults, positional
 metadata-free rendering, detached incompatible metadata, keyword-only
 arguments, and `str(molecule) == molecule.render()`. This is additive and
-stays green. [dep: S5b]
+stays green. **Implemented (green).** [dep: S5b]
 
 **S6b — Reaction operations.** In `umol-py/src/reaction.rs`, add the parallel
 `ReactionAst.parse_with_metadata`, `render`, and `render_with_metadata`

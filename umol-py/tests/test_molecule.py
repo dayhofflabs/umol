@@ -19,12 +19,15 @@ from umol import (
     Element,
     ElementAst,
     ElementScope,
+    Entity,
     InconsistencyPolicy,
     MaximumIndependentSetAlgorithm,
+    MetadataError,
     ModelConversionError,
     MoleculeAst,
     MoleculeCorrespondence,
     MoleculeDefaults,
+    MoleculeMetadata,
     NoncovalentBondAst,
     NoncovalentBondKind,
     ParseError,
@@ -105,6 +108,126 @@ def test_molecule_ast_parse_keyword_error():
         ),
     ):
         MoleculeAst.parse('{:atoms ["C"]}', MoleculeDefaults.ground())
+
+
+def test_molecule_ast_parse_with_metadata():
+    source = (
+        '{:atom-aliases [:x "C"] :atoms [[:carbon :x]] :bonds []}'
+    )
+
+    molecule, metadata = MoleculeAst.parse_with_metadata(source)
+
+    assert molecule == MoleculeAst.from_parts([AtomAst(Element("C"))])
+    assert metadata.keyword(Entity.Atom(0)) == "carbon"
+    assert metadata.entity("carbon") == Entity.Atom(0)
+    assert repr(metadata) == (
+        'MoleculeMetadata(keywords=[(Entity.Atom(0), "carbon")], '
+        "atom_alias_count=1)"
+    )
+    assert molecule.render_with_metadata(metadata) == source
+
+
+def test_molecule_ast_parse_with_metadata_defaults():
+    molecule, metadata = MoleculeAst.parse_with_metadata(
+        '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
+        defaults=MoleculeDefaults.ground(),
+    )
+
+    assert molecule == MoleculeAst.from_parts(
+        [
+            AtomAst.parse(
+                "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
+            )
+        ]
+    )
+    assert metadata == MoleculeMetadata()
+
+
+def test_molecule_ast_parse_with_metadata_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^MoleculeAst.parse_with_metadata\\(\\) takes 1 positional "
+            "arguments but 2 were given$"
+        ),
+    ):
+        MoleculeAst.parse_with_metadata(
+            '{:atoms ["C"]}',
+            MoleculeDefaults.ground(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("molecule", "defaults", "expected"),
+    [
+        (
+            MoleculeAst.parse('{:atoms ["C"]}'),
+            MoleculeDefaults(),
+            '{:atoms ["C"] :bonds []}',
+        ),
+        (
+            MoleculeAst.parse(
+                '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
+                defaults=MoleculeDefaults.ground(),
+            ),
+            MoleculeDefaults.ground(),
+            '{:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}',
+        ),
+    ],
+)
+def test_molecule_ast_render(molecule, defaults, expected):
+    assert molecule.render(defaults=defaults) == expected
+
+
+def test_molecule_ast_render_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match="^MoleculeAst.render\\(\\) takes 0 positional arguments but 1 was given$",
+    ):
+        MoleculeAst.parse('{:atoms ["C"]}').render(MoleculeDefaults())
+
+
+def test_molecule_ast_render_with_metadata():
+    source = (
+        '{:atom-aliases [:x "C"] :atoms [[:carbon :x]] :bonds []}'
+    )
+    molecule, metadata = MoleculeAst.parse_with_metadata(source)
+
+    assert molecule.render_with_metadata(metadata) == source
+    assert molecule.render() == '{:atoms ["C"] :bonds []}'
+
+
+def test_molecule_ast_render_with_metadata_error():
+    metadata = MoleculeMetadata()
+    metadata.set_keyword(Entity.Atom(1), "outside")
+
+    with pytest.raises(
+        MetadataError,
+        match="^metadata entity is out of range: atom 1$",
+    ):
+        MoleculeAst.parse('{:atoms ["C"]}').render_with_metadata(metadata)
+
+
+def test_molecule_ast_render_with_metadata_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^MoleculeAst.render_with_metadata\\(\\) takes 1 positional "
+            "arguments but 2 were given$"
+        ),
+    ):
+        MoleculeAst.parse('{:atoms ["C"]}').render_with_metadata(
+            MoleculeMetadata(),
+            MoleculeDefaults(),
+        )
+
+
+def test_molecule_ast_str():
+    molecule = MoleculeAst.parse(
+        '{:atoms ["C" "O"] :bonds [[0 1 "1"]]}'
+    )
+
+    assert str(molecule) == molecule.render()
 
 
 def test_molecule_ast_from_parts():

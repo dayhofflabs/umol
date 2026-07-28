@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    AtomId as AstAtomId, BondId as AstBondId, IntoAst, MoleculeAst as AstMoleculeAst,
+    AtomId as AstAtomId, BondId as AstBondId, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeParts as AstMoleculeParts,
 };
 use umol_ast::dsl::MoleculeDsl as AstMoleculeDsl;
@@ -22,13 +22,14 @@ use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
-use crate::error::{fingerprint_error, parse_error, smiles_input_error};
+use crate::error::{fingerprint_error, metadata_error, parse_error, smiles_input_error};
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
 };
 use crate::fingerprint::value::{
     BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet,
 };
+use crate::metadata::MoleculeMetadata;
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
@@ -59,6 +60,44 @@ impl MoleculeAst {
             .map_err(parse_error)?
             .into_ast(&defaults);
         Ok(Self::from_inner(molecule))
+    }
+
+    /// Parse a molecule and retain its persistent DSL metadata.
+    #[staticmethod]
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse_with_metadata(
+        text: &str,
+        defaults: Option<MoleculeDefaults>,
+    ) -> PyResult<(Self, MoleculeMetadata)> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let dsl = AstMoleculeDsl::from_str(text).map_err(parse_error)?;
+        let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
+        Ok((Self::from_inner(dsl.into_ast(&defaults)), metadata))
+    }
+
+    /// Render a canonical positional DSL representation without persistent metadata.
+    #[pyo3(signature = (*, defaults=None))]
+    fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        AstMoleculeDsl::from_ast(&self.0, &defaults).to_string()
+    }
+
+    /// Render a canonical DSL representation with coherent persistent metadata.
+    #[pyo3(signature = (metadata, *, defaults=None))]
+    fn render_with_metadata(
+        &self,
+        metadata: &MoleculeMetadata,
+        defaults: Option<MoleculeDefaults>,
+    ) -> PyResult<String> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let lowered = AstMoleculeDsl::from_ast(&self.0, &defaults).into_parts().0;
+        AstMoleculeDsl::new(lowered, metadata.to_rust())
+            .map(|dsl| dsl.to_string())
+            .map_err(metadata_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.render(None)
     }
 
     /// A molecule from its parts. Each bond is a `(first, second, bond)` triple:
@@ -436,13 +475,15 @@ mod tests {
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
         AtomAst as AstAtomAst, BondAst as AstBondAst, Constraint as AstConstraint,
         Constraints as AstConstraints, DativeBondAst as AstDativeBondAst,
-        DativeBondId as AstDativeBondId, MoleculeConstraint as AstMoleculeConstraint,
+        DativeBondId as AstDativeBondId, Entity as AstEntity,
+        MoleculeConstraint as AstMoleculeConstraint,
         MoleculeCorrespondence as AstMoleculeCorrespondence,
         MulticenterBondAst as AstMulticenterBondAst, MulticenterBondId as AstMulticenterBondId,
         NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
         NoncovalentBondKind as AstNoncovalentBondKind,
         SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
     };
+    use umol_ast::dsl::{AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata};
     use umol_ast::mol_dsl;
     use umol_chem::element::Element as ChemElement;
     use umol_graph::fingerprint::{
@@ -459,7 +500,7 @@ mod tests {
     use crate::atom::AtomAst as PyAtomAst;
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
-    use crate::error::{ParseError, UnderdeterminedError};
+    use crate::error::{MetadataError, ParseError, UnderdeterminedError};
     use crate::fingerprint::config::{
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
         WlHashScheme,
@@ -514,6 +555,111 @@ mod tests {
                 "EDN parse: unexpected token 'n' at byte 0"
             );
         });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_parse_with_metadata() {
+        let (molecule, metadata) = MoleculeAst::parse_with_metadata(
+            r#"{:atoms [[:carbon :x]] :bonds [] :atom-aliases [:x "C"]}"#,
+            None,
+        )
+        .unwrap();
+        let metadata = metadata.to_rust();
+
+        assert_eq!(molecule.inner(), &mol_dsl!(r#"{:atoms ["C"]}"#));
+        assert_eq!(
+            metadata.keyword(AstEntity::Atom(AstAtomId(0))),
+            Some("carbon")
+        );
+        assert_eq!(
+            metadata.atom_alias("x"),
+            Some(&AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_ast_parse_with_metadata_defaults() {
+        let (molecule, metadata) = MoleculeAst::parse_with_metadata(
+            r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
+            Some(MoleculeDefaults::ground()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            molecule.inner(),
+            &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#)
+        );
+        assert_eq!(
+            metadata,
+            MoleculeMetadata::from_rust(AstMoleculeMetadata::new())
+        );
+    }
+
+    #[rstest]
+    #[case::required(
+        mol_dsl!(r#"{:atoms ["C"]}"#),
+        None,
+        r#"{:atoms ["C"] :bonds []}"#
+    )]
+    #[case::ground(
+        mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#),
+        Some(MoleculeDefaults::ground()),
+        r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}"#
+    )]
+    fn test_molecule_ast_render(
+        #[case] molecule: AstMoleculeAst,
+        #[case] defaults: Option<MoleculeDefaults>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(MoleculeAst::from_inner(molecule).render(defaults), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_render_with_metadata() {
+        let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"]}"#));
+        let mut metadata = AstMoleculeMetadata::new();
+        metadata
+            .set_keyword(AstEntity::Atom(AstAtomId(0)), "carbon")
+            .unwrap();
+        metadata
+            .add_atom_alias("x", AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+            .unwrap();
+
+        assert_eq!(
+            molecule
+                .render_with_metadata(&MoleculeMetadata::from_rust(metadata), None)
+                .unwrap(),
+            r#"{:atom-aliases [:x "C"] :atoms [[:carbon :x]] :bonds []}"#
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_ast_render_with_metadata_error() {
+        Python::attach(|py| {
+            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"]}"#));
+            let mut metadata = AstMoleculeMetadata::new();
+            metadata
+                .set_keyword(AstEntity::Atom(AstAtomId(1)), "outside")
+                .unwrap();
+
+            let error = molecule
+                .render_with_metadata(&MoleculeMetadata::from_rust(metadata), None)
+                .unwrap_err();
+
+            assert!(error.is_instance_of::<MetadataError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "metadata entity is out of range: atom 1"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_str() {
+        let molecule =
+            MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#));
+
+        assert_eq!(molecule.__str__(), molecule.render(None));
     }
 
     #[rstest]
