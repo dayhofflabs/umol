@@ -310,7 +310,7 @@ the two reaction sides.
   side-model, side-resolution, ambiguous-map, and agent failures. Test the
   public error categories rather than duplicating parser or resolver internals.
 
-### S1 — Rust reaction ingestion
+### S1 — Rust reaction ingestion **Done**
 
 #### S1a — Implement strict `Interpret for ReactionSmiles` **Done**
 
@@ -335,7 +335,7 @@ the two reaction sides.
   ids still identify the same atoms after side interpretation. Expected values
   must not be constructed by the implementation path under test.
 
-#### S1b — Add public `ingest_reaction_smiles*` operations
+#### S1b — Add public `ingest_reaction_smiles*` operations **Done**
 
 - **Module:** `umol-graph/src/ingest.rs`
 - **Work:** Add `ingest_reaction_smiles`,

@@ -224,6 +224,44 @@ pub fn ingest_smiles_bytes_with(
         .map_err(SmilesInputError::from)
 }
 
+/// Ingest reaction SMILES text with the OpenSMILES configuration and default model.
+pub fn ingest_reaction_smiles(input: &str) -> Result<ReactionAst, ReactionSmilesInputError> {
+    ingest_reaction_smiles_bytes(input.as_bytes())
+}
+
+/// Ingest reaction SMILES bytes with the OpenSMILES configuration and default model.
+pub fn ingest_reaction_smiles_bytes(input: &[u8]) -> Result<ReactionAst, ReactionSmilesInputError> {
+    ingest_reaction_smiles_bytes_with(
+        input,
+        &SmilesIoConfig::opensmiles(),
+        &ChemistryModel::default(),
+        &ResolveConfig::default(),
+    )
+}
+
+/// Ingest reaction SMILES text with explicit IO, chemistry, and resolve configuration.
+pub fn ingest_reaction_smiles_with(
+    input: &str,
+    io_config: &SmilesIoConfig,
+    model: &ChemistryModel,
+    resolve_config: &ResolveConfig,
+) -> Result<ReactionAst, ReactionSmilesInputError> {
+    ingest_reaction_smiles_bytes_with(input.as_bytes(), io_config, model, resolve_config)
+}
+
+/// Ingest reaction SMILES bytes with explicit IO, chemistry, and resolve configuration.
+pub fn ingest_reaction_smiles_bytes_with(
+    input: &[u8],
+    io_config: &SmilesIoConfig,
+    model: &ChemistryModel,
+    resolve_config: &ResolveConfig,
+) -> Result<ReactionAst, ReactionSmilesInputError> {
+    let reaction_smiles = ReactionSmiles::parse_bytes_with(input, io_config)?;
+    reaction_smiles
+        .interpret(model, resolve_config)
+        .map_err(ReactionSmilesInputError::from)
+}
+
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
@@ -892,6 +930,174 @@ mod tests {
         assert_eq!(
             ingest_smiles_with(input, &io_config, &model, &resolve_config,),
             Err(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::mapped("[CH4:1]>>[CH4:1]")]
+    #[case::unmapped("C>>O")]
+    fn test_ingest_reaction_smiles(#[case] input: &str) {
+        assert_eq!(
+            ingest_reaction_smiles(input),
+            ingest_reaction_smiles_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &ChemistryModel::default(),
+                &ResolveConfig::default(),
+            )
+        );
+    }
+
+    #[rstest]
+    #[case::syntax(
+        " C>>C",
+        ReactionSmilesInputError::Syntax(SmilesParseError::LeadingWhitespace)
+    )]
+    #[case::extended_bond(
+        "C~C>>C.C",
+        ReactionSmilesInputError::Syntax(SmilesParseError::InvalidToken { pos: 1 }),
+    )]
+    #[case::agents(
+        "C>O>C",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::AgentsUnsupported,)
+    )]
+    #[case::ambiguous_atom_map_class(
+        "[C:1].[O:1]>>[C:1]",
+        ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::AmbiguousAtomMapClass {
+                class: 1,
+                reactant_count: 2,
+                product_count: 1,
+            },
+        ),
+    )]
+    #[case::underdetermined(
+        "*>>C",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+        ),)
+    )]
+    fn test_ingest_reaction_smiles_error(
+        #[case] input: &str,
+        #[case] expected: ReactionSmilesInputError,
+    ) {
+        assert_eq!(ingest_reaction_smiles(input), Err(expected));
+    }
+
+    #[rstest]
+    #[case::mapped(b"[CH4:1]>>[CH4:1]")]
+    #[case::unmapped(b"C>>O")]
+    fn test_ingest_reaction_smiles_bytes(#[case] input: &[u8]) {
+        assert_eq!(
+            ingest_reaction_smiles_bytes(input),
+            ingest_reaction_smiles_bytes_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &ChemistryModel::default(),
+                &ResolveConfig::default(),
+            )
+        );
+    }
+
+    #[rstest]
+    #[case::syntax(
+        b" C>>C",
+        ReactionSmilesInputError::Syntax(SmilesParseError::LeadingWhitespace)
+    )]
+    #[case::interpretation(
+        b"C>O>C",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::AgentsUnsupported,)
+    )]
+    fn test_ingest_reaction_smiles_bytes_error(
+        #[case] input: &[u8],
+        #[case] expected: ReactionSmilesInputError,
+    ) {
+        assert_eq!(ingest_reaction_smiles_bytes(input), Err(expected));
+    }
+
+    #[rstest]
+    #[case::io(
+        "C~C>>C.C",
+        SmilesIoConfig::lenient(),
+        ChemistryModel::default(),
+        ResolveConfig::default(),
+        Err(
+            ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
+                MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+            ),)
+        )
+    )]
+    #[case::chemistry(
+        "[nH]1cccc1>>",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::Clar {
+                scope: ElementScope::Any,
+                ring_limits: RingLimits::default(),
+            },
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        Err(ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::Reactants(
+                MoleculeInterpretationError::Contradiction(
+                    ResolverContradiction::Aromaticity(
+                        AromaticityContradiction::ClarNonBenzenoid(String::from(
+                            "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
+                        )),
+                    ),
+                ),
+            ),
+        )),
+    )]
+    #[case::resolve(
+        "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel::default(),
+        ResolveConfig {
+            aromaticity: AromaticityResolveConfig {
+                perception: Default::default(),
+                delocalize_charge: false,
+                reset_aromatic_valence: false,
+            },
+            stereo: StereoResolveConfig::default(),
+        },
+        Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :type "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] :bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]]}}"##.parse().unwrap()),
+    )]
+    fn test_ingest_reaction_smiles_with(
+        #[case] input: &str,
+        #[case] io_config: SmilesIoConfig,
+        #[case] model: ChemistryModel,
+        #[case] resolve_config: ResolveConfig,
+        #[case] expected: Result<ReactionAst, ReactionSmilesInputError>,
+    ) {
+        assert_eq!(
+            ingest_reaction_smiles_with(input, &io_config, &model, &resolve_config),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::lenient(
+        "C~C>>C.C",
+        SmilesIoConfig::lenient(),
+        ChemistryModel::default(),
+        ResolveConfig::default()
+    )]
+    fn test_ingest_reaction_smiles_bytes_with(
+        #[case] input: &str,
+        #[case] io_config: SmilesIoConfig,
+        #[case] model: ChemistryModel,
+        #[case] resolve_config: ResolveConfig,
+    ) {
+        assert_eq!(
+            ingest_reaction_smiles_bytes_with(
+                input.as_bytes(),
+                &io_config,
+                &model,
+                &resolve_config,
+            ),
+            ingest_reaction_smiles_with(input, &io_config, &model, &resolve_config)
         );
     }
 }
