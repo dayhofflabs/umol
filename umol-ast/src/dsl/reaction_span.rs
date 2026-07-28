@@ -25,7 +25,7 @@ use super::edn_utils::{
     two_atom_refs,
 };
 use super::error::ParseError;
-use super::metadata::MoleculeMetadata;
+use super::metadata::{MetadataError, MoleculeMetadata};
 use super::molecule::{
     parse_aromatic_system_entry, parse_atom_aliases, parse_atom_entry, parse_bond_entry,
     parse_dative_bond_entry, parse_multicenter_bond_entry, parse_noncovalent_bond_entry,
@@ -62,6 +62,27 @@ pub struct ReactionSpanDsl {
 }
 
 impl ReactionSpanDsl {
+    /// Pair a reaction-span AST with coherent surface metadata.
+    pub fn new(ast: ReactionSpanAst, metadata: MoleculeMetadata) -> Result<Self, MetadataError> {
+        for (entity, _) in metadata.iter_keywords() {
+            let contains = match entity {
+                Entity::Atom(id) => id.index() < ast.atoms().len(),
+                Entity::Bond(id) => id.index() < ast.bonds().len(),
+                Entity::DativeBond(id) => id.index() < ast.dative_bonds().count(),
+                Entity::AromaticSystem(id) => id.index() < ast.aromatic_systems().count(),
+                Entity::MulticenterBond(id) => id.index() < ast.multicenter_bonds().count(),
+                Entity::NoncovalentBond(id) => id.index() < ast.noncovalent_bonds().count(),
+                Entity::StereoAtom(id) => id.index() < ast.stereo_atoms().count(),
+                Entity::StereoBond(id) => id.index() < ast.stereo_bonds().count(),
+            };
+            if !contains {
+                return Err(MetadataError::EntityOutOfRange(entity));
+            }
+        }
+        Ok(Self::from_parts(ast, metadata))
+    }
+
+    /// Pair an AST and metadata without checking their coherence.
     pub fn from_parts(ast: ReactionSpanAst, metadata: MoleculeMetadata) -> Self {
         Self { ast, metadata }
     }
@@ -1666,6 +1687,84 @@ mod tests {
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::reaction::ReactionAst;
     use crate::ast::value::ValueAst;
+
+    #[fixture]
+    fn populated_reaction_span_dsl() -> ReactionSpanDsl {
+        r#"{
+            :atoms [[:a "C"] "F" "Cl" "Br" "I"]
+            :bonds [
+                {:id :b :atoms [0 1] :type "2"}
+                [0 2 "1"]
+                [0 3 "1"]
+                [0 4 "1"]
+            ]
+            :dative-bonds [{:id :d :donors [1] :acceptor 0 :type "1#R"}]
+            :aromatic-systems [{:id :ar :atoms [0 1] :type "*#e2"}]
+            :multicenter-bonds [{:id :m :atoms [0 1] :type "*#e2"}]
+            :noncovalent-bonds [{:id :n :atoms [0 1] :type "Hbd"}]
+            :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :type "Th1"}]
+            :stereo-bonds [{:id :sb :site :b :ligands [2 3] :type "Ct1"}]
+            :atom-aliases [:x "O"]
+        }"#
+        .parse()
+        .unwrap()
+    }
+
+    #[rstest]
+    #[case::empty(None)]
+    #[case::atom(Some(Entity::Atom(AtomId(4))))]
+    #[case::bond(Some(Entity::Bond(BondId(3))))]
+    #[case::dative_bond(Some(Entity::DativeBond(DativeBondId(0))))]
+    #[case::aromatic_system(Some(Entity::AromaticSystem(AromaticSystemId(0))))]
+    #[case::multicenter_bond(Some(Entity::MulticenterBond(MulticenterBondId(0))))]
+    #[case::noncovalent_bond(Some(Entity::NoncovalentBond(NoncovalentBondId(0))))]
+    #[case::stereo_atom(Some(Entity::StereoAtom(StereoAtomId(0))))]
+    #[case::stereo_bond(Some(Entity::StereoBond(StereoBondId(0))))]
+    fn test_reaction_span_dsl_new(
+        populated_reaction_span_dsl: ReactionSpanDsl,
+        #[case] entity: Option<Entity>,
+    ) {
+        let ast = populated_reaction_span_dsl.into_parts().0;
+        let mut metadata = MoleculeMetadata::new();
+        if let Some(entity) = entity {
+            metadata.set_keyword(entity, "key").unwrap();
+        }
+
+        let actual = ReactionSpanDsl::new(ast.clone(), metadata.clone()).unwrap();
+
+        assert_eq!(actual.into_parts(), (ast, metadata));
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(5)))]
+    #[case::bond(Entity::Bond(BondId(4)))]
+    #[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
+    #[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(1)))]
+    #[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(1)))]
+    #[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(1)))]
+    #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(1)))]
+    #[case::stereo_bond(Entity::StereoBond(StereoBondId(1)))]
+    fn test_reaction_span_dsl_new_error(
+        populated_reaction_span_dsl: ReactionSpanDsl,
+        #[case] entity: Entity,
+    ) {
+        let ast = populated_reaction_span_dsl.into_parts().0;
+        let mut metadata = MoleculeMetadata::new();
+        metadata.set_keyword(entity, "key").unwrap();
+
+        assert_eq!(
+            ReactionSpanDsl::new(ast, metadata),
+            Err(MetadataError::EntityOutOfRange(entity))
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_dsl_new_parsed(populated_reaction_span_dsl: ReactionSpanDsl) {
+        let expected = populated_reaction_span_dsl.clone();
+        let (ast, metadata) = populated_reaction_span_dsl.into_parts();
+
+        assert_eq!(ReactionSpanDsl::new(ast, metadata).unwrap(), expected);
+    }
 
     // Modified bond + Unchanged atoms + Unchanged molecule-constraint.
     #[rstest]

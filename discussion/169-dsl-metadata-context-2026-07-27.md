@@ -775,7 +775,8 @@ green. **Implemented (green).** [dep: S2h, S4a]
 `ReactionSpanDsl::new(ast, metadata)` constructor and validate each keyword
 against the corresponding span entity collection. Reuse the S4a error
 representation where possible. Test all eight kinds, empty metadata, and
-coherent parsed parts. This is additive and stays green. [dep: S2f, S4a]
+coherent parsed parts. This is additive and stays green.
+**Implemented (green).** [dep: S2f, S4a]
 
 **S4d — Privatize unchecked construction.** Make all three `from_parts`
 constructors private. Keep parser paths on private `from_parts`, because their
