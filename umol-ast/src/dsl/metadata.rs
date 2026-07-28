@@ -63,29 +63,21 @@ impl MoleculeMetadata {
         self.keywords.get_by_right(keyword).copied()
     }
 
-    /// Whether `name` is already bound as an entity keyword.
-    pub fn contains_keyword(&self, name: &str) -> bool {
-        self.keywords.contains_right(name)
+    pub fn iter_keywords(&self) -> impl ExactSizeIterator<Item = (Entity, &str)> {
+        self.keywords
+            .iter()
+            .map(|(entity, keyword)| (*entity, keyword.as_str()))
     }
 
-    /// Name of the alias bound to this atom DSL, if any.
-    pub fn atom_alias_for(&self, dsl: &AtomDsl) -> Option<&str> {
+    pub fn atom_alias(&self, name: &str) -> Option<&AtomDsl> {
+        self.atom_aliases.get_by_left(name).map(Box::as_ref)
+    }
+
+    pub fn atom_alias_name(&self, dsl: &AtomDsl) -> Option<&str> {
         self.atom_aliases.get_by_right(dsl).map(String::as_str)
     }
 
-    pub fn has_atom_alias(&self, name: &str) -> bool {
-        self.atom_aliases.contains_left(name)
-    }
-
-    pub fn has_atom_aliases(&self) -> bool {
-        !self.atom_aliases.is_empty()
-    }
-
-    pub fn atom_aliases_len(&self) -> usize {
-        self.atom_aliases.len()
-    }
-
-    pub fn iter_atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
+    pub fn iter_atom_aliases(&self) -> impl ExactSizeIterator<Item = (&str, &AtomDsl)> {
         self.atom_aliases
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_ref()))
@@ -509,17 +501,105 @@ mod tests {
     }
 
     #[rstest]
-    #[case::present("key", true)]
-    #[case::absent("other", false)]
-    fn test_molecule_metadata_contains_keyword(#[case] keyword: &str, #[case] expected: bool) {
-        let metadata = MoleculeMetadata {
-            keywords: [(Entity::Atom(AtomId(0)), "key".to_string())]
-                .into_iter()
-                .collect(),
+    #[case::empty(MoleculeMetadata::new(), Vec::new())]
+    #[case::populated(
+        MoleculeMetadata {
+            keywords: [
+                (Entity::Atom(AtomId(0)), "atom".to_string()),
+                (Entity::Bond(BondId(0)), "bond".to_string()),
+            ]
+            .into_iter()
+            .collect(),
             atom_aliases: BiBTreeMap::new(),
+        },
+        vec![
+            (Entity::Atom(AtomId(0)), "atom"),
+            (Entity::Bond(BondId(0)), "bond"),
+        ]
+    )]
+    fn test_molecule_metadata_iter_keywords(
+        #[case] metadata: MoleculeMetadata,
+        #[case] expected: Vec<(Entity, &str)>,
+    ) {
+        let keywords = metadata.iter_keywords();
+
+        assert_eq!(keywords.len(), expected.len());
+        assert_eq!(keywords.collect::<Vec<_>>(), expected);
+    }
+
+    #[rstest]
+    #[case::present("carbon", Some(AtomDsl(AtomAst::from_element(Element::C))))]
+    #[case::absent("nitrogen", None)]
+    fn test_molecule_metadata_atom_alias(#[case] name: &str, #[case] expected: Option<AtomDsl>) {
+        let metadata = MoleculeMetadata {
+            keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "carbon".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
         };
 
-        assert_eq!(metadata.contains_keyword(keyword), expected);
+        assert_eq!(metadata.atom_alias(name), expected.as_ref());
+    }
+
+    #[rstest]
+    #[case::present(AtomDsl(AtomAst::from_element(Element::C)), Some("carbon"))]
+    #[case::absent(AtomDsl(AtomAst::from_element(Element::N)), None)]
+    fn test_molecule_metadata_atom_alias_name(
+        #[case] atom: AtomDsl,
+        #[case] expected: Option<&str>,
+    ) {
+        let metadata = MoleculeMetadata {
+            keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "carbon".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(metadata.atom_alias_name(&atom), expected);
+    }
+
+    #[rstest]
+    #[case::empty(MoleculeMetadata::new(), Vec::new())]
+    #[case::populated(
+        MoleculeMetadata {
+            keywords: BiBTreeMap::new(),
+            atom_aliases: [
+                (
+                    "carbon".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                ),
+                (
+                    "nitrogen".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        },
+        vec![
+            ("carbon", AtomDsl(AtomAst::from_element(Element::C))),
+            ("nitrogen", AtomDsl(AtomAst::from_element(Element::N))),
+        ]
+    )]
+    fn test_molecule_metadata_iter_atom_aliases(
+        #[case] metadata: MoleculeMetadata,
+        #[case] expected: Vec<(&str, AtomDsl)>,
+    ) {
+        let aliases = metadata.iter_atom_aliases();
+
+        assert_eq!(aliases.len(), expected.len());
+        assert_eq!(
+            aliases
+                .map(|(name, atom)| (name, atom.clone()))
+                .collect::<Vec<_>>(),
+            expected
+        );
     }
 
     #[rstest]
@@ -583,19 +663,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_metadata_atom_alias_for() {
-        let atom = AtomDsl(AtomAst::from_element(Element::C));
-        let metadata = MoleculeMetadata {
-            keywords: BiBTreeMap::new(),
-            atom_aliases: [("carbon".to_string(), Box::new(atom.clone()))]
-                .into_iter()
-                .collect(),
-        };
-
-        assert_eq!(metadata.atom_alias_for(&atom), Some("carbon"));
-    }
-
-    #[rstest]
     fn test_molecule_metadata_add_atom_alias() {
         let atom = AtomDsl(AtomAst::from_element(Element::C));
         let mut actual = MoleculeMetadata::new();
@@ -653,6 +720,33 @@ mod tests {
 
         assert_eq!(result, Err(expected_error));
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::keyword_then_alias(false)]
+    #[case::alias_then_keyword(true)]
+    fn test_molecule_metadata_keyword_alias_collision(#[case] alias_first: bool) {
+        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let mut actual = MoleculeMetadata::new();
+        let result = if alias_first {
+            actual.add_atom_alias("carbon", atom.clone()).unwrap();
+            actual.set_keyword(Entity::Atom(AtomId(0)), "carbon")
+        } else {
+            actual
+                .set_keyword(Entity::Atom(AtomId(0)), "carbon")
+                .unwrap();
+            actual.add_atom_alias("carbon", atom.clone())
+        };
+
+        assert_eq!(
+            result,
+            Err(MetadataError::DuplicateKeyword("carbon".to_string()))
+        );
+        assert_eq!(
+            actual.entity("carbon"),
+            (!alias_first).then_some(Entity::Atom(AtomId(0)))
+        );
+        assert_eq!(actual.atom_alias("carbon"), alias_first.then_some(&atom));
     }
 
     #[rstest]
@@ -888,57 +982,5 @@ mod tests {
 
         assert_eq!(sequential, composed);
         assert_eq!(composed, expected);
-    }
-
-    #[rstest]
-    #[case::keyword_then_alias(false)]
-    #[case::alias_then_keyword(true)]
-    fn test_molecule_metadata_keyword_alias_collision(#[case] alias_first: bool) {
-        let atom = AtomAst::from_element(Element::C);
-        let mut actual = MoleculeMetadata::new();
-        let result = if alias_first {
-            actual.add_atom_alias("carbon", atom).unwrap();
-            actual.set_keyword(Entity::Atom(AtomId(0)), "carbon")
-        } else {
-            actual
-                .set_keyword(Entity::Atom(AtomId(0)), "carbon")
-                .unwrap();
-            actual.add_atom_alias("carbon", atom)
-        };
-
-        assert_eq!(
-            result,
-            Err(MetadataError::DuplicateKeyword("carbon".to_string()))
-        );
-        assert_eq!(actual.contains_keyword("carbon"), !alias_first);
-        assert_eq!(actual.has_atom_alias("carbon"), alias_first);
-    }
-
-    #[rstest]
-    fn test_molecule_metadata_iter_atom_aliases() {
-        let metadata = MoleculeMetadata {
-            keywords: BiBTreeMap::new(),
-            atom_aliases: [
-                (
-                    "carbon".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
-                ),
-                (
-                    "nitrogen".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        };
-        let actual: Vec<(&str, &AtomDsl)> = metadata.iter_atom_aliases().collect();
-
-        assert_eq!(
-            actual,
-            vec![
-                ("carbon", &AtomDsl(AtomAst::from_element(Element::C))),
-                ("nitrogen", &AtomDsl(AtomAst::from_element(Element::N))),
-            ]
-        );
     }
 }

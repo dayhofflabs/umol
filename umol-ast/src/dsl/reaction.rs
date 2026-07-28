@@ -2684,7 +2684,7 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn
     let dsl = AtomDsl::from_ref(atom);
     let spec = match meta
         .atom_alias_for(dsl)
-        .or_else(|| meta.lhs().atom_alias_for(dsl))
+        .or_else(|| meta.lhs().atom_alias_name(dsl))
     {
         Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
         None => dsl.to_edn(),
@@ -3325,8 +3325,10 @@ mod tests {
                 }),
             ]),
         );
-        assert_eq!(meta.lhs().atom_aliases_len(), 1);
-        assert!(meta.lhs().has_atom_alias("lo"));
+        assert_eq!(
+            meta.lhs().atom_alias("lo"),
+            Some(&AtomDsl(AtomAst::from_element(Element::N)))
+        );
         assert_eq!(meta.atom_aliases_len(), 1);
         assert!(meta.has_atom_alias("hi"));
     }

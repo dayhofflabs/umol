@@ -1592,9 +1592,10 @@ fn render_span_edn(ast: &ReactionSpanAst, meta: &MoleculeMetadata) -> Edn<'stati
         map.insert(Edn::keyword("constraints"), Edn::Vector(constraints.into()));
     }
 
-    if meta.has_atom_aliases() {
-        let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
-        for (name, dsl) in meta.iter_atom_aliases() {
+    let aliases = meta.iter_atom_aliases();
+    if aliases.len() != 0 {
+        let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(aliases.len() * 2);
+        for (name, dsl) in aliases {
             pairs.push(Edn::Keyword(EdnKeyword::owned(name.to_string())));
             pairs.push(dsl.to_edn());
         }

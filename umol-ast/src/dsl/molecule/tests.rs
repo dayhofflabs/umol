@@ -112,7 +112,10 @@ fn test_molecule_dsl_from_edn_atom_aliases() {
     let edn = read_string(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
     assert_eq!(dsl.ast().atoms().count(), 2);
-    assert!(dsl.metadata().has_atom_alias("x"));
+    assert_eq!(
+        dsl.metadata().atom_alias("x"),
+        Some(&AtomDsl(AtomAst::from_element(Element::C)))
+    );
 }
 
 #[rstest]

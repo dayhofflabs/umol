@@ -648,7 +648,7 @@ pub(super) fn render_molecule_edn(ast: &MoleculeAst, meta: &MoleculeMetadata) ->
     if ast.stereo_bonds().count() > 0 {
         map.insert(Edn::keyword("stereo-bonds"), render_stereo_bonds(ast, meta));
     }
-    if meta.has_atom_aliases() {
+    if meta.iter_atom_aliases().len() != 0 {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
     }
     let constraints_dsl = ConstraintsDsl::from_ast(ast.constraints(), meta)
@@ -671,7 +671,7 @@ fn render_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
 /// An atom value: its alias keyword if one is bound, else the atom-string.
 pub(super) fn render_atom_value(atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
-    match meta.atom_alias_for(dsl) {
+    match meta.atom_alias_name(dsl) {
         Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
         None => dsl.to_edn(),
     }
@@ -1010,8 +1010,9 @@ fn render_bond_ref(id: BondId, meta: &impl Metadata) -> Edn<'static> {
 }
 
 fn render_atom_aliases(meta: &MoleculeMetadata) -> Edn<'static> {
-    let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
-    for (name, dsl) in meta.iter_atom_aliases() {
+    let aliases = meta.iter_atom_aliases();
+    let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(aliases.len() * 2);
+    for (name, dsl) in aliases {
         pairs.push(Edn::Keyword(EdnKeyword::owned(name.to_string())));
         pairs.push(dsl.to_edn());
     }

@@ -514,10 +514,12 @@ typed methods on `Metadata` with
 `entity(&str) -> Option<Entity>`. Add the same inherent query methods and the
 public checked `set_keyword(Entity, impl Into<String>)` operation to
 `MoleculeMetadata`; remove the eight `*_keyword`, eight `*_id`, and eight
-`set_*_keyword` methods. Migrate reference denotation, molecule and
-reaction-span rendering, constraint and relational DSL conversion, namespace
-projection, macros, fixtures, and property strategies in the same subitem.
-Test both directions for every `Entity` variant, idempotent insertion,
+`set_*_keyword` methods. Add
+`iter_keywords() -> impl ExactSizeIterator<Item = (Entity, &str)>`. Migrate
+reference denotation, molecule and reaction-span rendering, constraint and
+relational DSL conversion, namespace projection, macros, fixtures, and
+property strategies in the same subitem. Test both directions for every
+`Entity` variant, empty and populated iteration, idempotent insertion,
 rebinding, cross-kind collisions, and rollback after failure. This is breaking
 and goes red→green with all Rust callers migrated. **Implemented (green).**
 [dep: S2d]
@@ -532,22 +534,24 @@ serialization and remove the redundant `contains_keyword`, `has_atom_alias`,
 reaction-span renderers and metadata consumers. Test both alias directions,
 empty and populated iteration, idempotence, name and target collisions,
 keyword/alias collisions in both insertion orders, and atomic failure. This is
-breaking and goes red→green with all callers migrated. [dep: S2e]
+breaking and goes red→green with all callers migrated. **Implemented (green).**
+[dep: S2e]
 
 **S2g — Reaction entity-keyword storage and API.** In `dsl/metadata.rs`,
 replace the eight reaction `IndexMap<Id, String>` fields with
 `delta_keywords: BiBTreeMap<Entity, String>`, retaining
 `lhs: MoleculeMetadata`. Implement the generic inherent and `Metadata`
-`keyword`/`entity` operations as delta-then-lhs lookup. Add explicit
-`delta_keyword`, `delta_entity`, and checked `set_delta_keyword`; remove the
-typed reaction getters and setters and the unused consuming `with_*` builders.
-Check delta insertion against lhs and reaction keywords and aliases without
-exposing mutable physical fields. Migrate reaction namespace projection,
-fixtures, and ordinary callers. Test every entity kind in both scopes,
-combined and scope-specific lookup, idempotence, rebinding, cross-kind and
-cross-scope collision rollback, and empty-delta construction from lhs
-metadata. This is breaking and goes red→green with all callers migrated.
-[dep: S2f]
+`keyword`/`entity` operations as delta-then-lhs lookup. Add combined
+`iter_keywords()` plus explicit `delta_keyword`, `delta_entity`,
+`iter_delta_keywords()`, and checked `set_delta_keyword`; both iterators are
+exact-size. Remove the typed reaction getters and setters and the unused
+consuming `with_*` builders. Check delta insertion against lhs and reaction
+keywords and aliases without exposing mutable physical fields. Migrate
+reaction namespace projection, fixtures, and ordinary callers. Test every
+entity kind in both scopes, combined and scope-specific lookup, empty and
+populated combined/delta iteration, idempotence, rebinding, cross-kind and
+cross-scope collision rollback, and empty-delta construction from lhs metadata.
+This is breaking and goes red→green with all callers migrated. [dep: S2f]
 
 **S2h — Reaction atom-alias API.** In `dsl/metadata.rs`, add the same
 combined `atom_alias` and `atom_alias_name` queries to `ReactionMetadata`,
