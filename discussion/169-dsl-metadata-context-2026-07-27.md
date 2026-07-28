@@ -420,7 +420,8 @@ across the workspace. **Implemented (green).** [dep: none]
 `MoleculeCorrespondence::right_of(Entity)` and `left_of(Entity)`, dispatching
 to the existing per-family correspondences and preserving the input entity
 kind. Test both directions for all eight variants and unmatched entities on
-both sides. This is additive and stays green. [dep: S0a, S0b]
+both sides. This is additive and stays green. **Implemented (green).**
+[dep: S0a, S0b]
 
 ### S1 — DSL keyword terminology
 

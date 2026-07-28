@@ -7,6 +7,7 @@
 
 use umol_graph_core::{Correspondence, NodeId};
 
+use super::entity::Entity;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -142,6 +143,60 @@ impl MoleculeCorrespondence {
             self.stereo_atoms.reverse(),
             self.stereo_bonds.reverse(),
         )
+    }
+
+    /// The rhs entity matched to `left`, preserving its entity kind.
+    pub fn right_of(&self, left: Entity) -> Option<Entity> {
+        match left {
+            Entity::Atom(id) => self
+                .atoms
+                .right_of(NodeId::from(id))
+                .map(AtomId::from)
+                .map(Entity::Atom),
+            Entity::Bond(id) => self.bonds.right_of(id).map(Entity::Bond),
+            Entity::DativeBond(id) => self.dative_bonds.right_of(id).map(Entity::DativeBond),
+            Entity::AromaticSystem(id) => self
+                .aromatic_systems
+                .right_of(id)
+                .map(Entity::AromaticSystem),
+            Entity::MulticenterBond(id) => self
+                .multicenter_bonds
+                .right_of(id)
+                .map(Entity::MulticenterBond),
+            Entity::NoncovalentBond(id) => self
+                .noncovalent_bonds
+                .right_of(id)
+                .map(Entity::NoncovalentBond),
+            Entity::StereoAtom(id) => self.stereo_atoms.right_of(id).map(Entity::StereoAtom),
+            Entity::StereoBond(id) => self.stereo_bonds.right_of(id).map(Entity::StereoBond),
+        }
+    }
+
+    /// The lhs entity matched to `right`, preserving its entity kind.
+    pub fn left_of(&self, right: Entity) -> Option<Entity> {
+        match right {
+            Entity::Atom(id) => self
+                .atoms
+                .left_of(NodeId::from(id))
+                .map(AtomId::from)
+                .map(Entity::Atom),
+            Entity::Bond(id) => self.bonds.left_of(id).map(Entity::Bond),
+            Entity::DativeBond(id) => self.dative_bonds.left_of(id).map(Entity::DativeBond),
+            Entity::AromaticSystem(id) => self
+                .aromatic_systems
+                .left_of(id)
+                .map(Entity::AromaticSystem),
+            Entity::MulticenterBond(id) => self
+                .multicenter_bonds
+                .left_of(id)
+                .map(Entity::MulticenterBond),
+            Entity::NoncovalentBond(id) => self
+                .noncovalent_bonds
+                .left_of(id)
+                .map(Entity::NoncovalentBond),
+            Entity::StereoAtom(id) => self.stereo_atoms.left_of(id).map(Entity::StereoAtom),
+            Entity::StereoBond(id) => self.stereo_bonds.left_of(id).map(Entity::StereoBond),
+        }
     }
 
     /// Whether every id in all eight entity families is matched on both sides.
@@ -397,14 +452,14 @@ mod tests {
     fn correspondence() -> MoleculeCorrespondence {
         // distinct pairs per family so a mis-wired accessor is caught.
         MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
-            Correspondence::new(vec![(BondId(0), BondId(2))], 1, 3),
-            Correspondence::new(vec![(DativeBondId(0), DativeBondId(3))], 1, 4),
-            Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(4))], 1, 5),
-            Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(5))], 1, 6),
-            Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(6))], 1, 7),
-            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(7))], 1, 8),
-            Correspondence::new(vec![(StereoBondId(0), StereoBondId(8))], 1, 9),
+            Correspondence::new(vec![(NodeId(0), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(BondId(0), BondId(2))], 2, 3),
+            Correspondence::new(vec![(DativeBondId(0), DativeBondId(3))], 2, 4),
+            Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(4))], 2, 5),
+            Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(5))], 2, 6),
+            Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(6))], 2, 7),
+            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(7))], 2, 8),
+            Correspondence::new(vec![(StereoBondId(0), StereoBondId(8))], 2, 9),
         )
     }
 
@@ -580,8 +635,94 @@ mod tests {
             reversed.stereo_bonds().matched_pairs(),
             &[(StereoBondId(8), StereoBondId(0))]
         );
-        // counts swap too: atoms went lhs_count 1 / rhs_count 2, so the new lhs id 0 is unmatched.
+        // Counts swap too: rhs atom 0 becomes an unmatched lhs atom.
         assert_eq!(reversed.atoms().left_unmatched(), vec![NodeId(0)]);
+    }
+
+    #[rstest]
+    #[case::atom_matched(Entity::Atom(AtomId(0)), Some(Entity::Atom(AtomId(1))))]
+    #[case::atom_unmatched(Entity::Atom(AtomId(1)), None)]
+    #[case::bond_matched(Entity::Bond(BondId(0)), Some(Entity::Bond(BondId(2))))]
+    #[case::bond_unmatched(Entity::Bond(BondId(1)), None)]
+    #[case::dative_bond_matched(
+        Entity::DativeBond(DativeBondId(0)),
+        Some(Entity::DativeBond(DativeBondId(3)))
+    )]
+    #[case::dative_bond_unmatched(Entity::DativeBond(DativeBondId(1)), None)]
+    #[case::aromatic_system_matched(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Some(Entity::AromaticSystem(AromaticSystemId(4)))
+    )]
+    #[case::aromatic_system_unmatched(Entity::AromaticSystem(AromaticSystemId(1)), None)]
+    #[case::multicenter_bond_matched(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        Some(Entity::MulticenterBond(MulticenterBondId(5)))
+    )]
+    #[case::multicenter_bond_unmatched(Entity::MulticenterBond(MulticenterBondId(1)), None)]
+    #[case::noncovalent_bond_matched(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Some(Entity::NoncovalentBond(NoncovalentBondId(6)))
+    )]
+    #[case::noncovalent_bond_unmatched(Entity::NoncovalentBond(NoncovalentBondId(1)), None)]
+    #[case::stereo_atom_matched(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Some(Entity::StereoAtom(StereoAtomId(7)))
+    )]
+    #[case::stereo_atom_unmatched(Entity::StereoAtom(StereoAtomId(1)), None)]
+    #[case::stereo_bond_matched(
+        Entity::StereoBond(StereoBondId(0)),
+        Some(Entity::StereoBond(StereoBondId(8)))
+    )]
+    #[case::stereo_bond_unmatched(Entity::StereoBond(StereoBondId(1)), None)]
+    fn test_molecule_correspondence_right_of(
+        correspondence: MoleculeCorrespondence,
+        #[case] left: Entity,
+        #[case] expected: Option<Entity>,
+    ) {
+        assert_eq!(correspondence.right_of(left), expected);
+    }
+
+    #[rstest]
+    #[case::atom_matched(Entity::Atom(AtomId(1)), Some(Entity::Atom(AtomId(0))))]
+    #[case::atom_unmatched(Entity::Atom(AtomId(0)), None)]
+    #[case::bond_matched(Entity::Bond(BondId(2)), Some(Entity::Bond(BondId(0))))]
+    #[case::bond_unmatched(Entity::Bond(BondId(1)), None)]
+    #[case::dative_bond_matched(
+        Entity::DativeBond(DativeBondId(3)),
+        Some(Entity::DativeBond(DativeBondId(0)))
+    )]
+    #[case::dative_bond_unmatched(Entity::DativeBond(DativeBondId(1)), None)]
+    #[case::aromatic_system_matched(
+        Entity::AromaticSystem(AromaticSystemId(4)),
+        Some(Entity::AromaticSystem(AromaticSystemId(0)))
+    )]
+    #[case::aromatic_system_unmatched(Entity::AromaticSystem(AromaticSystemId(1)), None)]
+    #[case::multicenter_bond_matched(
+        Entity::MulticenterBond(MulticenterBondId(5)),
+        Some(Entity::MulticenterBond(MulticenterBondId(0)))
+    )]
+    #[case::multicenter_bond_unmatched(Entity::MulticenterBond(MulticenterBondId(1)), None)]
+    #[case::noncovalent_bond_matched(
+        Entity::NoncovalentBond(NoncovalentBondId(6)),
+        Some(Entity::NoncovalentBond(NoncovalentBondId(0)))
+    )]
+    #[case::noncovalent_bond_unmatched(Entity::NoncovalentBond(NoncovalentBondId(1)), None)]
+    #[case::stereo_atom_matched(
+        Entity::StereoAtom(StereoAtomId(7)),
+        Some(Entity::StereoAtom(StereoAtomId(0)))
+    )]
+    #[case::stereo_atom_unmatched(Entity::StereoAtom(StereoAtomId(1)), None)]
+    #[case::stereo_bond_matched(
+        Entity::StereoBond(StereoBondId(8)),
+        Some(Entity::StereoBond(StereoBondId(0)))
+    )]
+    #[case::stereo_bond_unmatched(Entity::StereoBond(StereoBondId(1)), None)]
+    fn test_molecule_correspondence_left_of(
+        correspondence: MoleculeCorrespondence,
+        #[case] right: Entity,
+        #[case] expected: Option<Entity>,
+    ) {
+        assert_eq!(correspondence.left_of(right), expected);
     }
 
     #[rstest]
