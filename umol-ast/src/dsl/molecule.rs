@@ -29,7 +29,7 @@ use super::edn_utils::{
     required_key, two_atom_refs, unexpected_byte_kind,
 };
 use super::error::ParseError;
-use super::metadata::{Metadata, MoleculeMetadata};
+use super::metadata::{Metadata, MetadataError, MoleculeMetadata};
 use super::multicenter::MulticenterBondDsl;
 use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
@@ -65,6 +65,27 @@ pub struct MoleculeDsl {
 }
 
 impl MoleculeDsl {
+    /// Pair a molecule AST with coherent surface metadata.
+    pub fn new(ast: MoleculeAst, metadata: MoleculeMetadata) -> Result<Self, MetadataError> {
+        for (entity, _) in metadata.iter_keywords() {
+            let contains = match entity {
+                Entity::Atom(id) => ast.atoms().contains(id),
+                Entity::Bond(id) => ast.bonds().contains(id),
+                Entity::DativeBond(id) => ast.dative_bonds().contains(id),
+                Entity::AromaticSystem(id) => ast.aromatic_systems().contains(id),
+                Entity::MulticenterBond(id) => ast.multicenter_bonds().contains(id),
+                Entity::NoncovalentBond(id) => ast.noncovalent_bonds().contains(id),
+                Entity::StereoAtom(id) => ast.stereo_atoms().contains(id),
+                Entity::StereoBond(id) => ast.stereo_bonds().contains(id),
+            };
+            if !contains {
+                return Err(MetadataError::EntityOutOfRange(entity));
+            }
+        }
+        Ok(Self::from_parts(ast, metadata))
+    }
+
+    /// Pair an AST and metadata without checking their coherence.
     pub fn from_parts(ast: MoleculeAst, metadata: MoleculeMetadata) -> Self {
         Self { ast, metadata }
     }

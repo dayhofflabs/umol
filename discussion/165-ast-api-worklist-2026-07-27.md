@@ -31,6 +31,11 @@ hashing remain in docs 115, 117, 123, and 149 respectively.
   is reserved for graph operations that have no AST-level equivalent.
 - Audit constructor argument types such as bond order. Public arguments should
   express the accepted domain and convert once at the boundary.
+- Inventory public operations duplicated across entity kinds and determine
+  which are better expressed by one `Entity`-based operation. Use `Entity`
+  where the contract and return type are uniform across all eight kinds; retain
+  kind-specific operations where their typed arguments or results prevent
+  invalid calls.
 - Review imports inside the `ast` and `dsl` trees after the module split:
   `super` for a direct parent and `crate` for non-local dependencies.
 

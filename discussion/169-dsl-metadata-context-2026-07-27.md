@@ -760,7 +760,7 @@ binding names an existing entity of the corresponding kind; add only the
 required out-of-range `MetadataError` representation. Keep `from_parts`
 temporarily available so the additive constructor can land green. Test every
 entity kind, boundary indices, empty metadata, and parsed coherent parts.
-This is additive and stays green. [dep: S2f]
+This is additive and stays green. **Implemented (green).** [dep: S2f]
 
 **S4b — `ReactionDsl::new`.** Add the public fallible
 `ReactionDsl::new(ast, metadata)` constructor. Validate lhs metadata against

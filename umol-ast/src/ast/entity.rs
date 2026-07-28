@@ -1,5 +1,7 @@
 //! Molecule entity types.
 
+use std::fmt;
+
 use strum::{EnumCount, EnumDiscriminants, FromRepr};
 
 use super::id::{
@@ -21,6 +23,21 @@ pub enum Entity {
     NoncovalentBond(NoncovalentBondId),
     StereoAtom(StereoAtomId),
     StereoBond(StereoBondId),
+}
+
+impl fmt::Display for Entity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Entity::Atom(id) => write!(f, "atom {id}"),
+            Entity::Bond(id) => write!(f, "bond {id}"),
+            Entity::DativeBond(id) => write!(f, "dative bond {id}"),
+            Entity::AromaticSystem(id) => write!(f, "aromatic system {id}"),
+            Entity::MulticenterBond(id) => write!(f, "multicenter bond {id}"),
+            Entity::NoncovalentBond(id) => write!(f, "noncovalent bond {id}"),
+            Entity::StereoAtom(id) => write!(f, "stereo atom {id}"),
+            Entity::StereoBond(id) => write!(f, "stereo bond {id}"),
+        }
+    }
 }
 
 impl Entity {
@@ -82,6 +99,19 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(1)), "atom 1")]
+    #[case::bond(Entity::Bond(BondId(2)), "bond 2")]
+    #[case::dative_bond(Entity::DativeBond(DativeBondId(3)), "dative bond 3")]
+    #[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(4)), "aromatic system 4")]
+    #[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(5)), "multicenter bond 5")]
+    #[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(6)), "noncovalent bond 6")]
+    #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(7)), "stereo atom 7")]
+    #[case::stereo_bond(Entity::StereoBond(StereoBondId(8)), "stereo bond 8")]
+    fn test_entity_display(#[case] entity: Entity, #[case] expected: &str) {
+        assert_eq!(entity.to_string(), expected);
+    }
 
     #[rstest]
     #[case::variant_and_id(

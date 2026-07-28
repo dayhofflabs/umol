@@ -637,6 +637,9 @@ fn metadata_parse_error(error: MetadataError) -> ParseError {
         MetadataError::DuplicateAtomAlias(_) => ParseError::InvalidValue(
             "atom-aliases must be bijective: two names map to the same atom".into(),
         ),
+        MetadataError::EntityOutOfRange(entity) => {
+            ParseError::InvalidValue(format!("metadata entity is out of range: {entity}"))
+        }
     }
 }
 

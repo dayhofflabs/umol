@@ -12,14 +12,16 @@ use crate::ast::id::{
     StereoAtomId, StereoBondId,
 };
 
-/// Error raised when metadata would no longer define disjoint entity keywords
-/// and bijective atom aliases.
+/// Error raised when metadata would violate its namespace invariants or refer
+/// outside the AST with which it is paired.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MetadataError {
     #[error("duplicate keyword: {0}")]
     DuplicateKeyword(String),
     #[error("atom DSL already has alias: {0}")]
     DuplicateAtomAlias(String),
+    #[error("metadata entity is out of range: {0}")]
+    EntityOutOfRange(Entity),
 }
 
 /// The rendering counterpart to [`crate::dsl::Namespace`].
@@ -34,8 +36,8 @@ pub trait Metadata {
 }
 
 /// Surface-form metadata paired with a `MoleculeAst`. Records entity keywords and atom aliases.
-/// `MoleculeDsl` keeps both fields private and rewraps atomically
-/// through `from_parts`.
+/// `MoleculeDsl` keeps both fields private and validates their coherence during
+/// checked construction.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoleculeMetadata {
     keywords: BiBTreeMap<Entity, String>,
