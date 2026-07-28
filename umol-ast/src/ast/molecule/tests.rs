@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -2602,7 +2603,103 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
 }
 
 #[rstest]
-fn test_molecule_ast_join() {
+#[case::empty(Vec::new(), MoleculeAst::new(), Vec::new())]
+#[case::singleton(
+    vec![MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C)],
+        ..Default::default()
+    })],
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C)],
+        ..Default::default()
+    }),
+    vec![vec![(NodeId(0), NodeId(0))]],
+)]
+#[case::multiple(
+    vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        }),
+        MoleculeAst::new(),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::O),
+                AtomAst::from_element(Element::N),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            ..Default::default()
+        }),
+    ],
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::O),
+            AtomAst::from_element(Element::N),
+        ],
+        bonds: vec![(AtomId(1), AtomId(2), BondAst::from_order(2))],
+        ..Default::default()
+    }),
+    vec![
+        vec![(NodeId(0), NodeId(0))],
+        vec![],
+        vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(2))],
+    ],
+)]
+fn test_molecule_ast_combine_all(
+    #[case] molecules: Vec<MoleculeAst>,
+    #[case] expected: MoleculeAst,
+    #[case] expected_atom_mates: Vec<Vec<(NodeId, NodeId)>>,
+) {
+    let (combined, correspondences) = MoleculeAst::combine_all(&molecules);
+
+    assert_eq!(combined, expected);
+    assert_eq!(
+        correspondences
+            .iter()
+            .map(|correspondence| correspondence.atoms().mates().to_vec())
+            .collect::<Vec<_>>(),
+        expected_atom_mates,
+    );
+    for (molecule, correspondence) in molecules.iter().zip(&correspondences) {
+        assert_eq!(combined.extract(correspondence), *molecule);
+        assert_eq!(
+            correspondence.atoms().right_count(),
+            combined.atoms().count()
+        );
+        assert_eq!(
+            correspondence.bonds().right_count(),
+            combined.bonds().count()
+        );
+        assert_eq!(
+            correspondence.dative_bonds().right_count(),
+            combined.dative_bonds().count()
+        );
+        assert_eq!(
+            correspondence.aromatic_systems().right_count(),
+            combined.aromatic_systems().count()
+        );
+        assert_eq!(
+            correspondence.multicenter_bonds().right_count(),
+            combined.multicenter_bonds().count()
+        );
+        assert_eq!(
+            correspondence.noncovalent_bonds().right_count(),
+            combined.noncovalent_bonds().count()
+        );
+        assert_eq!(
+            correspondence.stereo_atoms().right_count(),
+            combined.stereo_atoms().count()
+        );
+        assert_eq!(
+            correspondence.stereo_bonds().right_count(),
+            combined.stereo_bonds().count()
+        );
+    }
+}
+
+#[rstest]
+fn test_molecule_ast_combine() {
     let left = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![
             AtomAst::from_element(Element::C),
@@ -2619,7 +2716,7 @@ fn test_molecule_ast_join() {
         bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
         ..Default::default()
     });
-    let (union, correspondence) = left.join(&right);
+    let (union, correspondence) = left.combine(&right);
 
     assert_eq!(union.atoms().count(), 4);
     assert_eq!(union.bonds().count(), 2);
@@ -2633,7 +2730,7 @@ fn test_molecule_ast_join() {
 }
 
 #[rstest]
-fn test_molecule_ast_join_from() {
+fn test_molecule_ast_combine_from() {
     let mut left = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![AtomAst::from_element(Element::C)],
         ..Default::default()
@@ -2646,7 +2743,7 @@ fn test_molecule_ast_join_from() {
         bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
         ..Default::default()
     });
-    let correspondence = left.join_from(&right);
+    let correspondence = left.combine_from(&right);
 
     assert_eq!(left.atoms().count(), 3);
     assert_eq!(left.bond(BondId(0)).atom_ids(), [AtomId(1), AtomId(2)]);
@@ -2655,7 +2752,36 @@ fn test_molecule_ast_join_from() {
 }
 
 #[rstest]
-fn test_molecule_ast_join_overlay() {
+fn test_molecule_ast_combine_from_storage() {
+    let mut left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::O),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ..Default::default()
+    });
+    Arc::get_mut(&mut left.atoms).unwrap().reserve(2);
+    Arc::get_mut(&mut left.bonds).unwrap().reserve(1);
+    let atom_storage = left.atoms.as_ptr();
+    let bond_storage = left.bonds.as_ptr();
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
+            AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::F),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+        ..Default::default()
+    });
+
+    left.combine_from(&right);
+
+    assert_eq!(left.atoms.as_ptr(), atom_storage);
+    assert_eq!(left.bonds.as_ptr(), bond_storage);
+}
+
+#[rstest]
+fn test_molecule_ast_combine_overlay() {
     let left = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![AtomAst::from_element(Element::C)],
         ..Default::default()
@@ -2672,7 +2798,7 @@ fn test_molecule_ast_join_overlay() {
         )],
         ..Default::default()
     });
-    let (union, correspondence) = left.join(&right);
+    let (union, correspondence) = left.combine(&right);
 
     assert_eq!(union.aromatic_systems().count(), 1);
     // right's overlay over its atoms [0, 1] shifts by left's one atom
@@ -2692,7 +2818,7 @@ fn test_molecule_ast_join_overlay() {
 }
 
 #[rstest]
-fn test_molecule_ast_join_stereo() {
+fn test_molecule_ast_combine_stereo() {
     let left = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![AtomAst::from_element(Element::C)],
         ..Default::default()
@@ -2714,7 +2840,7 @@ fn test_molecule_ast_join_stereo() {
         constraints: Constraints::new(),
         ..Default::default()
     });
-    let (union, _) = left.join(&right);
+    let (union, _) = left.combine(&right);
 
     assert_eq!(union.stereo_atoms().count(), 1);
     let stereo = union.stereo_atoms().iter().next().unwrap();
@@ -2727,7 +2853,7 @@ fn test_molecule_ast_join_stereo() {
 }
 
 #[rstest]
-fn test_molecule_ast_join_constraint() {
+fn test_molecule_ast_combine_constraint() {
     let left = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![AtomAst::from_element(Element::C)],
         ..Default::default()
@@ -2745,7 +2871,7 @@ fn test_molecule_ast_join_constraint() {
         )),
         ..Default::default()
     });
-    let (union, _) = left.join(&right);
+    let (union, _) = left.combine(&right);
 
     // right's constraint over atoms [0, 1] is remapped to [1, 2] in the union
     let expected = Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -2815,7 +2941,7 @@ fn test_molecule_ast_split_overlay_binds() {
 }
 
 #[rstest]
-fn test_molecule_ast_join_split_roundtrip() {
+fn test_molecule_ast_combine_split_roundtrip() {
     let left = MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![
             AtomAst::from_element(Element::C),
@@ -2832,7 +2958,7 @@ fn test_molecule_ast_join_split_roundtrip() {
         bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
         ..Default::default()
     });
-    let (union, _) = left.join(&right);
+    let (union, _) = left.combine(&right);
     let components = union.split();
 
     assert_eq!(components.len(), 2);

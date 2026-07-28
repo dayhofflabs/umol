@@ -240,12 +240,12 @@ impl MoleculeAst {
         if self.graph != other.graph
             || self.atoms.len() != other.atoms.len()
             || self.bonds.len() != other.bonds.len()
-            || self.dative_bonds.relation_count() != other.dative_bonds.relation_count()
-            || self.aromatic_systems.relation_count() != other.aromatic_systems.relation_count()
-            || self.multicenter_bonds.relation_count() != other.multicenter_bonds.relation_count()
-            || self.noncovalent_bonds.relation_count() != other.noncovalent_bonds.relation_count()
-            || self.stereo_atoms.relation_count() != other.stereo_atoms.relation_count()
-            || self.stereo_bonds.relation_count() != other.stereo_bonds.relation_count()
+            || self.dative_bonds.count() != other.dative_bonds.count()
+            || self.aromatic_systems.count() != other.aromatic_systems.count()
+            || self.multicenter_bonds.count() != other.multicenter_bonds.count()
+            || self.noncovalent_bonds.count() != other.noncovalent_bonds.count()
+            || self.stereo_atoms.count() != other.stereo_atoms.count()
+            || self.stereo_bonds.count() != other.stereo_bonds.count()
         {
             return false;
         }
@@ -349,39 +349,39 @@ impl MoleculeAst {
             ),
             (
                 correspondence.dative_bonds().left_count(),
-                self.dative_bonds.relation_count(),
+                self.dative_bonds.count(),
                 correspondence.dative_bonds().right_count(),
-                other.dative_bonds.relation_count(),
+                other.dative_bonds.count(),
             ),
             (
                 correspondence.aromatic_systems().left_count(),
-                self.aromatic_systems.relation_count(),
+                self.aromatic_systems.count(),
                 correspondence.aromatic_systems().right_count(),
-                other.aromatic_systems.relation_count(),
+                other.aromatic_systems.count(),
             ),
             (
                 correspondence.multicenter_bonds().left_count(),
-                self.multicenter_bonds.relation_count(),
+                self.multicenter_bonds.count(),
                 correspondence.multicenter_bonds().right_count(),
-                other.multicenter_bonds.relation_count(),
+                other.multicenter_bonds.count(),
             ),
             (
                 correspondence.noncovalent_bonds().left_count(),
-                self.noncovalent_bonds.relation_count(),
+                self.noncovalent_bonds.count(),
                 correspondence.noncovalent_bonds().right_count(),
-                other.noncovalent_bonds.relation_count(),
+                other.noncovalent_bonds.count(),
             ),
             (
                 correspondence.stereo_atoms().left_count(),
-                self.stereo_atoms.relation_count(),
+                self.stereo_atoms.count(),
                 correspondence.stereo_atoms().right_count(),
-                other.stereo_atoms.relation_count(),
+                other.stereo_atoms.count(),
             ),
             (
                 correspondence.stereo_bonds().left_count(),
-                self.stereo_bonds.relation_count(),
+                self.stereo_bonds.count(),
                 correspondence.stereo_bonds().right_count(),
-                other.stereo_bonds.relation_count(),
+                other.stereo_bonds.count(),
             ),
         ]
         .into_iter()
@@ -424,8 +424,8 @@ impl MoleculeAst {
         }
 
         for &(left, right) in correspondence.dative_bonds().mates() {
-            if left.index() >= self.dative_bonds.relation_count()
-                || right.index() >= other.dative_bonds.relation_count()
+            if left.index() >= self.dative_bonds.count()
+                || right.index() >= other.dative_bonds.count()
             {
                 return false;
             }
@@ -464,8 +464,8 @@ impl MoleculeAst {
         }
 
         for &(left, right) in correspondence.aromatic_systems().mates() {
-            if left.index() >= self.aromatic_systems.relation_count()
-                || right.index() >= other.aromatic_systems.relation_count()
+            if left.index() >= self.aromatic_systems.count()
+                || right.index() >= other.aromatic_systems.count()
             {
                 return false;
             }
@@ -494,8 +494,8 @@ impl MoleculeAst {
         }
 
         for &(left, right) in correspondence.multicenter_bonds().mates() {
-            if left.index() >= self.multicenter_bonds.relation_count()
-                || right.index() >= other.multicenter_bonds.relation_count()
+            if left.index() >= self.multicenter_bonds.count()
+                || right.index() >= other.multicenter_bonds.count()
             {
                 return false;
             }
@@ -524,8 +524,8 @@ impl MoleculeAst {
         }
 
         for &(left, right) in correspondence.noncovalent_bonds().mates() {
-            if left.index() >= self.noncovalent_bonds.relation_count()
-                || right.index() >= other.noncovalent_bonds.relation_count()
+            if left.index() >= self.noncovalent_bonds.count()
+                || right.index() >= other.noncovalent_bonds.count()
             {
                 return false;
             }
@@ -554,8 +554,8 @@ impl MoleculeAst {
         }
 
         for &(left, right) in correspondence.stereo_atoms().mates() {
-            if left.index() >= self.stereo_atoms.relation_count()
-                || right.index() >= other.stereo_atoms.relation_count()
+            if left.index() >= self.stereo_atoms.count()
+                || right.index() >= other.stereo_atoms.count()
             {
                 return false;
             }
@@ -598,8 +598,8 @@ impl MoleculeAst {
         }
 
         for &(left, right) in correspondence.stereo_bonds().mates() {
-            if left.index() >= self.stereo_bonds.relation_count()
-                || right.index() >= other.stereo_bonds.relation_count()
+            if left.index() >= self.stereo_bonds.count()
+                || right.index() >= other.stereo_bonds.count()
             {
                 return false;
             }
@@ -1118,27 +1118,27 @@ impl MoleculeAst {
     }
 
     pub fn has_dative_bonds(&self) -> bool {
-        self.dative_bonds.relation_count() > 0
+        self.dative_bonds.count() > 0
     }
 
     pub fn has_aromatic_systems(&self) -> bool {
-        self.aromatic_systems.relation_count() > 0
+        self.aromatic_systems.count() > 0
     }
 
     pub fn has_multicenter_bonds(&self) -> bool {
-        self.multicenter_bonds.relation_count() > 0
+        self.multicenter_bonds.count() > 0
     }
 
     pub fn has_noncovalent_bonds(&self) -> bool {
-        self.noncovalent_bonds.relation_count() > 0
+        self.noncovalent_bonds.count() > 0
     }
 
     pub fn has_stereo_atoms(&self) -> bool {
-        self.stereo_atoms.relation_count() > 0
+        self.stereo_atoms.count() > 0
     }
 
     pub fn has_stereo_bonds(&self) -> bool {
-        self.stereo_bonds.relation_count() > 0
+        self.stereo_bonds.count() > 0
     }
 
     /// Drain every entity's inline `constraints` store into `self.constraints`
@@ -1285,73 +1285,284 @@ impl MoleculeAst {
         )
     }
 
-    /// Append `other` disjointly, in place: `self` keeps its ids (the prefix) and `other`'s
-    /// entities follow, each id offset by `self`'s per-family count. Returns the
-    /// `MoleculeCorrespondence` mapping `other`'s ids to their new ids in the union. Pure
-    /// renumbering — no gluing, no chemistry.
-    pub fn join_from(&mut self, other: &MoleculeAst) -> MoleculeCorrespondence {
+    /// Combine molecules by disjoint concatenation. Input order determines each entity family's
+    /// id ranges in the result. Returns one correspondence per input, in input order, mapping that
+    /// molecule's ids into the combined molecule. Pure renumbering — no gluing, no chemistry.
+    pub fn combine_all<'a>(
+        molecules: impl IntoIterator<Item = &'a MoleculeAst>,
+    ) -> (MoleculeAst, Vec<MoleculeCorrespondence>) {
+        let molecules: Vec<&MoleculeAst> = molecules.into_iter().collect();
+        let atom_count = molecules.iter().map(|m| m.atoms().count()).sum();
+        let bond_count = molecules.iter().map(|m| m.bonds().count()).sum();
+        let dative_count = molecules.iter().map(|m| m.dative_bonds().count()).sum();
+        let aromatic_count = molecules.iter().map(|m| m.aromatic_systems().count()).sum();
+        let multicenter_count = molecules
+            .iter()
+            .map(|m| m.multicenter_bonds().count())
+            .sum();
+        let noncovalent_count = molecules
+            .iter()
+            .map(|m| m.noncovalent_bonds().count())
+            .sum();
+        let stereo_atom_count = molecules.iter().map(|m| m.stereo_atoms().count()).sum();
+        let stereo_bond_count = molecules.iter().map(|m| m.stereo_bonds().count()).sum();
+
+        let mut parts = MoleculeParts {
+            atoms: Vec::with_capacity(atom_count),
+            bonds: Vec::with_capacity(bond_count),
+            dative: Vec::with_capacity(dative_count),
+            aromatic: Vec::with_capacity(aromatic_count),
+            multicenter: Vec::with_capacity(multicenter_count),
+            noncovalent: Vec::with_capacity(noncovalent_count),
+            stereo_atoms: Vec::with_capacity(stereo_atom_count),
+            stereo_bonds: Vec::with_capacity(stereo_bond_count),
+            constraints: Constraints::new(),
+        };
+        let mut correspondences = Vec::with_capacity(molecules.len());
+        let mut atom_offset = 0;
+        let mut bond_offset = 0;
+        let mut dative_offset = 0;
+        let mut aromatic_offset = 0;
+        let mut multicenter_offset = 0;
+        let mut noncovalent_offset = 0;
+        let mut stereo_atom_offset = 0;
+        let mut stereo_bond_offset = 0;
+
+        for molecule in molecules {
+            let molecule_atom_count = molecule.atoms().count();
+            let molecule_bond_count = molecule.bonds().count();
+            let molecule_dative_count = molecule.dative_bonds().count();
+            let molecule_aromatic_count = molecule.aromatic_systems().count();
+            let molecule_multicenter_count = molecule.multicenter_bonds().count();
+            let molecule_noncovalent_count = molecule.noncovalent_bonds().count();
+            let molecule_stereo_atom_count = molecule.stereo_atoms().count();
+            let molecule_stereo_bond_count = molecule.stereo_bonds().count();
+            let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
+
+            parts
+                .atoms
+                .extend(molecule.atoms().iter().map(|atom| atom.ast.clone()));
+            parts.bonds.extend(molecule.bonds().iter().map(|bond| {
+                let [first, second] = bond.atom_ids();
+                (shift_atom(first), shift_atom(second), bond.ast.clone())
+            }));
+            parts
+                .dative
+                .extend(molecule.dative_bonds().iter().map(|bond| {
+                    (
+                        bond.donors().map(|donor| shift_atom(donor.id)).collect(),
+                        shift_atom(bond.acceptor_id()),
+                        bond.ast.clone(),
+                    )
+                }));
+            parts
+                .aromatic
+                .extend(molecule.aromatic_systems().iter().map(|system| {
+                    (
+                        system.atom_ids().map(shift_atom).collect(),
+                        system.ast.clone(),
+                    )
+                }));
+            parts.multicenter.extend(
+                molecule
+                    .multicenter_bonds()
+                    .iter()
+                    .map(|bond| (bond.atom_ids().map(shift_atom).collect(), bond.ast.clone())),
+            );
+            parts
+                .noncovalent
+                .extend(molecule.noncovalent_bonds().iter().map(|bond| {
+                    let [first, second] = bond.atom_ids();
+                    (shift_atom(first), shift_atom(second), bond.ast.clone())
+                }));
+            for id in molecule.stereo_atoms.relation_ids() {
+                let site = shift_atom(AtomId::from(molecule.stereo_atoms.participants_1(id)[0]));
+                let ligands = molecule
+                    .stereo_atoms
+                    .participants_2(id)
+                    .iter()
+                    .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
+                    .collect();
+                parts
+                    .stereo_atoms
+                    .push((site, ligands, molecule.stereo_atoms.data(id).clone()));
+            }
+            for id in molecule.stereo_bonds.relation_ids() {
+                let site =
+                    BondId(molecule.stereo_bonds.participants_1(id)[0].0 + bond_offset as u32);
+                let ligands = molecule
+                    .stereo_bonds
+                    .participants_2(id)
+                    .iter()
+                    .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
+                    .collect();
+                parts
+                    .stereo_bonds
+                    .push((site, ligands, molecule.stereo_bonds.data(id).clone()));
+            }
+
+            if !molecule.constraints.is_empty() {
+                let remapping = IdRemapping::new(
+                    offset_map(atom_offset, molecule_atom_count),
+                    offset_map(bond_offset, molecule_bond_count),
+                    offset_map(dative_offset, molecule_dative_count),
+                    offset_map(aromatic_offset, molecule_aromatic_count),
+                    offset_map(multicenter_offset, molecule_multicenter_count),
+                    offset_map(noncovalent_offset, molecule_noncovalent_count),
+                    offset_map(stereo_atom_offset, molecule_stereo_atom_count),
+                    offset_map(stereo_bond_offset, molecule_stereo_bond_count),
+                );
+                for constraint in molecule.constraints.iter() {
+                    parts.constraints.push(constraint.clone().remap(&remapping));
+                }
+            }
+
+            correspondences.push(MoleculeCorrespondence::new(
+                offset_correspondence(atom_offset, molecule_atom_count, atom_count),
+                offset_correspondence(bond_offset, molecule_bond_count, bond_count),
+                offset_correspondence(dative_offset, molecule_dative_count, dative_count),
+                offset_correspondence(aromatic_offset, molecule_aromatic_count, aromatic_count),
+                offset_correspondence(
+                    multicenter_offset,
+                    molecule_multicenter_count,
+                    multicenter_count,
+                ),
+                offset_correspondence(
+                    noncovalent_offset,
+                    molecule_noncovalent_count,
+                    noncovalent_count,
+                ),
+                offset_correspondence(
+                    stereo_atom_offset,
+                    molecule_stereo_atom_count,
+                    stereo_atom_count,
+                ),
+                offset_correspondence(
+                    stereo_bond_offset,
+                    molecule_stereo_bond_count,
+                    stereo_bond_count,
+                ),
+            ));
+
+            atom_offset += molecule_atom_count;
+            bond_offset += molecule_bond_count;
+            dative_offset += molecule_dative_count;
+            aromatic_offset += molecule_aromatic_count;
+            multicenter_offset += molecule_multicenter_count;
+            noncovalent_offset += molecule_noncovalent_count;
+            stereo_atom_offset += molecule_stereo_atom_count;
+            stereo_bond_offset += molecule_stereo_bond_count;
+        }
+
+        (MoleculeAst::from_parts(parts), correspondences)
+    }
+
+    /// Combine `self` and `other` as a fresh molecule by disjoint concatenation. Returns the
+    /// correspondence mapping `other` into the combined molecule.
+    pub fn combine(&self, other: &MoleculeAst) -> (MoleculeAst, MoleculeCorrespondence) {
+        let (combined, mut correspondences) = Self::combine_all([self, other]);
+        let correspondence = correspondences
+            .pop()
+            .expect("two inputs produce two correspondences");
+        (combined, correspondence)
+    }
+
+    /// Append `other` by disjoint concatenation. `self` keeps its ids as the prefix; `other`'s
+    /// entities follow. Returns the correspondence mapping `other` into the combined molecule.
+    pub fn combine_from(&mut self, other: &MoleculeAst) -> MoleculeCorrespondence {
         let atom_offset = self.atoms().count();
         let bond_offset = self.bonds().count();
         let dative_offset = self.dative_bonds().count();
         let aromatic_offset = self.aromatic_systems().count();
         let multicenter_offset = self.multicenter_bonds().count();
         let noncovalent_offset = self.noncovalent_bonds().count();
-        let stereo_atom_count = self.stereo_atoms().count();
-        let stereo_bond_count = self.stereo_bonds().count();
-        let shift = |id: AtomId| AtomId(id.0 + atom_offset as u32);
+        let stereo_atom_offset = self.stereo_atoms().count();
+        let stereo_bond_offset = self.stereo_bonds().count();
+        let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-        let mut editor = self.edit();
+        let MoleculeAst {
+            graph,
+            atoms,
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        } = mem::take(self);
+        let mut editor = MoleculeEditor::from_parts(
+            graph,
+            atoms,
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        );
+
         for atom in other.atoms().iter() {
             editor.add_atom(atom.ast.clone());
         }
         for bond in other.bonds().iter() {
-            let [a, b] = bond.atom_ids();
-            editor.add_bond(shift(a), shift(b), bond.ast.clone());
+            let [first, second] = bond.atom_ids();
+            editor.add_bond(shift_atom(first), shift_atom(second), bond.ast.clone());
         }
-        for dative in other.dative_bonds().iter() {
-            let donors: Vec<AtomId> = dative.donors().map(|d| shift(d.id)).collect();
-            editor.add_dative_bond(donors, shift(dative.acceptor_id()), dative.ast.clone());
+        for bond in other.dative_bonds().iter() {
+            editor.add_dative_bond(
+                bond.donors().map(|donor| shift_atom(donor.id)).collect(),
+                shift_atom(bond.acceptor_id()),
+                bond.ast.clone(),
+            );
         }
         for system in other.aromatic_systems().iter() {
-            let atoms: Vec<AtomId> = system.atom_ids().map(shift).collect();
-            editor.add_aromatic_system(atoms, system.ast.clone());
+            editor.add_aromatic_system(
+                system.atom_ids().map(shift_atom).collect(),
+                system.ast.clone(),
+            );
         }
         for bond in other.multicenter_bonds().iter() {
-            let atoms: Vec<AtomId> = bond.atom_ids().map(shift).collect();
-            editor.add_multicenter_bond(atoms, bond.ast.clone());
+            editor
+                .add_multicenter_bond(bond.atom_ids().map(shift_atom).collect(), bond.ast.clone());
         }
         for bond in other.noncovalent_bonds().iter() {
-            let [a, b] = bond.atom_ids();
-            editor.add_noncovalent_bond([shift(a), shift(b)], bond.ast.clone());
+            let [first, second] = bond.atom_ids();
+            editor.add_noncovalent_bond([shift_atom(first), shift_atom(second)], bond.ast.clone());
         }
+
         let ligand_remapping = Remapping::new(
             (0..other.atoms().count())
-                .map(|k| NodeId((k + atom_offset) as u32))
+                .map(|index| NodeId((atom_offset + index) as u32))
                 .collect(),
             (0..other.bonds().count())
-                .map(|k| EdgeId((k + bond_offset) as u32))
+                .map(|index| EdgeId((bond_offset + index) as u32))
                 .collect(),
         );
-        for rid in other.stereo_atoms.relation_ids() {
-            let site = shift(AtomId::from(other.stereo_atoms.participants_1(rid)[0]));
-            let ligands: Vec<StereoLigand> = other
+        for id in other.stereo_atoms.relation_ids() {
+            let site = shift_atom(AtomId::from(other.stereo_atoms.participants_1(id)[0]));
+            let ligands = other
                 .stereo_atoms
-                .participants_2(rid)
+                .participants_2(id)
                 .iter()
                 .map(|ligand| ligand.remap(&ligand_remapping))
                 .collect();
-            editor.add_stereo_atom(site, ligands, other.stereo_atoms.data(rid).clone());
+            editor.add_stereo_atom(site, ligands, other.stereo_atoms.data(id).clone());
         }
-        for rid in other.stereo_bonds.relation_ids() {
-            let site = BondId(other.stereo_bonds.participants_1(rid)[0].0 + bond_offset as u32);
-            let ligands: Vec<StereoLigand> = other
+        for id in other.stereo_bonds.relation_ids() {
+            let site = BondId(other.stereo_bonds.participants_1(id)[0].0 + bond_offset as u32);
+            let ligands = other
                 .stereo_bonds
-                .participants_2(rid)
+                .participants_2(id)
                 .iter()
                 .map(|ligand| ligand.remap(&ligand_remapping))
                 .collect();
-            editor.add_stereo_bond(site, ligands, other.stereo_bonds.data(rid).clone());
+            editor.add_stereo_bond(site, ligands, other.stereo_bonds.data(id).clone());
         }
+
         if !other.constraints.is_empty() {
             let remapping = IdRemapping::new(
                 offset_map(atom_offset, other.atoms().count()),
@@ -1360,8 +1571,8 @@ impl MoleculeAst {
                 offset_map(aromatic_offset, other.aromatic_systems().count()),
                 offset_map(multicenter_offset, other.multicenter_bonds().count()),
                 offset_map(noncovalent_offset, other.noncovalent_bonds().count()),
-                offset_map(stereo_atom_count, other.stereo_atoms().count()),
-                offset_map(stereo_bond_count, other.stereo_bonds().count()),
+                offset_map(stereo_atom_offset, other.stereo_atoms().count()),
+                offset_map(stereo_bond_offset, other.stereo_bonds().count()),
             );
             for constraint in other.constraints.iter() {
                 editor
@@ -1372,23 +1583,47 @@ impl MoleculeAst {
         *self = editor.build();
 
         MoleculeCorrespondence::new(
-            offset_correspondence(atom_offset, other.atoms().count()),
-            offset_correspondence(bond_offset, other.bonds().count()),
-            offset_correspondence(dative_offset, other.dative_bonds().count()),
-            offset_correspondence(aromatic_offset, other.aromatic_systems().count()),
-            offset_correspondence(multicenter_offset, other.multicenter_bonds().count()),
-            offset_correspondence(noncovalent_offset, other.noncovalent_bonds().count()),
-            offset_correspondence(stereo_atom_count, other.stereo_atoms().count()),
-            offset_correspondence(stereo_bond_count, other.stereo_bonds().count()),
+            offset_correspondence(
+                atom_offset,
+                other.atoms().count(),
+                atom_offset + other.atoms().count(),
+            ),
+            offset_correspondence(
+                bond_offset,
+                other.bonds().count(),
+                bond_offset + other.bonds().count(),
+            ),
+            offset_correspondence(
+                dative_offset,
+                other.dative_bonds().count(),
+                dative_offset + other.dative_bonds().count(),
+            ),
+            offset_correspondence(
+                aromatic_offset,
+                other.aromatic_systems().count(),
+                aromatic_offset + other.aromatic_systems().count(),
+            ),
+            offset_correspondence(
+                multicenter_offset,
+                other.multicenter_bonds().count(),
+                multicenter_offset + other.multicenter_bonds().count(),
+            ),
+            offset_correspondence(
+                noncovalent_offset,
+                other.noncovalent_bonds().count(),
+                noncovalent_offset + other.noncovalent_bonds().count(),
+            ),
+            offset_correspondence(
+                stereo_atom_offset,
+                other.stereo_atoms().count(),
+                stereo_atom_offset + other.stereo_atoms().count(),
+            ),
+            offset_correspondence(
+                stereo_bond_offset,
+                other.stereo_bonds().count(),
+                stereo_bond_offset + other.stereo_bonds().count(),
+            ),
         )
-    }
-
-    /// Disjoint union of `self` and `other` as a fresh molecule, with the correspondence mapping
-    /// `other`'s ids into it. `self.clone()` then [`join_from`](Self::join_from).
-    pub fn join(&self, other: &MoleculeAst) -> (MoleculeAst, MoleculeCorrespondence) {
-        let mut union = self.clone();
-        let correspondence = union.join_from(other);
-        (union, correspondence)
     }
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
@@ -1750,18 +1985,17 @@ impl MoleculeAst {
     }
 }
 
-/// The correspondence mapping a family's `other` ids (`0..other_count`) to their union ids
-/// (`offset..offset+other_count`) — the per-family offset a disjoint `join` induces.
+/// The correspondence mapping one input family's ids to their offset ids in a combined family.
 fn offset_correspondence<Id: Copy + Ord + From<usize>>(
     offset: usize,
-    other_count: usize,
+    input_count: usize,
+    combined_count: usize,
 ) -> Correspondence<Id> {
-    let images: Vec<Id> = (0..other_count).map(|k| Id::from(offset + k)).collect();
-    Correspondence::from_images(&images, offset + other_count)
+    let images: Vec<Id> = (0..input_count).map(|k| Id::from(offset + k)).collect();
+    Correspondence::from_images(&images, combined_count)
 }
 
-/// The per-family offset map (`other` ids → their union ids) that `join_from` feeds to
-/// `Constraints::remap`.
+/// The per-family offset map used to remap constraints into a combined molecule.
 fn offset_map<Id: Copy + Eq + Hash + From<usize>>(offset: usize, count: usize) -> HashMap<Id, Id> {
     (0..count)
         .map(|k| (Id::from(k), Id::from(offset + k)))

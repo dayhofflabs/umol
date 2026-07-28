@@ -39,7 +39,7 @@ impl<'a> DativeBondViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.dative_bonds.relation_count()
+        self.dative_bonds.count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = DativeBondId> {

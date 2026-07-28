@@ -162,12 +162,12 @@ impl Fragment {
                 )
             });
 
-        let (body, correspondence) = self.body.join(&other.body);
+        let (body, correspondence) = self.body.combine(&other.body);
         let other_atom = AtomId::from(
             correspondence
                 .atoms()
                 .right_of(NodeId::from(other_port_atom))
-                .expect("join maps every atom of `other`"),
+                .expect("combine maps every atom of `other`"),
         );
         let mut editor = body.edit();
         editor.add_bond(self_atom, other_atom, bond);
@@ -192,12 +192,12 @@ impl Fragment {
     }
 }
 
-/// Juxtapose two fragments — the monoidal product. `join`s the bodies (no bond formed) and
-/// concatenates the ports, `other`'s remapped through the join correspondence.
+/// Juxtapose two fragments — the monoidal product. Combines the bodies (no bond formed) and
+/// concatenates the ports, `other`'s remapped through the combination correspondence.
 impl Add<Fragment> for Fragment {
     type Output = Fragment;
     fn add(self, other: Fragment) -> Fragment {
-        let (body, correspondence) = self.body.join(&other.body);
+        let (body, correspondence) = self.body.combine(&other.body);
         let mut ports = self.ports;
         ports.extend(
             other
@@ -209,13 +209,13 @@ impl Add<Fragment> for Fragment {
     }
 }
 
-/// Move a port's atom from `other`'s id space into the joined body's, through the `other → union`
-/// correspondence a `join` returns (`self` is the prefix, so its ports are unchanged).
+/// Move a port's atom from `other`'s id space into the combined body's, through the `other → union`
+/// correspondence a `combine` returns (`self` is the prefix, so its ports are unchanged).
 fn remap_port(port: Port, correspondence: &MoleculeCorrespondence) -> Port {
     let atom = correspondence
         .atoms()
         .right_of(NodeId::from(port.atom))
-        .expect("join maps every atom of `other`");
+        .expect("combine maps every atom of `other`");
     Port {
         atom: AtomId::from(atom),
         ..port
@@ -363,7 +363,7 @@ mod tests {
 
         let combined = left + right;
 
-        // bodies joined disjointly, no bond formed between them
+        // Bodies are combined disjointly; no bond is formed between them.
         assert_eq!(combined.body().atoms().count(), 3);
         assert_eq!(combined.body().bonds().count(), 1);
         // left's port unchanged (prefix); right's port atom 1 remapped to 2

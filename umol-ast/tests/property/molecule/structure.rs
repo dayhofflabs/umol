@@ -1,4 +1,4 @@
-//! Molecule extraction, joining, and splitting properties.
+//! Molecule extraction, combination, and splitting properties.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -30,12 +30,39 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_join(
+    fn test_molecule_ast_combine_all(
+        molecules in prop::collection::vec(
+            molecule_ast_structurally_unambiguous_strategy(),
+            0..5,
+        ),
+    ) {
+        let (combined, correspondences) = MoleculeAst::combine_all(&molecules);
+        prop_assert_eq!(correspondences.len(), molecules.len());
+        for (molecule, correspondence) in molecules.iter().zip(&correspondences) {
+            prop_assert_eq!(&combined.extract(correspondence), molecule);
+        }
+    }
+
+    #[test]
+    fn test_molecule_ast_combine(
         left in molecule_ast_structurally_unambiguous_strategy(),
         right in molecule_ast_structurally_unambiguous_strategy(),
     ) {
-        let (joined, correspondence) = left.join(&right);
-        prop_assert_eq!(joined.extract(&correspondence), right);
+        let (combined, correspondence) = left.combine(&right);
+        prop_assert_eq!(combined.extract(&correspondence), right);
+    }
+
+    #[test]
+    fn test_molecule_ast_combine_from(
+        left in molecule_ast_structurally_unambiguous_strategy(),
+        right in molecule_ast_structurally_unambiguous_strategy(),
+    ) {
+        let (expected, expected_correspondence) = left.combine(&right);
+        let mut combined = left;
+        let correspondence = combined.combine_from(&right);
+
+        prop_assert_eq!(combined, expected);
+        prop_assert_eq!(correspondence, expected_correspondence);
     }
 
     #[test]

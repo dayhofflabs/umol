@@ -403,7 +403,12 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         }
     }
 
-    pub fn relation_count(&self) -> usize {
+    /// Consume the set into its canonical stored entries, in relation-id order.
+    pub fn into_entries(self) -> Vec<([P; N], D)> {
+        self.participants.into_iter().zip(self.data).collect()
+    }
+
+    pub fn count(&self) -> usize {
         self.data.len()
     }
 
@@ -484,7 +489,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     where
         D: RelationData + Clone,
     {
-        let entries: Vec<([P; N], D)> = (0..self.relation_count())
+        let entries: Vec<([P; N], D)> = (0..self.count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let parts: Option<Vec<P>> = self
@@ -504,7 +509,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         D: RelationData + Clone,
     {
         let mut positions = Vec::new();
-        let entries: Vec<([P; N], D)> = (0..self.relation_count())
+        let entries: Vec<([P; N], D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
                 let (sorted, sigma) = remap_factor::<P, O>(self.participants(rid), remapping);
@@ -537,7 +542,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
             .map(|id| (*self.participants(id), self.data(id).clone()))
             .collect();
         let self_count = entries.len();
-        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.relation_ids() {
             match self.find_by_participants(right.participants(id)) {
                 Some(hit) => {
@@ -587,8 +592,8 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
             Self::new(entries),
             left_images,
             right_images,
-            self.relation_count(),
-            right.relation_count(),
+            self.count(),
+            right.count(),
         ))
     }
 }
@@ -665,7 +670,25 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         }
     }
 
-    pub fn relation_count(&self) -> usize {
+    /// Consume the set into its canonical stored entries, in relation-id order.
+    pub fn into_entries(self) -> Vec<(Vec<P>, D)> {
+        let Self {
+            offsets,
+            participants,
+            data,
+            ..
+        } = self;
+        let lengths = offsets
+            .windows(2)
+            .map(|range| (range[1] - range[0]) as usize);
+        let mut participants = participants.into_iter();
+        lengths
+            .zip(data)
+            .map(|(len, data)| (participants.by_ref().take(len).collect(), data))
+            .collect()
+    }
+
+    pub fn count(&self) -> usize {
         self.data.len()
     }
 
@@ -747,7 +770,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     where
         D: RelationData + Clone,
     {
-        let entries: Vec<(Vec<P>, D)> = (0..self.relation_count())
+        let entries: Vec<(Vec<P>, D)> = (0..self.count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let parts: Option<Vec<P>> = self
@@ -766,7 +789,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         D: RelationData + Clone,
     {
         let mut positions = Vec::new();
-        let entries: Vec<(Vec<P>, D)> = (0..self.relation_count())
+        let entries: Vec<(Vec<P>, D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
                 let (sorted, sigma) = remap_factor::<P, O>(self.participants(rid), remapping);
@@ -791,7 +814,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
             .map(|id| (self.participants(id).to_vec(), self.data(id).clone()))
             .collect();
         let self_count = entries.len();
-        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.relation_ids() {
             match self.find_by_participants(right.participants(id)) {
                 Some(hit) => {
@@ -838,8 +861,8 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
             Self::new(entries),
             left_images,
             right_images,
-            self.relation_count(),
-            right.relation_count(),
+            self.count(),
+            right.count(),
         ))
     }
 }
@@ -926,7 +949,23 @@ where
         }
     }
 
-    pub fn relation_count(&self) -> usize {
+    /// Consume the set into its canonical stored entries, in relation-id order.
+    pub fn into_entries(self) -> Vec<([L1; N1], [L2; N2], D)> {
+        let Self {
+            participants_1,
+            participants_2,
+            data,
+            ..
+        } = self;
+        participants_1
+            .into_iter()
+            .zip(participants_2)
+            .zip(data)
+            .map(|((participants_1, participants_2), data)| (participants_1, participants_2, data))
+            .collect()
+    }
+
+    pub fn count(&self) -> usize {
         self.data.len()
     }
 
@@ -1025,7 +1064,7 @@ where
     where
         D: BiRelationData + Clone,
     {
-        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
+        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let f1: Option<Vec<L1>> = self
@@ -1055,7 +1094,7 @@ where
     {
         let mut positions_1 = Vec::new();
         let mut positions_2 = Vec::new();
-        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
+        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
                 let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
@@ -1095,7 +1134,7 @@ where
             })
             .collect();
         let self_count = entries.len();
-        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.relation_ids() {
             match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
@@ -1148,8 +1187,8 @@ where
             Self::new(entries),
             left_images,
             right_images,
-            self.relation_count(),
-            right.relation_count(),
+            self.count(),
+            right.count(),
         ))
     }
 }
@@ -1244,7 +1283,34 @@ where
         }
     }
 
-    pub fn relation_count(&self) -> usize {
+    /// Consume the set into its canonical stored entries, in relation-id order.
+    pub fn into_entries(self) -> Vec<([L1; N1], Vec<L2>, D)> {
+        let Self {
+            participants_1,
+            f2_offsets,
+            participants_2,
+            data,
+            ..
+        } = self;
+        let lengths = f2_offsets
+            .windows(2)
+            .map(|range| (range[1] - range[0]) as usize);
+        let mut participants_2 = participants_2.into_iter();
+        participants_1
+            .into_iter()
+            .zip(lengths)
+            .zip(data)
+            .map(|((participants_1, len), data)| {
+                (
+                    participants_1,
+                    participants_2.by_ref().take(len).collect(),
+                    data,
+                )
+            })
+            .collect()
+    }
+
+    pub fn count(&self) -> usize {
         self.data.len()
     }
 
@@ -1345,7 +1411,7 @@ where
     where
         D: BiRelationData + Clone,
     {
-        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.relation_count())
+        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let f1: Option<Vec<L1>> = self
@@ -1374,7 +1440,7 @@ where
     {
         let mut positions_1 = Vec::new();
         let mut positions_2 = Vec::new();
-        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.relation_count())
+        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
                 let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
@@ -1411,7 +1477,7 @@ where
             })
             .collect();
         let self_count = entries.len();
-        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.relation_ids() {
             match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
@@ -1468,8 +1534,8 @@ where
             Self::new(entries),
             left_images,
             right_images,
-            self.relation_count(),
-            right.relation_count(),
+            self.count(),
+            right.count(),
         ))
     }
 }
@@ -1570,7 +1636,38 @@ where
         }
     }
 
-    pub fn relation_count(&self) -> usize {
+    /// Consume the set into its canonical stored entries, in relation-id order.
+    pub fn into_entries(self) -> Vec<(Vec<L1>, Vec<L2>, D)> {
+        let Self {
+            f1_offsets,
+            participants_1,
+            f2_offsets,
+            participants_2,
+            data,
+            ..
+        } = self;
+        let lengths_1 = f1_offsets
+            .windows(2)
+            .map(|range| (range[1] - range[0]) as usize);
+        let lengths_2 = f2_offsets
+            .windows(2)
+            .map(|range| (range[1] - range[0]) as usize);
+        let mut participants_1 = participants_1.into_iter();
+        let mut participants_2 = participants_2.into_iter();
+        lengths_1
+            .zip(lengths_2)
+            .zip(data)
+            .map(|((len_1, len_2), data)| {
+                (
+                    participants_1.by_ref().take(len_1).collect(),
+                    participants_2.by_ref().take(len_2).collect(),
+                    data,
+                )
+            })
+            .collect()
+    }
+
+    pub fn count(&self) -> usize {
         self.data.len()
     }
 
@@ -1673,7 +1770,7 @@ where
     where
         D: BiRelationData + Clone,
     {
-        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.relation_count())
+        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let f1: Option<Vec<L1>> = self
@@ -1701,7 +1798,7 @@ where
     {
         let mut positions_1 = Vec::new();
         let mut positions_2 = Vec::new();
-        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.relation_count())
+        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
                 let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
@@ -1735,7 +1832,7 @@ where
             })
             .collect();
         let self_count = entries.len();
-        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.relation_ids() {
             match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
@@ -1792,8 +1889,8 @@ where
             Self::new(entries),
             left_images,
             right_images,
-            self.relation_count(),
-            right.relation_count(),
+            self.count(),
+            right.count(),
         ))
     }
 }
@@ -1920,10 +2017,23 @@ mod tests {
     fn test_fixed_relation_set_new() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], "dative"), ([n(1), n(2)], "noncov")]);
-        assert_eq!(rs.relation_count(), 2);
+        assert_eq!(rs.count(), 2);
         assert_eq!(rs.data(RelationId(0)), &"dative");
         assert_eq!(rs.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(rs.participants(RelationId(1)), &[n(1), n(2)]);
+    }
+
+    #[rstest]
+    #[case::canonical_entries(
+        vec![([n(2), n(0)], "first"), ([n(3), n(1)], "second")],
+        vec![([n(0), n(2)], "first"), ([n(1), n(3)], "second")],
+    )]
+    fn test_fixed_relation_set_into_entries(
+        #[case] entries: Vec<([NodeId; 2], &str)>,
+        #[case] expected: Vec<([NodeId; 2], &str)>,
+    ) {
+        let rs: FixedRelationSet<NodeId, Unordered, &str, 2> = FixedRelationSet::new(entries);
+        assert_eq!(rs.into_entries(), expected);
     }
 
     #[rstest]
@@ -2004,7 +2114,7 @@ mod tests {
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
         let compaction = Compaction::new(vec![1], vec![]);
         let out = rs.apply_compaction(&compaction);
-        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
@@ -2027,7 +2137,7 @@ mod tests {
     #[rstest]
     fn test_fixed_relation_set_default() {
         let rs = FixedRelationSet::<NodeId, Unordered, (), 2>::default();
-        assert_eq!(rs.relation_count(), 0);
+        assert_eq!(rs.count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
 
@@ -2035,12 +2145,31 @@ mod tests {
     fn test_var_relation_set_new() {
         let rs: VarRelationSet<NodeId, Unordered, &str> =
             VarRelationSet::new(vec![(vec![n(0), n(1), n(2), n(3), n(4), n(5)], "benzene")]);
-        assert_eq!(rs.relation_count(), 1);
+        assert_eq!(rs.count(), 1);
         assert_eq!(rs.data(RelationId(0)), &"benzene");
         assert_eq!(
             rs.participants(RelationId(0)),
             &[n(0), n(1), n(2), n(3), n(4), n(5)]
         );
+    }
+
+    #[rstest]
+    #[case::canonical_entries(
+        vec![
+            (vec![n(2), n(0)], "first"),
+            (vec![n(4), n(3), n(1)], "second"),
+        ],
+        vec![
+            (vec![n(0), n(2)], "first"),
+            (vec![n(1), n(3), n(4)], "second"),
+        ],
+    )]
+    fn test_var_relation_set_into_entries(
+        #[case] entries: Vec<(Vec<NodeId>, &str)>,
+        #[case] expected: Vec<(Vec<NodeId>, &str)>,
+    ) {
+        let rs: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(entries);
+        assert_eq!(rs.into_entries(), expected);
     }
 
     #[rstest]
@@ -2150,7 +2279,7 @@ mod tests {
         ]);
         let compaction = Compaction::new(vec![1], vec![]);
         let out = rs.apply_compaction(&compaction);
-        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
@@ -2177,7 +2306,7 @@ mod tests {
     #[rstest]
     fn test_var_relation_set_default() {
         let rs = VarRelationSet::<NodeId, Unordered, ()>::default();
-        assert_eq!(rs.relation_count(), 0);
+        assert_eq!(rs.count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
 
@@ -2185,10 +2314,30 @@ mod tests {
     fn test_fixed_fixed_birelation_set_new() {
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
             FixedFixedBirelationSet::new(vec![([n(0)], [n(2), n(1)], "x")]);
-        assert_eq!(rs.relation_count(), 1);
+        assert_eq!(rs.count(), 1);
         assert_eq!(rs.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(rs.participants_2(RelationId(0)), &[n(1), n(2)]);
         assert_eq!(rs.data(RelationId(0)), &"x");
+    }
+
+    #[rstest]
+    #[case::canonical_entries(
+        vec![
+            ([n(2)], [n(4), n(1)], "first"),
+            ([n(3)], [n(5), n(0)], "second"),
+        ],
+        vec![
+            ([n(2)], [n(1), n(4)], "first"),
+            ([n(3)], [n(0), n(5)], "second"),
+        ],
+    )]
+    fn test_fixed_fixed_birelation_set_into_entries(
+        #[case] entries: Vec<([NodeId; 1], [NodeId; 2], &str)>,
+        #[case] expected: Vec<([NodeId; 1], [NodeId; 2], &str)>,
+    ) {
+        let rs: FixedFixedBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, 2, &str> =
+            FixedFixedBirelationSet::new(entries);
+        assert_eq!(rs.into_entries(), expected);
     }
 
     #[rstest]
@@ -2248,7 +2397,7 @@ mod tests {
             ]);
         let compaction = Compaction::new(vec![1], vec![]);
         let out = rs.apply_compaction(&compaction);
-        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -2271,7 +2420,7 @@ mod tests {
     fn test_fixed_fixed_birelation_set_default() {
         let rs =
             FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, ()>::default();
-        assert_eq!(rs.relation_count(), 0);
+        assert_eq!(rs.count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
 
@@ -2279,10 +2428,30 @@ mod tests {
     fn test_fixed_var_birelation_set_new() {
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1), n(2), n(3)], "ct")]);
-        assert_eq!(rs.relation_count(), 1);
+        assert_eq!(rs.count(), 1);
         assert_eq!(rs.participants_1(RelationId(0)), &[EdgeId(0)]);
         assert_eq!(rs.participants_2(RelationId(0)), &[n(1), n(2), n(3)]);
         assert_eq!(rs.data(RelationId(0)), &"ct");
+    }
+
+    #[rstest]
+    #[case::canonical_entries(
+        vec![
+            ([EdgeId(2)], vec![n(3), n(1)], "first"),
+            ([EdgeId(4)], vec![n(5), n(0)], "second"),
+        ],
+        vec![
+            ([EdgeId(2)], vec![n(1), n(3)], "first"),
+            ([EdgeId(4)], vec![n(0), n(5)], "second"),
+        ],
+    )]
+    fn test_fixed_var_birelation_set_into_entries(
+        #[case] entries: Vec<([EdgeId; 1], Vec<NodeId>, &str)>,
+        #[case] expected: Vec<([EdgeId; 1], Vec<NodeId>, &str)>,
+    ) {
+        let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Unordered, &str> =
+            FixedVarBirelationSet::new(entries);
+        assert_eq!(rs.into_entries(), expected);
     }
 
     #[rstest]
@@ -2348,7 +2517,7 @@ mod tests {
             ]);
         let compaction = Compaction::new(vec![1], vec![]);
         let out = rs.apply_compaction(&compaction);
-        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -2370,7 +2539,7 @@ mod tests {
     #[rstest]
     fn test_fixed_var_birelation_set_default() {
         let rs = FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, ()>::default();
-        assert_eq!(rs.relation_count(), 0);
+        assert_eq!(rs.count(), 0);
         assert!(!rs.has_incident_edge(EdgeId(0)));
     }
 
@@ -2378,10 +2547,30 @@ mod tests {
     fn test_var_var_birelation_set_new() {
         let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, &str> =
             VarVarBirelationSet::new(vec![(vec![n(0), n(1)], vec![EdgeId(5)], "y")]);
-        assert_eq!(rs.relation_count(), 1);
+        assert_eq!(rs.count(), 1);
         assert_eq!(rs.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(5)]);
         assert_eq!(rs.data(RelationId(0)), &"y");
+    }
+
+    #[rstest]
+    #[case::canonical_entries(
+        vec![
+            (vec![n(2), n(0)], vec![EdgeId(4), EdgeId(1)], "first"),
+            (vec![n(5), n(3)], vec![EdgeId(6), EdgeId(2)], "second"),
+        ],
+        vec![
+            (vec![n(0), n(2)], vec![EdgeId(1), EdgeId(4)], "first"),
+            (vec![n(3), n(5)], vec![EdgeId(2), EdgeId(6)], "second"),
+        ],
+    )]
+    fn test_var_var_birelation_set_into_entries(
+        #[case] entries: Vec<(Vec<NodeId>, Vec<EdgeId>, &str)>,
+        #[case] expected: Vec<(Vec<NodeId>, Vec<EdgeId>, &str)>,
+    ) {
+        let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, &str> =
+            VarVarBirelationSet::new(entries);
+        assert_eq!(rs.into_entries(), expected);
     }
 
     #[rstest]
@@ -2447,7 +2636,7 @@ mod tests {
             ]);
         let compaction = Compaction::new(vec![1], vec![]);
         let out = rs.apply_compaction(&compaction);
-        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -2469,7 +2658,7 @@ mod tests {
     #[rstest]
     fn test_var_var_birelation_set_default() {
         let rs = VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, ()>::default();
-        assert_eq!(rs.relation_count(), 0);
+        assert_eq!(rs.count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
 
@@ -2586,7 +2775,7 @@ mod tests {
             ([n(4), n(5)], 30),
         ]);
         let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(glue.object.relation_count(), 3);
+        assert_eq!(glue.object.count(), 3);
         let value = |q: [NodeId; 2]| {
             glue.object
                 .find_by_participants(&q)
@@ -2617,7 +2806,7 @@ mod tests {
             (vec![n(3), n(4)], 20),
         ]);
         let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
                 .find_by_participants(&[n(0), n(1), n(2)])
@@ -2641,7 +2830,7 @@ mod tests {
             ([n(3)], vec![n(4), n(5)], 20),
         ]);
         let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
                 .find_by_participants(&[n(0)], &[n(1), n(2)])
@@ -2662,7 +2851,7 @@ mod tests {
                 ([n(3)], [n(4), n(5)], 20),
             ]);
         let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
                 .find_by_participants(&[n(0)], &[n(1), n(2)])
@@ -2684,7 +2873,7 @@ mod tests {
             (vec![n(4)], vec![n(5)], 20),
         ]);
         let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
                 .find_by_participants(&[n(0), n(1)], &[n(2), n(3)])
@@ -2706,7 +2895,7 @@ mod tests {
             ([n(4), n(5)], 30),
         ]);
         let pb = left.pullback(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(pb.object.relation_count(), 1); // self-only and right-only dropped
+        assert_eq!(pb.object.count(), 1); // self-only and right-only dropped
         assert_eq!(*pb.object.data(RelationId(0)), 15);
         assert_eq!(pb.left.right_of(RelationId(0)), Some(RelationId(0))); // → self {01}
         assert_eq!(pb.right.right_of(RelationId(0)), Some(RelationId(0))); // → right {01}
@@ -2732,7 +2921,7 @@ mod tests {
                 5,
             )]);
         let pb = left.pullback(&right, |a, b| Some(a + b)).expect("no ⊥");
-        assert_eq!(pb.object.relation_count(), 1); // only the shared ([0],[1,2])
+        assert_eq!(pb.object.count(), 1); // only the shared ([0],[1,2])
         assert_eq!(*pb.object.data(RelationId(0)), 15);
     }
 }

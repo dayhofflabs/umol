@@ -69,13 +69,21 @@ where
     }
 
     fn materialize(&mut self) {
-        if let FixedSetStorage::Shared(arc) = self {
-            let entries: Vec<([P; N], D)> = (0..arc.relation_count())
-                .map(|i| {
-                    let rid = RelationId(i as u32);
-                    (*arc.participants(rid), arc.data(rid).clone())
-                })
-                .collect();
+        if matches!(self, FixedSetStorage::Shared(_)) {
+            let FixedSetStorage::Shared(arc) =
+                mem::replace(self, FixedSetStorage::Mutable(Vec::new()))
+            else {
+                unreachable!()
+            };
+            let entries = match Arc::try_unwrap(arc) {
+                Ok(relation_set) => relation_set.into_entries(),
+                Err(arc) => (0..arc.count())
+                    .map(|i| {
+                        let id = RelationId(i as u32);
+                        (*arc.participants(id), arc.data(id).clone())
+                    })
+                    .collect(),
+            };
             *self = FixedSetStorage::Mutable(entries);
         }
     }
@@ -87,9 +95,9 @@ where
         }
     }
 
-    fn relation_count(&self) -> usize {
+    fn count(&self) -> usize {
         match self {
-            FixedSetStorage::Shared(arc) => arc.relation_count(),
+            FixedSetStorage::Shared(arc) => arc.count(),
             FixedSetStorage::Mutable(vec) => vec.len(),
         }
     }
@@ -168,7 +176,7 @@ where
 
     fn entries(&self) -> Vec<([P; N], D)> {
         match self {
-            FixedSetStorage::Shared(arc) => (0..arc.relation_count())
+            FixedSetStorage::Shared(arc) => (0..arc.count())
                 .map(|i| {
                     let rid = RelationId(i as u32);
                     (*arc.participants(rid), arc.data(rid).clone())
@@ -202,13 +210,20 @@ where
     }
 
     fn materialize(&mut self) {
-        if let VarSetStorage::Shared(arc) = self {
-            let entries: Vec<(Vec<P>, D)> = (0..arc.relation_count())
-                .map(|i| {
-                    let rid = RelationId(i as u32);
-                    (arc.participants(rid).to_vec(), arc.data(rid).clone())
-                })
-                .collect();
+        if matches!(self, VarSetStorage::Shared(_)) {
+            let VarSetStorage::Shared(arc) = mem::replace(self, VarSetStorage::Mutable(Vec::new()))
+            else {
+                unreachable!()
+            };
+            let entries = match Arc::try_unwrap(arc) {
+                Ok(relation_set) => relation_set.into_entries(),
+                Err(arc) => (0..arc.count())
+                    .map(|i| {
+                        let id = RelationId(i as u32);
+                        (arc.participants(id).to_vec(), arc.data(id).clone())
+                    })
+                    .collect(),
+            };
             *self = VarSetStorage::Mutable(entries);
         }
     }
@@ -220,9 +235,9 @@ where
         }
     }
 
-    fn relation_count(&self) -> usize {
+    fn count(&self) -> usize {
         match self {
-            VarSetStorage::Shared(arc) => arc.relation_count(),
+            VarSetStorage::Shared(arc) => arc.count(),
             VarSetStorage::Mutable(vec) => vec.len(),
         }
     }
@@ -302,7 +317,7 @@ where
 
     fn entries(&self) -> Vec<(Vec<P>, D)> {
         match self {
-            VarSetStorage::Shared(arc) => (0..arc.relation_count())
+            VarSetStorage::Shared(arc) => (0..arc.count())
                 .map(|i| {
                     let rid = RelationId(i as u32);
                     (arc.participants(rid).to_vec(), arc.data(rid).clone())
@@ -340,8 +355,17 @@ where
     }
 
     fn materialize(&mut self) {
-        if let FixedVarSetStorage::Shared(arc) = self {
-            *self = FixedVarSetStorage::Mutable(arc_entries(arc));
+        if matches!(self, FixedVarSetStorage::Shared(_)) {
+            let FixedVarSetStorage::Shared(arc) =
+                mem::replace(self, FixedVarSetStorage::Mutable(Vec::new()))
+            else {
+                unreachable!()
+            };
+            let entries = match Arc::try_unwrap(arc) {
+                Ok(relation_set) => relation_set.into_entries(),
+                Err(arc) => arc_entries(&arc),
+            };
+            *self = FixedVarSetStorage::Mutable(entries);
         }
     }
 
@@ -352,9 +376,9 @@ where
         }
     }
 
-    fn relation_count(&self) -> usize {
+    fn count(&self) -> usize {
         match self {
-            FixedVarSetStorage::Shared(arc) => arc.relation_count(),
+            FixedVarSetStorage::Shared(arc) => arc.count(),
             FixedVarSetStorage::Mutable(vec) => vec.len(),
         }
     }
@@ -477,7 +501,7 @@ where
     O2: FactorOrdering,
     D: Clone,
 {
-    (0..arc.relation_count())
+    (0..arc.count())
         .map(|i| {
             let rid = RelationId(i as u32);
             (
@@ -503,7 +527,7 @@ where
     D: BiRelationData + Clone,
 {
     let mut removed = Vec::new();
-    for i in 0..storage.relation_count() {
+    for i in 0..storage.count() {
         let f1_gone = storage
             .participants_1(i)
             .iter()
@@ -550,7 +574,7 @@ where
     D: RelationData + Clone,
 {
     let mut removed = Vec::new();
-    for i in 0..storage.relation_count() {
+    for i in 0..storage.count() {
         if storage
             .participants(i)
             .iter()
@@ -572,7 +596,7 @@ where
     D: RelationData + Clone,
 {
     let mut removed = Vec::new();
-    for i in 0..storage.relation_count() {
+    for i in 0..storage.count() {
         if storage
             .participants(i)
             .iter()
@@ -1073,27 +1097,27 @@ impl MoleculeEditor {
     }
 
     pub fn dative_bond_count(&self) -> usize {
-        self.dative_bonds.relation_count()
+        self.dative_bonds.count()
     }
 
     pub fn aromatic_system_count(&self) -> usize {
-        self.aromatic_systems.relation_count()
+        self.aromatic_systems.count()
     }
 
     pub fn multicenter_bond_count(&self) -> usize {
-        self.multicenter_bonds.relation_count()
+        self.multicenter_bonds.count()
     }
 
     pub fn noncovalent_bond_count(&self) -> usize {
-        self.noncovalent_bonds.relation_count()
+        self.noncovalent_bonds.count()
     }
 
     pub fn stereo_atom_count(&self) -> usize {
-        self.stereo_atoms.relation_count()
+        self.stereo_atoms.count()
     }
 
     pub fn stereo_bond_count(&self) -> usize {
-        self.stereo_bonds.relation_count()
+        self.stereo_bonds.count()
     }
 
     // -- Relation removal -----------------------------------------------------
@@ -1538,6 +1562,8 @@ impl MoleculeEditor {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
     use rstest::*;
     use umol_chem::element::Element;
 
@@ -1548,6 +1574,93 @@ mod tests {
     use crate::ast::dative::DativeBondAst;
     use crate::ast::RemovedConstraint;
     use crate::mol_dsl;
+
+    #[derive(Debug)]
+    struct CloneCounted {
+        count: Arc<AtomicUsize>,
+    }
+
+    impl Clone for CloneCounted {
+        fn clone(&self) -> Self {
+            self.count.fetch_add(1, AtomicOrdering::Relaxed);
+            Self {
+                count: Arc::clone(&self.count),
+            }
+        }
+    }
+
+    impl RelationData for CloneCounted {
+        fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
+    }
+
+    impl BiRelationData for CloneCounted {
+        fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
+    }
+
+    #[rstest]
+    #[case::unique(false, 0)]
+    #[case::shared(true, 1)]
+    fn test_fixed_set_storage_materialize(#[case] shared: bool, #[case] expected_clones: usize) {
+        let count = Arc::new(AtomicUsize::new(0));
+        let relation_set: Arc<FixedRelationSet<NodeId, Unordered, CloneCounted, 2>> =
+            Arc::new(FixedRelationSet::new(vec![(
+                [NodeId(0), NodeId(1)],
+                CloneCounted {
+                    count: Arc::clone(&count),
+                },
+            )]));
+        let _shared = shared.then(|| Arc::clone(&relation_set));
+        let mut storage = FixedSetStorage::Shared(relation_set);
+
+        storage.materialize();
+
+        assert_eq!(count.load(AtomicOrdering::Relaxed), expected_clones);
+    }
+
+    #[rstest]
+    #[case::unique(false, 0)]
+    #[case::shared(true, 1)]
+    fn test_var_set_storage_materialize(#[case] shared: bool, #[case] expected_clones: usize) {
+        let count = Arc::new(AtomicUsize::new(0));
+        let relation_set: Arc<VarRelationSet<NodeId, Unordered, CloneCounted>> =
+            Arc::new(VarRelationSet::new(vec![(
+                vec![NodeId(0), NodeId(1)],
+                CloneCounted {
+                    count: Arc::clone(&count),
+                },
+            )]));
+        let _shared = shared.then(|| Arc::clone(&relation_set));
+        let mut storage = VarSetStorage::Shared(relation_set);
+
+        storage.materialize();
+
+        assert_eq!(count.load(AtomicOrdering::Relaxed), expected_clones);
+    }
+
+    #[rstest]
+    #[case::unique(false, 0)]
+    #[case::shared(true, 1)]
+    fn test_fixed_var_set_storage_materialize(
+        #[case] shared: bool,
+        #[case] expected_clones: usize,
+    ) {
+        let count = Arc::new(AtomicUsize::new(0));
+        let relation_set: Arc<
+            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, CloneCounted>,
+        > = Arc::new(FixedVarBirelationSet::new(vec![(
+            [NodeId(0)],
+            vec![NodeId(1), NodeId(2)],
+            CloneCounted {
+                count: Arc::clone(&count),
+            },
+        )]));
+        let _shared = shared.then(|| Arc::clone(&relation_set));
+        let mut storage = FixedVarSetStorage::Shared(relation_set);
+
+        storage.materialize();
+
+        assert_eq!(count.load(AtomicOrdering::Relaxed), expected_clones);
+    }
 
     #[fixture]
     fn triatomic() -> MoleculeEditor {

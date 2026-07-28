@@ -30,7 +30,7 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.noncovalent_bonds.relation_count()
+        self.noncovalent_bonds.count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = NoncovalentBondId> {

@@ -33,7 +33,7 @@ impl<'a> MulticenterBondViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.multicenter_bonds.relation_count()
+        self.multicenter_bonds.count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = MulticenterBondId> {

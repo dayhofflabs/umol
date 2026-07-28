@@ -548,7 +548,7 @@ impl ReactionSpanAst {
             let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
             [AtomId::from(a), AtomId::from(b)]
         }));
-        let dative_states: Vec<EntitySpan<DativeBondAst>> = (0..self.dative_bonds.relation_count())
+        let dative_states: Vec<EntitySpan<DativeBondAst>> = (0..self.dative_bonds.count())
             .map(|i| self.dative_bonds.data(RelationId(i as u32)).clone())
             .collect();
         deltas.extend(DativeBondDelta::deltas_from_states(
@@ -566,7 +566,7 @@ impl ReactionSpanAst {
             },
         ));
         let aromatic_states: Vec<EntitySpan<AromaticSystemAst>> =
-            (0..self.aromatic_systems.relation_count())
+            (0..self.aromatic_systems.count())
                 .map(|i| self.aromatic_systems.data(RelationId(i as u32)).clone())
                 .collect();
         deltas.extend(AromaticSystemDelta::deltas_from_states(
@@ -580,7 +580,7 @@ impl ReactionSpanAst {
             },
         ));
         let multicenter_states: Vec<EntitySpan<MulticenterBondAst>> =
-            (0..self.multicenter_bonds.relation_count())
+            (0..self.multicenter_bonds.count())
                 .map(|i| self.multicenter_bonds.data(RelationId(i as u32)).clone())
                 .collect();
         deltas.extend(MulticenterBondDelta::deltas_from_states(
@@ -594,7 +594,7 @@ impl ReactionSpanAst {
             },
         ));
         let noncovalent_states: Vec<EntitySpan<NoncovalentBondAst>> =
-            (0..self.noncovalent_bonds.relation_count())
+            (0..self.noncovalent_bonds.count())
                 .map(|i| self.noncovalent_bonds.data(RelationId(i as u32)).clone())
                 .collect();
         deltas.extend(NoncovalentBondDelta::deltas_from_states(
@@ -609,7 +609,7 @@ impl ReactionSpanAst {
         // Stereo overlays have no `EntityFold`, so recover their deltas here: `Removed`/`Added` carry
         // the relation's site + ligand frame; `Modified` is the field/constraint diff. Site/ligand
         // ids are the union frame (lhs ids for preserved/removed entities).
-        for i in 0..self.stereo_atoms.relation_count() {
+        for i in 0..self.stereo_atoms.count() {
             let rid = RelationId(i as u32);
             let id = StereoAtomId::from(rid);
             let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
@@ -640,7 +640,7 @@ impl ReactionSpanAst {
                 ),
             }
         }
-        for i in 0..self.stereo_bonds.relation_count() {
+        for i in 0..self.stereo_bonds.count() {
             let rid = RelationId(i as u32);
             let id = StereoBondId::from(rid);
             let site = BondId::from(self.stereo_bonds.participants_1(rid)[0]);
@@ -724,7 +724,7 @@ impl ReactionSpanAst {
         let atom = |n: NodeId| compacted[n.index()];
         let mut dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
         let mut removed_dative: Vec<RelationId> = Vec::new();
-        for i in 0..self.dative_bonds.relation_count() {
+        for i in 0..self.dative_bonds.count() {
             let rid = RelationId(i as u32);
             let acceptor = atom(self.dative_bonds.participants_1(rid)[0]);
             let donors: Option<Vec<AtomId>> = self
@@ -747,7 +747,7 @@ impl ReactionSpanAst {
 
         let mut aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)> = Vec::new();
         let mut removed_aromatic: Vec<RelationId> = Vec::new();
-        for i in 0..self.aromatic_systems.relation_count() {
+        for i in 0..self.aromatic_systems.count() {
             let rid = RelationId(i as u32);
             let members: Option<Vec<AtomId>> = self
                 .aromatic_systems
@@ -763,7 +763,7 @@ impl ReactionSpanAst {
 
         let mut multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)> = Vec::new();
         let mut removed_multicenter: Vec<RelationId> = Vec::new();
-        for i in 0..self.multicenter_bonds.relation_count() {
+        for i in 0..self.multicenter_bonds.count() {
             let rid = RelationId(i as u32);
             let members: Option<Vec<AtomId>> = self
                 .multicenter_bonds
@@ -779,7 +779,7 @@ impl ReactionSpanAst {
 
         let mut noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)> = Vec::new();
         let mut removed_noncovalent: Vec<RelationId> = Vec::new();
-        for i in 0..self.noncovalent_bonds.relation_count() {
+        for i in 0..self.noncovalent_bonds.count() {
             let rid = RelationId(i as u32);
             let [a, b] = *self.noncovalent_bonds.participants(rid);
             match (
@@ -799,7 +799,7 @@ impl ReactionSpanAst {
         };
         let mut stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = Vec::new();
         let mut removed_stereo_atoms: Vec<RelationId> = Vec::new();
-        for i in 0..self.stereo_atoms.relation_count() {
+        for i in 0..self.stereo_atoms.count() {
             let rid = RelationId(i as u32);
             let site = atom(self.stereo_atoms.participants_1(rid)[0]);
             match (
@@ -816,7 +816,7 @@ impl ReactionSpanAst {
 
         let mut stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = Vec::new();
         let mut removed_stereo_bonds: Vec<RelationId> = Vec::new();
-        for i in 0..self.stereo_bonds.relation_count() {
+        for i in 0..self.stereo_bonds.count() {
             let rid = RelationId(i as u32);
             let site = compacted_bonds[self.stereo_bonds.participants_1(rid)[0].index()];
             match (

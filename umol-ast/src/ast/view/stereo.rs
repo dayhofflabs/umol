@@ -40,7 +40,7 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.stereo_atoms.relation_count()
+        self.stereo_atoms.count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = StereoAtomId> {
@@ -359,7 +359,7 @@ impl<'a> StereoBondViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.stereo_bonds.relation_count()
+        self.stereo_bonds.count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = StereoBondId> {

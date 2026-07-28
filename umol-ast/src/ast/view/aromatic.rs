@@ -35,7 +35,7 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.aromatic_systems.relation_count()
+        self.aromatic_systems.count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = AromaticSystemId> {

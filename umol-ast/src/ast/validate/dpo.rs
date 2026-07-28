@@ -150,7 +150,7 @@ impl DpoValidator {
                 }
             }
         }
-        for i in 0..span.dative_bonds().relation_count() {
+        for i in 0..span.dative_bonds().count() {
             let rid = RelationId(i as u32);
             if matches!(span.dative_bonds().data(rid), EntitySpan::Removed(_)) {
                 continue;
@@ -166,7 +166,7 @@ impl DpoValidator {
                 }
             }
         }
-        for i in 0..span.aromatic_systems().relation_count() {
+        for i in 0..span.aromatic_systems().count() {
             let rid = RelationId(i as u32);
             if matches!(span.aromatic_systems().data(rid), EntitySpan::Removed(_)) {
                 continue;
@@ -180,7 +180,7 @@ impl DpoValidator {
                 }
             }
         }
-        for i in 0..span.multicenter_bonds().relation_count() {
+        for i in 0..span.multicenter_bonds().count() {
             let rid = RelationId(i as u32);
             if matches!(span.multicenter_bonds().data(rid), EntitySpan::Removed(_)) {
                 continue;
@@ -194,7 +194,7 @@ impl DpoValidator {
                 }
             }
         }
-        for i in 0..span.noncovalent_bonds().relation_count() {
+        for i in 0..span.noncovalent_bonds().count() {
             let rid = RelationId(i as u32);
             if matches!(span.noncovalent_bonds().data(rid), EntitySpan::Removed(_)) {
                 continue;
