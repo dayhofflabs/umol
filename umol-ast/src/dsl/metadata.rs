@@ -1,7 +1,6 @@
 //! Surface-form metadata for molecule and reaction DSLs.
 
 use bimap::BiBTreeMap;
-use indexmap::IndexMap;
 use thiserror::Error;
 
 use super::atom::AtomDsl;
@@ -9,6 +8,7 @@ use super::namespace::MoleculeNamespace;
 use super::reaction::ReactionNamespace;
 use crate::ast::correspondence::MoleculeCorrespondence;
 use crate::ast::entity::Entity;
+#[cfg(test)]
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -218,22 +218,58 @@ impl From<&MoleculeNamespace> for MoleculeMetadata {
     }
 }
 
-/// Surface-form metadata paired with a `ReactionAst`: the lhs molecule metadata plus the
-/// created-entity keyword bindings and atom aliases introduced by the deltas. Mirrors
-/// `MoleculeMetadata` for the atom/bond entities (the reaction admits the `[:C "C#h3"]`
-/// alias notation for added atoms).
+/// Surface-form metadata paired with a `ReactionAst`: lhs molecule metadata,
+/// entity keywords introduced by deltas, and reaction-scope atom aliases.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionMetadata {
     lhs: MoleculeMetadata,
-    atom_ids: IndexMap<AtomId, String>,
+    delta_keywords: BiBTreeMap<Entity, String>,
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
-    bond_ids: IndexMap<BondId, String>,
-    dative_bond_ids: IndexMap<DativeBondId, String>,
-    aromatic_system_ids: IndexMap<AromaticSystemId, String>,
-    multicenter_bond_ids: IndexMap<MulticenterBondId, String>,
-    noncovalent_bond_ids: IndexMap<NoncovalentBondId, String>,
-    stereo_atom_ids: IndexMap<StereoAtomId, String>,
-    stereo_bond_ids: IndexMap<StereoBondId, String>,
+}
+
+struct ReactionKeywordIter<D, L> {
+    delta: D,
+    lhs: L,
+}
+
+impl<D, L> ReactionKeywordIter<D, L>
+where
+    D: ExactSizeIterator,
+    L: ExactSizeIterator<Item = D::Item>,
+{
+    fn remaining_len(&self) -> usize {
+        self.delta
+            .len()
+            .checked_add(self.lhs.len())
+            .expect("reaction metadata keyword count exceeds usize")
+    }
+}
+
+impl<D, L> Iterator for ReactionKeywordIter<D, L>
+where
+    D: ExactSizeIterator,
+    L: ExactSizeIterator<Item = D::Item>,
+{
+    type Item = D::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.delta.next().or_else(|| self.lhs.next())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.remaining_len();
+        (len, Some(len))
+    }
+}
+
+impl<D, L> ExactSizeIterator for ReactionKeywordIter<D, L>
+where
+    D: ExactSizeIterator,
+    L: ExactSizeIterator<Item = D::Item>,
+{
+    fn len(&self) -> usize {
+        self.remaining_len()
+    }
 }
 
 impl ReactionMetadata {
@@ -241,57 +277,45 @@ impl ReactionMetadata {
         &self.lhs
     }
 
+    pub fn keyword(&self, entity: Entity) -> Option<&str> {
+        self.delta_keyword(entity)
+            .or_else(|| self.lhs.keyword(entity))
+    }
+
+    pub fn entity(&self, keyword: &str) -> Option<Entity> {
+        self.delta_entity(keyword)
+            .or_else(|| self.lhs.entity(keyword))
+    }
+
+    pub fn iter_keywords(&self) -> impl ExactSizeIterator<Item = (Entity, &str)> {
+        ReactionKeywordIter {
+            delta: self.iter_delta_keywords(),
+            lhs: self.lhs.iter_keywords(),
+        }
+    }
+
+    pub fn delta_keyword(&self, entity: Entity) -> Option<&str> {
+        self.delta_keywords.get_by_left(&entity).map(String::as_str)
+    }
+
+    pub fn delta_entity(&self, keyword: &str) -> Option<Entity> {
+        self.delta_keywords.get_by_right(keyword).copied()
+    }
+
+    pub fn iter_delta_keywords(&self) -> impl ExactSizeIterator<Item = (Entity, &str)> {
+        self.delta_keywords
+            .iter()
+            .map(|(entity, keyword)| (*entity, keyword.as_str()))
+    }
+
     pub fn combined_metadata(&self) -> MoleculeMetadata {
         let mut combined = self.lhs.clone();
-        for (&id, name) in &self.atom_ids {
+        for (entity, name) in self.iter_delta_keywords() {
             combined
-                .set_keyword(Entity::Atom(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.bond_ids {
-            combined
-                .set_keyword(Entity::Bond(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.dative_bond_ids {
-            combined
-                .set_keyword(Entity::DativeBond(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.aromatic_system_ids {
-            combined
-                .set_keyword(Entity::AromaticSystem(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.multicenter_bond_ids {
-            combined
-                .set_keyword(Entity::MulticenterBond(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.noncovalent_bond_ids {
-            combined
-                .set_keyword(Entity::NoncovalentBond(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.stereo_atom_ids {
-            combined
-                .set_keyword(Entity::StereoAtom(id), name)
-                .expect("reaction metadata keywords are disjoint");
-        }
-        for (&id, name) in &self.stereo_bond_ids {
-            combined
-                .set_keyword(Entity::StereoBond(id), name)
+                .set_keyword(entity, name)
                 .expect("reaction metadata keywords are disjoint");
         }
         combined
-    }
-
-    pub fn atom_keyword(&self, id: AtomId) -> Option<&str> {
-        self.atom_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn bond_keyword(&self, id: BondId) -> Option<&str> {
-        self.bond_ids.get(&id).map(String::as_str)
     }
 
     /// Name of the alias bound to this atom DSL, if any.
@@ -317,60 +341,26 @@ impl ReactionMetadata {
             .map(|(k, v)| (k.as_str(), v.as_ref()))
     }
 
-    pub fn set_atom_keyword(&mut self, id: AtomId, name: impl Into<String>) {
-        self.atom_ids.insert(id, name.into());
-    }
+    pub fn set_delta_keyword(
+        &mut self,
+        entity: Entity,
+        name: impl Into<String>,
+    ) -> Result<(), MetadataError> {
+        let name = name.into();
 
-    pub fn set_bond_keyword(&mut self, id: BondId, name: impl Into<String>) {
-        self.bond_ids.insert(id, name.into());
-    }
+        if self.delta_keywords.get_by_left(&entity) == Some(&name) {
+            return Ok(());
+        }
+        if self.delta_keywords.contains_right(name.as_str())
+            || self.lhs.entity(name.as_str()).is_some()
+            || self.lhs.atom_alias(name.as_str()).is_some()
+            || self.atom_aliases.contains_left(name.as_str())
+        {
+            return Err(MetadataError::DuplicateKeyword(name));
+        }
 
-    pub fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str> {
-        self.dative_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_dative_bond_keyword(&mut self, id: DativeBondId, name: impl Into<String>) {
-        self.dative_bond_ids.insert(id, name.into());
-    }
-
-    pub fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str> {
-        self.aromatic_system_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_aromatic_system_keyword(&mut self, id: AromaticSystemId, name: impl Into<String>) {
-        self.aromatic_system_ids.insert(id, name.into());
-    }
-
-    pub fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str> {
-        self.multicenter_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_multicenter_bond_keyword(&mut self, id: MulticenterBondId, name: impl Into<String>) {
-        self.multicenter_bond_ids.insert(id, name.into());
-    }
-
-    pub fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str> {
-        self.noncovalent_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_noncovalent_bond_keyword(&mut self, id: NoncovalentBondId, name: impl Into<String>) {
-        self.noncovalent_bond_ids.insert(id, name.into());
-    }
-
-    pub fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str> {
-        self.stereo_atom_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_stereo_atom_keyword(&mut self, id: StereoAtomId, name: impl Into<String>) {
-        self.stereo_atom_ids.insert(id, name.into());
-    }
-
-    pub fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str> {
-        self.stereo_bond_ids.get(&id).map(String::as_str)
-    }
-
-    pub fn set_stereo_bond_keyword(&mut self, id: StereoBondId, name: impl Into<String>) {
-        self.stereo_bond_ids.insert(id, name.into());
+        self.delta_keywords.insert(entity, name);
+        Ok(())
     }
 
     /// Insert an atom alias. Last-wins on either side of the bijection: a
@@ -380,20 +370,15 @@ impl ReactionMetadata {
     pub fn add_atom_alias(&mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) {
         self.atom_aliases.insert(name.into(), Box::new(atom.into()));
     }
+}
 
-    pub fn with_atom_keyword(mut self, id: AtomId, name: impl Into<String>) -> Self {
-        self.set_atom_keyword(id, name);
-        self
+impl Metadata for ReactionMetadata {
+    fn keyword(&self, entity: Entity) -> Option<&str> {
+        self.keyword(entity)
     }
 
-    pub fn with_bond_keyword(mut self, id: BondId, name: impl Into<String>) -> Self {
-        self.set_bond_keyword(id, name);
-        self
-    }
-
-    pub fn with_atom_alias(mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) -> Self {
-        self.add_atom_alias(name, atom);
-        self
+    fn entity(&self, keyword: &str) -> Option<Entity> {
+        self.entity(keyword)
     }
 }
 
@@ -415,28 +400,44 @@ impl From<&ReactionNamespace> for ReactionMetadata {
             ..Default::default()
         };
         for (id, name) in ns.deltas().atom_keywords() {
-            metadata.set_atom_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::Atom(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().bond_keywords() {
-            metadata.set_bond_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::Bond(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().dative_bond_keywords() {
-            metadata.set_dative_bond_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::DativeBond(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().aromatic_system_keywords() {
-            metadata.set_aromatic_system_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::AromaticSystem(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().multicenter_bond_keywords() {
-            metadata.set_multicenter_bond_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::MulticenterBond(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().noncovalent_bond_keywords() {
-            metadata.set_noncovalent_bond_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::NoncovalentBond(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().stereo_atom_keywords() {
-            metadata.set_stereo_atom_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::StereoAtom(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (id, name) in ns.deltas().stereo_bond_keywords() {
-            metadata.set_stereo_bond_keyword(id, name);
+            metadata
+                .set_delta_keyword(Entity::StereoBond(id), name)
+                .expect("reaction namespace keywords are disjoint");
         }
         for (name, dsl) in ns.atom_aliases() {
             metadata.add_atom_alias(name.to_string(), dsl.clone());
@@ -982,5 +983,446 @@ mod tests {
 
         assert_eq!(sequential, composed);
         assert_eq!(composed, expected);
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_lhs() {
+        let lhs = MoleculeMetadata {
+            keywords: [(Entity::Atom(AtomId(0)), "lhs".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+        let metadata = ReactionMetadata {
+            lhs: lhs.clone(),
+            ..Default::default()
+        };
+
+        assert_eq!(metadata.lhs(), &lhs);
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)))]
+    #[case::bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)))]
+    #[case::dative_bond(
+        Entity::DativeBond(DativeBondId(0)),
+        Entity::DativeBond(DativeBondId(1))
+    )]
+    #[case::aromatic_system(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Entity::AromaticSystem(AromaticSystemId(1))
+    )]
+    #[case::multicenter_bond(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        Entity::MulticenterBond(MulticenterBondId(1))
+    )]
+    #[case::noncovalent_bond(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(1))
+    )]
+    #[case::stereo_atom(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Entity::StereoAtom(StereoAtomId(1))
+    )]
+    #[case::stereo_bond(
+        Entity::StereoBond(StereoBondId(0)),
+        Entity::StereoBond(StereoBondId(1))
+    )]
+    fn test_reaction_metadata_keyword(#[case] lhs_entity: Entity, #[case] delta_entity: Entity) {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(lhs_entity, "lhs".to_string())].into_iter().collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: [(delta_entity, "delta".to_string())].into_iter().collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        assert_eq!(metadata.keyword(lhs_entity), Some("lhs"));
+        assert_eq!(metadata.keyword(delta_entity), Some("delta"));
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)))]
+    #[case::bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)))]
+    #[case::dative_bond(
+        Entity::DativeBond(DativeBondId(0)),
+        Entity::DativeBond(DativeBondId(1))
+    )]
+    #[case::aromatic_system(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Entity::AromaticSystem(AromaticSystemId(1))
+    )]
+    #[case::multicenter_bond(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        Entity::MulticenterBond(MulticenterBondId(1))
+    )]
+    #[case::noncovalent_bond(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(1))
+    )]
+    #[case::stereo_atom(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Entity::StereoAtom(StereoAtomId(1))
+    )]
+    #[case::stereo_bond(
+        Entity::StereoBond(StereoBondId(0)),
+        Entity::StereoBond(StereoBondId(1))
+    )]
+    fn test_reaction_metadata_entity(#[case] lhs_entity: Entity, #[case] delta_entity: Entity) {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(lhs_entity, "lhs".to_string())].into_iter().collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: [(delta_entity, "delta".to_string())].into_iter().collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        assert_eq!(metadata.entity("lhs"), Some(lhs_entity));
+        assert_eq!(metadata.entity("delta"), Some(delta_entity));
+        assert_eq!(metadata.entity("missing"), None);
+    }
+
+    #[rstest]
+    #[case::empty(ReactionMetadata::default(), Vec::new())]
+    #[case::populated(
+        ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(Entity::Atom(AtomId(0)), "lhs".to_string())]
+                    .into_iter()
+                    .collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: [(Entity::Bond(BondId(0)), "delta".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        vec![
+            (Entity::Bond(BondId(0)), "delta"),
+            (Entity::Atom(AtomId(0)), "lhs"),
+        ]
+    )]
+    fn test_reaction_metadata_iter_keywords(
+        #[case] metadata: ReactionMetadata,
+        #[case] expected: Vec<(Entity, &str)>,
+    ) {
+        let mut keywords = metadata.iter_keywords();
+
+        assert_eq!(keywords.len(), expected.len());
+        assert_eq!(keywords.size_hint(), (expected.len(), Some(expected.len())));
+        assert_eq!(keywords.next(), expected.first().copied());
+        assert_eq!(keywords.len(), expected.len().saturating_sub(1));
+        assert_eq!(
+            keywords.by_ref().collect::<Vec<_>>(),
+            expected.get(1..).unwrap_or_default()
+        );
+        assert_eq!(keywords.len(), 0);
+        assert_eq!(keywords.size_hint(), (0, Some(0)));
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)))]
+    #[case::bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)))]
+    #[case::dative_bond(
+        Entity::DativeBond(DativeBondId(0)),
+        Entity::DativeBond(DativeBondId(1))
+    )]
+    #[case::aromatic_system(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Entity::AromaticSystem(AromaticSystemId(1))
+    )]
+    #[case::multicenter_bond(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        Entity::MulticenterBond(MulticenterBondId(1))
+    )]
+    #[case::noncovalent_bond(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(1))
+    )]
+    #[case::stereo_atom(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Entity::StereoAtom(StereoAtomId(1))
+    )]
+    #[case::stereo_bond(
+        Entity::StereoBond(StereoBondId(0)),
+        Entity::StereoBond(StereoBondId(1))
+    )]
+    fn test_reaction_metadata_delta_keyword(
+        #[case] lhs_entity: Entity,
+        #[case] delta_entity: Entity,
+    ) {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(lhs_entity, "lhs".to_string())].into_iter().collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: [(delta_entity, "delta".to_string())].into_iter().collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        assert_eq!(metadata.delta_keyword(delta_entity), Some("delta"));
+        assert_eq!(metadata.delta_keyword(lhs_entity), None);
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)))]
+    #[case::bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)))]
+    #[case::dative_bond(
+        Entity::DativeBond(DativeBondId(0)),
+        Entity::DativeBond(DativeBondId(1))
+    )]
+    #[case::aromatic_system(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Entity::AromaticSystem(AromaticSystemId(1))
+    )]
+    #[case::multicenter_bond(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        Entity::MulticenterBond(MulticenterBondId(1))
+    )]
+    #[case::noncovalent_bond(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(1))
+    )]
+    #[case::stereo_atom(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Entity::StereoAtom(StereoAtomId(1))
+    )]
+    #[case::stereo_bond(
+        Entity::StereoBond(StereoBondId(0)),
+        Entity::StereoBond(StereoBondId(1))
+    )]
+    fn test_reaction_metadata_delta_entity(
+        #[case] lhs_entity: Entity,
+        #[case] delta_entity: Entity,
+    ) {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(lhs_entity, "lhs".to_string())].into_iter().collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: [(delta_entity, "delta".to_string())].into_iter().collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        assert_eq!(metadata.delta_entity("delta"), Some(delta_entity));
+        assert_eq!(metadata.delta_entity("lhs"), None);
+        assert_eq!(metadata.delta_entity("missing"), None);
+    }
+
+    #[rstest]
+    #[case::empty(ReactionMetadata::default(), Vec::new())]
+    #[case::populated(
+        ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(Entity::Atom(AtomId(0)), "lhs".to_string())]
+                    .into_iter()
+                    .collect(),
+                atom_aliases: BiBTreeMap::new(),
+            },
+            delta_keywords: [
+                (Entity::Atom(AtomId(1)), "delta-atom".to_string()),
+                (Entity::Bond(BondId(0)), "delta-bond".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        vec![
+            (Entity::Atom(AtomId(1)), "delta-atom"),
+            (Entity::Bond(BondId(0)), "delta-bond"),
+        ]
+    )]
+    fn test_reaction_metadata_iter_delta_keywords(
+        #[case] metadata: ReactionMetadata,
+        #[case] expected: Vec<(Entity, &str)>,
+    ) {
+        let mut keywords = metadata.iter_delta_keywords();
+
+        assert_eq!(keywords.len(), expected.len());
+        assert_eq!(keywords.size_hint(), (expected.len(), Some(expected.len())));
+        assert_eq!(keywords.next(), expected.first().copied());
+        assert_eq!(keywords.len(), expected.len().saturating_sub(1));
+        assert_eq!(
+            keywords.by_ref().collect::<Vec<_>>(),
+            expected.get(1..).unwrap_or_default()
+        );
+        assert_eq!(keywords.len(), 0);
+        assert_eq!(keywords.size_hint(), (0, Some(0)));
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_combined_metadata() {
+        let metadata = ReactionMetadata {
+            lhs: MoleculeMetadata {
+                keywords: [(Entity::Atom(AtomId(0)), "lhs".to_string())]
+                    .into_iter()
+                    .collect(),
+                atom_aliases: [(
+                    "carbon".to_string(),
+                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                )]
+                .into_iter()
+                .collect(),
+            },
+            delta_keywords: [(Entity::Bond(BondId(0)), "delta".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+        let expected = MoleculeMetadata {
+            keywords: [
+                (Entity::Atom(AtomId(0)), "lhs".to_string()),
+                (Entity::Bond(BondId(0)), "delta".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+            atom_aliases: [(
+                "carbon".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(metadata.combined_metadata(), expected);
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(1)))]
+    #[case::bond(Entity::Bond(BondId(1)))]
+    #[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
+    #[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(1)))]
+    #[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(1)))]
+    #[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(1)))]
+    #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(1)))]
+    #[case::stereo_bond(Entity::StereoBond(StereoBondId(1)))]
+    fn test_reaction_metadata_set_delta_keyword(#[case] entity: Entity) {
+        let mut actual = ReactionMetadata::default();
+        let result = actual.set_delta_keyword(entity, "key");
+        let expected = ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: [(entity, "key".to_string())].into_iter().collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_set_delta_keyword_idempotent() {
+        let mut actual = ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: [(Entity::Atom(AtomId(1)), "key".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+        let expected = actual.clone();
+
+        let result = actual.set_delta_keyword(Entity::Atom(AtomId(1)), "key");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_set_delta_keyword_rebinding() {
+        let mut actual = ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: [(Entity::Atom(AtomId(1)), "old".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+        let expected = ReactionMetadata {
+            lhs: MoleculeMetadata::new(),
+            delta_keywords: [(Entity::Atom(AtomId(1)), "new".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        let result = actual.set_delta_keyword(Entity::Atom(AtomId(1)), "new");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::delta_keyword(ReactionMetadata {
+        lhs: MoleculeMetadata::new(),
+        delta_keywords: [(Entity::Atom(AtomId(1)), "used".to_string())]
+            .into_iter()
+            .collect(),
+        atom_aliases: BiBTreeMap::new(),
+    })]
+    #[case::lhs_keyword(ReactionMetadata {
+        lhs: MoleculeMetadata {
+            keywords: [(Entity::Atom(AtomId(0)), "used".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: BiBTreeMap::new(),
+        },
+        delta_keywords: BiBTreeMap::new(),
+        atom_aliases: BiBTreeMap::new(),
+    })]
+    #[case::lhs_alias(ReactionMetadata {
+        lhs: MoleculeMetadata {
+            keywords: BiBTreeMap::new(),
+            atom_aliases: [(
+                "used".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        },
+        delta_keywords: BiBTreeMap::new(),
+        atom_aliases: BiBTreeMap::new(),
+    })]
+    #[case::reaction_alias(ReactionMetadata {
+        lhs: MoleculeMetadata::new(),
+        delta_keywords: BiBTreeMap::new(),
+        atom_aliases: [(
+            "used".to_string(),
+            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+        )]
+        .into_iter()
+        .collect(),
+    })]
+    fn test_reaction_metadata_set_delta_keyword_error(#[case] mut actual: ReactionMetadata) {
+        let expected = actual.clone();
+
+        let result = actual.set_delta_keyword(Entity::Bond(BondId(1)), "used");
+
+        assert_eq!(
+            result,
+            Err(MetadataError::DuplicateKeyword("used".to_string()))
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_reaction_metadata_from_molecule_metadata() {
+        let lhs = MoleculeMetadata {
+            keywords: [(Entity::Atom(AtomId(0)), "lhs".to_string())]
+                .into_iter()
+                .collect(),
+            atom_aliases: [(
+                "carbon".to_string(),
+                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            )]
+            .into_iter()
+            .collect(),
+        };
+        let expected = ReactionMetadata {
+            lhs: lhs.clone(),
+            delta_keywords: BiBTreeMap::new(),
+            atom_aliases: BiBTreeMap::new(),
+        };
+
+        assert_eq!(ReactionMetadata::from(lhs), expected);
     }
 }

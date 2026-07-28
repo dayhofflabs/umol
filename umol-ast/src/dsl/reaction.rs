@@ -2689,7 +2689,7 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn
         Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
         None => dsl.to_edn(),
     };
-    match meta.atom_keyword(id) {
+    match meta.delta_keyword(Entity::Atom(id)) {
         Some(name) => {
             Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(name.to_string())), spec].into())
         }
@@ -2700,10 +2700,7 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn
 /// An atom named as a bond endpoint — resolved against the union namespace (lhs ∪ created), since a
 /// bond may attach to a same-reaction atom. Unlike a delta target ref, which is lhs-only.
 fn render_atom_endpoint(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
-    match meta
-        .atom_keyword(id)
-        .or_else(|| meta.lhs().keyword(Entity::Atom(id)))
-    {
+    match meta.keyword(Entity::Atom(id)) {
         Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
         None => Edn::Int(id.index() as i64),
     }
@@ -2729,7 +2726,7 @@ fn render_bond_entry(
     let bond_edn = BondDsl::from_ref(ast).to_edn();
     let first = render_atom_endpoint(atoms[0], meta);
     let second = render_atom_endpoint(atoms[1], meta);
-    match meta.bond_keyword(id) {
+    match meta.delta_keyword(Entity::Bond(id)) {
         Some(name) => {
             let mut m = EdnMap::with_capacity(3);
             m.insert(
@@ -3294,8 +3291,8 @@ mod tests {
                 }),
             ]),
         );
-        assert_eq!(meta.atom_keyword(AtomId(1)), Some("nu"));
-        assert_eq!(meta.atom_keyword(AtomId(2)), None);
+        assert_eq!(meta.delta_keyword(Entity::Atom(AtomId(1))), Some("nu"));
+        assert_eq!(meta.delta_keyword(Entity::Atom(AtomId(2))), None);
         assert!(meta.has_atom_alias("me"));
     }
 
@@ -3915,8 +3912,12 @@ mod tests {
             .unwrap();
 
         let mut metadata = ReactionMetadata::from(lhs);
-        metadata.set_atom_keyword(AtomId(2), "n");
-        metadata.set_bond_keyword(BondId(2), "b2");
+        metadata
+            .set_delta_keyword(Entity::Atom(AtomId(2)), "n")
+            .unwrap();
+        metadata
+            .set_delta_keyword(Entity::Bond(BondId(2)), "b2")
+            .unwrap();
         metadata
     }
 

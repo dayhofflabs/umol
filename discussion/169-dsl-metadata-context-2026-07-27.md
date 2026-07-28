@@ -551,7 +551,8 @@ reaction namespace projection, fixtures, and ordinary callers. Test every
 entity kind in both scopes, combined and scope-specific lookup, empty and
 populated combined/delta iteration, idempotence, rebinding, cross-kind and
 cross-scope collision rollback, and empty-delta construction from lhs metadata.
-This is breaking and goes red→green with all callers migrated. [dep: S2f]
+This is breaking and goes red→green with all callers migrated.
+**Implemented (green).** [dep: S2f]
 
 **S2h — Reaction atom-alias API.** In `dsl/metadata.rs`, add the same
 combined `atom_alias` and `atom_alias_name` queries to `ReactionMetadata`,
@@ -577,10 +578,91 @@ delta, combined constraint and overlay references, aliases in both scopes,
 and all eight entity kinds. This is a breaking removal and rewire that goes
 red→green with all rendering callers migrated. [dep: S2h]
 
+**S2j — Exact-size iterator contracts.** Strengthen every opaque iterator
+return type whose remaining cardinality is structurally known from
+`impl Iterator` to `impl ExactSizeIterator`. This exposes `len()` without
+materializing the sequence and does not change iteration order or ownership.
+Treat this as a repository-wide iterator-contract implementation and
+verification task, not a textual return-bound replacement: review each
+implementation, preserve laziness, refactor adapter chains when the exact
+cardinality is structurally available but not propagated by the current
+adapter, and reject the stronger bound wherever exact remaining length cannot
+be maintained. Apply the change to the following complete set:
+
+- In `umol-graph-core`, change `DiGraph::node_ids`,
+  `Graph::{node_ids, edge_ids}`, and `UniqueRingFamilies::ids`. For each of
+  `FixedRelationSet`, `VarRelationSet`, `FixedFixedBirelationSet`,
+  `FixedVarBirelationSet`, and `VarVarBirelationSet`, change both
+  `data_iter_mut` and `relation_ids`.
+- In `umol-ast` constraint containers, change
+  `AtomConstraintsAst::{iter, take}` and `take` on
+  `BondConstraintsAst`, `DativeBondConstraintsAst`,
+  `AromaticSystemConstraintsAst`, `MulticenterBondConstraintsAst`,
+  `NoncovalentBondConstraintsAst`, `StereoAtomConstraintsAst`, and
+  `StereoBondConstraintsAst`. Leave methods that already return the concrete
+  `slice::Iter`, `IterMut`, or `smallvec` iterator types unchanged: those
+  already expose the exact-size contract.
+- In `umol-ast` stored entity and ring collections, change `ids` and `iter` on
+  `AtomViews`, `BondViews`, `DativeBondViews`, `AromaticSystemViews`,
+  `MulticenterBondViews`, `NoncovalentBondViews`, `StereoAtomViews`,
+  `StereoBondViews`, `RingSet`, and `RingViews`. Also change `incident_ids`
+  and `incident` on the dative, aromatic-system, multicenter,
+  noncovalent, and stereo-atom view collections; do not change stereo-bond
+  incidence, which performs unions, filtering, or deduplication.
+- In `umol-ast` direct topology and participant views, change
+  `MoleculeAst::neighbors`; `AtomView::{neighbors, bond_ids, dative_bonds,
+  dative_bond_ids, multicenter_bonds, multicenter_bond_ids,
+  noncovalent_bonds, noncovalent_bond_ids}`; `BondView::atoms`;
+  `DativeBondView::{donor_ids, atom_ids, donors, atoms}` and `atom_ids` on
+  both dative editor views; `AromaticSystemView::{atom_ids, atoms}` and
+  `atom_ids` on both aromatic-system editor views;
+  `MulticenterBondView::{atom_ids, atoms}` and `atom_ids` on both
+  multicenter-bond editor views; `StereoAtomView::ligands`;
+  `StereoBondView::ligands`; and `BondMatching::bonds`.
+- In the supporting crates, change `EdnMap::{iter, keys, values}` and
+  `EdnSet::iter` in `umol-edn`, `Path::atoms` in `umol-ast-macros`, and
+  `MatrixRep::iter` in `umol-msym`.
+
+Do not strengthen filtered, flattened, deduplicated, or otherwise
+data-dependent iterators: `Graph::induced_edges`,
+`PlanarEmbedding::bounded_faces`, AST `ring_memberships`, ring containment
+queries, aromatic-system bond iteration, overlapping atom/bond queries,
+stereo ligand-kind and stereo incidence filters, stereo entity `atom_ids`,
+macro-parser `paths`/`overlays`, property-corpus `simple_graphs`, or the
+Python constraint `ring_sizes` helpers. Leave the parse-time namespace
+keyword/alias iterators for their removal in S3. Leave
+`SgroupsView::iter` and `RgroupsView::iter` unchanged: their cardinality is
+known, but their chained optional-map representation would require dedicated
+iterator types solely to expose this bound.
+
+The exact-size property requires direct tests, not only successful type
+checking. For every changed method, exercise empty and populated iterators and
+assert:
+
+- the initial `len()` equals the corresponding collection, relation,
+  incidence, participant, or view count;
+- `size_hint()` is `(len, Some(len))`;
+- `len()` decreases by exactly one after `next()` and reaches zero on
+  exhaustion;
+- the number and order of yielded values still match the existing semantic
+  assertions.
+
+For generated relation sets and molecule/view structures, add property tests
+that consume an arbitrary prefix and assert that `len()` always equals the
+number of remaining yielded elements. Mutable and consuming iterators need
+their own cases so the tests also verify that exposing the bound does not
+change mutation or `take` semantics. Implement and verify this in green
+crate-local batches in dependency order: `umol-graph-core`, `umol-ast`,
+`umol-edn`, `umol-ast-macros`, then `umol-msym`. This is an additive public
+contract plus a nontrivial verification pass, and stays green after each
+batch. [dep: S2i]
+
 The S2 critical path is `S2d → S2e → S2f → S2g → S2h → S2i`. None of the
-remaining S2 subitems is deferrable: S3 contexts and the checked wrappers must
-consume one stable metadata API, and leaving clone-based combined rendering
-would preserve a second reaction lookup path.
+remaining S2 metadata subitems is deferrable: S3 contexts and the checked
+wrappers must consume one stable metadata API, and leaving clone-based
+combined rendering would preserve a second reaction lookup path. S2j is a
+required repository-wide consistency pass but is not on the S3 critical path;
+after S2i it can run independently of the context work.
 
 ### S3 — Parse-time contexts
 
