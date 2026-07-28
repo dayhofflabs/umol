@@ -3,8 +3,9 @@
 use std::any::Any;
 
 use thiserror::Error;
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
-use umol_io::smiles::{ParseError as SmilesParseError, Smiles, SmilesIoConfig};
+use umol_ast::ast::{MoleculeAst, ReactionAst, TryIntoAst};
+use umol_graph_core::{Correspondence, NodeId};
+use umol_io::smiles::{ParseError as SmilesParseError, ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
 use umol_io::table_ir::Molecule as TableMolecule;
 use umol_utils::error::UmolError;
@@ -143,6 +144,45 @@ impl Interpret for Smiles {
         resolve_config: &ResolveConfig,
     ) -> Result<Self::Output, Self::Error> {
         interpret_molecule(self.as_table_ir(), model, resolve_config)
+    }
+}
+
+impl Interpret for ReactionSmiles {
+    type Output = ReactionAst;
+    type Error = ReactionInterpretationError;
+
+    fn interpret(
+        &self,
+        model: &ChemistryModel,
+        resolve_config: &ResolveConfig,
+    ) -> Result<Self::Output, Self::Error> {
+        let reaction = self.as_table_ir();
+        if reaction.agents.atom_count() != 0 {
+            return Err(ReactionInterpretationError::AgentsUnsupported);
+        }
+
+        let mut matched_pairs = Vec::new();
+        for (&class, (reactants, products)) in &reaction.atom_mapping {
+            if reactants.len() > 1 || products.len() > 1 {
+                return Err(ReactionInterpretationError::AmbiguousAtomMapClass {
+                    class,
+                    reactant_count: reactants.len(),
+                    product_count: products.len(),
+                });
+            }
+            if let ([reactant], [product]) = (reactants.as_slice(), products.as_slice()) {
+                matched_pairs.push((NodeId(*reactant), NodeId(*product)));
+            }
+        }
+
+        let lhs = interpret_molecule(&reaction.reactants, model, resolve_config)
+            .map_err(ReactionInterpretationError::Reactants)?;
+        let rhs = interpret_molecule(&reaction.products, model, resolve_config)
+            .map_err(ReactionInterpretationError::Products)?;
+        let atom_correspondence =
+            Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count());
+
+        Ok(ReactionAst::from_sides(lhs, rhs, atom_correspondence))
     }
 }
 
@@ -447,6 +487,204 @@ mod tests {
             Err(MoleculeInterpretationError::Underdetermined(
                 ResolveUnderdetermined
             ))
+        );
+    }
+
+    #[rstest]
+    #[case::mapped(
+        "[CH4:1]>>[CH4:1]",
+        r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+    )]
+    #[case::atom_change(
+        "[NH4+:1]>>[NH3:1]",
+        r##"{:deltas [{:atom {:modify [0 "#c0#h3#n"]}}] :lhs {:atoms ["N#i=#c+#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"##.parse().unwrap(),
+    )]
+    #[case::bond_change(
+        "[CH2:1]=[CH2:2]>>[CH3:1][CH3:2]",
+        r##"{:deltas [{:atom {:modify [0 "#h3#v"]}} {:atom {:modify [1 "#h3#v"]}} {:bond {:modify [0 "1"]}}] :lhs {:atoms ["C#i=#c0#h2#n0#u0#s#v2#d0#t0#a!#m!" "C#i=#c0#h2#n0#u0#s#v2#d0#t0#a!#m!"] :bonds [[0 1 "2#c0#u0#s"]]}}"##.parse().unwrap(),
+    )]
+    #[case::reactant_only(
+        "[CH4:1].[OH2:2]>>[CH4:1]",
+        r#"{:deltas [{:atom {:remove 1}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!" "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+    )]
+    #[case::product_only(
+        "[CH4:1]>>[CH4:1].[OH2:2]",
+        r#"{:deltas [{:atom {:add "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+    )]
+    #[case::unmapped(
+        "C>>O",
+        r#"{:deltas [{:atom {:remove 0}} {:atom {:add "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+    )]
+    #[case::reordered(
+        "[CH4:1].[OH2:2]>>[OH2:2].[CH4:1]",
+        r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!" "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+    )]
+    fn test_reaction_smiles_interpret(#[case] input: &str, #[case] expected: ReactionAst) {
+        let reaction = ReactionSmiles::parse(input).unwrap();
+
+        assert_eq!(
+            reaction.interpret(&ChemistryModel::default(), &ResolveConfig::default()),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::agents(
+        "*>O>*",
+        ChemistryModel::default(),
+        ReactionInterpretationError::AgentsUnsupported
+    )]
+    #[case::ambiguous_reactants(
+        "[*:1].[*:1]>>[*:1]",
+        ChemistryModel::default(),
+        ReactionInterpretationError::AmbiguousAtomMapClass {
+            class: 1,
+            reactant_count: 2,
+            product_count: 1,
+        },
+    )]
+    #[case::ambiguous_products(
+        "[*:1]>>[*:1].[*:1]",
+        ChemistryModel::default(),
+        ReactionInterpretationError::AmbiguousAtomMapClass {
+            class: 1,
+            reactant_count: 1,
+            product_count: 2,
+        },
+    )]
+    #[case::ambiguous_both(
+        "[*:1].[*:1]>>[*:1].[*:1]",
+        ChemistryModel::default(),
+        ReactionInterpretationError::AmbiguousAtomMapClass {
+            class: 1,
+            reactant_count: 2,
+            product_count: 2,
+        },
+    )]
+    #[case::reactants_model_conversion(
+        "C[S@]C>>",
+        ChemistryModel::default(),
+        ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::ModelConversion(
+                RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+            ),
+        ),
+    )]
+    #[case::products_model_conversion(
+        ">>C[S@]C",
+        ChemistryModel::default(),
+        ReactionInterpretationError::Products(
+            MoleculeInterpretationError::ModelConversion(
+                RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+            ),
+        ),
+    )]
+    #[case::reactants_underdetermined(
+        "*>>",
+        ChemistryModel::default(),
+        ReactionInterpretationError::Reactants(MoleculeInterpretationError::Underdetermined(
+            ResolveUnderdetermined
+        ),)
+    )]
+    #[case::products_underdetermined(
+        ">>*",
+        ChemistryModel::default(),
+        ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
+            ResolveUnderdetermined
+        ),)
+    )]
+    #[case::reactants_contradiction(
+        "[nH]1cccc1>>",
+        ChemistryModel {
+            aromaticity: AromaticityModel::Clar {
+                scope: ElementScope::Any,
+                ring_limits: RingLimits::default(),
+            },
+            ..ChemistryModel::default()
+        },
+        ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::Contradiction(
+                ResolverContradiction::Aromaticity(
+                    AromaticityContradiction::ClarNonBenzenoid(String::from(
+                        "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
+                    )),
+                ),
+            ),
+        ),
+    )]
+    #[case::products_contradiction(
+        ">>[nH]1cccc1",
+        ChemistryModel {
+            aromaticity: AromaticityModel::Clar {
+                scope: ElementScope::Any,
+                ring_limits: RingLimits::default(),
+            },
+            ..ChemistryModel::default()
+        },
+        ReactionInterpretationError::Products(
+            MoleculeInterpretationError::Contradiction(
+                ResolverContradiction::Aromaticity(
+                    AromaticityContradiction::ClarNonBenzenoid(String::from(
+                        "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
+                    )),
+                ),
+            ),
+        ),
+    )]
+    #[case::reactants_execution(
+        "c1ccccc1>>",
+        ChemistryModel {
+            valence: ValenceModel::AtomTyping {
+                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+                    "C#i=#c0#h0#n0#u0#s#v2#a2"
+                )])),
+            },
+            aromaticity: AromaticityModel::Hmo {
+                scope: ElementScope::Any,
+                stabilization_threshold: 0.5,
+            },
+            ..ChemistryModel::default()
+        },
+        ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::Execution(
+                ResolverError::Aromaticity(AromaticityError::HmoMissingParameters(
+                    String::from("no Van-Catledge parameters for C with 2 pi-electrons"),
+                )),
+            ),
+        ),
+    )]
+    #[case::products_execution(
+        ">>c1ccccc1",
+        ChemistryModel {
+            valence: ValenceModel::AtomTyping {
+                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+                    "C#i=#c0#h0#n0#u0#s#v2#a2"
+                )])),
+            },
+            aromaticity: AromaticityModel::Hmo {
+                scope: ElementScope::Any,
+                stabilization_threshold: 0.5,
+            },
+            ..ChemistryModel::default()
+        },
+        ReactionInterpretationError::Products(
+            MoleculeInterpretationError::Execution(
+                ResolverError::Aromaticity(AromaticityError::HmoMissingParameters(
+                    String::from("no Van-Catledge parameters for C with 2 pi-electrons"),
+                )),
+            ),
+        ),
+    )]
+    fn test_reaction_smiles_interpret_error(
+        #[case] input: &str,
+        #[case] model: ChemistryModel,
+        #[case] expected: ReactionInterpretationError,
+    ) {
+        let reaction = ReactionSmiles::parse(input).unwrap();
+
+        assert_eq!(
+            reaction.interpret(&model, &ResolveConfig::default()),
+            Err(expected)
         );
     }
 

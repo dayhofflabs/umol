@@ -312,7 +312,7 @@ the two reaction sides.
 
 ### S1 — Rust reaction ingestion
 
-#### S1a — Implement strict `Interpret for ReactionSmiles`
+#### S1a — Implement strict `Interpret for ReactionSmiles` **Done**
 
 - **Modules:** `umol-graph/src/ingest.rs`,
   `umol-graph/tests/` if the existing ingest test module becomes too large.
