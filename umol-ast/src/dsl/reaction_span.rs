@@ -880,45 +880,45 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
 
 fn resolve_atom_span(
     span: EntitySpan<AtomSpecInput>,
-    namespace: &MoleculeContext,
+    context: &MoleculeContext,
 ) -> Result<EntitySpan<AtomAst>, ParseError> {
     Ok(match span {
-        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve_atom_spec(s, namespace)?),
-        EntitySpan::Added(s) => EntitySpan::Added(resolve_atom_spec(s, namespace)?),
-        EntitySpan::Removed(s) => EntitySpan::Removed(resolve_atom_spec(s, namespace)?),
+        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve_atom_spec(s, context)?),
+        EntitySpan::Added(s) => EntitySpan::Added(resolve_atom_spec(s, context)?),
+        EntitySpan::Removed(s) => EntitySpan::Removed(resolve_atom_spec(s, context)?),
         EntitySpan::Modified {
             lhs: left,
             rhs: right,
         } => EntitySpan::Modified {
-            lhs: resolve_atom_spec(left, namespace)?,
-            rhs: resolve_atom_spec(right, namespace)?,
+            lhs: resolve_atom_spec(left, context)?,
+            rhs: resolve_atom_spec(right, context)?,
         },
     })
 }
 
 fn resolve_constraint_span(
     input: ConstraintSpanInput,
-    namespace: &MoleculeContext,
+    context: &MoleculeContext,
 ) -> Result<ConstraintSpan, ParseError> {
     Ok(match input {
-        ConstraintSpanInput::Unchanged(dsl) => ConstraintSpan::Unchanged(dsl.into_ast(namespace)?),
-        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ast(namespace)?),
-        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ast(namespace)?),
+        ConstraintSpanInput::Unchanged(dsl) => ConstraintSpan::Unchanged(dsl.into_ast(context)?),
+        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ast(context)?),
+        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ast(context)?),
     })
 }
 
 impl SpanInput {
     /// Resolve the union-frame span: positions are the union ids (no fresh-id allocation), inline
-    /// entity keywords and `:atom-aliases` populate the namespace, atom `AtomSpecInput` sides resolve to
-    /// `AtomAst`, bond endpoints and constraint refs resolve against the namespace, and each
+    /// entity keywords and `:atom-aliases` populate the context, atom `AtomSpecInput` sides resolve to
+    /// `AtomAst`, bond endpoints and constraint refs resolve against the context, and each
     /// projected side must be internally ref-consistent.
     pub(crate) fn into_ast(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
         let atom_count = self.atoms.len();
         let bond_count = self.bonds.len();
 
-        // The span's namespace: atoms take the union positions as their ids, then the bijective
-        // aliases. Every ref resolves against it; `register_*` enforces keyword disjointness, and the
-        // roundtrip `MoleculeMetadata` is projected from it at the end.
+        // The span context: atoms take the union positions as their ids, then the bijective aliases.
+        // Every ref resolves against it; `register_*` enforces keyword disjointness, and the
+        // roundtrip `MoleculeMetadata` is moved out at the end.
         let mut context = MoleculeContext::default();
         for (keyword, _) in self.atoms.iter() {
             context.register_atom(keyword.clone())?;
@@ -1144,7 +1144,7 @@ impl SpanInput {
         }
 
         let graph = Graph::new(atom_count, &edges);
-        let metadata = context.metadata().clone();
+        let metadata = context.into_metadata();
         Ok((
             ReactionSpanAst::from_parts(
                 graph,
@@ -2104,9 +2104,62 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom(r#"{:atoms [[:a "C"]]}"#, Entity::Atom(AtomId(0)), "a")]
+    #[case::bond(
+        r#"{:atoms ["C" "C"] :bonds [{:id :b :atoms [0 1] :type :single}]}"#,
+        Entity::Bond(BondId(0)),
+        "b"
+    )]
+    #[case::dative_bond(
+        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d :donors [0] :acceptor 1 :type "1#R"}]}"#,
+        Entity::DativeBond(DativeBondId(0)),
+        "d"
+    )]
+    #[case::aromatic_system(
+        r#"{:atoms ["C" "C"] :aromatic-systems [{:id :a :atoms [0 1] :type "*#e2"}]}"#,
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        "a"
+    )]
+    #[case::multicenter_bond(
+        r#"{:atoms ["C" "C"] :multicenter-bonds [{:id :m :atoms [0 1] :type "*#e2"}]}"#,
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        "m"
+    )]
+    #[case::noncovalent_bond(
+        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:id :n :atoms [0 1] :type "Hbd"}]}"#,
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        "n"
+    )]
+    #[case::stereo_atom(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :type "Th1"}]}"#,
+        Entity::StereoAtom(StereoAtomId(0)),
+        "s",
+    )]
+    #[case::stereo_bond(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s :site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        Entity::StereoBond(StereoBondId(0)),
+        "s",
+    )]
+    fn test_span_input_into_ast_metadata(
+        #[case] input: &str,
+        #[case] entity: Entity,
+        #[case] keyword: &str,
+    ) {
+        let (_, metadata) = parse_span_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+
+        assert_eq!(
+            metadata.iter_keywords().collect::<Vec<_>>(),
+            vec![(entity, keyword)]
+        );
+    }
+
+    #[rstest]
     fn test_span_input_into_ast_structural_bond_ref() {
         // A structural bond ref ({:atoms [0 1]}) names the bond by its endpoints, resolved against
-        // the namespace's participant lookup.
+        // the context's participant lookup.
         let input = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#;
         let (ast, _) = parse_span_input(&read_string(input).unwrap())
             .unwrap()
@@ -2446,6 +2499,8 @@ mod tests {
     #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
     #[case::constraint(r#"{:atoms ["C"] :constraints [{:connected {}} {:add {:connected {}}}]}"#)]
     #[case::aliases(r#"{:atoms [:nu {:add "O"}] :atom-aliases [:nu "C"]}"#)]
+    #[case::atom_keyword(r#"{:atoms [[:c "C"]]}"#)]
+    #[case::bond_keyword(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#)]
     #[case::dative(
         r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#
     )]
@@ -2453,13 +2508,15 @@ mod tests {
         r#"{:atoms ["C" "N"] :dative-bonds [{:add {:donors [0] :acceptor 1 :type "1#R"}}]}"#
     )]
     #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}]}"#)]
-    #[case::aromatic(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]}"#)]
-    #[case::multicenter(r#"{:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]}"#)]
-    #[case::noncovalent(
-        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:remove {:atoms [0 1] :type "Hbd"}}]}"#
+    #[case::aromatic_keyword(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2 3 4 5] :type "*#e6"}]}"#)]
+    #[case::multicenter_keyword(
+        r#"{:atoms ["C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1] :type "*#e2"}]}"#
     )]
-    #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
-    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#)]
+    #[case::noncovalent(
+        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:remove {:id :n1 :atoms [0 1] :type "Hbd"}}]}"#
+    )]
+    #[case::stereo_atom_keyword(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
+    #[case::stereo_bond_keyword(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s1 :site 1 :ligands [0 3] :type "Ct1"}]}"#)]
     fn test_reaction_span_dsl_to_edn(#[case] input: &str) {
         let dsl = ReactionSpanDsl::from_str(input).unwrap();
         assert_eq!(ReactionSpanDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);

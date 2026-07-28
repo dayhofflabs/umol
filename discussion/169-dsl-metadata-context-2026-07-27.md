@@ -750,7 +750,7 @@ metadata parity. This is breaking and goes red→green across the workspace.
 `MoleculeContext` and to move the context's `MoleculeMetadata` into the
 resulting wrapper. Update its unit and roundtrip tests for all eight entity
 kinds and aliases. This is an internal rewire and stays green after caller
-migration. [dep: S3a]
+migration. **Implemented (green).** [dep: S3a]
 
 ### S4 — Checked metadata-bearing wrappers
 
