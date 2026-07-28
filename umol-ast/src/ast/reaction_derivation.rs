@@ -2,10 +2,10 @@
 //!
 //! The two concrete molecule sides of a single rule application plus the correspondence between them:
 //! `lhs` is an owned snapshot of the molecule the rule matched, `rhs` is the molecule produced, and
-//! `comap` maps `lhs` → `rhs` (preserved entities mated, deleted `lhs` entities left-exposed, created
-//! entities right-exposed). It is the *instance* of a `ReactionAst` (rule : derivation ∷ function :
-//! one evaluation) and carries the ground-truth atom map — `apply` created the atoms, so no post-hoc
-//! diff is needed to recover it; `to_reaction` abstracts back to the rule layer.
+//! `comap` maps `lhs` → `rhs` (preserved entities matched, deleted `lhs` entities left-unmatched,
+//! created entities right-unmatched). It is the *instance* of a `ReactionAst` (rule : derivation ∷
+//! function : one evaluation) and carries the ground-truth atom map — `apply` created the atoms, so
+//! no post-hoc diff is needed to recover it; `to_reaction` abstracts back to the rule layer.
 
 use umol_graph_core::{Correspondence, NodeId};
 
@@ -39,8 +39,8 @@ impl ReactionDerivation {
         &self.rhs
     }
 
-    /// The `lhs`↔`rhs` correspondence: preserved entities mated, deleted `lhs` entities left-exposed,
-    /// created entities right-exposed.
+    /// The `lhs`↔`rhs` correspondence: preserved entities matched, deleted `lhs` entities
+    /// left-unmatched, created entities right-unmatched.
     pub fn comap(&self) -> &MoleculeCorrespondence {
         &self.comap
     }
@@ -181,7 +181,7 @@ mod tests {
         let (lhs, rhs, comap) = derivation_parts;
         let derivation = ReactionDerivation::new(lhs, rhs, comap);
         assert_eq!(
-            derivation.atom_map().mates(),
+            derivation.atom_map().matched_pairs(),
             &[(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))]
         );
     }

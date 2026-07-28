@@ -200,24 +200,24 @@ def test_substructure_workflow():
     matches = pattern.substructure_matches(host, config=config)
 
     assert len(matches) == 1
-    assert matches[0].atoms.mates == [(0, 1), (1, 2)]
-    assert matches[0].bonds.mates == [(0, 1)]
-    assert matches[0].dative_bonds.mates == []
-    assert matches[0].aromatic_systems.mates == []
-    assert matches[0].multicenter_bonds.mates == []
-    assert matches[0].noncovalent_bonds.mates == []
-    assert matches[0].stereo_atoms.mates == []
-    assert matches[0].stereo_bonds.mates == []
+    assert matches[0].atoms.matched_pairs == [(0, 1), (1, 2)]
+    assert matches[0].bonds.matched_pairs == [(0, 1)]
+    assert matches[0].dative_bonds.matched_pairs == []
+    assert matches[0].aromatic_systems.matched_pairs == []
+    assert matches[0].multicenter_bonds.matched_pairs == []
+    assert matches[0].noncovalent_bonds.matched_pairs == []
+    assert matches[0].stereo_atoms.matched_pairs == []
+    assert matches[0].stereo_bonds.matched_pairs == []
     assert pattern == pattern_snapshot
     assert host == host_snapshot
 
-    atom_mates = matches[0].atoms.mates
-    atom_mates.append((0, 0))
+    atom_matched_pairs = matches[0].atoms.matched_pairs
+    atom_matched_pairs.append((0, 0))
     pattern.atoms[0].charge = 2
     host.atoms[0].charge = 3
 
-    assert matches[0].atoms.mates == [(0, 1), (1, 2)]
-    assert matches[0].bonds.mates == [(0, 1)]
+    assert matches[0].atoms.matched_pairs == [(0, 1), (1, 2)]
+    assert matches[0].bonds.matched_pairs == [(0, 1)]
 
     with pytest.raises(
         TypeError,
@@ -248,10 +248,10 @@ def test_reaction_application_workflow():
     assert len(derivations) == 1
     assert derivations[0].lhs == host_snapshot
     assert derivations[0].rhs == MoleculeAst.from_smiles("CC")
-    assert derivations[0].atom_map.mates == [(0, 0), (1, 1)]
+    assert derivations[0].atom_map.matched_pairs == [(0, 0), (1, 1)]
     assert derivations[0].atom_map.left_count == 3
     assert derivations[0].atom_map.right_count == 2
-    assert derivations[0].comap.bonds.mates == [(0, 0)]
+    assert derivations[0].comap.bonds.matched_pairs == [(0, 0)]
     assert reaction == reaction_snapshot
     assert host == host_snapshot
 

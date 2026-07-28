@@ -461,8 +461,8 @@ def test_molecule_ast_combine():
         bonds=[(1, 2, BondAst(2))],
     )
     assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.atoms.mates == [(0, 1), (1, 2)]
-    assert correspondence.bonds.mates == [(0, 0)]
+    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
+    assert correspondence.bonds.matched_pairs == [(0, 0)]
     assert left == left_before
     assert right == right_before
 
@@ -488,8 +488,8 @@ def test_molecule_ast_combine_from():
         ],
         bonds=[(1, 2, BondAst(2))],
     )
-    assert correspondence.atoms.mates == [(0, 1), (1, 2)]
-    assert correspondence.bonds.mates == [(0, 0)]
+    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
+    assert correspondence.bonds.matched_pairs == [(0, 0)]
     assert other == other_before
 
 
@@ -510,8 +510,8 @@ def test_molecule_ast_combine_from_alias():
         ],
         bonds=[(0, 1, BondAst(1)), (2, 3, BondAst(1))],
     )
-    assert correspondence.atoms.mates == [(0, 2), (1, 3)]
-    assert correspondence.bonds.mates == [(0, 1)]
+    assert correspondence.atoms.matched_pairs == [(0, 2), (1, 3)]
+    assert correspondence.bonds.matched_pairs == [(0, 1)]
 
 
 def test_molecule_ast_combine_all():
@@ -545,12 +545,12 @@ def test_molecule_ast_combine_all():
         ],
         bonds=[(1, 2, BondAst(2))],
     )
-    assert [correspondence.atoms.mates for correspondence in correspondences] == [
+    assert [correspondence.atoms.matched_pairs for correspondence in correspondences] == [
         [(0, 0)],
         [(0, 1), (1, 2)],
         [(0, 3)],
     ]
-    assert [correspondence.bonds.mates for correspondence in correspondences] == [
+    assert [correspondence.bonds.matched_pairs for correspondence in correspondences] == [
         [],
         [(0, 0)],
         [],
@@ -582,10 +582,10 @@ def test_molecule_ast_split():
         ),
     ]
     assert [
-        correspondence.atoms.mates for _, correspondence in components
+        correspondence.atoms.matched_pairs for _, correspondence in components
     ] == [[(0, 0)], [(0, 1), (1, 2)]]
     assert [
-        correspondence.bonds.mates for _, correspondence in components
+        correspondence.bonds.matched_pairs for _, correspondence in components
     ] == [[], [(0, 0)]]
 
 

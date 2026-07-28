@@ -61,18 +61,18 @@ pub struct ReactionSpanAst {
     constraints: Vec<ConstraintSpan>,
 }
 
-/// R id → union id for one entity family: a mated right id reuses its left partner; a right-exposed
-/// id is appended after the left family's ids.
+/// R id → union id for one entity family: a matched right id reuses its left partner; a
+/// right-unmatched id is appended after the left family's ids.
 fn union_map<Id: Copy + Ord + Hash + From<usize>>(
     correspondence: &Correspondence<Id>,
     left_count: usize,
 ) -> HashMap<Id, Id> {
     let mut map: HashMap<Id, Id> = correspondence
-        .mates()
+        .matched_pairs()
         .iter()
         .map(|&(l, r)| (r, l))
         .collect();
-    for (offset, &r) in correspondence.right_exposed().iter().enumerate() {
+    for (offset, &r) in correspondence.right_unmatched().iter().enumerate() {
         map.insert(r, Id::from(left_count + offset));
     }
     map
@@ -86,12 +86,12 @@ fn recover_correspondence<'a, Id, T: 'a>(
 where
     Id: Copy + Ord + From<usize>,
 {
-    let mut mates = Vec::new();
+    let mut matched_pairs = Vec::new();
     let (mut left, mut right) = (0usize, 0usize);
     for span in column {
         match span {
             EntitySpan::Unchanged(_) | EntitySpan::Modified { .. } => {
-                mates.push((Id::from(left), Id::from(right)));
+                matched_pairs.push((Id::from(left), Id::from(right)));
                 left += 1;
                 right += 1;
             }
@@ -99,7 +99,7 @@ where
             EntitySpan::Added(_) => right += 1,
         }
     }
-    Correspondence::new(mates, left, right)
+    Correspondence::new(matched_pairs, left, right)
 }
 
 impl MoleculeAst {
@@ -167,10 +167,11 @@ impl ReactionSpanAst {
         }
     }
 
-    /// Superimpose two molecules over their correspondence into the reaction span. Mated entities
-    /// become `Unchanged` / `Modified` carrying both molecules' actual values; entities exposed on
-    /// the lhs become `Removed`, those exposed on the rhs `Added`. Lhs-anchored: lhs ids kept,
-    /// rhs-exposed entities appended, rhs participants and constraints remapped into that union frame.
+    /// Superimpose two molecules over their correspondence into the reaction span. Matched entities
+    /// become `Unchanged` / `Modified` carrying both molecules' actual values; entities unmatched
+    /// on the lhs become `Removed`, those unmatched on the rhs `Added`. Lhs-anchored: lhs ids kept,
+    /// right-unmatched entities appended, rhs participants and constraints remapped into that union
+    /// frame.
     pub fn superimpose(
         lhs: &MoleculeAst,
         rhs: &MoleculeAst,
@@ -194,7 +195,7 @@ impl ReactionSpanAst {
                 .map(|r| rhs.atom(AtomId::from(r.index())).ast.clone());
             atoms.push(EntitySpan::superimpose(Some(lhs_ast), rhs_ast).unwrap());
         }
-        for &r in &atoms_corr.right_exposed() {
+        for &r in &atoms_corr.right_unmatched() {
             atoms.push(EntitySpan::Added(
                 rhs.atom(AtomId::from(r.index())).ast.clone(),
             ));
@@ -212,7 +213,7 @@ impl ReactionSpanAst {
                 .map(|r| rhs.bond(r).ast.clone());
             bonds.push(EntitySpan::superimpose(Some(lhs_ast), rhs_ast).unwrap());
         }
-        for &r in &bonds_corr.right_exposed() {
+        for &r in &bonds_corr.right_unmatched() {
             let [a, b] = rhs.raw_graph().edge_endpoints(EdgeId(r.index() as u32));
             edges.push([atom_union[&a].0, atom_union[&b].0]);
             bonds.push(EntitySpan::Added(rhs.bond(r).ast.clone()));
@@ -231,7 +232,7 @@ impl ReactionSpanAst {
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
-        for &r in &aromatic_corr.right_exposed() {
+        for &r in &aromatic_corr.right_unmatched() {
             let view = rhs.aromatic_system(r);
             let participants: Vec<NodeId> = view
                 .atom_ids()
@@ -255,7 +256,7 @@ impl ReactionSpanAst {
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
-        for &r in &multicenter_corr.right_exposed() {
+        for &r in &multicenter_corr.right_unmatched() {
             let view = rhs.multicenter_bond(r);
             let participants: Vec<NodeId> = view
                 .atom_ids()
@@ -279,7 +280,7 @@ impl ReactionSpanAst {
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
-        for &r in &noncovalent_corr.right_exposed() {
+        for &r in &noncovalent_corr.right_unmatched() {
             let view = rhs.noncovalent_bond(r);
             let [a, b] = view.atom_ids();
             let participants = [atom_union[&NodeId::from(a)], atom_union[&NodeId::from(b)]];
@@ -303,7 +304,7 @@ impl ReactionSpanAst {
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
-        for &r in &dative_corr.right_exposed() {
+        for &r in &dative_corr.right_unmatched() {
             let view = rhs.dative_bond(r);
             let acceptor = [atom_union[&NodeId::from(view.acceptor_id())]];
             let donors: Vec<NodeId> = view
@@ -331,7 +332,7 @@ impl ReactionSpanAst {
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
-        for &r in &stereo_atom_corr.right_exposed() {
+        for &r in &stereo_atom_corr.right_unmatched() {
             let view = rhs.stereo_atom(r);
             let site = [atom_union[&NodeId::from(view.site_id())]];
             let ligands: Vec<StereoLigand> = view
@@ -365,7 +366,7 @@ impl ReactionSpanAst {
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
-        for &r in &stereo_bond_corr.right_exposed() {
+        for &r in &stereo_bond_corr.right_unmatched() {
             let view = rhs.stereo_bond(r);
             let site = [EdgeId::from(bond_union[&view.site_id()])];
             let ligands: Vec<StereoLigand> = view
@@ -2338,7 +2339,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_superimpose_removed() {
-        // left has a third atom, a bond to it, and a dative onto it — all left-exposed (Removed).
+        // left has a third atom, a bond to it, and a dative onto it — all left-unmatched (Removed).
         let left = MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![AtomAst::from_element(Element::C); 3],
             bonds: vec![

@@ -129,7 +129,7 @@ fn atom_correspondence(
 ) -> PyResult<Correspondence<NodeId>> {
     let mut left_ids = HashSet::with_capacity(pairs.len());
     let mut right_ids = HashSet::with_capacity(pairs.len());
-    let mut mates = Vec::with_capacity(pairs.len());
+    let mut matched_pairs = Vec::with_capacity(pairs.len());
 
     for (left, right) in pairs {
         if left >= lhs_count {
@@ -152,10 +152,10 @@ fn atom_correspondence(
                 "duplicate right atom id {right}"
             )));
         }
-        mates.push((NodeId::from(left), NodeId::from(right)));
+        matched_pairs.push((NodeId::from(left), NodeId::from(right)));
     }
 
-    Ok(Correspondence::new(mates, lhs_count, rhs_count))
+    Ok(Correspondence::new(matched_pairs, lhs_count, rhs_count))
 }
 
 /// A reaction whose molecule and delta components remain live Python values.
@@ -640,11 +640,14 @@ mod tests {
         #[case] pairs: Vec<(usize, usize)>,
         #[case] lhs_count: usize,
         #[case] rhs_count: usize,
-        #[case] expected_mates: Vec<(NodeId, NodeId)>,
+        #[case] expected_matched_pairs: Vec<(NodeId, NodeId)>,
     ) {
         let correspondence = atom_correspondence(pairs, lhs_count, rhs_count).unwrap();
 
-        assert_eq!(correspondence.mates(), expected_mates.as_slice());
+        assert_eq!(
+            correspondence.matched_pairs(),
+            expected_matched_pairs.as_slice()
+        );
         assert_eq!(correspondence.left_count(), lhs_count);
         assert_eq!(correspondence.right_count(), rhs_count);
     }
@@ -2687,14 +2690,14 @@ mod tests {
                     "ReactionDerivation(lhs=MoleculeAst(atoms=2, bonds=1), ",
                     "rhs=MoleculeAst(atoms=2, bonds=1), ",
                     "comap=MoleculeCorrespondence(",
-                    "atoms=Correspondence(mates=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
-                    "bonds=Correspondence(mates=[(0, 0)], left_count=1, right_count=1), ",
-                    "dative_bonds=Correspondence(mates=[], left_count=0, right_count=0), ",
-                    "aromatic_systems=Correspondence(mates=[], left_count=0, right_count=0), ",
-                    "multicenter_bonds=Correspondence(mates=[], left_count=0, right_count=0), ",
-                    "noncovalent_bonds=Correspondence(mates=[], left_count=0, right_count=0), ",
-                    "stereo_atoms=Correspondence(mates=[], left_count=0, right_count=0), ",
-                    "stereo_bonds=Correspondence(mates=[], left_count=0, right_count=0)))"
+                    "atoms=Correspondence(matched_pairs=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
+                    "bonds=Correspondence(matched_pairs=[(0, 0)], left_count=1, right_count=1), ",
+                    "dative_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
+                    "aromatic_systems=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
+                    "multicenter_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
+                    "noncovalent_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
+                    "stereo_atoms=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
+                    "stereo_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0)))"
                 )
             );
         });

@@ -18,7 +18,7 @@ use super::molecule::MoleculeParts;
 use super::remap::IdRemapping;
 
 /// A per-entity partial bijection between two molecules: atoms + bonds + the six overlay families.
-/// The mated/exposed reads of each family are those of its `Correspondence`.
+/// The matched/unmatched reads of each family are those of its `Correspondence`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeCorrespondence {
     atoms: Correspondence<NodeId>,
@@ -59,7 +59,7 @@ impl MoleculeCorrespondence {
     /// Derive the full per-entity correspondence between `lhs` and `rhs` from their atom
     /// correspondence. Bonds are the induced edge correspondence; each overlay's lhs entities are
     /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
-    /// constituents are not all mated is exposed (not matched).
+    /// constituents are not all matched is unmatched.
     pub fn induce(lhs: &MoleculeAst, rhs: &MoleculeAst, atoms: Correspondence<NodeId>) -> Self {
         let bonds = induced_bonds(lhs, rhs, &atoms);
         let dative_bonds = induced_dative_bonds(lhs, rhs, &atoms);
@@ -144,7 +144,7 @@ impl MoleculeCorrespondence {
         )
     }
 
-    /// Whether every id in all eight entity families is mated on both sides.
+    /// Whether every id in all eight entity families is matched on both sides.
     pub fn is_total(&self) -> bool {
         self.atoms.is_total()
             && self.bonds.is_total()
@@ -157,32 +157,46 @@ impl MoleculeCorrespondence {
     }
 
     /// This correspondence as an [`IdRemapping`]. Requires every entity family to be total on the
-    /// left: each left id maps to its mated right id.
+    /// left: each left id maps to its matched right id.
     pub fn to_remapping(&self) -> IdRemapping {
         debug_assert!(
-            self.atoms.mate_count() == self.atoms.left_count()
-                && self.bonds.mate_count() == self.bonds.left_count()
-                && self.dative_bonds.mate_count() == self.dative_bonds.left_count()
-                && self.aromatic_systems.mate_count() == self.aromatic_systems.left_count()
-                && self.multicenter_bonds.mate_count() == self.multicenter_bonds.left_count()
-                && self.noncovalent_bonds.mate_count() == self.noncovalent_bonds.left_count()
-                && self.stereo_atoms.mate_count() == self.stereo_atoms.left_count()
-                && self.stereo_bonds.mate_count() == self.stereo_bonds.left_count(),
+            self.atoms.matched_pair_count() == self.atoms.left_count()
+                && self.bonds.matched_pair_count() == self.bonds.left_count()
+                && self.dative_bonds.matched_pair_count() == self.dative_bonds.left_count()
+                && self.aromatic_systems.matched_pair_count() == self.aromatic_systems.left_count()
+                && self.multicenter_bonds.matched_pair_count()
+                    == self.multicenter_bonds.left_count()
+                && self.noncovalent_bonds.matched_pair_count()
+                    == self.noncovalent_bonds.left_count()
+                && self.stereo_atoms.matched_pair_count() == self.stereo_atoms.left_count()
+                && self.stereo_bonds.matched_pair_count() == self.stereo_bonds.left_count(),
             "to_remapping requires every entity family to be total on the left",
         );
         IdRemapping::new(
             self.atoms
-                .mates()
+                .matched_pairs()
                 .iter()
                 .map(|&(left, right)| (AtomId::from(left), AtomId::from(right)))
                 .collect(),
-            self.bonds.mates().iter().copied().collect(),
-            self.dative_bonds.mates().iter().copied().collect(),
-            self.aromatic_systems.mates().iter().copied().collect(),
-            self.multicenter_bonds.mates().iter().copied().collect(),
-            self.noncovalent_bonds.mates().iter().copied().collect(),
-            self.stereo_atoms.mates().iter().copied().collect(),
-            self.stereo_bonds.mates().iter().copied().collect(),
+            self.bonds.matched_pairs().iter().copied().collect(),
+            self.dative_bonds.matched_pairs().iter().copied().collect(),
+            self.aromatic_systems
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            self.multicenter_bonds
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            self.noncovalent_bonds
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            self.stereo_atoms.matched_pairs().iter().copied().collect(),
+            self.stereo_bonds.matched_pairs().iter().copied().collect(),
         )
     }
 
@@ -236,7 +250,7 @@ pub(crate) fn induced_bonds(
 ) -> Correspondence<BondId> {
     Correspondence::new(
         atoms
-            .edge_mates(left.raw_graph(), right.raw_graph())
+            .edge_matched_pairs(left.raw_graph(), right.raw_graph())
             .into_iter()
             .map(|(l, r)| (BondId::from(l), BondId::from(r)))
             .collect(),
@@ -246,13 +260,13 @@ pub(crate) fn induced_bonds(
 }
 
 /// The dative-bond correspondence induced by an atom correspondence: each left dative bond whose
-/// acceptor and donors are all mated pairs with the right dative bond over the same roles.
+/// acceptor and donors are all matched with the right dative bond over the same roles.
 pub(crate) fn induced_dative_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<NodeId>,
 ) -> Correspondence<DativeBondId> {
-    let mut mates = Vec::new();
+    let mut matched_pairs = Vec::new();
     for d in left.dative_bonds().iter() {
         let (Some(acceptor), Some(donors)) = (
             map_atom(atoms, d.acceptor_id()),
@@ -261,92 +275,92 @@ pub(crate) fn induced_dative_bonds(
             continue;
         };
         if let Some(id) = right.dative_bonds().of_id(acceptor, &donors) {
-            mates.push((d.id, id));
+            matched_pairs.push((d.id, id));
         }
     }
     Correspondence::new(
-        mates,
+        matched_pairs,
         left.dative_bonds().count(),
         right.dative_bonds().count(),
     )
 }
 
 /// The aromatic-system correspondence induced by an atom correspondence: each left system whose
-/// atoms are all mated pairs with the right system over the same atom set.
+/// atoms are all matched with the right system over the same atom set.
 pub(crate) fn induced_aromatic_systems(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<NodeId>,
 ) -> Correspondence<AromaticSystemId> {
-    let mut mates = Vec::new();
+    let mut matched_pairs = Vec::new();
     for a in left.aromatic_systems().iter() {
         let Some(mapped) = map_atoms(atoms, a.atom_ids()) else {
             continue;
         };
         if let Some(id) = right.aromatic_systems().of_id(mapped) {
-            mates.push((a.id, id));
+            matched_pairs.push((a.id, id));
         }
     }
     Correspondence::new(
-        mates,
+        matched_pairs,
         left.aromatic_systems().count(),
         right.aromatic_systems().count(),
     )
 }
 
 /// The multicenter-bond correspondence induced by an atom correspondence: each left bond whose
-/// atoms are all mated pairs with the right bond over the same atom set.
+/// atoms are all matched with the right bond over the same atom set.
 pub(crate) fn induced_multicenter_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<NodeId>,
 ) -> Correspondence<MulticenterBondId> {
-    let mut mates = Vec::new();
+    let mut matched_pairs = Vec::new();
     for m in left.multicenter_bonds().iter() {
         let Some(mapped) = map_atoms(atoms, m.atom_ids()) else {
             continue;
         };
         if let Some(id) = right.multicenter_bonds().of_id(mapped) {
-            mates.push((m.id, id));
+            matched_pairs.push((m.id, id));
         }
     }
     Correspondence::new(
-        mates,
+        matched_pairs,
         left.multicenter_bonds().count(),
         right.multicenter_bonds().count(),
     )
 }
 
 /// The noncovalent-bond correspondence induced by an atom correspondence: each left bond whose two
-/// atoms are both mated pairs with the right bond over the same atom pair.
+/// atoms are both matched with the right bond over the same atom pair.
 pub(crate) fn induced_noncovalent_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<NodeId>,
 ) -> Correspondence<NoncovalentBondId> {
-    let mut mates = Vec::new();
+    let mut matched_pairs = Vec::new();
     for nc in left.noncovalent_bonds().iter() {
         let [a, b] = nc.atom_ids();
         let (Some(first), Some(second)) = (map_atom(atoms, a), map_atom(atoms, b)) else {
             continue;
         };
         if let Some(id) = right.noncovalent_bonds().of_id(first, second) {
-            mates.push((nc.id, id));
+            matched_pairs.push((nc.id, id));
         }
     }
     Correspondence::new(
-        mates,
+        matched_pairs,
         left.noncovalent_bonds().count(),
         right.noncovalent_bonds().count(),
     )
 }
 
-/// The rhs partner of a lhs atom under the atom correspondence, if mated.
+/// The rhs partner of a lhs atom under the atom correspondence, if matched.
 pub(crate) fn map_atom(atoms: &Correspondence<NodeId>, atom: AtomId) -> Option<AtomId> {
     atoms.right_of(NodeId::from(atom)).map(AtomId::from)
 }
 
-/// The rhs partners of a set of lhs atoms, or `None` if any is exposed.
+/// The rhs partners of a set of lhs atoms, or `None` if any is unmatched.
 fn map_atoms(
     atoms: &Correspondence<NodeId>,
     lhs: impl IntoIterator<Item = AtomId>,
@@ -355,7 +369,7 @@ fn map_atoms(
 }
 
 /// The rhs-frame ligands (each ligand's atom mapped, its kind kept), or `None` if any ligand's
-/// atom is exposed.
+/// atom is unmatched.
 pub(crate) fn map_ligands(
     atoms: &Correspondence<NodeId>,
     ligands: Vec<StereoLigand>,
@@ -396,30 +410,36 @@ mod tests {
 
     #[rstest]
     fn test_molecule_correspondence_accessors(correspondence: MoleculeCorrespondence) {
-        assert_eq!(correspondence.atoms().mates(), &[(NodeId(0), NodeId(1))]);
-        assert_eq!(correspondence.bonds().mates(), &[(BondId(0), BondId(2))]);
         assert_eq!(
-            correspondence.dative_bonds().mates(),
+            correspondence.atoms().matched_pairs(),
+            &[(NodeId(0), NodeId(1))]
+        );
+        assert_eq!(
+            correspondence.bonds().matched_pairs(),
+            &[(BondId(0), BondId(2))]
+        );
+        assert_eq!(
+            correspondence.dative_bonds().matched_pairs(),
             &[(DativeBondId(0), DativeBondId(3))]
         );
         assert_eq!(
-            correspondence.aromatic_systems().mates(),
+            correspondence.aromatic_systems().matched_pairs(),
             &[(AromaticSystemId(0), AromaticSystemId(4))]
         );
         assert_eq!(
-            correspondence.multicenter_bonds().mates(),
+            correspondence.multicenter_bonds().matched_pairs(),
             &[(MulticenterBondId(0), MulticenterBondId(5))]
         );
         assert_eq!(
-            correspondence.noncovalent_bonds().mates(),
+            correspondence.noncovalent_bonds().matched_pairs(),
             &[(NoncovalentBondId(0), NoncovalentBondId(6))]
         );
         assert_eq!(
-            correspondence.stereo_atoms().mates(),
+            correspondence.stereo_atoms().matched_pairs(),
             &[(StereoAtomId(0), StereoAtomId(7))]
         );
         assert_eq!(
-            correspondence.stereo_bonds().mates(),
+            correspondence.stereo_bonds().matched_pairs(),
             &[(StereoBondId(0), StereoBondId(8))]
         );
     }
@@ -459,7 +479,7 @@ mod tests {
         let c = MoleculeCorrespondence::induce(&lhs, &rhs, atoms);
 
         assert_eq!(
-            c.atoms().mates(),
+            c.atoms().matched_pairs(),
             &[
                 (NodeId(0), NodeId(0)),
                 (NodeId(1), NodeId(1)),
@@ -467,12 +487,12 @@ mod tests {
             ]
         );
         assert_eq!(
-            c.bonds().mates(),
+            c.bonds().matched_pairs(),
             &[(BondId(0), BondId(0)), (BondId(1), BondId(1))]
         );
-        assert_eq!(c.bonds().right_exposed(), vec![BondId(2)]);
+        assert_eq!(c.bonds().right_unmatched(), vec![BondId(2)]);
         assert_eq!(
-            c.dative_bonds().mates(),
+            c.dative_bonds().matched_pairs(),
             &[(DativeBondId(0), DativeBondId(0))]
         );
     }
@@ -503,30 +523,30 @@ mod tests {
 
         let ac = ab.compose(&bc);
 
-        assert_eq!(ac.atoms().mates(), &[(NodeId(0), NodeId(2))]);
-        assert_eq!(ac.bonds().mates(), &[(BondId(0), BondId(2))]);
+        assert_eq!(ac.atoms().matched_pairs(), &[(NodeId(0), NodeId(2))]);
+        assert_eq!(ac.bonds().matched_pairs(), &[(BondId(0), BondId(2))]);
         assert_eq!(
-            ac.dative_bonds().mates(),
+            ac.dative_bonds().matched_pairs(),
             &[(DativeBondId(0), DativeBondId(2))]
         );
         assert_eq!(
-            ac.aromatic_systems().mates(),
+            ac.aromatic_systems().matched_pairs(),
             &[(AromaticSystemId(0), AromaticSystemId(2))]
         );
         assert_eq!(
-            ac.multicenter_bonds().mates(),
+            ac.multicenter_bonds().matched_pairs(),
             &[(MulticenterBondId(0), MulticenterBondId(2))]
         );
         assert_eq!(
-            ac.noncovalent_bonds().mates(),
+            ac.noncovalent_bonds().matched_pairs(),
             &[(NoncovalentBondId(0), NoncovalentBondId(2))]
         );
         assert_eq!(
-            ac.stereo_atoms().mates(),
+            ac.stereo_atoms().matched_pairs(),
             &[(StereoAtomId(0), StereoAtomId(2))]
         );
         assert_eq!(
-            ac.stereo_bonds().mates(),
+            ac.stereo_bonds().matched_pairs(),
             &[(StereoBondId(0), StereoBondId(2))]
         );
     }
@@ -534,34 +554,34 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_reverse(correspondence: MoleculeCorrespondence) {
         let reversed = correspondence.reverse();
-        assert_eq!(reversed.atoms().mates(), &[(NodeId(1), NodeId(0))]);
-        assert_eq!(reversed.bonds().mates(), &[(BondId(2), BondId(0))]);
+        assert_eq!(reversed.atoms().matched_pairs(), &[(NodeId(1), NodeId(0))]);
+        assert_eq!(reversed.bonds().matched_pairs(), &[(BondId(2), BondId(0))]);
         assert_eq!(
-            reversed.dative_bonds().mates(),
+            reversed.dative_bonds().matched_pairs(),
             &[(DativeBondId(3), DativeBondId(0))]
         );
         assert_eq!(
-            reversed.aromatic_systems().mates(),
+            reversed.aromatic_systems().matched_pairs(),
             &[(AromaticSystemId(4), AromaticSystemId(0))]
         );
         assert_eq!(
-            reversed.multicenter_bonds().mates(),
+            reversed.multicenter_bonds().matched_pairs(),
             &[(MulticenterBondId(5), MulticenterBondId(0))]
         );
         assert_eq!(
-            reversed.noncovalent_bonds().mates(),
+            reversed.noncovalent_bonds().matched_pairs(),
             &[(NoncovalentBondId(6), NoncovalentBondId(0))]
         );
         assert_eq!(
-            reversed.stereo_atoms().mates(),
+            reversed.stereo_atoms().matched_pairs(),
             &[(StereoAtomId(7), StereoAtomId(0))]
         );
         assert_eq!(
-            reversed.stereo_bonds().mates(),
+            reversed.stereo_bonds().matched_pairs(),
             &[(StereoBondId(8), StereoBondId(0))]
         );
-        // counts swap too: atoms went lhs_count 1 / rhs_count 2, so the new lhs id 0 is exposed.
-        assert_eq!(reversed.atoms().left_exposed(), vec![NodeId(0)]);
+        // counts swap too: atoms went lhs_count 1 / rhs_count 2, so the new lhs id 0 is unmatched.
+        assert_eq!(reversed.atoms().left_unmatched(), vec![NodeId(0)]);
     }
 
     #[rstest]
@@ -576,34 +596,34 @@ mod tests {
             Correspondence::from_images(&[StereoAtomId(0)], 1),
             Correspondence::from_images(&[StereoBondId(0)], 1),
         );
-        let mut atom_exposed = complete.clone();
-        atom_exposed.atoms = Correspondence::new(Vec::new(), 1, 1);
-        let mut bond_exposed = complete.clone();
-        bond_exposed.bonds = Correspondence::new(Vec::new(), 1, 1);
-        let mut dative_exposed = complete.clone();
-        dative_exposed.dative_bonds = Correspondence::new(Vec::new(), 1, 1);
-        let mut aromatic_exposed = complete.clone();
-        aromatic_exposed.aromatic_systems = Correspondence::new(Vec::new(), 1, 1);
-        let mut multicenter_exposed = complete.clone();
-        multicenter_exposed.multicenter_bonds = Correspondence::new(Vec::new(), 1, 1);
-        let mut noncovalent_exposed = complete.clone();
-        noncovalent_exposed.noncovalent_bonds = Correspondence::new(Vec::new(), 1, 1);
-        let mut stereo_atom_exposed = complete.clone();
-        stereo_atom_exposed.stereo_atoms = Correspondence::new(Vec::new(), 1, 1);
-        let mut stereo_bond_exposed = complete.clone();
-        stereo_bond_exposed.stereo_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut atom_unmatched = complete.clone();
+        atom_unmatched.atoms = Correspondence::new(Vec::new(), 1, 1);
+        let mut bond_unmatched = complete.clone();
+        bond_unmatched.bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut dative_unmatched = complete.clone();
+        dative_unmatched.dative_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut aromatic_unmatched = complete.clone();
+        aromatic_unmatched.aromatic_systems = Correspondence::new(Vec::new(), 1, 1);
+        let mut multicenter_unmatched = complete.clone();
+        multicenter_unmatched.multicenter_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut noncovalent_unmatched = complete.clone();
+        noncovalent_unmatched.noncovalent_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut stereo_atom_unmatched = complete.clone();
+        stereo_atom_unmatched.stereo_atoms = Correspondence::new(Vec::new(), 1, 1);
+        let mut stereo_bond_unmatched = complete.clone();
+        stereo_bond_unmatched.stereo_bonds = Correspondence::new(Vec::new(), 1, 1);
 
         assert!(complete.is_total());
         assert_eq!(
             [
-                atom_exposed.is_total(),
-                bond_exposed.is_total(),
-                dative_exposed.is_total(),
-                aromatic_exposed.is_total(),
-                multicenter_exposed.is_total(),
-                noncovalent_exposed.is_total(),
-                stereo_atom_exposed.is_total(),
-                stereo_bond_exposed.is_total(),
+                atom_unmatched.is_total(),
+                bond_unmatched.is_total(),
+                dative_unmatched.is_total(),
+                aromatic_unmatched.is_total(),
+                multicenter_unmatched.is_total(),
+                noncovalent_unmatched.is_total(),
+                stereo_atom_unmatched.is_total(),
+                stereo_bond_unmatched.is_total(),
             ],
             [false; 8],
         );

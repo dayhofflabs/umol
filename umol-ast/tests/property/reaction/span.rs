@@ -27,7 +27,7 @@ proptest! {
 
     /// `reverse` swaps the span's sides and reverses its correspondence. Constructing that span
     /// directly must reproduce the span obtained by reversing the reaction, including the union
-    /// frame chosen for entities exposed on only one side.
+    /// frame chosen for entities unmatched on only one side.
     #[test]
     fn test_reaction_ast_reverse_swaps_sides(reaction in reaction_strategy()) {
         if let (Ok(span), Ok(reverse)) = (reaction.to_reaction_span(), reaction.reverse()) {

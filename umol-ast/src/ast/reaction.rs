@@ -235,7 +235,7 @@ impl ReactionAst {
     ) -> Result<ReactionDerivation, ApplyError> {
         if correspondence.atoms().left_count() != self.lhs.atoms().count()
             || correspondence.atoms().right_count() != host.atoms().count()
-            || correspondence.atoms().mate_count() != self.lhs.atoms().count()
+            || correspondence.atoms().matched_pair_count() != self.lhs.atoms().count()
         {
             return Err(ApplyError::CorrespondenceMismatch {
                 entity: Entity::Atom(AtomId(0)),
@@ -260,13 +260,13 @@ impl ReactionAst {
                 let expected = induced.$family();
                 if supplied != expected {
                     let id = supplied
-                        .mates()
+                        .matched_pairs()
                         .iter()
                         .find_map(|&(left, right)| {
                             (expected.right_of(left) != Some(right)).then_some(left)
                         })
                         .or_else(|| {
-                            expected.mates().iter().find_map(|&(left, right)| {
+                            expected.matched_pairs().iter().find_map(|&(left, right)| {
                                 (supplied.right_of(left) != Some(right)).then_some(left)
                             })
                         })
@@ -285,7 +285,7 @@ impl ReactionAst {
 
         if correspondence.stereo_atoms().left_count() != self.lhs.stereo_atoms().count()
             || correspondence.stereo_atoms().right_count() != host.stereo_atoms().count()
-            || correspondence.stereo_atoms().mate_count() != self.lhs.stereo_atoms().count()
+            || correspondence.stereo_atoms().matched_pair_count() != self.lhs.stereo_atoms().count()
         {
             return Err(ApplyError::CorrespondenceMismatch {
                 entity: Entity::StereoAtom(StereoAtomId(0)),
@@ -315,7 +315,7 @@ impl ReactionAst {
         }
         if correspondence.stereo_bonds().left_count() != self.lhs.stereo_bonds().count()
             || correspondence.stereo_bonds().right_count() != host.stereo_bonds().count()
-            || correspondence.stereo_bonds().mate_count() != self.lhs.stereo_bonds().count()
+            || correspondence.stereo_bonds().matched_pair_count() != self.lhs.stereo_bonds().count()
         {
             return Err(ApplyError::CorrespondenceMismatch {
                 entity: Entity::StereoBond(StereoBondId(0)),
@@ -1267,21 +1267,24 @@ impl ReactionAst {
             return Err(ApplyError::StructuralConflict);
         }
 
-        // The host↔product comap: preserved host atoms mate to their compacted product id (survivors
-        // keep ascending order), removed atoms are left-exposed, created atoms right-exposed. `induce`
-        // derives the bond and overlay correspondences from this atom map.
+        // The host↔product comap: preserved host atoms match their compacted product id (survivors
+        // keep ascending order), removed atoms are left-unmatched, created atoms right-unmatched.
+        // `induce` derives the bond and overlay correspondences from this atom map.
         let removed: HashSet<AtomId> = removed_host_atoms.iter().copied().collect();
-        let mut atom_mates: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut atom_matched_pairs: Vec<(NodeId, NodeId)> = Vec::new();
         let mut product_atom = 0u32;
         for host_atom in 0..host.atoms().count() as u32 {
             if removed.contains(&AtomId(host_atom)) {
                 continue;
             }
-            atom_mates.push((NodeId(host_atom), NodeId(product_atom)));
+            atom_matched_pairs.push((NodeId(host_atom), NodeId(product_atom)));
             product_atom += 1;
         }
-        let atom_map =
-            Correspondence::new(atom_mates, host.atoms().count(), product.atoms().count());
+        let atom_map = Correspondence::new(
+            atom_matched_pairs,
+            host.atoms().count(),
+            product.atoms().count(),
+        );
         let comap = MoleculeCorrespondence::induce(host, &product, atom_map);
         Ok(ReactionDerivation::new(host.clone(), product, comap))
     }
@@ -2693,8 +2696,8 @@ mod tests {
 
     #[rstest]
     fn test_reaction_ast_apply_at_comap() {
-        // Remove atom O (id 1) and its bond: host C-O ⇒ product C. Atom 0 is preserved (mated), atom
-        // 1 is deleted (left-exposed), so the comap's atom map records exactly that.
+        // Remove atom O (id 1) and its bond: host C-O ⇒ product C. Atom 0 is preserved (matched),
+        // atom 1 is deleted (left-unmatched), so the comap's atom map records exactly that.
         let reaction = ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts {
                 atoms: vec![
@@ -2738,7 +2741,10 @@ mod tests {
                 ..Default::default()
             })
         );
-        assert_eq!(derivation.atom_map().mates(), &[(NodeId(0), NodeId(0))]);
-        assert_eq!(derivation.atom_map().left_exposed(), vec![NodeId(1)]);
+        assert_eq!(
+            derivation.atom_map().matched_pairs(),
+            &[(NodeId(0), NodeId(0))]
+        );
+        assert_eq!(derivation.atom_map().left_unmatched(), vec![NodeId(1)]);
     }
 }

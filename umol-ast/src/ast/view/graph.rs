@@ -195,7 +195,7 @@ impl<'a> GraphView<'a> {
             )
             .into_iter()
             .map(|c| {
-                c.mates()
+                c.matched_pairs()
                     .iter()
                     .map(|&(_, host)| AtomId::from(host))
                     .collect()
@@ -227,7 +227,7 @@ impl<'a> GraphView<'a> {
             )
             .into_iter()
             .map(|c| {
-                c.mates()
+                c.matched_pairs()
                     .iter()
                     .map(|&(_, host)| AtomId::from(host))
                     .collect()

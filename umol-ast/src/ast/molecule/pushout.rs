@@ -242,17 +242,47 @@ impl MoleculeAst {
         let remapping = IdRemapping::new(
             right
                 .atoms()
-                .mates()
+                .matched_pairs()
                 .iter()
                 .map(|&(o, g)| (AtomId::from(o), AtomId::from(g)))
                 .collect(),
-            right.bonds().mates().iter().copied().collect(),
-            right.dative_bonds().mates().iter().copied().collect(),
-            right.aromatic_systems().mates().iter().copied().collect(),
-            right.multicenter_bonds().mates().iter().copied().collect(),
-            right.noncovalent_bonds().mates().iter().copied().collect(),
-            right.stereo_atoms().mates().iter().copied().collect(),
-            right.stereo_bonds().mates().iter().copied().collect(),
+            right.bonds().matched_pairs().iter().copied().collect(),
+            right
+                .dative_bonds()
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            right
+                .aromatic_systems()
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            right
+                .multicenter_bonds()
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            right
+                .noncovalent_bonds()
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            right
+                .stereo_atoms()
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
+            right
+                .stereo_bonds()
+                .matched_pairs()
+                .iter()
+                .copied()
+                .collect(),
         );
         let mut constraints = self.constraints.clone();
         for c in other.constraints.iter() {
@@ -386,7 +416,7 @@ mod tests {
     use super::super::super::stereo::StereoKind;
     use super::*;
 
-    // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one exposed atom.
+    // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one unmatched atom.
     #[fixture]
     fn overlap() -> GraphCorrespondence {
         GraphCorrespondence::new(
@@ -395,7 +425,7 @@ mod tests {
         )
     }
 
-    // meet_pushout glues over the shared atom: `object` keeps left's ids, appends right's exposed
+    // meet_pushout glues over the shared atom: `object` keeps left's ids, appends right's unmatched
     // atom, and the shared atom carries the two sides' meet (either order → the more specific).
     #[rstest]
     #[case::top_meets_element(AtomAst::default(), AtomAst::from_element(Element::C), Element::C)]
@@ -438,7 +468,8 @@ mod tests {
 
     // The glue is inadmissible (`None`) when it would be malformed: a coincident-atom meet is `⊥`
     // (`carbon_nitrogen` / `oxygen_nitrogen`), or an emit-compliance invariant fails — here two aromatic
-    // systems that share glue atom 0 (`[0,1]` from left, `[0,2]` from right's exposed atom), which the
+    // systems that share glue atom 0 (`[0,1]` from left, `[0,2]` from right's unmatched atom), which
+    // the
     // `has_conflict` gate rejects.
     #[rstest]
     #[case::carbon_nitrogen(

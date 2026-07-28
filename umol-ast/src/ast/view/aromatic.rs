@@ -487,7 +487,7 @@ mod tests {
             .aromatic_system(AromaticSystemId(0))
             .induced_subgraph();
         assert_eq!(
-            correspondence.atoms().mates(),
+            correspondence.atoms().matched_pairs(),
             &[
                 (NodeId(0), NodeId(0)),
                 (NodeId(1), NodeId(1)),
@@ -495,7 +495,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            correspondence.bonds().mates(),
+            correspondence.bonds().matched_pairs(),
             &[(BondId(0), BondId(0)), (BondId(1), BondId(1))],
         );
     }

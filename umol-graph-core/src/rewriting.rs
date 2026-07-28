@@ -9,9 +9,10 @@
 //! `Graph`; the attributed `meet`-glue and rule application live one layer up (umol-ast) and carry
 //! their data through the morphisms these return.
 //!
-//! A morphism is a [`GraphCorrespondence`]; a rule/overlap is one too (its `mates` are the shared
-//! interface, its exposed ids the deleted / created part). All graphs are **simple**: a pushout that
-//! would induce a parallel edge identifies it instead (the pushout in the category of simple graphs).
+//! A morphism is a [`GraphCorrespondence`]; a rule/overlap is one too (its matched pairs are the
+//! shared interface, its unmatched ids the deleted / created part). All graphs are **simple**: a
+//! pushout that would induce a parallel edge identifies it instead (the pushout in the category of
+//! simple graphs).
 
 use std::collections::HashMap;
 
@@ -61,29 +62,29 @@ fn identity<Id: Copy + Ord + From<usize>>(count: usize) -> Vec<Id> {
 }
 
 impl Graph {
-    /// Glue `self` and `right` identifying the mated pairs of `overlap` (a partial `self ↔ right`
+    /// Glue `self` and `right` identifying the matched pairs of `overlap` (a partial `self ↔ right`
     /// correspondence): the pushout of the span it denotes (Def. 2.16). `self` keeps its ids; `right`'s
-    /// exposed nodes/edges are appended. An appended edge whose endpoints already carry one is identified
-    /// with it (simple-graph pushout).
+    /// unmatched nodes/edges are appended. An appended edge whose endpoints already carry one is
+    /// identified with it (simple-graph pushout).
     pub fn pushout(&self, right: &Graph, overlap: &GraphCorrespondence) -> Pushout {
         let n_left = self.node_count();
         let m_left = self.edge_count();
 
-        // right node → object node: mated fold onto their left partner, exposed append after `left`.
-        let exposed_nodes = overlap.nodes().right_exposed();
+        // right node → object node: matched fold onto their left partner, unmatched append after `left`.
+        let unmatched_nodes = overlap.nodes().right_unmatched();
         let mut right_node: HashMap<NodeId, NodeId> = overlap
             .nodes()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(l, r)| (r, l))
             .collect();
-        for (rank, &r) in exposed_nodes.iter().enumerate() {
+        for (rank, &r) in unmatched_nodes.iter().enumerate() {
             right_node.insert(r, NodeId::from(n_left + rank));
         }
-        let object_node_count = n_left + exposed_nodes.len();
+        let object_node_count = n_left + unmatched_nodes.len();
 
-        // Object edges: `left`'s verbatim, then `right`'s exposed (endpoints relabelled), collapsing a
-        // parallel onto the existing edge.
+        // Object edges: `left`'s verbatim, then `right`'s unmatched (endpoints relabelled),
+        // collapsing a parallel onto the existing edge.
         let mut edges: Vec<[u32; 2]> = Vec::with_capacity(m_left);
         let mut by_pair: HashMap<[u32; 2], EdgeId> = HashMap::new();
         for j in 0..m_left {
@@ -93,11 +94,11 @@ impl Graph {
         }
         let mut right_edge: HashMap<EdgeId, EdgeId> = overlap
             .edges()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(le, re)| (re, le))
             .collect();
-        for re in overlap.edges().right_exposed() {
+        for re in overlap.edges().right_unmatched() {
             let [u, v] = right.edge_endpoints(re);
             let ends = [right_node[&u].0, right_node[&v].0];
             let object_edge = *by_pair.entry(sorted(ends)).or_insert_with(|| {
@@ -141,16 +142,16 @@ impl Graph {
         matched: &GraphCorrespondence,
         interface: &GraphCorrespondence,
     ) -> Option<PushoutComplement> {
-        // The deleted host items: L\K (interface-exposed on the L side), carried through the match.
+        // The deleted host items: L\K (interface-unmatched on the L side), carried through the match.
         let deleted_nodes: Vec<NodeId> = interface
             .nodes()
-            .right_exposed()
+            .right_unmatched()
             .into_iter()
             .filter_map(|l| matched.nodes().right_of(l))
             .collect();
         let deleted_edges: Vec<EdgeId> = interface
             .edges()
-            .right_exposed()
+            .right_unmatched()
             .into_iter()
             .filter_map(|le| matched.edges().right_of(le))
             .collect();
@@ -208,49 +209,61 @@ impl Graph {
         left_into: &GraphCorrespondence,
         right_into: &GraphCorrespondence,
     ) -> Pullback {
-        // self ↔ right over the common E: mate a self item to the right item sharing its E-image.
-        let node_mates = left_into
+        // self ↔ right over the common E: match a self item to the right item sharing its E-image.
+        let node_matched_pairs = left_into
             .nodes()
             .compose(&right_into.nodes().reverse())
-            .mates()
+            .matched_pairs()
             .to_vec();
-        let edge_mates = left_into
+        let edge_matched_pairs = left_into
             .edges()
             .compose(&right_into.edges().reverse())
-            .mates()
+            .matched_pairs()
             .to_vec();
 
-        let left_to_k: HashMap<NodeId, NodeId> = node_mates
+        let left_to_k: HashMap<NodeId, NodeId> = node_matched_pairs
             .iter()
             .enumerate()
             .map(|(i, &(l, _))| (l, NodeId::from(i)))
             .collect();
-        let edges: Vec<[u32; 2]> = edge_mates
+        let edges: Vec<[u32; 2]> = edge_matched_pairs
             .iter()
             .map(|&(le, _)| {
                 let [a, b] = self.edge_endpoints(le);
                 [left_to_k[&a].0, left_to_k[&b].0]
             })
             .collect();
-        let object = Graph::new(node_mates.len(), &edges);
+        let object = Graph::new(node_matched_pairs.len(), &edges);
 
         let left_map = GraphCorrespondence::new(
             Correspondence::from_images(
-                &node_mates.iter().map(|&(l, _)| l).collect::<Vec<_>>(),
+                &node_matched_pairs
+                    .iter()
+                    .map(|&(l, _)| l)
+                    .collect::<Vec<_>>(),
                 self.node_count(),
             ),
             Correspondence::from_images(
-                &edge_mates.iter().map(|&(le, _)| le).collect::<Vec<_>>(),
+                &edge_matched_pairs
+                    .iter()
+                    .map(|&(le, _)| le)
+                    .collect::<Vec<_>>(),
                 self.edge_count(),
             ),
         );
         let right_map = GraphCorrespondence::new(
             Correspondence::from_images(
-                &node_mates.iter().map(|&(_, r)| r).collect::<Vec<_>>(),
+                &node_matched_pairs
+                    .iter()
+                    .map(|&(_, r)| r)
+                    .collect::<Vec<_>>(),
                 right.node_count(),
             ),
             Correspondence::from_images(
-                &edge_mates.iter().map(|&(_, re)| re).collect::<Vec<_>>(),
+                &edge_matched_pairs
+                    .iter()
+                    .map(|&(_, re)| re)
+                    .collect::<Vec<_>>(),
                 right.edge_count(),
             ),
         );
@@ -270,9 +283,16 @@ mod tests {
 
     use super::*;
 
-    fn node_overlap(mates: Vec<(u32, u32)>, left: &Graph, right: &Graph) -> GraphCorrespondence {
+    fn node_overlap(
+        matched_pairs: Vec<(u32, u32)>,
+        left: &Graph,
+        right: &Graph,
+    ) -> GraphCorrespondence {
         let nodes = Correspondence::new(
-            mates.iter().map(|&(l, r)| (NodeId(l), NodeId(r))).collect(),
+            matched_pairs
+                .iter()
+                .map(|&(l, r)| (NodeId(l), NodeId(r)))
+                .collect(),
             left.node_count(),
             right.node_count(),
         );

@@ -332,7 +332,7 @@ impl MoleculeAst {
     ///
     /// The correspondence supplies the target id and participant frame. It must cover the actual
     /// id spaces of both molecules, and every mapped topology edge, relation participant, stereo
-    /// site, and stereo ligand must agree with its mated entity.
+    /// site, and stereo ligand must agree with its matched entity.
     pub fn equiv_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
         let counts_match = [
             (
@@ -392,7 +392,7 @@ impl MoleculeAst {
             return false;
         }
 
-        for &(left, right) in correspondence.atoms().mates() {
+        for &(left, right) in correspondence.atoms().matched_pairs() {
             let (Some(left_ast), Some(right_ast)) =
                 (self.atoms.get(left.index()), other.atoms.get(right.index()))
             else {
@@ -403,7 +403,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.bonds().mates() {
+        for &(left, right) in correspondence.bonds().matched_pairs() {
             let (Some(left_ast), Some(right_ast)) =
                 (self.bonds.get(left.index()), other.bonds.get(right.index()))
             else {
@@ -423,7 +423,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.dative_bonds().mates() {
+        for &(left, right) in correspondence.dative_bonds().matched_pairs() {
             if left.index() >= self.dative_bonds.count()
                 || right.index() >= other.dative_bonds.count()
             {
@@ -463,7 +463,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.aromatic_systems().mates() {
+        for &(left, right) in correspondence.aromatic_systems().matched_pairs() {
             if left.index() >= self.aromatic_systems.count()
                 || right.index() >= other.aromatic_systems.count()
             {
@@ -493,7 +493,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.multicenter_bonds().mates() {
+        for &(left, right) in correspondence.multicenter_bonds().matched_pairs() {
             if left.index() >= self.multicenter_bonds.count()
                 || right.index() >= other.multicenter_bonds.count()
             {
@@ -523,7 +523,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.noncovalent_bonds().mates() {
+        for &(left, right) in correspondence.noncovalent_bonds().matched_pairs() {
             if left.index() >= self.noncovalent_bonds.count()
                 || right.index() >= other.noncovalent_bonds.count()
             {
@@ -553,7 +553,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.stereo_atoms().mates() {
+        for &(left, right) in correspondence.stereo_atoms().matched_pairs() {
             if left.index() >= self.stereo_atoms.count()
                 || right.index() >= other.stereo_atoms.count()
             {
@@ -597,7 +597,7 @@ impl MoleculeAst {
             }
         }
 
-        for &(left, right) in correspondence.stereo_bonds().mates() {
+        for &(left, right) in correspondence.stereo_bonds().matched_pairs() {
             if left.index() >= self.stereo_bonds.count()
                 || right.index() >= other.stereo_bonds.count()
             {
@@ -857,7 +857,7 @@ impl MoleculeAst {
     pub fn extract(&self, sub: &MoleculeCorrespondence) -> MoleculeAst {
         let kept: HashSet<AtomId> = sub
             .atoms()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(_, host)| AtomId::from(host))
             .collect();
@@ -884,12 +884,16 @@ impl MoleculeAst {
     pub fn edits(&self, sub: &MoleculeCorrespondence) -> Vec<Edit> {
         let kept: HashSet<AtomId> = sub
             .atoms()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(_, host)| AtomId::from(host))
             .collect();
-        let kept_bonds: HashSet<BondId> =
-            sub.bonds().mates().iter().map(|&(_, host)| host).collect();
+        let kept_bonds: HashSet<BondId> = sub
+            .bonds()
+            .matched_pairs()
+            .iter()
+            .map(|&(_, host)| host)
+            .collect();
         let removed_atoms: Vec<AtomHandle> = (0..self.atoms().count())
             .map(AtomId::from)
             .filter(|a| !kept.contains(a))
@@ -2018,49 +2022,49 @@ fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> I
     IdRemapping::new(
         correspondence
             .atoms()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (AtomId::from(original), AtomId::from(compact)))
             .collect(),
         correspondence
             .bonds()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .dative_bonds()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .aromatic_systems()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .multicenter_bonds()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .noncovalent_bonds()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .stereo_atoms()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .stereo_bonds()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(compact, original)| (original, compact))
             .collect(),

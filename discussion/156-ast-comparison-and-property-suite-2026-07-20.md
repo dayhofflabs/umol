@@ -57,7 +57,7 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   (`umol-ast/src/ast/molecule.rs`, `correspondence.rs`): require S0a's total
   correspondence, verify that every mapped bond endpoint, overlay participant,
   stereo site, and stereo ligand agrees with the right molecule, and compare
-  each mated entity AST canonically. Reindex position-dependent relation data
+  each matched entity AST canonically. Reindex position-dependent relation data
   with the participant permutations already used by overlay matching; remap
   the left molecule constraints through `IdRemapping` before canonical
   comparison. Return `false` for a partial or structurally inconsistent

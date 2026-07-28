@@ -249,17 +249,17 @@ impl<'a> MatchingSearchState<'a> {
 
     pub(super) fn residual_graph(&self) -> (Graph, GraphCorrespondence) {
         let mut original_to_residual = vec![None; self.graph.node_bound()];
-        let mut node_mates = Vec::new();
+        let mut node_matched_pairs = Vec::new();
         for original in self.graph.node_ids() {
             if !self.covered[original.index()] {
-                let residual = NodeId(node_mates.len() as u32);
+                let residual = NodeId(node_matched_pairs.len() as u32);
                 original_to_residual[original.index()] = Some(residual);
-                node_mates.push((residual, original));
+                node_matched_pairs.push((residual, original));
             }
         }
 
         let mut residual_edges = Vec::new();
-        let mut edge_mates = Vec::new();
+        let mut edge_matched_pairs = Vec::new();
         for original_edge in self.graph.edge_ids() {
             if self.excluded[original_edge.index()] {
                 continue;
@@ -273,13 +273,21 @@ impl<'a> MatchingSearchState<'a> {
             };
             let residual_edge = EdgeId(residual_edges.len() as u32);
             residual_edges.push([residual_first.0, residual_second.0]);
-            edge_mates.push((residual_edge, original_edge));
+            edge_matched_pairs.push((residual_edge, original_edge));
         }
 
-        let residual = Graph::new(node_mates.len(), &residual_edges);
+        let residual = Graph::new(node_matched_pairs.len(), &residual_edges);
         let correspondence = GraphCorrespondence::new(
-            Correspondence::new(node_mates, residual.node_count(), self.graph.node_count()),
-            Correspondence::new(edge_mates, residual.edge_count(), self.graph.edge_count()),
+            Correspondence::new(
+                node_matched_pairs,
+                residual.node_count(),
+                self.graph.node_count(),
+            ),
+            Correspondence::new(
+                edge_matched_pairs,
+                residual.edge_count(),
+                self.graph.edge_count(),
+            ),
         );
         (residual, correspondence)
     }

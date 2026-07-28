@@ -100,7 +100,7 @@ fn matches(
         .graph
         .subgraph_isomorphisms(&query.graph, &mut node_match, &mut edge_match, alg)
         .iter()
-        .map(|c| c.mates().iter().map(|&(_, t)| t.index()).collect())
+        .map(|c| c.matched_pairs().iter().map(|&(_, t)| t.index()).collect())
         .collect();
     found.sort();
     found

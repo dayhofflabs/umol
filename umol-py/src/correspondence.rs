@@ -41,17 +41,17 @@ correspondence_ids!(
 #[pyclass(eq, frozen, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Correspondence {
-    mates: Vec<(usize, usize)>,
+    matched_pairs: Vec<(usize, usize)>,
     left_count: usize,
     right_count: usize,
 }
 
 #[pymethods]
 impl Correspondence {
-    /// Mated `(left, right)` id pairs, ordered by left id.
+    /// Matched `(left, right)` id pairs, ordered by left id.
     #[getter]
-    fn mates(&self) -> Vec<(usize, usize)> {
-        self.mates.clone()
+    fn matched_pairs(&self) -> Vec<(usize, usize)> {
+        self.matched_pairs.clone()
     }
 
     /// Size of the left id space.
@@ -66,16 +66,22 @@ impl Correspondence {
         self.right_count
     }
 
-    /// Left ids without a mate.
+    /// Left ids without a match.
     #[getter]
-    fn left_exposed(&self) -> Vec<usize> {
-        exposed_ids(self.left_count, self.mates.iter().map(|&(left, _)| left))
+    fn left_unmatched(&self) -> Vec<usize> {
+        unmatched_ids(
+            self.left_count,
+            self.matched_pairs.iter().map(|&(left, _)| left),
+        )
     }
 
-    /// Right ids without a mate.
+    /// Right ids without a match.
     #[getter]
-    fn right_exposed(&self) -> Vec<usize> {
-        exposed_ids(self.right_count, self.mates.iter().map(|&(_, right)| right))
+    fn right_unmatched(&self) -> Vec<usize> {
+        unmatched_ids(
+            self.right_count,
+            self.matched_pairs.iter().map(|&(_, right)| right),
+        )
     }
 
     fn __repr__(&self) -> String {
@@ -88,8 +94,8 @@ impl Correspondence {
         correspondence: &GraphCoreCorrespondence<Id>,
     ) -> Self {
         Self {
-            mates: correspondence
-                .mates()
+            matched_pairs: correspondence
+                .matched_pairs()
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index()))
                 .collect(),
@@ -100,8 +106,8 @@ impl Correspondence {
 
     fn repr(&self) -> String {
         format!(
-            "Correspondence(mates={:?}, left_count={}, right_count={})",
-            self.mates, self.left_count, self.right_count
+            "Correspondence(matched_pairs={:?}, left_count={}, right_count={})",
+            self.matched_pairs, self.left_count, self.right_count
         )
     }
 }
@@ -191,8 +197,8 @@ impl MoleculeCorrespondence {
     }
 }
 
-fn exposed_ids(count: usize, mated: impl Iterator<Item = usize>) -> Vec<usize> {
-    let present: HashSet<_> = mated.collect();
+fn unmatched_ids(count: usize, matched: impl Iterator<Item = usize>) -> Vec<usize> {
+    let present: HashSet<_> = matched.collect();
     (0..count).filter(|id| !present.contains(id)).collect()
 }
 
@@ -227,11 +233,11 @@ mod tests {
     #[rstest]
     #[case::empty(
         GraphCoreCorrespondence::new(vec![], 2, 3),
-        Correspondence { mates: vec![], left_count: 2, right_count: 3 },
+        Correspondence { matched_pairs: vec![], left_count: 2, right_count: 3 },
     )]
     #[case::partial(
         GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
-        Correspondence { mates: vec![(0, 2)], left_count: 2, right_count: 3 },
+        Correspondence { matched_pairs: vec![(0, 2)], left_count: 2, right_count: 3 },
     )]
     #[case::total(
         GraphCoreCorrespondence::new(
@@ -240,7 +246,7 @@ mod tests {
             2,
         ),
         Correspondence {
-            mates: vec![(0, 1), (1, 0)],
+            matched_pairs: vec![(0, 1), (1, 0)],
             left_count: 2,
             right_count: 2,
         },
@@ -252,7 +258,7 @@ mod tests {
             3,
         ),
         Correspondence {
-            mates: vec![(0, 2), (2, 0)],
+            matched_pairs: vec![(0, 2), (2, 0)],
             left_count: 3,
             right_count: 3,
         },
@@ -295,18 +301,18 @@ mod tests {
     )]
     fn test_correspondence_accessors(
         #[case] correspondence: GraphCoreCorrespondence<NodeId>,
-        #[case] mates: Vec<(usize, usize)>,
+        #[case] matched_pairs: Vec<(usize, usize)>,
         #[case] left_count: usize,
         #[case] right_count: usize,
-        #[case] left_exposed: Vec<usize>,
-        #[case] right_exposed: Vec<usize>,
+        #[case] left_unmatched: Vec<usize>,
+        #[case] right_unmatched: Vec<usize>,
     ) {
         let correspondence = Correspondence::from_rust(&correspondence);
-        assert_eq!(correspondence.mates(), mates);
+        assert_eq!(correspondence.matched_pairs(), matched_pairs);
         assert_eq!(correspondence.left_count(), left_count);
         assert_eq!(correspondence.right_count(), right_count);
-        assert_eq!(correspondence.left_exposed(), left_exposed);
-        assert_eq!(correspondence.right_exposed(), right_exposed);
+        assert_eq!(correspondence.left_unmatched(), left_unmatched);
+        assert_eq!(correspondence.right_unmatched(), right_unmatched);
     }
 
     #[rstest]
@@ -316,20 +322,20 @@ mod tests {
             2,
             3,
         ));
-        let mut mates = correspondence.mates();
-        let mut left_exposed = correspondence.left_exposed();
-        let mut right_exposed = correspondence.right_exposed();
+        let mut matched_pairs = correspondence.matched_pairs();
+        let mut left_unmatched = correspondence.left_unmatched();
+        let mut right_unmatched = correspondence.right_unmatched();
 
-        mates.push((1, 1));
-        left_exposed.clear();
-        right_exposed.clear();
+        matched_pairs.push((1, 1));
+        left_unmatched.clear();
+        right_unmatched.clear();
 
-        assert_eq!(correspondence.mates(), vec![(0, 2)]);
-        assert_eq!(correspondence.left_exposed(), vec![1]);
-        assert_eq!(correspondence.right_exposed(), vec![0, 1]);
+        assert_eq!(correspondence.matched_pairs(), vec![(0, 2)]);
+        assert_eq!(correspondence.left_unmatched(), vec![1]);
+        assert_eq!(correspondence.right_unmatched(), vec![0, 1]);
         assert_eq!(
             correspondence.__repr__(),
-            "Correspondence(mates=[(0, 2)], left_count=2, right_count=3)"
+            "Correspondence(matched_pairs=[(0, 2)], left_count=2, right_count=3)"
         );
         assert_eq!(
             correspondence,
@@ -356,7 +362,7 @@ mod tests {
         assert_eq!(
             correspondence.atoms(),
             Correspondence {
-                mates: vec![(0, 1)],
+                matched_pairs: vec![(0, 1)],
                 left_count: 2,
                 right_count: 3,
             }
@@ -364,7 +370,7 @@ mod tests {
         assert_eq!(
             correspondence.bonds(),
             Correspondence {
-                mates: vec![(0, 2)],
+                matched_pairs: vec![(0, 2)],
                 left_count: 1,
                 right_count: 3,
             }
@@ -372,7 +378,7 @@ mod tests {
         assert_eq!(
             correspondence.dative_bonds(),
             Correspondence {
-                mates: vec![(1, 0)],
+                matched_pairs: vec![(1, 0)],
                 left_count: 2,
                 right_count: 1,
             }
@@ -380,7 +386,7 @@ mod tests {
         assert_eq!(
             correspondence.aromatic_systems(),
             Correspondence {
-                mates: vec![],
+                matched_pairs: vec![],
                 left_count: 1,
                 right_count: 2,
             }
@@ -388,7 +394,7 @@ mod tests {
         assert_eq!(
             correspondence.multicenter_bonds(),
             Correspondence {
-                mates: vec![(0, 0)],
+                matched_pairs: vec![(0, 0)],
                 left_count: 1,
                 right_count: 1,
             }
@@ -396,7 +402,7 @@ mod tests {
         assert_eq!(
             correspondence.noncovalent_bonds(),
             Correspondence {
-                mates: vec![(0, 1)],
+                matched_pairs: vec![(0, 1)],
                 left_count: 2,
                 right_count: 2,
             }
@@ -404,7 +410,7 @@ mod tests {
         assert_eq!(
             correspondence.stereo_atoms(),
             Correspondence {
-                mates: vec![(0, 0), (1, 1)],
+                matched_pairs: vec![(0, 0), (1, 1)],
                 left_count: 2,
                 right_count: 2,
             }
@@ -412,7 +418,7 @@ mod tests {
         assert_eq!(
             correspondence.stereo_bonds(),
             Correspondence {
-                mates: vec![(0, 1)],
+                matched_pairs: vec![(0, 1)],
                 left_count: 1,
                 right_count: 2,
             }
@@ -429,17 +435,17 @@ mod tests {
             .unwrap();
             let first = correspondence.bind(py).getattr("atoms").unwrap();
             let second = correspondence.bind(py).getattr("atoms").unwrap();
-            let first_mates = first
-                .getattr("mates")
+            let first_matched_pairs = first
+                .getattr("matched_pairs")
                 .unwrap()
                 .cast_into::<PyList>()
                 .unwrap();
-            first_mates.append((1, 2)).unwrap();
+            first_matched_pairs.append((1, 2)).unwrap();
 
             assert!(!first.is(&second));
             assert_eq!(
                 second
-                    .getattr("mates")
+                    .getattr("matched_pairs")
                     .unwrap()
                     .extract::<Vec<(usize, usize)>>()
                     .unwrap(),
@@ -456,14 +462,14 @@ mod tests {
             correspondence.__repr__(),
             concat!(
                 "MoleculeCorrespondence(",
-                "atoms=Correspondence(mates=[(0, 1)], left_count=2, right_count=3), ",
-                "bonds=Correspondence(mates=[(0, 2)], left_count=1, right_count=3), ",
-                "dative_bonds=Correspondence(mates=[(1, 0)], left_count=2, right_count=1), ",
-                "aromatic_systems=Correspondence(mates=[], left_count=1, right_count=2), ",
-                "multicenter_bonds=Correspondence(mates=[(0, 0)], left_count=1, right_count=1), ",
-                "noncovalent_bonds=Correspondence(mates=[(0, 1)], left_count=2, right_count=2), ",
-                "stereo_atoms=Correspondence(mates=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
-                "stereo_bonds=Correspondence(mates=[(0, 1)], left_count=1, right_count=2))"
+                "atoms=Correspondence(matched_pairs=[(0, 1)], left_count=2, right_count=3), ",
+                "bonds=Correspondence(matched_pairs=[(0, 2)], left_count=1, right_count=3), ",
+                "dative_bonds=Correspondence(matched_pairs=[(1, 0)], left_count=2, right_count=1), ",
+                "aromatic_systems=Correspondence(matched_pairs=[], left_count=1, right_count=2), ",
+                "multicenter_bonds=Correspondence(matched_pairs=[(0, 0)], left_count=1, right_count=1), ",
+                "noncovalent_bonds=Correspondence(matched_pairs=[(0, 1)], left_count=2, right_count=2), ",
+                "stereo_atoms=Correspondence(matched_pairs=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
+                "stereo_bonds=Correspondence(matched_pairs=[(0, 1)], left_count=1, right_count=2))"
             )
         );
     }

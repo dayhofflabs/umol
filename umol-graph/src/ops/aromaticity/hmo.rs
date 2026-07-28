@@ -87,7 +87,7 @@ impl HmoAromaticity {
         let extracted = ast.extract(&subgraph);
         let mut sorted_host: Vec<AtomId> = subgraph
             .atoms()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(_, host)| AtomId::from(host))
             .collect();
@@ -173,8 +173,8 @@ impl HmoAromaticity {
             electron_count += valence as u32;
         }
 
-        let mut bond_positions = Vec::with_capacity(subgraph.bonds().mate_count());
-        for &(_, bid) in subgraph.bonds().mates() {
+        let mut bond_positions = Vec::with_capacity(subgraph.bonds().matched_pair_count());
+        for &(_, bid) in subgraph.bonds().matched_pairs() {
             let [ha, hb] = ast.bond(bid).atom_ids();
             let i = subgraph.atoms().left_of(NodeId::from(ha)).unwrap().index();
             let j = subgraph.atoms().left_of(NodeId::from(hb)).unwrap().index();

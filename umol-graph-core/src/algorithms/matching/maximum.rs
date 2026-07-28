@@ -1439,7 +1439,7 @@ mod tests {
 
         assert_eq!(residual, Graph::new(4, &[[0, 1], [2, 3], [0, 3]]));
         assert_eq!(
-            correspondence.nodes().mates(),
+            correspondence.nodes().matched_pairs(),
             &[
                 (NodeId(0), NodeId(2)),
                 (NodeId(1), NodeId(3)),
@@ -1448,7 +1448,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            correspondence.edges().mates(),
+            correspondence.edges().matched_pairs(),
             &[
                 (EdgeId(0), EdgeId(2)),
                 (EdgeId(1), EdgeId(4)),
@@ -1456,11 +1456,11 @@ mod tests {
             ]
         );
         assert_eq!(
-            correspondence.nodes().right_exposed(),
+            correspondence.nodes().right_unmatched(),
             vec![NodeId(0), NodeId(1)]
         );
         assert_eq!(
-            correspondence.edges().right_exposed(),
+            correspondence.edges().right_unmatched(),
             vec![EdgeId(0), EdgeId(1), EdgeId(3)]
         );
     }
@@ -1553,7 +1553,7 @@ mod tests {
                     Graph::new(expected_nodes.len(), &expected_endpoints)
                 );
                 assert_eq!(
-                    correspondence.nodes().mates(),
+                    correspondence.nodes().matched_pairs(),
                     expected_nodes
                         .iter()
                         .enumerate()
@@ -1561,7 +1561,7 @@ mod tests {
                         .collect::<Vec<_>>()
                 );
                 assert_eq!(
-                    correspondence.edges().mates(),
+                    correspondence.edges().matched_pairs(),
                     expected_edges
                         .iter()
                         .enumerate()

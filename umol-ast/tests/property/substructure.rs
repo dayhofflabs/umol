@@ -42,7 +42,7 @@ fn sorted_matches(
         .iter()
         .map(|c| {
             c.atoms()
-                .mates()
+                .matched_pairs()
                 .iter()
                 .map(|&(_, host)| AtomId::from(host))
                 .collect()

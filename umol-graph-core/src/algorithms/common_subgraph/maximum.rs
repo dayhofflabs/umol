@@ -132,7 +132,7 @@ impl Graph {
             state.best.push(fallback);
         }
         let mut best = state.best;
-        best.sort_by(|x, y| x.nodes().mates().cmp(y.nodes().mates()));
+        best.sort_by(|x, y| x.nodes().matched_pairs().cmp(y.nodes().matched_pairs()));
         best.dedup();
         best
     }
@@ -502,7 +502,10 @@ mod tests {
     use super::*;
 
     fn summary(c: &GraphCorrespondence) -> (Vec<(NodeId, NodeId)>, usize) {
-        (c.nodes().mates().to_vec(), c.edges().mate_count())
+        (
+            c.nodes().matched_pairs().to_vec(),
+            c.edges().matched_pair_count(),
+        )
     }
 
     fn any_node(_: NodeId, _: NodeId) -> bool {
@@ -541,8 +544,8 @@ mod tests {
             .into_iter()
             .next()
             .unwrap();
-        assert_eq!(r.nodes().mate_count(), nodes);
-        assert_eq!(r.edges().mate_count(), edges);
+        assert_eq!(r.nodes().matched_pair_count(), nodes);
+        assert_eq!(r.edges().matched_pair_count(), edges);
     }
 
     #[rstest]
@@ -568,8 +571,8 @@ mod tests {
             .into_iter()
             .next()
             .unwrap();
-        assert_eq!(r.nodes().mate_count(), nodes);
-        assert_eq!(r.edges().mate_count(), edges);
+        assert_eq!(r.nodes().matched_pair_count(), nodes);
+        assert_eq!(r.edges().matched_pair_count(), edges);
     }
 
     #[rstest]
@@ -639,8 +642,8 @@ mod tests {
             .into_iter()
             .next()
             .unwrap();
-        assert_eq!(r.nodes().mate_count(), 1);
-        assert_eq!(r.edges().mate_count(), 0);
+        assert_eq!(r.nodes().matched_pair_count(), 1);
+        assert_eq!(r.edges().matched_pair_count(), 0);
     }
 
     #[rstest]
@@ -658,9 +661,9 @@ mod tests {
         );
         assert_eq!(r.len(), 2);
         for cs in &r {
-            assert!(cs.nodes().mates().contains(&(NodeId(0), NodeId(1))));
-            assert_eq!(cs.nodes().mate_count(), 3);
-            assert_eq!(cs.edges().mate_count(), 3);
+            assert!(cs.nodes().matched_pairs().contains(&(NodeId(0), NodeId(1))));
+            assert_eq!(cs.nodes().matched_pair_count(), 3);
+            assert_eq!(cs.edges().matched_pair_count(), 3);
         }
     }
 
@@ -686,9 +689,12 @@ mod tests {
         );
         assert_eq!(seeded, unseeded);
         assert_eq!(unseeded.len(), 2);
-        assert!(unseeded
-            .iter()
-            .all(|cs| cs.nodes().mate_count() == 4 && cs.edges().mate_count() == 3));
+        assert!(
+            unseeded
+                .iter()
+                .all(|cs| cs.nodes().matched_pair_count() == 4
+                    && cs.edges().matched_pair_count() == 3)
+        );
     }
 
     #[rstest]
@@ -730,7 +736,7 @@ mod tests {
             .next()
             .unwrap();
         assert_eq!(summary(&r), (vec![], 0));
-        assert!(r.nodes().mates().is_empty());
+        assert!(r.nodes().matched_pairs().is_empty());
     }
 
     #[rstest]

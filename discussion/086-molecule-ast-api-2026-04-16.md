@@ -2227,7 +2227,7 @@ redundant twin. Resolution:
   the producers `reaction_span`/`reaction`/`pushout`/`constraint/molecule`): build
   correspondences instead of hashmap-triples, take `&MoleculeCorrespondence`. Add two things so
   nothing regresses: forward `map_*(id) -> XId` conveniences (relabel ergonomics under the
-  left-total contract) and an **O(1) dense `image` accessor** (`mates[id.index()].1` for the
+  left-total contract) and an **O(1) dense `image` accessor** (`matched_pairs[id.index()].1` for the
   dense-left case, so `remap_delta`'s hot path keeps O(1)). Bonus: `MoleculeCorrespondence` can
   *derive* all eight families from just the atom correspondence, simplifying several producers.
 

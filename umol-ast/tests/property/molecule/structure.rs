@@ -75,7 +75,7 @@ proptest! {
             covered_atoms.extend(
                 correspondence
                     .atoms()
-                    .mates()
+                    .matched_pairs()
                     .iter()
                     .map(|&(_, host)| AtomId::from(host)),
             );

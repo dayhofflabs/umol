@@ -1484,21 +1484,21 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   1. **DONE — S7a.1 — return-only `Correspondence` value**
      (`umol-py/src/correspondence.rs`) — add one frozen, value-equal Python value
-     that snapshots a Rust `Correspondence<Id>` into integer mated pairs plus
-     left/right id-space sizes. Expose `mates`, `left_exposed`, and
-     `right_exposed` as detached Python lists; keep construction and
+     that snapshots a Rust `Correspondence<Id>` into integer matched pairs plus
+     left/right id-space sizes. Expose `matched_pairs`, `left_unmatched`, and
+     `right_unmatched` as detached Python lists; keep construction and
      `from_rust` crate-private because Python only receives these values from a
      molecule correspondence or derivation. Rust tests cover empty, partial,
-     total, and unsorted-input correspondences and verify exact pair/exposed-id
+     total, and unsorted-input correspondences and verify exact pair/unmatched-id
      ordering, equality, repr, and detached return values. **Additive (green).**
      `[dep: S6a.1]`
 
-     **Implemented verification:** `Correspondence` stores integer mated pairs
-     and both id-space sizes, exposes detached `mates`, `left_exposed`, and
-     `right_exposed` lists plus the two counts, and has structural equality and
+     **Implemented verification:** `Correspondence` stores integer matched pairs
+     and both id-space sizes, exposes detached `matched_pairs`, `left_unmatched`, and
+     `right_unmatched` lists plus the two counts, and has structural equality and
      exact repr. A private ID conversion trait covers exactly the eight molecule
      correspondence families. Four conversion rows cover empty, partial, total,
-     and unsorted Rust inputs; three accessor rows pin exposed-id derivation, and
+     and unsorted Rust inputs; three accessor rows pin unmatched-id derivation, and
      one value test proves detached results, equality, and repr.
 
   2. **DONE — S7a.2 — return-only `MoleculeCorrespondence` value**

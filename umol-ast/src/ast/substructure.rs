@@ -247,7 +247,7 @@ impl MoleculeAst {
                         .map(|a| {
                             let host_node = levi_match
                                 .right_of(NodeId(a))
-                                .expect("a pattern atom node is mated");
+                                .expect("a pattern atom node is matched");
                             match host_levi.entity(host_node) {
                                 Entity::Atom(id) => (NodeId(a), NodeId::from(id)),
                                 _ => unreachable!("a pattern atom node maps to a host atom node"),
@@ -267,7 +267,7 @@ impl MoleculeAst {
     /// matching host overlay. Each N-ary / special overlay is located by **exact participant set**
     /// via the per-family inducer (which already checks dative donor/acceptor roles); the pattern
     /// overlay's predicate is then required to match the located host overlay's, and every pattern
-    /// overlay must be mated. Stereo overlays are matched by the bespoke coset filter.
+    /// overlay must be matched. Stereo overlays are matched by the bespoke coset filter.
     fn verify_overlays(
         &self,
         host: &MoleculeAst,
@@ -277,20 +277,20 @@ impl MoleculeAst {
         let bonds = induced_bonds(pattern, host, &atoms);
 
         let dative_bonds = induced_dative_bonds(pattern, host, &atoms);
-        if dative_bonds.mate_count() != pattern.dative_bonds().count() {
+        if dative_bonds.matched_pair_count() != pattern.dative_bonds().count() {
             return None;
         }
-        for &(p, h) in dative_bonds.mates() {
+        for &(p, h) in dative_bonds.matched_pairs() {
             if !pattern.dative_bond(p).ast.matches(host.dative_bond(h).ast) {
                 return None;
             }
         }
 
         let aromatic_systems = induced_aromatic_systems(pattern, host, &atoms);
-        if aromatic_systems.mate_count() != pattern.aromatic_systems().count() {
+        if aromatic_systems.matched_pair_count() != pattern.aromatic_systems().count() {
             return None;
         }
-        for &(p, h) in aromatic_systems.mates() {
+        for &(p, h) in aromatic_systems.matched_pairs() {
             let p_view = pattern.aromatic_system(p);
             let h_view = host.aromatic_system(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
@@ -301,10 +301,10 @@ impl MoleculeAst {
         }
 
         let multicenter_bonds = induced_multicenter_bonds(pattern, host, &atoms);
-        if multicenter_bonds.mate_count() != pattern.multicenter_bonds().count() {
+        if multicenter_bonds.matched_pair_count() != pattern.multicenter_bonds().count() {
             return None;
         }
-        for &(p, h) in multicenter_bonds.mates() {
+        for &(p, h) in multicenter_bonds.matched_pairs() {
             let p_view = pattern.multicenter_bond(p);
             let h_view = host.multicenter_bond(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
@@ -315,10 +315,10 @@ impl MoleculeAst {
         }
 
         let noncovalent_bonds = induced_noncovalent_bonds(pattern, host, &atoms);
-        if noncovalent_bonds.mate_count() != pattern.noncovalent_bonds().count() {
+        if noncovalent_bonds.matched_pair_count() != pattern.noncovalent_bonds().count() {
             return None;
         }
-        for &(p, h) in noncovalent_bonds.mates() {
+        for &(p, h) in noncovalent_bonds.matched_pairs() {
             if !pattern
                 .noncovalent_bond(p)
                 .ast
@@ -339,7 +339,7 @@ impl MoleculeAst {
         let mut stereo_atom = Vec::new();
         for sp in pattern.stereo_atoms().iter() {
             let host_site =
-                map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is mated");
+                map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is matched");
             // `incident` returns stereo atoms where `host_site` is the site *or* a ligand; select the
             // one it is the site of (≤1 by the site-uniqueness invariant), not merely the first.
             let sh = host
@@ -349,8 +349,8 @@ impl MoleculeAst {
             if sp.kind() != sh.kind() {
                 return None;
             }
-            let frame =
-                map_ligands(&atoms, sp.ligand_frame()).expect("matched pattern ligands are mated");
+            let frame = map_ligands(&atoms, sp.ligand_frame())
+                .expect("matched pattern ligands are matched");
             let host_coset = sh.coset_for(frame)?;
             if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
                 return None;
@@ -367,13 +367,13 @@ impl MoleculeAst {
         for sp in pattern.stereo_bonds().iter() {
             let host_site = bonds
                 .right_of(sp.site_id())
-                .expect("a matched pattern bond is mated");
+                .expect("a matched pattern bond is matched");
             let sh = host.bond(host_site).stereo_bond()?;
             if sp.kind() != sh.kind() {
                 return None;
             }
-            let frame =
-                map_ligands(&atoms, sp.ligand_frame()).expect("matched pattern ligands are mated");
+            let frame = map_ligands(&atoms, sp.ligand_frame())
+                .expect("matched pattern ligands are matched");
             let host_coset = sh.coset_for(frame)?;
             if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
                 return None;
@@ -578,7 +578,7 @@ mod tests {
                     .iter()
                     .map(|c| {
                         c.atoms()
-                            .mates()
+                            .matched_pairs()
                             .iter()
                             .map(|&(_, host)| AtomId::from(host))
                             .collect()

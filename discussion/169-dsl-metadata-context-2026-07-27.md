@@ -233,7 +233,8 @@ chemistry-facing API before these operations are exposed:
 - `mates` becomes `matched_pairs`;
 - `mate_count` becomes `matched_pair_count`;
 - `left_exposed` becomes `left_unmatched`;
-- `right_exposed` becomes `right_unmatched`.
+- `right_exposed` becomes `right_unmatched`;
+- `edge_mates` becomes `edge_matched_pairs`.
 
 This rename applies to `Correspondence` and its consumers across Rust and
 Python. It does not apply to `Matching::mate(node)` or algorithm-local mate
@@ -406,12 +407,13 @@ This is additive and stays green. **Implemented (green).** [dep: none]
 **S0b — Public correspondence vocabulary.** In
 `umol-graph-core/src/correspondence.rs`, rename `mates` to `matched_pairs`,
 `mate_count` to `matched_pair_count`, `left_exposed` to `left_unmatched`, and
-`right_exposed` to `right_unmatched`. Migrate all graph-core, AST, graph, and
-Python consumers, tests, documentation, fields, parameters, and local
-variables whose values are correspondence pairs. Do not rename
+`right_exposed` to `right_unmatched`. Rename `edge_mates` to
+`edge_matched_pairs`. Migrate all graph-core, AST, graph, and Python consumers,
+tests, documentation, fields, parameters, and local variables whose values are
+correspondence pairs. Do not rename
 `Matching::mate(node)`, its mate array, or matching-algorithm locals that
 represent one vertex's matching partner. This is breaking and goes red→green
-across the workspace. [dep: none]
+across the workspace. **Implemented (green).** [dep: none]
 
 **S0c — Entity-level correspondence lookup.** In
 `umol-ast/src/ast/correspondence.rs`, add

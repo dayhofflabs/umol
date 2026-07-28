@@ -1595,7 +1595,7 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
         ]
     );
     assert_eq!(
-        sub.atoms().mates(),
+        sub.atoms().matched_pairs(),
         &[
             (NodeId(0), NodeId(0)),
             (NodeId(1), NodeId(1)),
@@ -1603,23 +1603,23 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
         ]
     );
     assert_eq!(
-        sub.bonds().mates(),
+        sub.bonds().matched_pairs(),
         &[(BondId(0), BondId(0)), (BondId(1), BondId(1))]
     );
     assert_eq!(
-        sub.aromatic_systems().mates(),
+        sub.aromatic_systems().matched_pairs(),
         &[(AromaticSystemId(0), AromaticSystemId(0))]
     );
     assert_eq!(
-        sub.multicenter_bonds().mates(),
+        sub.multicenter_bonds().matched_pairs(),
         &[(MulticenterBondId(0), MulticenterBondId(0))]
     );
     assert_eq!(
-        sub.dative_bonds().mates(),
+        sub.dative_bonds().matched_pairs(),
         &[] as &[(DativeBondId, DativeBondId)]
     );
     assert_eq!(
-        sub.noncovalent_bonds().mates(),
+        sub.noncovalent_bonds().matched_pairs(),
         &[] as &[(NoncovalentBondId, NoncovalentBondId)]
     );
 }
@@ -1628,11 +1628,11 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
 fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(2), AtomId(3)]);
     assert_eq!(
-        sub.atoms().mates(),
+        sub.atoms().matched_pairs(),
         &[(NodeId(0), NodeId(2)), (NodeId(1), NodeId(3))]
     );
     assert_eq!(
-        sub.dative_bonds().mates(),
+        sub.dative_bonds().matched_pairs(),
         &[(DativeBondId(0), DativeBondId(0))]
     );
     let extracted = ast.extract(&sub);
@@ -2649,7 +2649,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
 fn test_molecule_ast_combine_all(
     #[case] molecules: Vec<MoleculeAst>,
     #[case] expected: MoleculeAst,
-    #[case] expected_atom_mates: Vec<Vec<(NodeId, NodeId)>>,
+    #[case] expected_atom_matched_pairs: Vec<Vec<(NodeId, NodeId)>>,
 ) {
     let (combined, correspondences) = MoleculeAst::combine_all(&molecules);
 
@@ -2657,9 +2657,9 @@ fn test_molecule_ast_combine_all(
     assert_eq!(
         correspondences
             .iter()
-            .map(|correspondence| correspondence.atoms().mates().to_vec())
+            .map(|correspondence| correspondence.atoms().matched_pairs().to_vec())
             .collect::<Vec<_>>(),
-        expected_atom_mates,
+        expected_atom_matched_pairs,
     );
     for (molecule, correspondence) in molecules.iter().zip(&correspondences) {
         assert_eq!(combined.extract(correspondence), *molecule);

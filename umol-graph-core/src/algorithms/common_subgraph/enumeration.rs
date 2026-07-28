@@ -145,7 +145,7 @@ fn subgraphs_from_cliques(
             subgraph_from_mapping(mapping, a, b)
         })
         .collect();
-    subgraphs.sort_by(|x, y| x.nodes().mates().cmp(y.nodes().mates()));
+    subgraphs.sort_by(|x, y| x.nodes().matched_pairs().cmp(y.nodes().matched_pairs()));
     subgraphs.dedup();
     subgraphs
 }
@@ -201,13 +201,13 @@ where
         embedding,
         candidates,
         used_right: bitvec![0; right.node_count()],
-        mates: Vec::new(),
+        matched_pairs: Vec::new(),
         subgraphs: Vec::new(),
     };
     state.search(0);
     state
         .subgraphs
-        .sort_by(|a, b| a.nodes().mates().cmp(b.nodes().mates()));
+        .sort_by(|a, b| a.nodes().matched_pairs().cmp(b.nodes().matched_pairs()));
     state.subgraphs
 }
 
@@ -218,7 +218,7 @@ struct DirectEnumerationState<'g, 'm, E> {
     embedding: EmbeddingKind,
     candidates: Vec<Vec<NodeId>>,
     used_right: BitVec,
-    mates: Vec<(NodeId, NodeId)>,
+    matched_pairs: Vec<(NodeId, NodeId)>,
     subgraphs: Vec<GraphCorrespondence>,
 }
 
@@ -229,7 +229,7 @@ where
     fn search(&mut self, left_index: usize) {
         if left_index == self.left.node_count() {
             self.subgraphs.push(subgraph_from_mapping(
-                self.mates.clone(),
+                self.matched_pairs.clone(),
                 self.left,
                 self.right,
             ));
@@ -243,16 +243,16 @@ where
                 continue;
             }
             self.used_right.set(right_node.index(), true);
-            self.mates.push((left_node, right_node));
+            self.matched_pairs.push((left_node, right_node));
             self.search(left_index + 1);
-            self.mates.pop();
+            self.matched_pairs.pop();
             self.used_right.set(right_node.index(), false);
         }
         self.search(left_index + 1);
     }
 
     fn compatible(&mut self, left_node: NodeId, right_node: NodeId) -> bool {
-        for &(mapped_left, mapped_right) in &self.mates {
+        for &(mapped_left, mapped_right) in &self.matched_pairs {
             match (
                 self.left.find_edge(left_node, mapped_left),
                 self.right.find_edge(right_node, mapped_right),

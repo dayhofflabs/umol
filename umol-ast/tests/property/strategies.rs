@@ -2243,12 +2243,12 @@ where
     Id: Copy + Eq + Ord + From<usize> + Hash,
 {
     correspondence
-        .mates()
+        .matched_pairs()
         .iter()
         .map(|&(_, right)| right)
         .collect::<HashSet<_>>()
         .len()
-        == correspondence.mate_count()
+        == correspondence.matched_pair_count()
 }
 
 /// Generate a `MoleculeMetadata` populated for an AST of the given counts. Entity

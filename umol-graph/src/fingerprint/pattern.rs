@@ -73,7 +73,7 @@ impl PatternFingerprinter {
 
                 let host: Vec<AtomId> = embedding
                     .atoms()
-                    .mates()
+                    .matched_pairs()
                     .iter()
                     .map(|&(_, host)| AtomId::from(host))
                     .collect();

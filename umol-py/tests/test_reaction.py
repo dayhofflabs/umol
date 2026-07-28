@@ -721,11 +721,11 @@ def test_reactionast_apply():
     assert first.atom_map == atom_map
     assert first.atom_map is not atom_map
     assert atom_map == comap.atoms
-    assert comap.atoms.mates == [(0, 0), (1, 1)]
+    assert comap.atoms.matched_pairs == [(0, 0), (1, 1)]
     assert comap.atoms.left_count == 2
     assert comap.atoms.right_count == 2
-    assert comap.atoms.left_exposed == []
-    assert comap.atoms.right_exposed == []
+    assert comap.atoms.left_unmatched == []
+    assert comap.atoms.right_unmatched == []
     for entity_map in (
         comap.bonds,
         comap.dative_bonds,
@@ -735,11 +735,11 @@ def test_reactionast_apply():
         comap.stereo_atoms,
         comap.stereo_bonds,
     ):
-        assert entity_map.mates == []
+        assert entity_map.matched_pairs == []
         assert entity_map.left_count == 0
         assert entity_map.right_count == 0
-        assert entity_map.left_exposed == []
-        assert entity_map.right_exposed == []
+        assert entity_map.left_unmatched == []
+        assert entity_map.right_unmatched == []
 
     detached_lhs = first.lhs
     detached_rhs = first.rhs

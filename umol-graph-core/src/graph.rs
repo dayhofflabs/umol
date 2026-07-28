@@ -345,7 +345,7 @@ impl Graph {
     pub fn extract(&self, sub: &GraphCorrespondence) -> Graph {
         let sub_edges: Vec<[u32; 2]> = sub
             .edges()
-            .mates()
+            .matched_pairs()
             .iter()
             .map(|&(_, host_edge)| {
                 let [ha, hb] = self.edge_endpoints(host_edge);
@@ -360,7 +360,7 @@ impl Graph {
                 [sa.0, sb.0]
             })
             .collect();
-        Graph::new(sub.nodes().mate_count(), &sub_edges)
+        Graph::new(sub.nodes().matched_pair_count(), &sub_edges)
     }
 
     /// Subdivide every edge exactly once.
@@ -786,9 +786,19 @@ mod tests {
         let g = Graph::new(node_count as usize, edges);
         let subset_edges: Vec<EdgeId> = subset.iter().map(|&e| EdgeId(e)).collect();
         let sub = g.edge_induced_subgraph(&subset_edges);
-        let host_edges: Vec<EdgeId> = sub.edges().mates().iter().map(|&(_, h)| h).collect();
+        let host_edges: Vec<EdgeId> = sub
+            .edges()
+            .matched_pairs()
+            .iter()
+            .map(|&(_, h)| h)
+            .collect();
         assert_eq!(host_edges, expected_edges);
-        let mut nodes: Vec<NodeId> = sub.nodes().mates().iter().map(|&(_, h)| h).collect();
+        let mut nodes: Vec<NodeId> = sub
+            .nodes()
+            .matched_pairs()
+            .iter()
+            .map(|&(_, h)| h)
+            .collect();
         nodes.sort_unstable();
         assert_eq!(nodes, expected_nodes);
     }
@@ -799,10 +809,10 @@ mod tests {
         let g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let sub = g.induced_subgraph(&[NodeId(0), NodeId(1)]);
         assert_eq!(
-            sub.nodes().mates(),
+            sub.nodes().matched_pairs(),
             &[(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))]
         );
-        assert_eq!(sub.edges().mates(), &[(EdgeId(0), EdgeId(0))]);
+        assert_eq!(sub.edges().matched_pairs(), &[(EdgeId(0), EdgeId(0))]);
     }
 
     #[rstest]

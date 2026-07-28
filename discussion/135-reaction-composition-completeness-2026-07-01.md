@@ -196,7 +196,7 @@ ids. All of Part C is **additive/green** (new methods; nothing existing changes 
   `pullback` over `Graph` + `GraphCorrespondence`, each returning object + morphisms. `[dep: —]`
 
 - **C-a — `Correspondence<Id>::to_remapping()`.** `correspondence.rs`: a total-on-left correspondence
-  (every left id mated) as a `Remapping` (left id → partner). Feeds a pushout's node morphism into the
+  (every left id matched) as a `Remapping` (left id → partner). Feeds a pushout's node morphism into the
   relation-set pushout, which relabels participants via `apply_remapping` (a `Remapping`). Additive.
   `[dep: C0]`
 

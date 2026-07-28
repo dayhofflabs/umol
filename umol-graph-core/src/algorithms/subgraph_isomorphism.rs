@@ -1973,7 +1973,12 @@ mod tests {
             let mut r: Vec<Vec<usize>> = target
                 .subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg)
                 .iter()
-                .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+                .map(|c| {
+                    c.matched_pairs()
+                        .iter()
+                        .map(|&(_, host)| host.index())
+                        .collect()
+                })
                 .collect();
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
@@ -2012,7 +2017,12 @@ mod tests {
             let mut r: Vec<Vec<usize>> = target
                 .subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg)
                 .iter()
-                .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+                .map(|c| {
+                    c.matched_pairs()
+                        .iter()
+                        .map(|&(_, host)| host.index())
+                        .collect()
+                })
                 .collect();
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
@@ -2038,7 +2048,12 @@ mod tests {
                 ArcMatch { path_length },
             )
             .iter()
-            .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+            .map(|c| {
+                c.matched_pairs()
+                    .iter()
+                    .map(|&(_, host)| host.index())
+                    .collect()
+            })
             .collect();
         r.sort();
         assert_eq!(
@@ -2112,7 +2127,12 @@ mod tests {
         let matches: Vec<Vec<usize>> = target
             .subgraph_isomorphisms(&query, &mut nm, &mut em, Vf2)
             .iter()
-            .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+            .map(|c| {
+                c.matched_pairs()
+                    .iter()
+                    .map(|&(_, host)| host.index())
+                    .collect()
+            })
             .collect();
         assert!(!matches.is_empty(), "fixture should have matches");
 
