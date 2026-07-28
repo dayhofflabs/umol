@@ -786,7 +786,7 @@ strategies to checked `new`; keep `into_parts` public. Property generators that
 intend to produce wrappers must generate coherent metadata, while dedicated
 invalid-metadata strategies assert the exact `MetadataError`. This is breaking
 and goes red→green with all external callers migrated in the same subitem.
-[dep: S4a, S4b, S4c, S3b, S3c]
+**Implemented (green).** [dep: S4a, S4b, S4c, S3b, S3c]
 
 ### S5 — Python correspondence and metadata types
 

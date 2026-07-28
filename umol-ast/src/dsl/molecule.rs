@@ -85,8 +85,7 @@ impl MoleculeDsl {
         Ok(Self::from_parts(ast, metadata))
     }
 
-    /// Pair an AST and metadata without checking their coherence.
-    pub fn from_parts(ast: MoleculeAst, metadata: MoleculeMetadata) -> Self {
+    fn from_parts(ast: MoleculeAst, metadata: MoleculeMetadata) -> Self {
         Self { ast, metadata }
     }
 

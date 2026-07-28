@@ -21,9 +21,9 @@ pub(crate) use umol_ast::ast::{
     Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
     DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst, DativeBondDelta,
     DativeBondFieldChange, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas,
-    DpoValidator, Edit, ElectronCountsAst, ElementAst, Entity, FluxionalityAst, FromAst, IntoAst,
-    IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
-    MoleculeConstraint, MoleculeCorrespondence, MoleculeParts, MulticenterBondAst,
+    DpoValidator, Edit, ElectronCountsAst, ElementAst, Entity, EntityKind, FluxionalityAst,
+    FromAst, IntoAst, IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp,
+    MoleculeAst, MoleculeConstraint, MoleculeCorrespondence, MoleculeParts, MulticenterBondAst,
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
     MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
     MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
@@ -41,12 +41,12 @@ pub(crate) use umol_ast::ast::{
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
-    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MoleculeContext,
-    MoleculeDefaults, MoleculeDsl, MoleculeMetadata, MulticenterBondDsl, MulticenterBondUpdateDsl,
-    NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError, ReactionDefaults, ReactionDsl,
-    ReactionSpanDsl, StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants,
-    StereoAtomUpdateDsl, StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants,
-    StereoBondUpdateDsl, StereoLigandRef, ValueDsl,
+    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MetadataError,
+    MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata, MulticenterBondDsl,
+    MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError,
+    ReactionDefaults, ReactionDsl, ReactionSpanDsl, StereoAtomConstraintDsl, StereoAtomDsl,
+    StereoAtomParticipants, StereoAtomUpdateDsl, StereoBondConstraintDsl, StereoBondDsl,
+    StereoBondParticipants, StereoBondUpdateDsl, StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -2266,6 +2266,8 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
     let aromatic_flags = prop::collection::vec(id_flag(), counts.aromatic);
     let multicenter_flags = prop::collection::vec(id_flag(), counts.multicenter);
     let noncovalent_flags = prop::collection::vec(id_flag(), counts.noncovalent);
+    let stereo_atom_flags = prop::collection::vec(id_flag(), counts.stereo_atom);
+    let stereo_bond_flags = prop::collection::vec(id_flag(), counts.stereo_bond);
     (
         atom_flags,
         bond_flags,
@@ -2273,9 +2275,20 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
         aromatic_flags,
         multicenter_flags,
         noncovalent_flags,
+        stereo_atom_flags,
+        stereo_bond_flags,
     )
         .prop_map(
-            |(atoms, bonds, datives, aromatics, multicenters, noncovalents)| {
+            |(
+                atoms,
+                bonds,
+                datives,
+                aromatics,
+                multicenters,
+                noncovalents,
+                stereo_atoms,
+                stereo_bonds,
+            )| {
                 let mut meta = MoleculeMetadata::new();
                 for (i, atom) in atoms.iter().enumerate() {
                     if atom.is_some() {
@@ -2325,6 +2338,24 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                         .unwrap();
                     }
                 }
+                for (i, stereo_atom) in stereo_atoms.iter().enumerate() {
+                    if stereo_atom.is_some() {
+                        meta.set_keyword(
+                            Entity::StereoAtom(StereoAtomId(i as u32)),
+                            format!("stereo_atom{i}"),
+                        )
+                        .unwrap();
+                    }
+                }
+                for (i, stereo_bond) in stereo_bonds.iter().enumerate() {
+                    if stereo_bond.is_some() {
+                        meta.set_keyword(
+                            Entity::StereoBond(StereoBondId(i as u32)),
+                            format!("stereo_bond{i}"),
+                        )
+                        .unwrap();
+                    }
+                }
                 for (i, element) in ALIAS_ELEMENTS.iter().enumerate() {
                     meta.add_atom_alias(format!("al{i}"), AtomAst::from_element(*element))
                         .unwrap();
@@ -2335,11 +2366,45 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
         .boxed()
 }
 
+pub(crate) fn invalid_metadata_for(
+    counts: ConstraintCounts,
+) -> BoxedStrategy<(MoleculeMetadata, Entity)> {
+    (0u8..8)
+        .prop_map(move |kind| {
+            let kind = EntityKind::try_from(kind).unwrap();
+            let count = match kind {
+                EntityKind::Atom => counts.atom,
+                EntityKind::Bond => counts.bond,
+                EntityKind::DativeBond => counts.dative,
+                EntityKind::AromaticSystem => counts.aromatic,
+                EntityKind::MulticenterBond => counts.multicenter,
+                EntityKind::NoncovalentBond => counts.noncovalent,
+                EntityKind::StereoAtom => counts.stereo_atom,
+                EntityKind::StereoBond => counts.stereo_bond,
+            };
+            let entity = kind.with_id(count as u32);
+            let mut metadata = MoleculeMetadata::new();
+            metadata.set_keyword(entity, "invalid".to_string()).unwrap();
+            (metadata, entity)
+        })
+        .boxed()
+}
+
 pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
     molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
         let counts = ConstraintCounts::from_ast(&ast);
-        metadata_for(counts)
-            .prop_map(move |metadata| MoleculeDsl::from_parts(ast.clone(), metadata))
+        metadata_for(counts).prop_map(move |metadata| {
+            MoleculeDsl::new(ast.clone(), metadata).expect("generated metadata is coherent")
+        })
+    })
+}
+
+pub(crate) fn invalid_molecule_dsl_parts_strategy(
+) -> impl Strategy<Value = (MoleculeAst, MoleculeMetadata, Entity)> {
+    molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
+        let counts = ConstraintCounts::from_ast(&ast);
+        invalid_metadata_for(counts)
+            .prop_map(move |(metadata, entity)| (ast.clone(), metadata, entity))
     })
 }
 

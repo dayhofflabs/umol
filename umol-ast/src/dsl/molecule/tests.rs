@@ -384,7 +384,7 @@ fn test_molecule_dsl_from_str_error() {
 #[case::stereo_bond(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"##)]
 fn test_molecule_dsl_dsl_to_ast_to_dsl_roundtrip_zeroed(#[case] source: &str) {
     let ast = mol_dsl!(source);
-    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
+    let dsl = MoleculeDsl::new(ast, MoleculeMetadata::default()).unwrap();
     let cfg = MoleculeDefaults::zeroed();
     let raised = dsl.clone().into_ast(&cfg);
     let lowered = MoleculeDsl::from_ast(&raised, &cfg);
@@ -472,7 +472,7 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
     for c in pushed {
         ast.constraints_mut().push(Constraint::Molecule(c));
     }
-    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
+    let dsl = MoleculeDsl::new(ast, MoleculeMetadata::default()).unwrap();
     let reparsed = MoleculeAst::from_edn(&dsl.to_edn()).unwrap();
     let surviving: Vec<MoleculeConstraint> = reparsed
         .constraints()

@@ -82,8 +82,7 @@ impl ReactionSpanDsl {
         Ok(Self::from_parts(ast, metadata))
     }
 
-    /// Pair an AST and metadata without checking their coherence.
-    pub fn from_parts(ast: ReactionSpanAst, metadata: MoleculeMetadata) -> Self {
+    fn from_parts(ast: ReactionSpanAst, metadata: MoleculeMetadata) -> Self {
         Self { ast, metadata }
     }
 
@@ -2317,7 +2316,7 @@ mod tests {
     #[rstest]
     #[case::span(
         r#"{:atoms ["C" {:add "O"}] :bonds [{:add [0 1 :single]}]}"#,
-        ReactionSpanDsl::from_parts(
+        ReactionSpanDsl::new(
             ReactionSpanAst::from_parts(
                 Graph::new(2, &[[0, 1]]),
                 vec![
@@ -2334,11 +2333,11 @@ mod tests {
                 vec![],
             ),
             MoleculeMetadata::new(),
-        ),
+        ).unwrap(),
     )]
     #[case::plain_molecule(
         r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#,
-        ReactionSpanDsl::from_parts(
+        ReactionSpanDsl::new(
             ReactionSpanAst::from_parts(
                 Graph::new(2, &[[0, 1]]),
                 vec![
@@ -2355,7 +2354,7 @@ mod tests {
                 vec![],
             ),
             MoleculeMetadata::new(),
-        ),
+        ).unwrap(),
     )]
     fn test_reaction_span_dsl_from_edn(#[case] input: &str, #[case] expected: ReactionSpanDsl) {
         assert_eq!(

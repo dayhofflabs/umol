@@ -1438,7 +1438,8 @@ impl ToEdn for MoleculeConstraintDsl {
             }
             Self::SubPattern { anchor, pattern } => {
                 let pattern_dsl =
-                    MoleculeDsl::from_parts((**pattern).clone(), MoleculeMetadata::default());
+                    MoleculeDsl::new((**pattern).clone(), MoleculeMetadata::default())
+                        .expect("empty metadata is coherent");
                 let mut m = EdnMap::with_capacity(2);
                 m.insert(Edn::keyword("anchor"), anchor.to_edn());
                 m.insert(Edn::keyword("pattern"), pattern_dsl.to_edn());

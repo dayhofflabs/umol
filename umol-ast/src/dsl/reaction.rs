@@ -141,8 +141,7 @@ impl ReactionDsl {
         Ok(Self::from_parts(ast, metadata))
     }
 
-    /// Pair an AST and metadata without checking their coherence.
-    pub fn from_parts(ast: ReactionAst, metadata: ReactionMetadata) -> Self {
+    fn from_parts(ast: ReactionAst, metadata: ReactionMetadata) -> Self {
         Self { ast, metadata }
     }
 
@@ -183,7 +182,8 @@ impl IntoAst<ReactionAst> for ReactionDsl {
 
     fn into_ast(self, cfg: &Self::Ctx) -> ReactionAst {
         let ReactionAst { lhs, mut deltas } = self.ast;
-        let lhs = MoleculeDsl::from_parts(lhs, MoleculeMetadata::default())
+        let lhs = MoleculeDsl::new(lhs, MoleculeMetadata::default())
+            .expect("empty metadata is coherent")
             .into_ast(&cfg.molecule_defaults());
         let delta_cfg = cfg.delta_defaults();
         for delta in deltas.iter_mut() {
@@ -2962,7 +2962,7 @@ mod tests {
     #[case::stereo_bond(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##.parse().unwrap())]
     fn test_reaction_dsl_from_ast_roundtrip(#[case] reaction: ReactionAst) {
         let cfg = ReactionDefaults::ground();
-        let dsl = ReactionDsl::from_parts(reaction, ReactionMetadata::default());
+        let dsl = ReactionDsl::new(reaction, ReactionMetadata::default()).unwrap();
         let lowered = ReactionDsl::from_ast(&dsl.clone().into_ast(&cfg), &cfg);
         assert_eq!(lowered.ast(), dsl.ast());
     }

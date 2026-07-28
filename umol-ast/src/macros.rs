@@ -22,7 +22,8 @@ macro_rules! mol_dsl_ground {
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
         let (ast, _meta) = dsl.into_parts();
         <$crate::dsl::MoleculeDsl as $crate::ast::IntoAst<$crate::ast::MoleculeAst>>::into_ast(
-            $crate::dsl::MoleculeDsl::from_parts(ast, $crate::dsl::MoleculeMetadata::default()),
+            $crate::dsl::MoleculeDsl::new(ast, $crate::dsl::MoleculeMetadata::default())
+                .expect("empty metadata is coherent"),
             &$crate::dsl::MoleculeDefaults::ground(),
         )
     }};
@@ -248,7 +249,7 @@ mod tests {
     #[case::empty("{}", MoleculeDsl::default())]
     #[case::with_alias(
         r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#,
-        MoleculeDsl::from_parts(
+        MoleculeDsl::new(
             MoleculeAst::from_parts(MoleculeParts {
                 atoms: vec![AtomAst::from_element(Element::C); 2],
                 bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
@@ -261,11 +262,11 @@ mod tests {
                     .unwrap();
                 metadata
             },
-        ),
+        ).unwrap(),
     )]
     #[case::with_atom_ids(
         r#"{:atoms [[:a "C"] [:b "C"]] :bonds []}"#,
-        MoleculeDsl::from_parts(
+        MoleculeDsl::new(
             MoleculeAst::from_parts(MoleculeParts {
                 atoms: vec![AtomAst::from_element(Element::C); 2],
                 bonds: vec![],
@@ -277,7 +278,7 @@ mod tests {
                 metadata.set_keyword(Entity::Atom(AtomId(1)), "b").unwrap();
                 metadata
             },
-        ),
+        ).unwrap(),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {
         assert_eq!(input.parse::<MoleculeDsl>().unwrap(), expected);
