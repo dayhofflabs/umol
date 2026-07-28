@@ -27,7 +27,7 @@ use super::predicate::{
 use super::stereo::{
     fmt_tetrahedral_stereo_config, tetrahedral_stereo_config, TetrahedralStereoDsl,
 };
-use super::value::{fmt_set, fmt_value, id, terminator, value, ValueDsl};
+use super::value::{fmt_set, fmt_value, terminator, value, variable_name, ValueDsl};
 use crate::ast::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
@@ -437,9 +437,9 @@ fn element(i: &mut &str) -> PResult<ElementAst> {
         preceded('!', element_set).map(ElementAst::not_set),
         preceded('!', element_literal).map(ElementAst::not),
         element_set.map(ElementAst::lit_set),
-        element_bind.map(|(id, set, polarity)| match polarity {
-            MemOp::In => ElementAst::var_in(id, set),
-            MemOp::NotIn => ElementAst::var_not_in(id, set),
+        element_bind.map(|(name, set, mem_op)| match mem_op {
+            MemOp::In => ElementAst::var_in(name, set),
+            MemOp::NotIn => ElementAst::var_not_in(name, set),
         }),
         element_ref.map(ElementAst::var),
         element_literal.map(ElementAst::Lit),
@@ -482,11 +482,11 @@ fn element_bind(i: &mut &str) -> PResult<(String, Vec<Element>, MemOp)> {
     alt((
         delimited('(', delimited(multispace0, element_bind, multispace0), ')'),
         (
-            preceded('?', id),
+            preceded('?', variable_name),
             delimited(multispace0, mem_op, multispace0),
             element_bind_domain,
         )
-            .map(|(id, op, set)| (id, set, op)),
+            .map(|(name, op, set)| (name, set, op)),
     ))
     .parse_next(i)
 }
@@ -498,7 +498,7 @@ fn element_bind_domain(i: &mut &str) -> PResult<Vec<Element>> {
 fn element_ref(i: &mut &str) -> PResult<String> {
     alt((
         delimited('(', delimited(multispace0, element_ref, multispace0), ')'),
-        preceded('?', id),
+        preceded('?', variable_name),
     ))
     .parse_next(i)
 }
@@ -510,9 +510,9 @@ fn isotope(i: &mut &str) -> PResult<IsotopeMassAst> {
             '='.value(IsotopeMassAst::Natural),
             '*'.value(IsotopeMassAst::Undetermined),
             isotope_set.map(IsotopeMassAst::lit_set),
-            terminated(isotope_var, (multispace0, terminator)).map(|(id, domain)| match domain {
-                Some(set) => IsotopeMassAst::var_in(id, set),
-                None => IsotopeMassAst::var(id),
+            terminated(isotope_var, (multispace0, terminator)).map(|(name, domain)| match domain {
+                Some(set) => IsotopeMassAst::var_in(name, set),
+                None => IsotopeMassAst::var(name),
             }),
             terminated(dec_uint::<_, u32, _>, (multispace0, terminator)).map(IsotopeMassAst::Lit),
         )),
@@ -542,7 +542,7 @@ fn isotope_var(i: &mut &str) -> PResult<(String, Option<Vec<u32>>)> {
     alt((
         delimited('(', delimited(multispace0, isotope_var, multispace0), ')'),
         (
-            preceded('?', id),
+            preceded('?', variable_name),
             opt(preceded(
                 delimited(multispace0, "::", multispace0),
                 isotope_set,
@@ -653,8 +653,8 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
             fmt_element_set(f, es.iter().copied())
         }
         ElementAst::Var(v) => {
-            let (id, domain) = &**v;
-            write!(f, "?{}", id)?;
+            let (name, domain) = &**v;
+            write!(f, "?{}", name)?;
             if let Some((op, set)) = domain {
                 write!(f, " {} ", mem_op_str(*op))?;
                 fmt_element_set(f, set.iter().copied())?;
@@ -688,8 +688,8 @@ fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassAst) -> fmt::Re
             fmt_set(f, s.iter().copied())
         }
         IsotopeMassAst::Var(v) => {
-            let (id, domain) = &**v;
-            write!(f, "#i?{}", id)?;
+            let (name, domain) = &**v;
+            write!(f, "#i?{}", name)?;
             match domain {
                 Some(set) => {
                     write!(f, " :: ")?;

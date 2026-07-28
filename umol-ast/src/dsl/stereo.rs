@@ -19,7 +19,7 @@ use super::boolean::{boolean, fmt_boolean, BooleanDsl};
 use super::config::{StereoAtomDefaults, StereoBondDefaults};
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
-use super::value::id;
+use super::value::variable_name;
 use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::{
     FluxionalityAst, LigandPermutation, LigandSymmetryAst, OrientedLigandPermutation,
@@ -460,7 +460,7 @@ fn stereo_prefix(i: &mut &str) -> PResult<StereoTerm> {
     }
 }
 
-/// `nat | '?' id ('::' set)? | set`.
+/// `nat | '?' variable-name ('::' set)? | set`.
 fn stereo_base(i: &mut &str) -> PResult<StereoTerm> {
     preceded(
         multispace0,
@@ -474,7 +474,7 @@ fn stereo_base(i: &mut &str) -> PResult<StereoTerm> {
 }
 
 fn stereo_var(i: &mut &str) -> PResult<StereoTerm> {
-    let name = preceded('?', id).parse_next(i)?;
+    let name = preceded('?', variable_name).parse_next(i)?;
     let domain = opt(preceded((multispace0, "::", multispace0), stereo_lit_set)).parse_next(i)?;
     Ok(match domain {
         Some(set) => StereoTerm::var_in(name, set),

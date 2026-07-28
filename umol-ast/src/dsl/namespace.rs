@@ -1,4 +1,4 @@
-//! A molecule's parse-time **namespace**: per entity kind, a running count, an id-keyword lookup, and
+//! A molecule's parse-time **namespace**: per entity kind, a running count, a keyword lookup, and
 //! a participant lookup, plus the atom-alias table. Grown while parsing a molecule (or applying
 //! reaction deltas); the roundtrip subset projects out as [`MoleculeMetadata`]. Index bounds are
 //! checked as entities are registered (not only at the end), and structural refs (a non-atom entity
@@ -42,7 +42,7 @@ pub struct MoleculeNamespace {
     stereo_atoms: EntityRegistry<StereoAtomId, (AtomId, Vec<StereoLigand>)>,
     stereo_bonds: EntityRegistry<StereoBondId, (BondId, Vec<StereoLigand>)>,
     /// The bijective atom-alias table (alias name ↔ atom-spec template) — part of the atom name
-    /// namespace (an `:id` may not collide with an alias name), so the namespace owns it.
+    /// namespace (an entity keyword may not collide with an alias name), so the namespace owns it.
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
 }
 
@@ -94,9 +94,8 @@ pub trait Namespace {
         ligands: &[StereoLigand],
     ) -> Option<StereoBondId>;
 
-    /// Whether `id` is already taken as any entity's `:id` keyword or an atom-alias name — the
-    /// id-uniqueness check the delta / entry loops need across the whole id namespace.
-    fn contains_id(&self, id: &str) -> bool;
+    /// Whether `keyword` is already taken as an entity keyword or atom-alias name.
+    fn contains_keyword(&self, keyword: &str) -> bool;
 
     /// The atom-spec template registered under alias `name`, for resolving `<alias>` atom specs.
     fn find_atom_alias(&self, name: &str) -> Option<&AtomDsl>;
@@ -173,7 +172,9 @@ impl MoleculeNamespace {
     /// disjointness check every `register_*` runs before handing out an id.
     fn check_keyword_free(&self, keyword: Option<&str>) -> Result<(), ParseError> {
         match keyword {
-            Some(kw) if self.contains_id(kw) => Err(ParseError::DuplicateId(kw.to_string())),
+            Some(kw) if self.contains_keyword(kw) => {
+                Err(ParseError::DuplicateKeyword(kw.to_string()))
+            }
             _ => Ok(()),
         }
     }
@@ -402,8 +403,8 @@ impl MoleculeNamespace {
         name: String,
         dsl: Box<AtomDsl>,
     ) -> Result<(), ParseError> {
-        if self.contains_id(&name) {
-            return Err(ParseError::DuplicateId(name));
+        if self.contains_keyword(&name) {
+            return Err(ParseError::DuplicateKeyword(name));
         }
         if self.atom_aliases.contains_right(&dsl) {
             return Err(ParseError::InvalidValue(
@@ -548,16 +549,16 @@ impl Namespace for MoleculeNamespace {
         self.find_stereo_bond_by_participants(site, ligands)
     }
 
-    fn contains_id(&self, id: &str) -> bool {
-        self.find_atom_by_keyword(id).is_some()
-            || self.find_bond_by_keyword(id).is_some()
-            || self.find_dative_bond_by_keyword(id).is_some()
-            || self.find_aromatic_system_by_keyword(id).is_some()
-            || self.find_multicenter_bond_by_keyword(id).is_some()
-            || self.find_noncovalent_bond_by_keyword(id).is_some()
-            || self.find_stereo_atom_by_keyword(id).is_some()
-            || self.find_stereo_bond_by_keyword(id).is_some()
-            || self.atom_aliases.get_by_left(id).is_some()
+    fn contains_keyword(&self, keyword: &str) -> bool {
+        self.find_atom_by_keyword(keyword).is_some()
+            || self.find_bond_by_keyword(keyword).is_some()
+            || self.find_dative_bond_by_keyword(keyword).is_some()
+            || self.find_aromatic_system_by_keyword(keyword).is_some()
+            || self.find_multicenter_bond_by_keyword(keyword).is_some()
+            || self.find_noncovalent_bond_by_keyword(keyword).is_some()
+            || self.find_stereo_atom_by_keyword(keyword).is_some()
+            || self.find_stereo_bond_by_keyword(keyword).is_some()
+            || self.atom_aliases.get_by_left(keyword).is_some()
     }
 
     fn find_atom_alias(&self, name: &str) -> Option<&AtomDsl> {
@@ -565,7 +566,7 @@ impl Namespace for MoleculeNamespace {
     }
 }
 
-/// Count + id-keyword lookup for one entity kind. Atoms — the base kind, which have no participants —
+/// Count + keyword lookup for one entity kind. Atoms — the base kind, which have no participants —
 /// use it directly.
 #[derive(Debug)]
 struct KeywordRegistry<Id> {
@@ -619,7 +620,7 @@ impl<Id: Copy + From<usize>> KeywordRegistry<Id> {
     }
 }
 
-/// Count + id-keyword + participant lookup for one non-atom entity kind. `Key` is the entity's
+/// Count + keyword + participant lookup for one non-atom entity kind. `Key` is the entity's
 /// canonical participant key (a normalized endpoint pair, atom set, donor-set + acceptor, or stereo
 /// site + ligand multiset); §4.1 uniqueness makes it injective, so a hit is unique.
 #[derive(Debug)]
@@ -749,14 +750,14 @@ mod tests {
         namespace.register_atom(Some("a".into())).unwrap();
         assert_eq!(
             namespace.register_atom(Some("a".into())).unwrap_err(),
-            ParseError::DuplicateId("a".into())
+            ParseError::DuplicateKeyword("a".into())
         );
         // The disjointness check spans the whole namespace: a bond may not reuse the atom's keyword.
         assert_eq!(
             namespace
                 .register_bond(Some("a".into()), AtomId(0), AtomId(0))
                 .unwrap_err(),
-            ParseError::DuplicateId("a".into())
+            ParseError::DuplicateKeyword("a".into())
         );
     }
 
@@ -929,13 +930,13 @@ mod tests {
             .register_atom_alias("me".into(), dsl.clone())
             .unwrap();
         assert_eq!(namespace.find_atom_alias("me"), Some(dsl.as_ref()));
-        assert!(namespace.contains_id("me"));
+        assert!(namespace.contains_keyword("me"));
         assert_eq!(namespace.find_atom_alias("nope"), None);
     }
 
     #[rstest]
-    #[case::name_taken_by_entity("a", "N", ParseError::DuplicateId("a".into()))]
-    #[case::name_taken_by_alias("me", "O", ParseError::DuplicateId("me".into()))]
+    #[case::name_taken_by_entity("a", "N", ParseError::DuplicateKeyword("a".into()))]
+    #[case::name_taken_by_alias("me", "O", ParseError::DuplicateKeyword("me".into()))]
     #[case::duplicate_spec(
         "me2",
         "C",
@@ -972,7 +973,7 @@ mod tests {
     #[case::stereo_bond("sb", true)]
     #[case::alias("al", true)]
     #[case::absent("nope", false)]
-    fn test_molecule_namespace_contains_id(#[case] id: &str, #[case] expected: bool) {
+    fn test_molecule_namespace_contains_keyword(#[case] keyword: &str, #[case] expected: bool) {
         let mut namespace = MoleculeNamespace::default();
         namespace.register_atom(Some("a".into())).unwrap();
         namespace
@@ -999,7 +1000,7 @@ mod tests {
         namespace
             .register_atom_alias("al".into(), Box::new("C".parse::<AtomDsl>().unwrap()))
             .unwrap();
-        assert_eq!(namespace.contains_id(id), expected);
+        assert_eq!(namespace.contains_keyword(keyword), expected);
     }
 
     #[rstest]

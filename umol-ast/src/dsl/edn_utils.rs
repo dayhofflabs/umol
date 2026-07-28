@@ -50,7 +50,7 @@ pub(super) fn optional_id_keyword(m: &EdnMap<'_>) -> Result<Option<String>, DeEr
     match m.get_keyword("id") {
         Some(Edn::Keyword(k)) => Ok(Some(k.name().to_string())),
         Some(other) => Err(DeError::TypeMismatch {
-            expected: "keyword id",
+            expected: "keyword",
             got: other.kind(),
             path: vec![":id".into()],
         }),
@@ -211,7 +211,7 @@ mod tests {
     #[case::string(
         r#"{:id "bond-1"}"#,
         DeError::TypeMismatch {
-            expected: "keyword id",
+            expected: "keyword",
             got: "string",
             path: vec![":id".into()],
         }
@@ -219,7 +219,7 @@ mod tests {
     #[case::integer(
         "{:id 1}",
         DeError::TypeMismatch {
-            expected: "keyword id",
+            expected: "keyword",
             got: "int",
             path: vec![":id".into()],
         }

@@ -59,9 +59,33 @@ fn test_metadata_new() {
 }
 
 #[rstest]
+#[case::atom("a", true)]
+#[case::bond("b", true)]
+#[case::dative_bond("d", true)]
+#[case::aromatic_system("ar", true)]
+#[case::multicenter_bond("m", true)]
+#[case::noncovalent_bond("n", true)]
+#[case::stereo_atom("sa", true)]
+#[case::stereo_bond("sb", true)]
+#[case::absent("other", false)]
+fn test_molecule_metadata_contains_keyword(#[case] keyword: &str, #[case] expected: bool) {
+    let metadata = MoleculeMetadata::new()
+        .with_atom_keyword(AtomId(0), "a")
+        .with_bond_keyword(BondId(0), "b")
+        .with_dative_bond_keyword(DativeBondId(0), "d")
+        .with_aromatic_system_keyword(AromaticSystemId(0), "ar")
+        .with_multicenter_bond_keyword(MulticenterBondId(0), "m")
+        .with_noncovalent_bond_keyword(NoncovalentBondId(0), "n")
+        .with_stereo_atom_keyword(StereoAtomId(0), "sa")
+        .with_stereo_bond_keyword(StereoBondId(0), "sb");
+
+    assert_eq!(metadata.contains_keyword(keyword), expected);
+}
+
+#[rstest]
 #[case::set(&["c1"], "c1")]
 #[case::last_wins(&["old", "new"], "new")]
-fn test_metadata_set_atom_id(#[case] names: &[&str], #[case] expected: &str) {
+fn test_metadata_set_atom_keyword(#[case] names: &[&str], #[case] expected: &str) {
     let mut m = MoleculeMetadata::new();
     for name in names {
         m.set_atom_keyword(AtomId(0), *name);
@@ -70,21 +94,21 @@ fn test_metadata_set_atom_id(#[case] names: &[&str], #[case] expected: &str) {
 }
 
 #[rstest]
-fn test_metadata_set_bond_id() {
+fn test_metadata_set_bond_keyword() {
     let mut m = MoleculeMetadata::new();
     m.set_bond_keyword(BondId(2), "b1");
     assert_eq!(m.bond_keyword(BondId(2)), Some("b1"));
 }
 
 #[rstest]
-fn test_metadata_set_dative_bond_id() {
+fn test_metadata_set_dative_bond_keyword() {
     let mut m = MoleculeMetadata::new();
     m.set_dative_bond_keyword(DativeBondId(1), "d1");
     assert_eq!(m.dative_bond_keyword(DativeBondId(1)), Some("d1"));
 }
 
 #[rstest]
-fn test_metadata_set_aromatic_system_id() {
+fn test_metadata_set_aromatic_system_keyword() {
     let mut m = MoleculeMetadata::new();
     m.set_aromatic_system_keyword(AromaticSystemId(0), "ring1");
     assert_eq!(
@@ -94,7 +118,7 @@ fn test_metadata_set_aromatic_system_id() {
 }
 
 #[rstest]
-fn test_metadata_set_multicenter_bond_id() {
+fn test_metadata_set_multicenter_bond_keyword() {
     let mut m = MoleculeMetadata::new();
     m.set_multicenter_bond_keyword(MulticenterBondId(0), "mc1");
     assert_eq!(
@@ -104,7 +128,7 @@ fn test_metadata_set_multicenter_bond_id() {
 }
 
 #[rstest]
-fn test_metadata_set_noncovalent_bond_id() {
+fn test_metadata_set_noncovalent_bond_keyword() {
     let mut m = MoleculeMetadata::new();
     m.set_noncovalent_bond_keyword(NoncovalentBondId(0), "h1");
     assert_eq!(m.noncovalent_bond_keyword(NoncovalentBondId(0)), Some("h1"));
@@ -158,7 +182,7 @@ fn test_metadata_iter_atom_aliases() {
 }
 
 #[rstest]
-fn test_metadata_with_atom_id_chains() {
+fn test_metadata_with_atom_keyword() {
     let m = MoleculeMetadata::new()
         .with_atom_keyword(AtomId(0), "a")
         .with_atom_keyword(AtomId(1), "b");
@@ -167,43 +191,43 @@ fn test_metadata_with_atom_id_chains() {
 }
 
 #[rstest]
-fn test_metadata_with_bond_id() {
+fn test_metadata_with_bond_keyword() {
     let m = MoleculeMetadata::new().with_bond_keyword(BondId(0), "b");
     assert_eq!(m.bond_keyword(BondId(0)), Some("b"));
 }
 
 #[rstest]
-fn test_metadata_with_dative_bond_id() {
+fn test_metadata_with_dative_bond_keyword() {
     let m = MoleculeMetadata::new().with_dative_bond_keyword(DativeBondId(0), "d");
     assert_eq!(m.dative_bond_keyword(DativeBondId(0)), Some("d"));
 }
 
 #[rstest]
-fn test_metadata_with_aromatic_system_id() {
+fn test_metadata_with_aromatic_system_keyword() {
     let m = MoleculeMetadata::new().with_aromatic_system_keyword(AromaticSystemId(0), "r");
     assert_eq!(m.aromatic_system_keyword(AromaticSystemId(0)), Some("r"));
 }
 
 #[rstest]
-fn test_metadata_with_multicenter_bond_id() {
+fn test_metadata_with_multicenter_bond_keyword() {
     let m = MoleculeMetadata::new().with_multicenter_bond_keyword(MulticenterBondId(0), "mc");
     assert_eq!(m.multicenter_bond_keyword(MulticenterBondId(0)), Some("mc"));
 }
 
 #[rstest]
-fn test_metadata_with_noncovalent_bond_id() {
+fn test_metadata_with_noncovalent_bond_keyword() {
     let m = MoleculeMetadata::new().with_noncovalent_bond_keyword(NoncovalentBondId(0), "h");
     assert_eq!(m.noncovalent_bond_keyword(NoncovalentBondId(0)), Some("h"));
 }
 
 #[rstest]
-fn test_metadata_with_stereo_atom_id() {
+fn test_metadata_with_stereo_atom_keyword() {
     let m = MoleculeMetadata::new().with_stereo_atom_keyword(StereoAtomId(0), "s");
     assert_eq!(m.stereo_atom_keyword(StereoAtomId(0)), Some("s"));
 }
 
 #[rstest]
-fn test_metadata_with_stereo_bond_id() {
+fn test_metadata_with_stereo_bond_keyword() {
     let m = MoleculeMetadata::new().with_stereo_bond_keyword(StereoBondId(0), "sb");
     assert_eq!(m.stereo_bond_keyword(StereoBondId(0)), Some("sb"));
 }
@@ -229,8 +253,8 @@ fn test_metadata_mixed_chain() {
 #[rstest]
 #[case::empty("{:atoms [] :bonds []}", MoleculeAst::default())]
 #[case::two_atoms_one_bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
-#[case::atom_with_id(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![], ..Default::default() }))]
-#[case::bond_with_id(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
+#[case::atom_with_keyword(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![], ..Default::default() }))]
+#[case::bond_with_id_field(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
 #[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
 fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
     let dsl = input.parse::<MoleculeDsl>().unwrap();
@@ -273,7 +297,7 @@ fn test_molecule_dsl_from_edn_two_atoms_one_bond() {
 }
 
 #[rstest]
-fn test_molecule_dsl_from_edn_atom_with_id() {
+fn test_molecule_dsl_from_edn_atom_with_keyword() {
     let edn = read_string(r##"{:atoms [[:c1 "C"] "C"] :bonds []}"##).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
     assert_eq!(dsl.metadata().atom_keyword(AtomId(0)), Some("c1"));
@@ -281,7 +305,7 @@ fn test_molecule_dsl_from_edn_atom_with_id() {
 }
 
 #[rstest]
-fn test_molecule_dsl_from_edn_bond_map_form_with_id() {
+fn test_molecule_dsl_from_edn_bond_map_form_with_id_field() {
     let edn =
         read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]}"##).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
@@ -314,7 +338,7 @@ fn test_molecule_dsl_edn_roundtrip() {
 }
 
 #[rstest]
-fn test_molecule_dsl_edn_roundtrip_with_ids_and_aliases() {
+fn test_molecule_dsl_edn_roundtrip_with_keywords_and_aliases() {
     let source = r##"{:atoms [[:a "C"] [:b "C"] :x] :bonds [{:id :b1 :atoms [:a :b] :type :single} [:b 2 :double]] :atom-aliases [:x "N"]}"##;
     let edn = read_string(source).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
@@ -326,7 +350,7 @@ fn test_molecule_dsl_edn_roundtrip_with_ids_and_aliases() {
 #[rstest]
 #[case::empty(r##"{:atoms [] :bonds []}"##)]
 #[case::small(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##)]
-#[case::with_ids(r##"{:atoms [[:a "C"] [:b "N"]] :bonds [{:id :b1 :atoms [:a :b] :type "1"}]}"##)]
+#[case::with_keywords(r##"{:atoms [[:a "C"] [:b "N"]] :bonds [{:id :b1 :atoms [:a :b] :type "1"}]}"##)]
 #[case::inline_atom_constraints(r##"{:atoms ["C#v4" "N#R+"] :bonds []}"##)]
 #[case::inline_bond_constraint(r##"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"##)]
 #[case::aromatic_section(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:id :ar1 :atoms [0 1 2 3 4 5] :type "*#e6"}]}"##)]
@@ -335,10 +359,10 @@ fn test_molecule_dsl_edn_roundtrip_with_ids_and_aliases() {
 #[case::dative_multi_donor(r##"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [0 1] :acceptor 2 :type "1#R"}]}"##)]
 #[case::noncovalent_section(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"##)]
 #[case::stereo_atom_section(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"##)]
-#[case::stereo_atom_id_and_keyword(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type :ccw}]}"##)]
+#[case::stereo_atom_id_field_and_keyword_type(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type :ccw}]}"##)]
 #[case::stereo_atom_virtual_ligand(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:h 0]] :type "Th1"}]}"##)]
 #[case::stereo_bond_section(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"##)]
-#[case::stereo_bond_id_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type :e}]}"##)]
+#[case::stereo_bond_keyword_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type :e}]}"##)]
 #[case::atom_aliases(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##)]
 #[case::constraints_connected(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"##)]
 #[case::constraints_bond_order_sum(r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :atoms [0 1] :type "1"} {:id :b2 :atoms [1 2] :type "1"}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##)]
@@ -411,9 +435,9 @@ fn test_molecule_dsl_from_edn_str_from_edn_parity(#[case] source: &str) {
 #[rustfmt::skip]
 #[rstest]
 #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"##)]
-#[case::stereo_atom_id_virtual(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 [:lp 0] [:h 0]] :type "Th1"}]}"##)]
-#[case::stereo_bond_id_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type "Ct1"}]}"##)]
-#[case::stereo_bond_own_id(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :sb1 :site 1 :ligands [0 3] :type "Ct1"}]}"##)]
+#[case::stereo_atom_id_field_virtual_ligands(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 [:lp 0] [:h 0]] :type "Th1"}]}"##)]
+#[case::stereo_bond_keyword_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type "Ct1"}]}"##)]
+#[case::stereo_bond_id_field(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :sb1 :site 1 :ligands [0 3] :type "Ct1"}]}"##)]
 #[case::stereo_atom_inline_constraints(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#f(0,1,2)#g/"}]}"##)]
 #[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}]}"##)]
 #[case::stereo_bond_inline_constraints(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1#g/"}]}"##)]
@@ -639,7 +663,7 @@ fn test_molecule_dsl_from_edn_str_structural_ref(#[case] input: &str) {
 }
 
 #[rstest]
-fn test_molecule_dsl_edn_roundtrip_bond_order_sum_by_id() {
+fn test_molecule_dsl_edn_roundtrip_bond_order_sum_by_keyword() {
     let source = r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single} {:id :b2 :atoms [1 2] :type :single}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##;
     let edn = read_string(source).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
@@ -647,7 +671,7 @@ fn test_molecule_dsl_edn_roundtrip_bond_order_sum_by_id() {
 }
 
 #[rstest]
-fn test_molecule_dsl_edn_roundtrip_atom_leaf_constraint_by_id() {
+fn test_molecule_dsl_edn_roundtrip_atom_leaf_constraint_by_keyword() {
     let source =
         r##"{:atoms [[:c1 "C"]] :bonds [] :constraints [{:not {:atom [:c1 {:valence 3}]}}]}"##;
     let edn = read_string(source).unwrap();
@@ -924,24 +948,24 @@ fn test_molecule_dsl_top_level_key_permutation(
 #[case::bond_vs_dative(r##"{:atoms ["C" "N"] :bonds [{:id :x :atoms [0 1] :type "1"}] :dative-bonds [{:id :x :donors [0] :acceptor 1 :type :single}]}"##)]
 #[case::atom_vs_aromatic(r##"{:atoms [[:x "C"] [:y "C"]] :bonds [] :aromatic-systems [{:id :x :atoms [0 1] :type "*"}]}"##)]
 #[case::bond_vs_noncovalent(r##"{:atoms ["C" "C"] :bonds [{:id :x :atoms [0 1] :type "1"}] :noncovalent-bonds [{:id :x :atoms [0 1] :type "Hbd"}]}"##)]
-fn test_molecule_dsl_cross_entity_id_collision_errors(#[case] source: &str) {
+fn test_molecule_dsl_from_edn_cross_entity_keyword_collision_error(#[case] source: &str) {
     let edn = read_string(source).unwrap();
     let err = MoleculeDsl::from_edn(&edn).unwrap_err();
     assert!(matches!(err, DeError::Custom(_)));
 }
 
-/// `from_edn` ref / alias / id resolution failures all surface as `DeError::Custom`.
+/// `from_edn` reference, alias, and keyword failures all surface as `DeError::Custom`.
 #[rustfmt::skip]
 #[rstest]
 #[case::unknown_alias(r##"{:atoms [:x] :bonds []}"##)]
-#[case::duplicate_atom_id(r##"{:atoms [[:a "C"] [:a "N"]] :bonds []}"##)]
+#[case::duplicate_atom_keyword(r##"{:atoms [[:a "C"] [:a "N"]] :bonds []}"##)]
 #[case::duplicate_alias_name(r##"{:atoms [] :bonds [] :atom-aliases [:a "C" :a "N"]}"##)]
 #[case::aliases_not_bijective(r##"{:atoms [] :bonds [] :atom-aliases [:a "C" :b "C"]}"##)]
 #[case::bond_endpoint_out_of_range(r##"{:atoms ["C" "C"] :bonds [[0 5 "1"]]}"##)]
-#[case::bond_endpoint_unknown_id(r##"{:atoms ["C" "C"] :bonds [[:nope 0 "1"]]}"##)]
+#[case::bond_endpoint_unknown_keyword(r##"{:atoms ["C" "C"] :bonds [[:nope 0 "1"]]}"##)]
 #[case::aromatic_atom_out_of_range(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 5] :type "*"}]}"##)]
 #[case::noncovalent_endpoint_out_of_range(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 99] :type "Hbd"}]}"##)]
-#[case::dative_unknown_donor_id(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donors [:nope] :acceptor 1 :type :single}]}"##)]
+#[case::dative_unknown_donor_keyword(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donors [:nope] :acceptor 1 :type :single}]}"##)]
 #[case::constraint_unknown_ref(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [:nope 0]}}]}"##)]
 #[case::sub_pattern_ref_out_of_range(r##"{:atoms ["C"] :bonds [] :constraints [{:sub-pattern {:anchor {:atoms [[0 5]]} :pattern {:atoms ["N"] :bonds []}}}]}"##)]
 fn test_molecule_dsl_from_edn_error(#[case] source: &str) {
@@ -966,11 +990,11 @@ fn test_molecule_dsl_guards() {
 }
 
 /// `MoleculeAst::to_edn` emits canonical EDN with positional refs only,
-/// regardless of any id keywords on the input. Parsing the canonical
+/// regardless of any entity keywords on the input. Parsing the canonical
 /// output back yields the same AST.
 #[rstest]
 fn test_molecule_ast_to_edn_canonical_positional_refs() {
-    // Input has id keywords on atoms, bonds, and a constraint anchor.
+    // Input has entity keywords on atoms, bonds, and a constraint anchor.
     let source = r##"{:atoms [[:c1 "C"] [:c2 "C"]]
                       :bonds [{:id :b1 :atoms [:c1 :c2] :type "1"}]
                       :constraints [{:atom [:c1 {:valence 4}]}
@@ -1009,15 +1033,15 @@ fn test_molecule_ast_from_edn_str_fast_path() {
 }
 
 #[rstest]
-fn test_molecule_ast_from_edn_id_metadata() {
-    // Input carries ids; AST is metadata-free, so reparsing the rendered
-    // form (which has no ids) should match the AST from the original parse.
+fn test_molecule_ast_from_edn_keyword_metadata() {
+    // Input carries entity keywords; AST is metadata-free, so reparsing the rendered
+    // form (which has no keywords) should match the AST from the original parse.
     let source = r##"{:atoms [[:carbon "C"] [:oxygen "O"]]
                       :bonds [{:id :myb :atoms [:carbon :oxygen] :type "1"}]}"##;
     let ast = MoleculeAst::from_edn(&read_string(source).unwrap()).unwrap();
     let rendered = ast.to_edn().to_string();
-    // No user-defined id keywords leaked through. (`:a` / `:b` / `:type`
-    // are bond-entry field names, not ids.)
+    // No user-defined entity keywords leaked through. (`:a` / `:b` / `:type`
+    // are bond-entry field names, not entity keywords.)
     assert!(!rendered.contains(":carbon"));
     assert!(!rendered.contains(":oxygen"));
     assert!(!rendered.contains(":myb"));
@@ -1044,8 +1068,9 @@ fn test_molecule_ast_to_edn_roundtrip() {
 }
 
 // Atom value + the atom / bond entry renderers (analogs of the overlay `render_<entity>_entry`):
-// the atom value is its alias keyword or atom-string; the atom entry adds the `[id …]` framing; the
-// bond entry places the caller's `type_edn` under `:type` (or in the `[a b type]` vector, no id).
+// the atom value is its alias keyword or atom-string; the atom entry adds the `[keyword …]` framing;
+// the bond entry places the caller's `type_edn` under `:type` (or in the `[a b type]` vector,
+// without an `:id` field).
 
 #[rstest]
 #[case::no_alias(false, r#""C""#)]
@@ -1063,12 +1088,12 @@ fn test_render_atom_value(#[case] alias: bool, #[case] expected: &str) {
 }
 
 #[rstest]
-#[case::no_id(None, r#""C""#)]
-#[case::with_id(Some("c0"), r#"[:c0 "C"]"#)]
-fn test_render_atom_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+#[case::no_keyword(None, r#""C""#)]
+#[case::with_keyword(Some("c0"), r#"[:c0 "C"]"#)]
+fn test_render_atom_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_atom_keyword(AtomId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_atom_keyword(AtomId(0), keyword);
     }
     let entry = render_atom_entry(AtomId(0), &AtomAst::from_element(Element::C), &meta);
     assert_eq!(entry, read_string(expected).unwrap());
@@ -1077,27 +1102,27 @@ fn test_render_atom_entry(#[case] id_name: Option<&str>, #[case] expected: &str)
 #[rstest]
 #[case::no_id(None, r#"[0 1 "1"]"#)]
 #[case::with_id(Some("b0"), r#"{:id :b0 :atoms [0 1] :type "1"}"#)]
-fn test_render_bond_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_bond_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_bond_keyword(BondId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_bond_keyword(BondId(0), keyword);
     }
     let entry = render_bond_entry(BondId(0), [AtomId(0), AtomId(1)], Edn::string("1"), &meta);
     assert_eq!(entry, read_string(expected).unwrap());
 }
 
 // I4a — the overlay `render_<entity>_entry` renderers: `:id` present iff the metadata binds one,
-// participants rendered as refs (positional without ids), and the caller's rendered `:type` placed
+// participants rendered as refs (positional without keywords), and the caller's rendered `:type` placed
 // under `:type` verbatim (realistic values: a bond/dative order `"1"`, an aromatic/multicenter
 // electron string `"[1,1,0]"`, a noncovalent `"Hbd"`, a stereo `"Th0"` / `"Ct0"`).
 
 #[rstest]
 #[case::no_id(None, r#"{:donors [0 2] :acceptor 1 :type "1"}"#)]
 #[case::with_id(Some("d0"), r#"{:id :d0 :donors [0 2] :acceptor 1 :type "1"}"#)]
-fn test_render_dative_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_dative_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_dative_bond_keyword(DativeBondId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_dative_bond_keyword(DativeBondId(0), keyword);
     }
     let entry = render_dative_entry(
         DativeBondId(0),
@@ -1112,10 +1137,10 @@ fn test_render_dative_entry(#[case] id_name: Option<&str>, #[case] expected: &st
 #[rstest]
 #[case::no_id(None, r#"{:atoms [0 1 2] :type "[1,1,0]"}"#)]
 #[case::with_id(Some("r0"), r#"{:id :r0 :atoms [0 1 2] :type "[1,1,0]"}"#)]
-fn test_render_aromatic_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_aromatic_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_aromatic_system_keyword(AromaticSystemId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_aromatic_system_keyword(AromaticSystemId(0), keyword);
     }
     let entry = render_aromatic_entry(
         AromaticSystemId(0),
@@ -1129,10 +1154,10 @@ fn test_render_aromatic_entry(#[case] id_name: Option<&str>, #[case] expected: &
 #[rstest]
 #[case::no_id(None, r#"{:atoms [0 1 2] :type "[1,1,0]"}"#)]
 #[case::with_id(Some("m0"), r#"{:id :m0 :atoms [0 1 2] :type "[1,1,0]"}"#)]
-fn test_render_multicenter_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_multicenter_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_multicenter_bond_keyword(MulticenterBondId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_multicenter_bond_keyword(MulticenterBondId(0), keyword);
     }
     let entry = render_multicenter_entry(
         MulticenterBondId(0),
@@ -1146,10 +1171,10 @@ fn test_render_multicenter_entry(#[case] id_name: Option<&str>, #[case] expected
 #[rstest]
 #[case::no_id(None, r#"{:atoms [0 1] :type "Hbd"}"#)]
 #[case::with_id(Some("n0"), r#"{:id :n0 :atoms [0 1] :type "Hbd"}"#)]
-fn test_render_noncovalent_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_noncovalent_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_noncovalent_bond_keyword(NoncovalentBondId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_noncovalent_bond_keyword(NoncovalentBondId(0), keyword);
     }
     let entry = render_noncovalent_entry(
         NoncovalentBondId(0),
@@ -1163,10 +1188,10 @@ fn test_render_noncovalent_entry(#[case] id_name: Option<&str>, #[case] expected
 #[rstest]
 #[case::no_id(None, r#"{:site 0 :ligands [1 2] :type "Th0"}"#)]
 #[case::with_id(Some("s0"), r#"{:id :s0 :site 0 :ligands [1 2] :type "Th0"}"#)]
-fn test_render_stereo_atom_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_stereo_atom_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_stereo_atom_keyword(StereoAtomId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_stereo_atom_keyword(StereoAtomId(0), keyword);
     }
     let entry = render_stereo_atom_entry(
         StereoAtomId(0),
@@ -1181,10 +1206,10 @@ fn test_render_stereo_atom_entry(#[case] id_name: Option<&str>, #[case] expected
 #[rstest]
 #[case::no_id(None, r#"{:site 0 :ligands [1] :type "Ct0"}"#)]
 #[case::with_id(Some("s0"), r#"{:id :s0 :site 0 :ligands [1] :type "Ct0"}"#)]
-fn test_render_stereo_bond_entry(#[case] id_name: Option<&str>, #[case] expected: &str) {
+fn test_render_stereo_bond_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
     let mut meta = MoleculeMetadata::new();
-    if let Some(name) = id_name {
-        meta.set_stereo_bond_keyword(StereoBondId(0), name);
+    if let Some(keyword) = keyword {
+        meta.set_stereo_bond_keyword(StereoBondId(0), keyword);
     }
     let entry = render_stereo_bond_entry(
         StereoBondId(0),

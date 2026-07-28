@@ -320,7 +320,7 @@ fn uint(i: &mut &str) -> PResult<i64> {
         .map_err(|_| ErrMode::Backtrack(ParseError::Syntax))
 }
 
-pub(crate) fn id(i: &mut &str) -> PResult<String> {
+pub(crate) fn variable_name(i: &mut &str) -> PResult<String> {
     (
         one_of(|c: char| c.is_ascii_alphabetic()),
         repeat::<_, _, (), _, _>(0.., one_of(|c: char| c.is_ascii_alphanumeric() || c == '_')),
@@ -507,7 +507,7 @@ fn unary_expr(i: &mut &str) -> PResult<Parsed> {
 fn base_expr(i: &mut &str) -> PResult<Parsed> {
     alt((
         uint.map(|n| Parsed::Term(ValueTerm::Lit(n))),
-        preceded('?', id).map(|name| Parsed::Term(ValueTerm::Var(name))),
+        preceded('?', variable_name).map(|name| Parsed::Term(ValueTerm::Var(name))),
         delimited('(', delimited(multispace0, or_expr, multispace0), ')'),
     ))
     .parse_next(i)
@@ -571,7 +571,7 @@ mod tests {
     #[case::empty("")]
     #[case::invalid_char("[]")]
     #[case::bare_open_paren("(")]
-    #[case::whitespace_id("? h")]
+    #[case::whitespace_variable_name("? h")]
     #[case::spaced_le("?h < = 1")]
     #[case::spaced_ge("?h > = 1")]
     #[case::spaced_eq("?h = = 0")]

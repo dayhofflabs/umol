@@ -1,8 +1,8 @@
 //! Surface-level entity references. Each ref is a positional index (`Edn::Int`),
-//! a symbolic id keyword (`Edn::Keyword`), or — for non-atom entities — a
+//! a keyword (`Edn::Keyword`), or — for non-atom entities — a
 //! *structural* form (`Edn::Map`) naming the entity by its constituent atoms /
 //! bonds. `resolve` turns a ref into an AST id against any parse-time `Namespace`
-//! (count for index bounds, `find_by_keyword` for id keywords,
+//! (count for index bounds, `find_by_keyword` for keyword references,
 //! `find_by_participants` for the structural form); `denote` renders an id back
 //! to a ref against the `MoleculeMetadata` roundtrip projection.
 
@@ -32,8 +32,8 @@ macro_rules! define_ref {
         }
 
         impl $name {
-            /// Render an AST id back to a ref: its id keyword from `metadata` if one is recorded for
-            /// this index, else the bare index. The `id → ref` inverse of `resolve` over the
+            /// Render an AST id back to a ref: its keyword from `metadata` if one is recorded for
+            /// this id, else the bare index. The `id → ref` inverse of `resolve` over the
             /// id↔keyword bijection.
             pub fn denote<M: Metadata>(id: $id, metadata: &M) -> Self {
                 if let Some(name) = metadata.$accessor(id) {
@@ -44,8 +44,8 @@ macro_rules! define_ref {
             }
 
             /// Resolve this ref to an AST id against the parse-time `namespace`
-            /// (the source of truth: count for index bounds, `by_name` for id
-            /// keywords, `by_participants` for the structural form).
+            /// (the source of truth: count for index bounds, keyword lookup, and
+            /// participant lookup for the structural form).
             pub fn resolve<N: Namespace>(self, namespace: &N) -> Result<$id, ParseError> {
                 match self {
                     Self::Index(i) => {

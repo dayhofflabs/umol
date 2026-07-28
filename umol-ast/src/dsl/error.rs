@@ -61,8 +61,8 @@ pub enum ParseError {
     EdnParse(String),
     #[error("missing key: {0}")]
     MissingKey(String),
-    #[error("duplicate id: {0}")]
-    DuplicateId(String),
+    #[error("duplicate keyword: {0}")]
+    DuplicateKeyword(String),
     #[error("invalid value: {0}")]
     InvalidValue(String),
     #[error("invalid {kind} ref: {value}")]
@@ -122,6 +122,10 @@ mod tests {
     #[case::invalid_ref(
         ParseError::InvalidRef { kind: "atom", value: "7".into() },
         "invalid atom ref: 7",
+    )]
+    #[case::duplicate_keyword(
+        ParseError::DuplicateKeyword("carbon".into()),
+        "duplicate keyword: carbon",
     )]
     #[case::wrong_field_type(
         ParseError::WrongFieldType { field: "charge".into(), expected: "int".into() },

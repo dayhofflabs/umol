@@ -1,7 +1,7 @@
 //! Reaction DSL.
 //!
 //! `ReactionDsl` wraps a `ReactionAst` together with the `ReactionMetadata` that records
-//! the surface-form bindings (the lhs molecule metadata plus created-entity id ↔ name and
+//! the surface-form bindings (the lhs molecule metadata plus created-entity keywords and
 //! atom-alias bindings). The EDN form is a map keyed by `:lhs` (a molecule map) and
 //! `:deltas` (a vector of `:add` / `:remove` / `:modify` / `:constraint` operations). Each
 //! entity delegates to its own entity DSL.
@@ -199,7 +199,7 @@ fn raise_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
 }
 
 /// Surface-form metadata paired with a `ReactionAst`: the lhs molecule metadata plus the
-/// created-entity id bindings and atom aliases introduced by the deltas. Mirrors
+/// created-entity keyword bindings and atom aliases introduced by the deltas. Mirrors
 /// `MoleculeMetadata` for the atom/bond entities (the reaction admits the `[:C "C#h3"]`
 /// alias notation for added atoms).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -367,8 +367,8 @@ impl ReactionMetadata {
 
 /// The reaction's resolution namespace: the lhs molecule's namespace, the delta namespace continuing
 /// its id space (holding every entity a delta binds — its own alias map stays empty), and the
-/// reaction's top-level atom aliases in a field of their own. A ref resolves against the union: an id
-/// or participant key is looked up in `deltas` first, then `lhs` (the id spaces are disjoint, so at
+/// reaction's top-level atom aliases in a field of their own. A ref resolves against the union: a
+/// keyword or participant key is looked up in `deltas` first, then `lhs` (the id spaces are disjoint, so at
 /// most one hits). Counts come from `deltas`, which continues `lhs` and so carries the reaction-wide
 /// total — the single running counter that hands out delta ids on `register_*`.
 pub struct ReactionNamespace {
@@ -440,8 +440,8 @@ impl ReactionNamespace {
     /// delegated `deltas.register_*`; the two together cover the whole reaction namespace.
     fn check_keyword_free(&self, keyword: Option<&str>) -> Result<(), ParseError> {
         match keyword {
-            Some(kw) if self.lhs.contains_id(kw) || self.atom_aliases.contains_left(kw) => {
-                Err(ParseError::DuplicateId(kw.to_string()))
+            Some(kw) if self.lhs.contains_keyword(kw) || self.atom_aliases.contains_left(kw) => {
+                Err(ParseError::DuplicateKeyword(kw.to_string()))
             }
             _ => Ok(()),
         }
@@ -516,8 +516,8 @@ impl ReactionNamespace {
     /// Bind a top-level reaction atom alias, erroring if the name is already taken (any entity or
     /// alias, lhs or reaction) or the atom-spec is already aliased (bijectivity).
     fn register_atom_alias(&mut self, name: String, dsl: Box<AtomDsl>) -> Result<(), ParseError> {
-        if self.contains_id(&name) {
-            return Err(ParseError::DuplicateId(name));
+        if self.contains_keyword(&name) {
+            return Err(ParseError::DuplicateKeyword(name));
         }
         if self.alias_targets(&dsl) {
             return Err(ParseError::InvalidValue(
@@ -705,10 +705,10 @@ impl Namespace for ReactionNamespace {
             .or_else(|| self.lhs.find_stereo_bond_by_participants(site, ligands))
     }
 
-    fn contains_id(&self, id: &str) -> bool {
-        self.deltas.contains_id(id)
-            || self.lhs.contains_id(id)
-            || self.atom_aliases.contains_left(id)
+    fn contains_keyword(&self, keyword: &str) -> bool {
+        self.deltas.contains_keyword(keyword)
+            || self.lhs.contains_keyword(keyword)
+            || self.atom_aliases.contains_left(keyword)
     }
 
     fn find_atom_alias(&self, name: &str) -> Option<&AtomDsl> {
@@ -760,7 +760,7 @@ impl From<&ReactionNamespace> for ReactionMetadata {
 
 /// One unresolved delta parsed from a `:deltas` entry. Refs stay symbolic
 /// (`AtomRef`/`BondRef`) and an `:add` carries the molecule entry verbatim
-/// (bare atom / alias / created-id resolved in R7); a `:modify` RHS is a
+/// (bare atom / alias / created keyword resolved in R7); a `:modify` RHS is a
 /// entity update value.
 #[derive(Debug, PartialEq)]
 pub(crate) enum DeltaInput {
@@ -1327,7 +1327,7 @@ impl Display for ReactionAst {
 }
 
 /// Direct EDN rendering for `ReactionAst`. The lhs and refs emit canonical positional
-/// form (no id keywords, no aliases) since the AST carries no metadata. For id/alias-bearing
+/// form (no entity keywords, no aliases) since the AST carries no metadata. For keyword/alias-bearing
 /// surface output, wrap in [`ReactionDsl`] with the appropriate [`ReactionMetadata`].
 impl ToEdn for ReactionAst {
     fn to_edn(&self) -> Edn<'static> {
@@ -2884,8 +2884,8 @@ fn render_atom_ref(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
     }
 }
 
-/// A created atom (`:add`) — its id and aliases live in the reaction frame (the alias namespace is
-/// the lhs ∪ reaction union). Renders `<atom-dsl>` or `[<id> <atom-dsl>]`.
+/// A created atom (`:add`) — its keyword and aliases live in the reaction frame (the alias namespace
+/// is the lhs ∪ reaction union). Renders `<atom-dsl>` or `[<keyword> <atom-dsl>]`.
 fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
     let spec = match meta
@@ -2923,8 +2923,9 @@ fn render_bond_ref(id: BondId, meta: &ReactionMetadata) -> Edn<'static> {
     }
 }
 
-/// A created bond (`:add`). Renders `[<a> <b> <bond-dsl>]`, or `{:id <id> :atoms [<a> <b>] :type
-/// <bond-dsl>}` when the bond carries an id. Endpoints resolve against the union namespace.
+/// A created bond (`:add`). Renders `[<a> <b> <bond-dsl>]`, or
+/// `{:id <keyword> :atoms [<a> <b>] :type <bond-dsl>}` when the bond carries a keyword.
+/// Endpoints resolve against the union namespace.
 fn render_bond_entry(
     id: BondId,
     atoms: [AtomId; 2],
@@ -3554,7 +3555,8 @@ mod tests {
 
     #[rstest]
     fn test_reaction_input_into_ast_atom_remove_error() {
-        // Adding then removing the same id is prohibited — recover-from-lhs cannot reach an added atom.
+        // Adding then removing through the same keyword is prohibited:
+        // recover-from-lhs cannot reach an added atom.
         let input =
             r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:x "O"]}} {:atom {:remove :x}}]}"##;
         let err = parse_reaction_input(&read_string(input).unwrap())
@@ -3571,17 +3573,18 @@ mod tests {
         );
     }
 
-    // A delta :id must be disjoint from every id already bound — lhs entities and earlier deltas alike.
+    // A delta keyword must be disjoint from every keyword already bound, whether by an lhs entity
+    // or an earlier delta.
     #[rstest]
     #[case::collides_with_lhs(
         r##"{:lhs {:atoms [[:a "C"]]} :deltas [{:atom {:add [:a "O"]}}]}"##,
-        ParseError::DuplicateId("a".to_string()),
+        ParseError::DuplicateKeyword("a".to_string()),
     )]
     #[case::collides_with_prior_delta(
         r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:a "O"]}} {:atom {:add [:a "N"]}}]}"##,
-        ParseError::DuplicateId("a".to_string()),
+        ParseError::DuplicateKeyword("a".to_string()),
     )]
-    fn test_reaction_input_into_ast_duplicate_id_error(
+    fn test_reaction_input_into_ast_duplicate_keyword_error(
         #[case] input: &str,
         #[case] expected: ParseError,
     ) {

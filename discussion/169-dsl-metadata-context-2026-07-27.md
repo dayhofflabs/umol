@@ -448,7 +448,8 @@ and goes red→green with all constructors and pattern matches migrated.
 case names so `id` remains only for numerical AST ids, numerical id spaces, or
 the literal `:id` field. Preserve the existing parse-error behavior apart from
 the corrected terminology. This is breaking and goes red→green with all
-callers migrated. [dep: S1b]
+callers migrated.
+**Implemented (green).** [dep: S1b]
 
 ### S2 — Persistent metadata representation
 

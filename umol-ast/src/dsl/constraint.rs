@@ -1,7 +1,7 @@
 //! Tree-shaped constraint DSLs.
 //!
 //! Boundary types between the AST `Constraint` tree and its EDN form. Refs in
-//! the tree carry either an integer index or a symbolic id; resolution to /
+//! the tree carry either an integer index or a keyword reference; resolution to /
 //! from the `AtomId` / `BondId` / ... on the AST is a separate fallible
 //! step that consults the surrounding `MoleculeMetadata`.
 

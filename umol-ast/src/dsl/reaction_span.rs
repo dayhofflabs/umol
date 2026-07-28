@@ -52,7 +52,7 @@ use crate::ast::{
 };
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the `MoleculeMetadata` recording
-/// its span-frame id↔name bindings; fields private so metadata cannot drift onto a different AST.
+/// its span-frame id↔keyword bindings; fields private so metadata cannot drift onto a different AST.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionSpanDsl {
     ast: ReactionSpanAst,
@@ -338,7 +338,7 @@ fn bond_entry_span(
     ))
 }
 
-/// Split a bond `:modify` payload — `[a b X]` or `{:id :atoms [a b] :type X}` — into its id,
+/// Split a bond `:modify` payload — `[a b X]` or `{:id :atoms [a b] :type X}` — into its keyword,
 /// endpoints, and the raw value `X` (a `[left right]` vector).
 fn split_bond_frame<'e>(
     payload: &'e Edn<'e>,
@@ -907,7 +907,7 @@ fn resolve_constraint_span(
 
 impl SpanInput {
     /// Resolve the union-frame span: positions are the union ids (no fresh-id allocation), inline
-    /// `:id`s and `:atom-aliases` populate the namespace, atom `AtomSpecInput` sides resolve to
+    /// entity keywords and `:atom-aliases` populate the namespace, atom `AtomSpecInput` sides resolve to
     /// `AtomAst`, bond endpoints and constraint refs resolve against the namespace, and each
     /// projected side must be internally ref-consistent.
     pub(crate) fn into_ast(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
@@ -915,7 +915,7 @@ impl SpanInput {
         let bond_count = self.bonds.len();
 
         // The span's namespace: atoms take the union positions as their ids, then the bijective
-        // aliases. Every ref resolves against it; `register_*` enforces id-disjointness, and the
+        // aliases. Every ref resolves against it; `register_*` enforces keyword disjointness, and the
         // roundtrip `MoleculeMetadata` is projected from it at the end.
         let mut namespace = MoleculeNamespace::default();
         for (keyword, _) in self.atoms.iter() {
@@ -1638,8 +1638,8 @@ impl Display for ReactionSpanAst {
     }
 }
 
-/// Direct EDN rendering for `ReactionSpanAst`: positional form (no `:id` keywords, no aliases) since
-/// the AST carries no metadata. For id/alias-bearing output, wrap in [`ReactionSpanDsl`].
+/// Direct EDN rendering for `ReactionSpanAst`: positional form (no entity keywords or aliases) since
+/// the AST carries no metadata. For keyword/alias-bearing output, wrap in [`ReactionSpanDsl`].
 impl ToEdn for ReactionSpanAst {
     fn to_edn(&self) -> Edn<'static> {
         render_span_edn(self, &MoleculeMetadata::default())
@@ -1717,7 +1717,7 @@ mod tests {
         lhs:AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
         rhs:AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::N)))),
     }))]
-    #[case::with_id(r#"[:c "C"]"#, (Some("c".to_string()), EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))))]
+    #[case::with_keyword(r#"[:c "C"]"#, (Some("c".to_string()), EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))))]
     #[case::alias(r#":nu"#, (None, EntitySpan::Unchanged(AtomSpecInput::Alias("nu".to_string()))))]
     #[case::add_alias(r#"{:add :nu}"#, (None, EntitySpan::Added(AtomSpecInput::Alias("nu".to_string()))))]
     fn test_parse_atom_span_entry(
@@ -2115,9 +2115,9 @@ mod tests {
         r#"{:atoms ["C"] :bonds [[0 5 :single]]}"#,
         ParseError::InvalidRef { kind: "atom", value: "5".to_string() },
     )]
-    #[case::duplicate_id(
+    #[case::duplicate_keyword(
         r#"{:atoms [[:a "C"] [:a "O"]]}"#,
-        ParseError::DuplicateId("a".to_string()),
+        ParseError::DuplicateKeyword("a".to_string()),
     )]
     #[case::left_inconsistent(
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
@@ -2219,7 +2219,7 @@ mod tests {
         r#"{:remove "O"}"#
     )]
     #[case::modify(AtomId(0), EntitySpan::Modified { lhs:AtomAst::from_element(Element::C), rhs:AtomAst::from_element(Element::N) }, MoleculeMetadata::new(), r#"{:modify ["C" "N"]}"#)]
-    #[case::with_id(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), MoleculeMetadata::new().with_atom_keyword(AtomId(0), "c"), r#"[:c "C"]"#)]
+    #[case::with_keyword(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), MoleculeMetadata::new().with_atom_keyword(AtomId(0), "c"), r#"[:c "C"]"#)]
     #[case::alias(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), MoleculeMetadata::new().with_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C))), r#":nu"#)]
     fn test_render_atom_span_entry(
         #[case] id: AtomId,

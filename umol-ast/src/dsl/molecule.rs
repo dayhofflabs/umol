@@ -1,7 +1,7 @@
 //! Molecule DSL.
 //!
 //! `MoleculeDsl` wraps a `MoleculeAst` together with the `MoleculeMetadata` that records
-//! the surface-form id/alias bindings (atom ids, bond ids, etc.). The EDN
+//! the surface-form entity keywords and atom aliases. The EDN
 //! form is a map keyed by `:atoms`, `:bonds`, `:dative-bonds`, `:aromatic-systems`,
 //! `:multicenter-bonds`, `:noncovalent-bonds`, `:atom-aliases`/`:aliases`, and
 //! `:constraints`. Each entity delegates to its own entity DSL. Constraints
@@ -128,8 +128,8 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
     }
 }
 
-/// Surface-form metadata paired with a `MoleculeAst`. Records entity ids, atom aliases,
-/// entity ids, `MoleculeDsl` keeps both fields private and rewraps atomically
+/// Surface-form metadata paired with a `MoleculeAst`. Records entity keywords and atom aliases.
+/// `MoleculeDsl` keeps both fields private and rewraps atomically
 /// through `from_parts`.
 /// TODO: Review API, harmonize with `MoleculeNamespace`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -150,7 +150,7 @@ impl MoleculeMetadata {
         Self::default()
     }
 
-    /// Whether this metadata binds no `:id` keywords and no atom aliases — the shape an anonymous
+    /// Whether this metadata binds no entity keywords and no atom aliases — the shape an anonymous
     /// molecule (e.g. a sub-pattern) projects.
     pub fn is_empty(&self) -> bool {
         self.atom_ids.is_empty()
@@ -196,8 +196,8 @@ impl MoleculeMetadata {
         self.stereo_bond_ids.get(&id).map(String::as_str)
     }
 
-    /// Whether `name` is already bound to any entity id (across all kinds). Linear scan.
-    pub fn contains_id(&self, name: &str) -> bool {
+    /// Whether `name` is already bound as an entity keyword (across all kinds). Linear scan.
+    pub fn contains_keyword(&self, name: &str) -> bool {
         self.atom_ids.values().any(|n| n == name)
             || self.bond_ids.values().any(|n| n == name)
             || self.dative_bond_ids.values().any(|n| n == name)
@@ -409,7 +409,7 @@ impl From<&MoleculeNamespace> for MoleculeMetadata {
 }
 
 /// Direct EDN parsing for `MoleculeAst`. Accepts the same molecule-map
-/// surface as [`MoleculeDsl::from_edn`]; any id keywords or aliases in the
+/// surface as [`MoleculeDsl::from_edn`]; any entity keywords or aliases in the
 /// input resolve to positional indices, then the metadata is discarded —
 /// the result is metadata-free.
 impl<'de> FromEdn<'de> for MoleculeAst {
@@ -437,8 +437,8 @@ impl Display for MoleculeAst {
 }
 
 /// Direct EDN rendering for `MoleculeAst`. Always emits canonical positional
-/// refs (no id keywords, no aliases) since the AST carries no metadata.
-/// For id-bearing surface output, wrap in [`MoleculeDsl`] with appropriate
+/// refs (no entity keywords, no aliases) since the AST carries no metadata.
+/// For keyword-bearing surface output, wrap in [`MoleculeDsl`] with appropriate
 /// [`MoleculeMetadata`] and call [`MoleculeDsl::to_edn`].
 impl ToEdn for MoleculeAst {
     fn to_edn(&self) -> Edn<'static> {
@@ -960,19 +960,21 @@ pub(super) fn render_atom_value(atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<
 fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let spec = render_atom_value(atom, meta);
     match meta.atom_keyword(id) {
-        Some(id) => Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(id.to_string())), spec].into()),
+        Some(keyword) => {
+            Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(keyword.to_string())), spec].into())
+        }
         None => spec,
     }
 }
 
 fn render_atom_ref(id: AtomId, meta: &MoleculeMetadata) -> Edn<'static> {
     match meta.atom_keyword(id) {
-        Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        Some(keyword) => Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         None => Edn::Int(id.index() as i64),
     }
 }
 
-/// A bond entry — `[a b type]`, or `{:id … :atoms [a b] :type type}` when the bond has an id.
+/// A bond entry — `[a b type]`, or `{:id … :atoms [a b] :type type}` when the bond has a keyword.
 /// `type_edn` is the already-rendered `:type` Edn — one bond-dsl for a molecule, or a `[left right]`
 /// vector / op-wrapped map for a span entry; it is not an ast.
 pub(super) fn render_bond_entry(
@@ -1029,10 +1031,10 @@ pub(super) fn render_dative_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
-    if let Some(id) = meta.dative_bond_keyword(id) {
+    if let Some(keyword) = meta.dative_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
-            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+            Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         );
     }
     m.insert(
@@ -1073,10 +1075,10 @@ pub(super) fn render_aromatic_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    if let Some(id) = meta.aromatic_system_keyword(id) {
+    if let Some(keyword) = meta.aromatic_system_keyword(id) {
         m.insert(
             Edn::keyword("id"),
-            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+            Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         );
     }
     m.insert(
@@ -1117,10 +1119,10 @@ pub(super) fn render_multicenter_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    if let Some(id) = meta.multicenter_bond_keyword(id) {
+    if let Some(keyword) = meta.multicenter_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
-            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+            Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         );
     }
     m.insert(
@@ -1161,10 +1163,10 @@ pub(super) fn render_noncovalent_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    if let Some(id) = meta.noncovalent_bond_keyword(id) {
+    if let Some(keyword) = meta.noncovalent_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
-            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+            Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         );
     }
     m.insert(
@@ -1199,10 +1201,10 @@ pub(super) fn render_stereo_atom_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
-    if let Some(id) = meta.stereo_atom_keyword(id) {
+    if let Some(keyword) = meta.stereo_atom_keyword(id) {
         m.insert(
             Edn::keyword("id"),
-            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+            Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         );
     }
     m.insert(Edn::keyword("site"), render_atom_ref(site, meta));
@@ -1239,10 +1241,10 @@ pub(super) fn render_stereo_bond_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
-    if let Some(id) = meta.stereo_bond_keyword(id) {
+    if let Some(keyword) = meta.stereo_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
-            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+            Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         );
     }
     m.insert(Edn::keyword("site"), render_bond_ref(site, meta));
@@ -1282,7 +1284,7 @@ pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &MoleculeMetadata
 
 fn render_bond_ref(id: BondId, meta: &MoleculeMetadata) -> Edn<'static> {
     match meta.bond_keyword(id) {
-        Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        Some(keyword) => Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         None => Edn::Int(id.index() as i64),
     }
 }
@@ -1297,7 +1299,7 @@ fn render_atom_aliases(meta: &MoleculeMetadata) -> Edn<'static> {
 }
 
 // Unresolved, owned-by-value tree that mirrors the EDN shape. Atom entries and
-// per-bond endpoints carry `AtomRef` (index or id); constraint leaves carry
+// per-bond endpoints carry `AtomRef` (index or keyword); constraint leaves carry
 // typed per-entity `Constraint*` variants already parsed from their EDN form.
 // Lowered destructively via `into_ast(self, cfg)` so that allocations move
 // into the final `MoleculeAst`.
@@ -1421,7 +1423,7 @@ impl MoleculeInput {
         } = self;
 
         // Register atoms (positions + keywords), then the bijective aliases. `register_*` enforces
-        // id-disjointness (across every entity kind + aliases) and alias bijectivity as it goes, so
+        // keyword disjointness (across every entity kind + aliases) and alias bijectivity as it goes, so
         // there are no side tables; atom specs resolve against the namespace once it is complete.
         let mut namespace = MoleculeNamespace::default();
         for entry in &atom_entries {
@@ -1623,7 +1625,7 @@ pub(super) fn parse_atom_entry(edn: &Edn<'_>) -> Result<AtomEntryInput, DeError>
         Edn::Vector(v) if v.len() == 2 => {
             let Edn::Keyword(keyword) = &v[0] else {
                 return Err(DeError::TypeMismatch {
-                    expected: "keyword id",
+                    expected: "keyword",
                     got: v[0].kind(),
                     path: vec!["atom-entry".into()],
                 });
