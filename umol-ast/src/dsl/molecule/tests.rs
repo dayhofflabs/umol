@@ -119,6 +119,16 @@ fn test_molecule_dsl_from_edn_atom_aliases() {
 }
 
 #[rstest]
+fn test_molecule_dsl_tree_streaming_metadata_equivalence() {
+    let source = r##"{:atoms [[:a "C"] :x] :bonds [{:id :b :atoms [:a 1] :type :single}] :atom-aliases [:x "N"]}"##;
+    let tree = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
+    let streaming = MoleculeDsl::from_edn_str(source).unwrap();
+
+    assert_eq!(streaming.metadata(), tree.metadata());
+    assert_eq!(streaming.ast(), tree.ast());
+}
+
+#[rstest]
 fn test_molecule_dsl_from_edn_unknown_top_level_key_errors() {
     let edn = read_string(r##"{:atoms [] :bonds [] :bogus 1}"##).unwrap();
     let err = MoleculeDsl::from_edn(&edn).unwrap_err();

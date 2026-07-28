@@ -623,7 +623,7 @@ mod tests {
     use umol_edn::{read_string, EdnKeyword};
 
     use super::super::metadata::MoleculeMetadata;
-    use super::super::namespace::MoleculeNamespace;
+    use super::super::namespace::MoleculeContext;
     use super::*;
 
     #[fixture]
@@ -634,13 +634,14 @@ mod tests {
     }
 
     #[fixture]
-    fn namespace_with_atom_keyword() -> MoleculeNamespace {
-        let mut ns = MoleculeNamespace::default();
+    fn namespace_with_atom_keyword() -> MoleculeContext {
+        let mut context = MoleculeContext::default();
         for i in 0..5 {
-            ns.register_atom((i == 2).then(|| "c1".to_string()))
+            context
+                .register_atom((i == 2).then(|| "c1".to_string()))
                 .unwrap();
         }
-        ns
+        context
     }
 
     #[rstest]
@@ -699,7 +700,7 @@ mod tests {
     #[case::keyword(AtomRef::Keyword("c1".into()), AtomId(2))]
     #[case::index(AtomRef::Index(3), AtomId(3))]
     fn test_atom_ref_resolve(
-        namespace_with_atom_keyword: MoleculeNamespace,
+        namespace_with_atom_keyword: MoleculeContext,
         #[case] r: AtomRef,
         #[case] expected: AtomId,
     ) {
@@ -710,7 +711,7 @@ mod tests {
     #[case::out_of_range_index(AtomRef::Index(9), "9")]
     #[case::unknown_keyword(AtomRef::Keyword("nope".into()), "nope")]
     fn test_atom_ref_resolve_error(
-        namespace_with_atom_keyword: MoleculeNamespace,
+        namespace_with_atom_keyword: MoleculeContext,
         #[case] r: AtomRef,
         #[case] value: &str,
     ) {
@@ -745,13 +746,13 @@ mod tests {
 
     #[rstest]
     fn test_bond_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
-        ns.register_atom(None).unwrap();
-        ns.register_atom(None).unwrap();
-        ns.register_bond(None, AtomId(0), AtomId(1)).unwrap();
+        let mut context = MoleculeContext::default();
+        context.register_atom(None).unwrap();
+        context.register_atom(None).unwrap();
+        context.register_bond(None, AtomId(0), AtomId(1)).unwrap();
         // Endpoint order is immaterial.
         let r = BondRef::Structural([AtomRef::Index(1), AtomRef::Index(0)]);
-        assert_eq!(r.resolve(&ns).unwrap(), BondId(0));
+        assert_eq!(r.resolve(&context).unwrap(), BondId(0));
     }
 
     #[rstest]
@@ -762,11 +763,11 @@ mod tests {
         #[case] kind: &'static str,
         #[case] value: &str,
     ) {
-        let mut ns = MoleculeNamespace::default();
-        ns.register_atom(None).unwrap();
-        ns.register_atom(None).unwrap();
+        let mut context = MoleculeContext::default();
+        context.register_atom(None).unwrap();
+        context.register_atom(None).unwrap();
         assert_eq!(
-            BondRef::Structural(atoms).resolve(&ns).unwrap_err(),
+            BondRef::Structural(atoms).resolve(&context).unwrap_err(),
             ParseError::InvalidRef {
                 kind,
                 value: value.into(),
@@ -788,17 +789,18 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..3 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
-        ns.register_dative_bond(None, &[AtomId(1), AtomId(2)], AtomId(0))
+        context
+            .register_dative_bond(None, &[AtomId(1), AtomId(2)], AtomId(0))
             .unwrap();
         let r = DativeBondRef::Structural(DativeBondParticipants {
             donors: vec![AtomRef::Index(2), AtomRef::Index(1)],
             acceptor: AtomRef::Index(0),
         });
-        assert_eq!(r.resolve(&ns).unwrap(), DativeBondId(0));
+        assert_eq!(r.resolve(&context).unwrap(), DativeBondId(0));
     }
 
     #[rstest]
@@ -816,11 +818,12 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_system_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..3 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
-        ns.register_aromatic_system(None, &[AtomId(2), AtomId(0), AtomId(1)])
+        context
+            .register_aromatic_system(None, &[AtomId(2), AtomId(0), AtomId(1)])
             .unwrap();
         // Atom order is immaterial.
         let r = AromaticSystemRef::Structural(vec![
@@ -828,7 +831,7 @@ mod tests {
             AtomRef::Index(1),
             AtomRef::Index(2),
         ]);
-        assert_eq!(r.resolve(&ns).unwrap(), AromaticSystemId(0));
+        assert_eq!(r.resolve(&context).unwrap(), AromaticSystemId(0));
     }
 
     #[rstest]
@@ -846,18 +849,19 @@ mod tests {
 
     #[rstest]
     fn test_multicenter_bond_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..3 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
-        ns.register_multicenter_bond(None, &[AtomId(0), AtomId(1), AtomId(2)])
+        context
+            .register_multicenter_bond(None, &[AtomId(0), AtomId(1), AtomId(2)])
             .unwrap();
         let r = MulticenterBondRef::Structural(vec![
             AtomRef::Index(2),
             AtomRef::Index(1),
             AtomRef::Index(0),
         ]);
-        assert_eq!(r.resolve(&ns).unwrap(), MulticenterBondId(0));
+        assert_eq!(r.resolve(&context).unwrap(), MulticenterBondId(0));
     }
 
     #[rstest]
@@ -871,14 +875,15 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..4 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
-        ns.register_noncovalent_bond(None, AtomId(3), AtomId(1))
+        context
+            .register_noncovalent_bond(None, AtomId(3), AtomId(1))
             .unwrap();
         let r = NoncovalentBondRef::Structural([AtomRef::Index(1), AtomRef::Index(3)]);
-        assert_eq!(r.resolve(&ns).unwrap(), NoncovalentBondId(0));
+        assert_eq!(r.resolve(&context).unwrap(), NoncovalentBondId(0));
     }
 
     #[rstest]
@@ -908,15 +913,17 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..5 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
         let ligands = [
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         ];
-        ns.register_stereo_atom(None, AtomId(4), &ligands).unwrap();
+        context
+            .register_stereo_atom(None, AtomId(4), &ligands)
+            .unwrap();
         // Ligand frame order is immaterial.
         let r = StereoAtomRef::Structural(StereoAtomParticipants {
             site: AtomRef::Index(4),
@@ -931,20 +938,22 @@ mod tests {
                 },
             ],
         });
-        assert_eq!(r.resolve(&ns).unwrap(), StereoAtomId(0));
+        assert_eq!(r.resolve(&context).unwrap(), StereoAtomId(0));
     }
 
     #[rstest]
     fn test_stereo_atom_ref_resolve_structural_error() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..5 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
         let ligands = [
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         ];
-        ns.register_stereo_atom(None, AtomId(4), &ligands).unwrap();
+        context
+            .register_stereo_atom(None, AtomId(4), &ligands)
+            .unwrap();
         // Same site, wrong ligand set.
         let r = StereoAtomRef::Structural(StereoAtomParticipants {
             site: AtomRef::Index(4),
@@ -954,7 +963,7 @@ mod tests {
             }],
         });
         assert_eq!(
-            r.resolve(&ns).unwrap_err(),
+            r.resolve(&context).unwrap_err(),
             ParseError::InvalidRef {
                 kind: "stereo-atom",
                 value: "site 4".into(),
@@ -985,13 +994,15 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_ref_resolve_structural() {
-        let mut ns = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..4 {
-            ns.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
-        ns.register_bond(None, AtomId(0), AtomId(1)).unwrap();
+        context.register_bond(None, AtomId(0), AtomId(1)).unwrap();
         let ligands = [StereoLigand::new(AtomId(3), StereoLigandKind::Atom)];
-        ns.register_stereo_bond(None, BondId(0), &ligands).unwrap();
+        context
+            .register_stereo_bond(None, BondId(0), &ligands)
+            .unwrap();
         let r = StereoBondRef::Structural(StereoBondParticipants {
             site: BondRef::Index(0),
             ligands: vec![StereoLigandRef {
@@ -999,6 +1010,6 @@ mod tests {
                 atom: AtomRef::Index(3),
             }],
         });
-        assert_eq!(r.resolve(&ns).unwrap(), StereoBondId(0));
+        assert_eq!(r.resolve(&context).unwrap(), StereoBondId(0));
     }
 }

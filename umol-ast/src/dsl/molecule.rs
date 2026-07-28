@@ -31,7 +31,7 @@ use super::edn_utils::{
 use super::error::ParseError;
 use super::metadata::{Metadata, MoleculeMetadata};
 use super::multicenter::MulticenterBondDsl;
-use super::namespace::{MoleculeNamespace, Namespace};
+use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{
     parse_stereo_ligand, read_atom_ref, read_bond_ref, read_stereo_ligand, AtomRef, BondRef,
@@ -107,24 +107,18 @@ impl Display for MoleculeDsl {
 impl<'de> FromEdn<'de> for MoleculeDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let input = parse_molecule_input(edn)?;
-        let (ast, namespace) = input
+        let (ast, context) = input
             .into_ast()
             .map_err(|e| DeError::Custom(e.to_string()))?;
-        Ok(MoleculeDsl::from_parts(
-            ast,
-            MoleculeMetadata::from(&namespace),
-        ))
+        Ok(MoleculeDsl::from_parts(ast, context.into_metadata()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
         let mut de = EdnStreamDeserializer::new(input);
         let mi = read_molecule_input(&mut de)?;
         de.expect_eof()?;
-        let (ast, namespace) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
-        Ok(MoleculeDsl::from_parts(
-            ast,
-            MoleculeMetadata::from(&namespace),
-        ))
+        let (ast, context) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(MoleculeDsl::from_parts(ast, context.into_metadata()))
     }
 }
 
@@ -1128,8 +1122,8 @@ pub(crate) struct StereoBondEntryInput {
 impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
-    /// `MoleculeMetadata`. Called from `FromEdn::from_edn` and the streaming path.
-    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, MoleculeNamespace), ParseError> {
+    /// parse-time context. Called from `FromEdn::from_edn` and the streaming path.
+    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, MoleculeContext), ParseError> {
         let MoleculeInput {
             atoms: atom_entries,
             bonds: bond_entries,
@@ -1145,27 +1139,27 @@ impl MoleculeInput {
 
         // Register atoms (positions + keywords), then the bijective aliases. `register_*` enforces
         // keyword disjointness (across every entity kind + aliases) and alias bijectivity as it goes, so
-        // there are no side tables; atom specs resolve against the namespace once it is complete.
-        let mut namespace = MoleculeNamespace::default();
+        // atom specs resolve against the context once it is complete.
+        let mut context = MoleculeContext::default();
         for entry in &atom_entries {
-            namespace.register_atom(entry.keyword.clone())?;
+            context.register_atom(entry.keyword.clone())?;
         }
         for (name, dsl) in alias_entries {
-            namespace.register_atom_alias(name, dsl)?;
+            context.register_atom_alias(name, *dsl)?;
         }
 
         // Resolve atom aliases.
         let atoms: Vec<AtomAst> = atom_entries
             .into_iter()
-            .map(|entry| resolve_atom_spec(entry.spec, &namespace))
+            .map(|entry| resolve_atom_spec(entry.spec, &context))
             .collect::<Result<_, _>>()?;
 
         // Bonds.
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(bond_entries.len());
         for entry in bond_entries {
-            let a = entry.first.resolve(&namespace)?;
-            let b = entry.second.resolve(&namespace)?;
-            namespace.register_bond(entry.keyword, a, b)?;
+            let a = entry.first.resolve(&context)?;
+            let b = entry.second.resolve(&context)?;
+            context.register_bond(entry.keyword, a, b)?;
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1176,15 +1170,15 @@ impl MoleculeInput {
             let donors = entry
                 .donors
                 .into_iter()
-                .map(|d| d.resolve(&namespace))
+                .map(|d| d.resolve(&context))
                 .collect::<Result<Vec<_>, _>>()?;
             if donors.is_empty() {
                 return Err(ParseError::InvalidValue(
                     "dative bond requires at least one donor".to_string(),
                 ));
             }
-            let acceptor = entry.acceptor.resolve(&namespace)?;
-            namespace.register_dative_bond(entry.keyword, &donors, acceptor)?;
+            let acceptor = entry.acceptor.resolve(&context)?;
+            context.register_dative_bond(entry.keyword, &donors, acceptor)?;
             dative_list.push((donors, acceptor, entry.bond.0));
         }
 
@@ -1195,9 +1189,9 @@ impl MoleculeInput {
             let atoms_resolved: Vec<AtomId> = entry
                 .atoms
                 .into_iter()
-                .map(|r| r.resolve(&namespace))
+                .map(|r| r.resolve(&context))
                 .collect::<Result<_, _>>()?;
-            namespace.register_aromatic_system(entry.keyword, &atoms_resolved)?;
+            context.register_aromatic_system(entry.keyword, &atoms_resolved)?;
             aromatic_list.push((atoms_resolved, entry.system.0));
         }
 
@@ -1208,9 +1202,9 @@ impl MoleculeInput {
             let atoms_resolved: Vec<AtomId> = entry
                 .atoms
                 .into_iter()
-                .map(|r| r.resolve(&namespace))
+                .map(|r| r.resolve(&context))
                 .collect::<Result<_, _>>()?;
-            namespace.register_multicenter_bond(entry.keyword, &atoms_resolved)?;
+            context.register_multicenter_bond(entry.keyword, &atoms_resolved)?;
             multicenter_list.push((atoms_resolved, entry.bond.0));
         }
 
@@ -1218,9 +1212,9 @@ impl MoleculeInput {
         let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondAst)> =
             Vec::with_capacity(noncovalent_entries.len());
         for entry in noncovalent_entries {
-            let first = entry.first.resolve(&namespace)?;
-            let second = entry.second.resolve(&namespace)?;
-            namespace.register_noncovalent_bond(entry.keyword, first, second)?;
+            let first = entry.first.resolve(&context)?;
+            let second = entry.second.resolve(&context)?;
+            context.register_noncovalent_bond(entry.keyword, first, second)?;
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
@@ -1228,13 +1222,13 @@ impl MoleculeInput {
         let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> =
             Vec::with_capacity(stereo_atom_entries.len());
         for entry in stereo_atom_entries {
-            let site = entry.site.resolve(&namespace)?;
+            let site = entry.site.resolve(&context)?;
             let ligands: Vec<StereoLigand> = entry
                 .ligands
                 .into_iter()
-                .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
+                .map(|l| Ok(StereoLigand::new(l.atom.resolve(&context)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_atom(entry.keyword, site, &ligands)?;
+            context.register_stereo_atom(entry.keyword, site, &ligands)?;
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1242,19 +1236,18 @@ impl MoleculeInput {
         let mut stereo_bond_list: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> =
             Vec::with_capacity(stereo_bond_entries.len());
         for entry in stereo_bond_entries {
-            let site = entry.site.resolve(&namespace)?;
+            let site = entry.site.resolve(&context)?;
             let ligands: Vec<StereoLigand> = entry
                 .ligands
                 .into_iter()
-                .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
+                .map(|l| Ok(StereoLigand::new(l.atom.resolve(&context)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_bond(entry.keyword, site, &ligands)?;
+            context.register_stereo_bond(entry.keyword, site, &ligands)?;
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
-        // The namespace is complete; constraints resolve against it directly. `MoleculeMetadata` is
-        // projected only at the DSL boundary, not here.
-        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&namespace)?;
+        // The context is complete; constraints resolve against it directly.
+        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&context)?;
 
         let ast = MoleculeAst::from_parts(MoleculeParts {
             atoms,
@@ -1267,7 +1260,7 @@ impl MoleculeInput {
             stereo_bonds: stereo_bond_list,
             constraints,
         });
-        Ok((ast, namespace))
+        Ok((ast, context))
     }
 }
 

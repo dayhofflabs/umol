@@ -1046,7 +1046,7 @@ mod tests {
     use umol_edn::read_string;
 
     use super::super::metadata::MoleculeMetadata;
-    use super::super::namespace::MoleculeNamespace;
+    use super::super::namespace::MoleculeContext;
     use super::*;
     use crate::ast::constraint::AtomConstraintAst;
     use crate::ast::id::{
@@ -1062,33 +1062,29 @@ mod tests {
 
     /// A namespace with ten entities of each kind, so index refs up to 9 resolve.
     #[fixture]
-    fn full_namespace() -> MoleculeNamespace {
-        let mut namespace = MoleculeNamespace::default();
+    fn full_namespace() -> MoleculeContext {
+        let mut context = MoleculeContext::default();
         for _ in 0..10 {
-            namespace.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
         for _ in 0..10 {
-            namespace.register_bond(None, AtomId(0), AtomId(1)).unwrap();
-            namespace
+            context.register_bond(None, AtomId(0), AtomId(1)).unwrap();
+            context
                 .register_dative_bond(None, &[AtomId(0)], AtomId(1))
                 .unwrap();
-            namespace
+            context
                 .register_aromatic_system(None, &[AtomId(0)])
                 .unwrap();
-            namespace
+            context
                 .register_multicenter_bond(None, &[AtomId(0)])
                 .unwrap();
-            namespace
+            context
                 .register_noncovalent_bond(None, AtomId(0), AtomId(1))
                 .unwrap();
-            namespace
-                .register_stereo_atom(None, AtomId(0), &[])
-                .unwrap();
-            namespace
-                .register_stereo_bond(None, BondId(0), &[])
-                .unwrap();
+            context.register_stereo_atom(None, AtomId(0), &[]).unwrap();
+            context.register_stereo_bond(None, BondId(0), &[]).unwrap();
         }
-        namespace
+        context
     }
 
     #[rustfmt::skip]
@@ -1152,7 +1148,7 @@ mod tests {
         "{:stereo-bond-any-ligand [0 {:degree 3}]}")]
     fn test_relational_constraint_dsl_roundtrip(
         meta: MoleculeMetadata,
-        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
         #[case] input: RelationalConstraint,
         #[case] edn_source: &str,
     ) {
@@ -1194,17 +1190,17 @@ mod tests {
 
     #[rstest]
     fn test_relational_constraint_dsl_rejects_out_of_range_atom() {
-        let mut namespace = MoleculeNamespace::default();
-        namespace.register_atom(None).unwrap();
-        namespace.register_atom(None).unwrap();
-        namespace
+        let mut context = MoleculeContext::default();
+        context.register_atom(None).unwrap();
+        context.register_atom(None).unwrap();
+        context
             .register_dative_bond(None, &[AtomId(0)], AtomId(1))
             .unwrap();
         let dsl = RelationalConstraintDsl::DativeBondDonor {
             bond: DativeBondRef::Index(0),
             atom: AtomRef::Index(99),
         };
-        let err = dsl.into_ast(&namespace).unwrap_err();
+        let err = dsl.into_ast(&context).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {
@@ -1216,12 +1212,12 @@ mod tests {
 
     #[rstest]
     fn test_relational_constraint_dsl_rejects_out_of_range_bond() {
-        let mut namespace = MoleculeNamespace::default();
+        let mut context = MoleculeContext::default();
         for _ in 0..5 {
-            namespace.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
         for _ in 0..5 {
-            namespace
+            context
                 .register_dative_bond(None, &[AtomId(0)], AtomId(1))
                 .unwrap();
         }
@@ -1229,7 +1225,7 @@ mod tests {
             bond: DativeBondRef::Index(99),
             atom: AtomRef::Index(0),
         };
-        let err = dsl.into_ast(&namespace).unwrap_err();
+        let err = dsl.into_ast(&context).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {

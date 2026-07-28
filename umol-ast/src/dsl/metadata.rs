@@ -4,7 +4,6 @@ use bimap::BiBTreeMap;
 use thiserror::Error;
 
 use super::atom::AtomDsl;
-use super::namespace::MoleculeNamespace;
 use super::reaction::ReactionNamespace;
 use crate::ast::correspondence::MoleculeCorrespondence;
 use crate::ast::entity::Entity;
@@ -160,61 +159,6 @@ impl Metadata for MoleculeMetadata {
 
     fn entity(&self, keyword: &str) -> Option<Entity> {
         self.entity(keyword)
-    }
-}
-
-impl From<&MoleculeNamespace> for MoleculeMetadata {
-    /// Project the namespace to its roundtrip subset: the eight `id → keyword` maps (the inverse of
-    /// the namespace's `find_by_keyword`) plus the atom aliases. The namespace is the source of truth;
-    /// this is the derived view — parse-only data (participant indexes, counts) is dropped.
-    fn from(namespace: &MoleculeNamespace) -> Self {
-        let mut metadata = MoleculeMetadata::new();
-        for (id, keyword) in namespace.atom_keywords() {
-            metadata
-                .set_keyword(Entity::Atom(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.bond_keywords() {
-            metadata
-                .set_keyword(Entity::Bond(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.dative_bond_keywords() {
-            metadata
-                .set_keyword(Entity::DativeBond(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.aromatic_system_keywords() {
-            metadata
-                .set_keyword(Entity::AromaticSystem(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.multicenter_bond_keywords() {
-            metadata
-                .set_keyword(Entity::MulticenterBond(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.noncovalent_bond_keywords() {
-            metadata
-                .set_keyword(Entity::NoncovalentBond(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.stereo_atom_keywords() {
-            metadata
-                .set_keyword(Entity::StereoAtom(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (id, keyword) in namespace.stereo_bond_keywords() {
-            metadata
-                .set_keyword(Entity::StereoBond(id), keyword)
-                .expect("namespace keywords are disjoint");
-        }
-        for (name, dsl) in namespace.atom_aliases() {
-            metadata
-                .add_atom_alias(name, dsl.clone())
-                .expect("namespace aliases are bijective and disjoint from keywords");
-        }
-        metadata
     }
 }
 
@@ -405,52 +349,17 @@ impl From<MoleculeMetadata> for ReactionMetadata {
 impl From<&ReactionNamespace> for ReactionMetadata {
     /// Project the roundtrip metadata: the lhs molecule's metadata, the delta-introduced entity
     /// keywords (any delta that binds a name, not only `:add`), and the reaction's top-level aliases.
-    fn from(ns: &ReactionNamespace) -> Self {
+    fn from(namespace: &ReactionNamespace) -> Self {
         let mut metadata = ReactionMetadata {
-            lhs: MoleculeMetadata::from(ns.lhs()),
+            lhs: namespace.lhs().metadata().clone(),
             ..Default::default()
         };
-        for (id, name) in ns.deltas().atom_keywords() {
+        for (entity, name) in namespace.deltas().metadata().iter_keywords() {
             metadata
-                .set_delta_keyword(Entity::Atom(id), name)
+                .set_delta_keyword(entity, name)
                 .expect("reaction namespace keywords are disjoint");
         }
-        for (id, name) in ns.deltas().bond_keywords() {
-            metadata
-                .set_delta_keyword(Entity::Bond(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (id, name) in ns.deltas().dative_bond_keywords() {
-            metadata
-                .set_delta_keyword(Entity::DativeBond(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (id, name) in ns.deltas().aromatic_system_keywords() {
-            metadata
-                .set_delta_keyword(Entity::AromaticSystem(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (id, name) in ns.deltas().multicenter_bond_keywords() {
-            metadata
-                .set_delta_keyword(Entity::MulticenterBond(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (id, name) in ns.deltas().noncovalent_bond_keywords() {
-            metadata
-                .set_delta_keyword(Entity::NoncovalentBond(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (id, name) in ns.deltas().stereo_atom_keywords() {
-            metadata
-                .set_delta_keyword(Entity::StereoAtom(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (id, name) in ns.deltas().stereo_bond_keywords() {
-            metadata
-                .set_delta_keyword(Entity::StereoBond(id), name)
-                .expect("reaction namespace keywords are disjoint");
-        }
-        for (name, dsl) in ns.atom_aliases() {
+        for (name, dsl) in namespace.atom_aliases() {
             metadata
                 .add_atom_alias(name, dsl.clone())
                 .expect("reaction namespace aliases are bijective and disjoint from keywords");

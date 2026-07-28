@@ -57,7 +57,7 @@ pub use multicenter::{
     parse_multicenter_bond, parse_multicenter_bond_update, MulticenterBondConstraintDsl,
     MulticenterBondDsl, MulticenterBondPredicate, MulticenterBondUpdateDsl,
 };
-pub use namespace::{MoleculeNamespace, Namespace};
+pub use namespace::{MoleculeContext, Namespace};
 pub use noncovalent::{
     parse_noncovalent_bond, parse_noncovalent_bond_update, NoncovalentBondConstraintDsl,
     NoncovalentBondDsl, NoncovalentBondUpdateDsl,

@@ -41,8 +41,8 @@ pub(crate) use umol_ast::ast::{
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
-    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MoleculeDefaults,
-    MoleculeDsl, MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, MulticenterBondUpdateDsl,
+    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MoleculeContext,
+    MoleculeDefaults, MoleculeDsl, MoleculeMetadata, MulticenterBondDsl, MulticenterBondUpdateDsl,
     NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError, ReactionDefaults, ReactionDsl,
     ReactionSpanDsl, StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants,
     StereoAtomUpdateDsl, StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants,

@@ -43,7 +43,7 @@ proptest! {
     /// `resolve_*_structural` paths cross-checked against positional resolution.
     #[test]
     fn test_structural_ref_resolves_like_positional(ast in molecule_ast_strategy()) {
-        let ns = MoleculeNamespace::from_ast(&ast);
+        let context = MoleculeContext::from_ast(&ast);
 
         let bond_keys: Vec<[usize; 2]> = ast
             .bonds()
@@ -60,8 +60,8 @@ proptest! {
             let [a, b] = view.atom_ids();
             let structural =
                 BondRef::Structural([AtomRef::Index(a.index()), AtomRef::Index(b.index())]);
-            prop_assert_eq!(structural.resolve(&ns), Ok(BondId(i as u32)));
-            prop_assert_eq!(BondRef::Index(i).resolve(&ns), Ok(BondId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(BondId(i as u32)));
+            prop_assert_eq!(BondRef::Index(i).resolve(&context), Ok(BondId(i as u32)));
         }
 
         let dative_keys: Vec<(Vec<usize>, usize)> = ast
@@ -76,7 +76,7 @@ proptest! {
             let donors = view.donor_ids().map(|a| AtomRef::Index(a.index())).collect();
             let acceptor = AtomRef::Index(view.acceptor_id().index());
             let structural = DativeBondRef::Structural(DativeBondParticipants { donors, acceptor });
-            prop_assert_eq!(structural.resolve(&ns), Ok(DativeBondId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(DativeBondId(i as u32)));
         }
 
         let aromatic_keys: Vec<Vec<usize>> = ast
@@ -90,7 +90,7 @@ proptest! {
             }
             let atoms = view.atom_ids().map(|a| AtomRef::Index(a.index())).collect();
             let structural = AromaticSystemRef::Structural(atoms);
-            prop_assert_eq!(structural.resolve(&ns), Ok(AromaticSystemId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(AromaticSystemId(i as u32)));
         }
 
         let multicenter_keys: Vec<Vec<usize>> = ast
@@ -104,7 +104,7 @@ proptest! {
             }
             let atoms = view.atom_ids().map(|a| AtomRef::Index(a.index())).collect();
             let structural = MulticenterBondRef::Structural(atoms);
-            prop_assert_eq!(structural.resolve(&ns), Ok(MulticenterBondId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(MulticenterBondId(i as u32)));
         }
 
         let noncovalent_keys: Vec<[usize; 2]> = ast
@@ -122,7 +122,7 @@ proptest! {
             let [a, b] = view.atom_ids();
             let structural =
                 NoncovalentBondRef::Structural([AtomRef::Index(a.index()), AtomRef::Index(b.index())]);
-            prop_assert_eq!(structural.resolve(&ns), Ok(NoncovalentBondId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(NoncovalentBondId(i as u32)));
         }
 
         // Stereo sites are distinct (one element per site), so keys never collide.
@@ -136,7 +136,7 @@ proptest! {
                 })
                 .collect();
             let structural = StereoAtomRef::Structural(StereoAtomParticipants { site, ligands });
-            prop_assert_eq!(structural.resolve(&ns), Ok(StereoAtomId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(StereoAtomId(i as u32)));
         }
 
         for (i, view) in ast.stereo_bonds().iter().enumerate() {
@@ -149,7 +149,7 @@ proptest! {
                 })
                 .collect();
             let structural = StereoBondRef::Structural(StereoBondParticipants { site, ligands });
-            prop_assert_eq!(structural.resolve(&ns), Ok(StereoBondId(i as u32)));
+            prop_assert_eq!(structural.resolve(&context), Ok(StereoBondId(i as u32)));
         }
     }
 
@@ -157,14 +157,14 @@ proptest! {
     /// (`InvalidRef`), never silently hitting a wrong id — one guaranteed-miss perturbation per kind.
     #[test]
     fn test_structural_ref_wrong_participants_error(ast in molecule_ast_strategy()) {
-        let ns = MoleculeNamespace::from_ast(&ast);
+        let context = MoleculeContext::from_ast(&ast);
 
         // A two-atom entity: a self-pair is never a bond (endpoints are distinct).
         for view in ast.bonds().iter() {
             let [a, _] = view.atom_ids();
             let wrong = BondRef::Structural([AtomRef::Index(a.index()), AtomRef::Index(a.index())]);
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "bond", .. })
             ), "structural ref over wrong participants must not resolve");
         }
@@ -173,7 +173,7 @@ proptest! {
             let wrong =
                 NoncovalentBondRef::Structural([AtomRef::Index(a.index()), AtomRef::Index(a.index())]);
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "noncovalent-bond", .. })
             ), "structural ref over wrong participants must not resolve");
         }
@@ -183,7 +183,7 @@ proptest! {
             let first = view.atom_ids().next().expect("aromatic systems are non-empty");
             let wrong = AromaticSystemRef::Structural(vec![AtomRef::Index(first.index())]);
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "aromatic-system", .. })
             ), "structural ref over wrong participants must not resolve");
         }
@@ -191,7 +191,7 @@ proptest! {
             let first = view.atom_ids().next().expect("multicenter bonds are non-empty");
             let wrong = MulticenterBondRef::Structural(vec![AtomRef::Index(first.index())]);
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "multicenter-bond", .. })
             ), "structural ref over wrong participants must not resolve");
         }
@@ -202,7 +202,7 @@ proptest! {
             let acceptor = AtomRef::Index(view.donor_ids().next().expect("≥ 1 donor").index());
             let wrong = DativeBondRef::Structural(DativeBondParticipants { donors, acceptor });
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "dative-bond", .. })
             ), "structural ref over wrong participants must not resolve");
         }
@@ -223,7 +223,7 @@ proptest! {
             ligands.push(first);
             let wrong = StereoAtomRef::Structural(StereoAtomParticipants { site, ligands });
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "stereo-atom", .. })
             ), "structural ref over wrong participants must not resolve");
         }
@@ -242,7 +242,7 @@ proptest! {
             ligands.push(first);
             let wrong = StereoBondRef::Structural(StereoBondParticipants { site, ligands });
             prop_assert!(matches!(
-                wrong.resolve(&ns),
+                wrong.resolve(&context),
                 Err(ParseError::InvalidRef { kind: "stereo-bond", .. })
             ), "structural ref over wrong participants must not resolve");
         }

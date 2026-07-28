@@ -21,7 +21,7 @@ use super::error::ParseError;
 use super::metadata::{Metadata, MoleculeMetadata};
 use super::molecule::{read_molecule_input, MoleculeDsl};
 use super::multicenter::MulticenterBondConstraintDsl;
-use super::namespace::{MoleculeNamespace, Namespace};
+use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
@@ -1317,8 +1317,8 @@ impl MoleculeConstraintDsl {
                 atoms: resolve_atom_subset(atoms, namespace)?,
             },
             Self::SubPattern { anchor, pattern } => {
-                let pattern_namespace = MoleculeNamespace::from_ast(&pattern);
-                let anchor_ast = anchor.into_ast_pair(namespace, &pattern_namespace)?;
+                let pattern_context = MoleculeContext::from_ast(&pattern);
+                let anchor_ast = anchor.into_ast_pair(namespace, &pattern_context)?;
                 MoleculeConstraint::SubPattern {
                     anchor: anchor_ast,
                     pattern,
@@ -2170,7 +2170,7 @@ mod tests {
     use umol_edn::read_string;
     use umol_perm::{Orientation, Permutation};
 
-    use super::super::namespace::MoleculeNamespace;
+    use super::super::namespace::MoleculeContext;
     use super::*;
     use crate::ast::constraint::{
         AromaticValenceAst, AtomConstraintAst, BondConstraintAst, DativeBondConstraintAst,
@@ -2258,33 +2258,29 @@ mod tests {
 
     /// A namespace with ten entities of each kind, so index refs up to 9 resolve.
     #[fixture]
-    fn full_namespace() -> MoleculeNamespace {
-        let mut namespace = MoleculeNamespace::default();
+    fn full_namespace() -> MoleculeContext {
+        let mut context = MoleculeContext::default();
         for _ in 0..10 {
-            namespace.register_atom(None).unwrap();
+            context.register_atom(None).unwrap();
         }
         for _ in 0..10 {
-            namespace.register_bond(None, AtomId(0), AtomId(1)).unwrap();
-            namespace
+            context.register_bond(None, AtomId(0), AtomId(1)).unwrap();
+            context
                 .register_dative_bond(None, &[AtomId(0)], AtomId(1))
                 .unwrap();
-            namespace
+            context
                 .register_aromatic_system(None, &[AtomId(0)])
                 .unwrap();
-            namespace
+            context
                 .register_multicenter_bond(None, &[AtomId(0)])
                 .unwrap();
-            namespace
+            context
                 .register_noncovalent_bond(None, AtomId(0), AtomId(1))
                 .unwrap();
-            namespace
-                .register_stereo_atom(None, AtomId(0), &[])
-                .unwrap();
-            namespace
-                .register_stereo_bond(None, BondId(0), &[])
-                .unwrap();
+            context.register_stereo_atom(None, AtomId(0), &[]).unwrap();
+            context.register_stereo_bond(None, BondId(0), &[]).unwrap();
         }
-        namespace
+        context
     }
 
     #[rustfmt::skip]
@@ -2300,7 +2296,7 @@ mod tests {
     #[case::connected(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1), AtomId(2)]) }, "{:connected {:atoms [0 1 2]}}")]
     #[case::connected_all(MoleculeConstraint::Connected { atoms: None }, "{:connected {}}")]
     fn test_molecule_constraint_dsl_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
         #[case] input: MoleculeConstraint,
         #[case] edn_source: &str,
     ) {
@@ -2347,7 +2343,7 @@ mod tests {
             StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
@@ -2399,8 +2395,8 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_empty_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
-        #[from(full_namespace)] pattern: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
+        #[from(full_namespace)] pattern: MoleculeContext,
     ) {
         let meta = MoleculeMetadata::default();
         let anchor = SubPatternAnchor::new();
@@ -2415,8 +2411,8 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_atoms_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
-        #[from(full_namespace)] pattern: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
+        #[from(full_namespace)] pattern: MoleculeContext,
     ) {
         let meta = MoleculeMetadata::default();
         let mut anchor = SubPatternAnchor::new();
@@ -2432,8 +2428,8 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_stereo_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
-        #[from(full_namespace)] pattern: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
+        #[from(full_namespace)] pattern: MoleculeContext,
     ) {
         let meta = MoleculeMetadata::default();
         let mut anchor = SubPatternAnchor::new();
@@ -2512,7 +2508,7 @@ mod tests {
     #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(ValueAst::Lit(4)))]),
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
     fn test_constraint_dsl_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
@@ -2569,7 +2565,7 @@ mod tests {
     #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
     #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
     fn test_bond_constraint_dsl_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_namespace)] namespace: MoleculeContext,
         #[case] input: BondConstraintAst,
         #[case] edn_source: &str,
     ) {
@@ -2622,7 +2618,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_constraints_dsl_empty_roundtrip(#[from(full_namespace)] namespace: MoleculeNamespace) {
+    fn test_constraints_dsl_empty_roundtrip(#[from(full_namespace)] namespace: MoleculeContext) {
         let meta = MoleculeMetadata::default();
         let cs = Constraints::new();
         let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
@@ -2634,7 +2630,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_constraints_dsl_multi_roundtrip(#[from(full_namespace)] namespace: MoleculeNamespace) {
+    fn test_constraints_dsl_multi_roundtrip(#[from(full_namespace)] namespace: MoleculeContext) {
         let meta = MoleculeMetadata::default();
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(

@@ -40,7 +40,7 @@ use super::molecule::{
     NoncovalentBondEntryInput, StereoAtomEntryInput, StereoBondEntryInput,
 };
 use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
-use super::namespace::{MoleculeNamespace, Namespace};
+use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::{NoncovalentBondDsl, NoncovalentBondUpdateDsl};
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
@@ -205,8 +205,8 @@ fn raise_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
 /// most one hits). Counts come from `deltas`, which continues `lhs` and so carries the reaction-wide
 /// total — the single running counter that hands out delta ids on `register_*`.
 pub struct ReactionNamespace {
-    lhs: MoleculeNamespace,
-    deltas: MoleculeNamespace,
+    lhs: MoleculeContext,
+    deltas: MoleculeContext,
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
 }
 
@@ -218,8 +218,8 @@ enum EntityScope {
 }
 
 impl ReactionNamespace {
-    fn new(lhs: MoleculeNamespace) -> Self {
-        let deltas = MoleculeNamespace::continuation(&lhs);
+    fn new(lhs: MoleculeContext) -> Self {
+        let deltas = MoleculeContext::continuation(&lhs);
         Self {
             lhs,
             deltas,
@@ -232,41 +232,47 @@ impl ReactionNamespace {
     /// reproduces the per-kind delta ids). Refs resolve against it as they did at parse time.
     pub fn from_ast(reaction: &ReactionAst) -> Self {
         let free = "anonymous delta entity registration never collides";
-        let mut ns = Self::new(MoleculeNamespace::from_ast(&reaction.lhs));
+        let mut context = Self::new(MoleculeContext::from_ast(&reaction.lhs));
         for delta in reaction.deltas.iter() {
             match delta {
                 Delta::Atom(AtomDelta::Add { .. }) => {
-                    ns.register_atom(None).expect(free);
+                    context.register_atom(None).expect(free);
                 }
                 Delta::Bond(BondDelta::Add { atoms, .. }) => {
-                    ns.register_bond(None, atoms[0], atoms[1]).expect(free);
+                    context.register_bond(None, atoms[0], atoms[1]).expect(free);
                 }
                 Delta::DativeBond(DativeBondDelta::Add {
                     donors, acceptor, ..
                 }) => {
-                    ns.register_dative_bond(None, donors, *acceptor)
+                    context
+                        .register_dative_bond(None, donors, *acceptor)
                         .expect(free);
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, .. }) => {
-                    ns.register_aromatic_system(None, atoms).expect(free);
+                    context.register_aromatic_system(None, atoms).expect(free);
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, .. }) => {
-                    ns.register_multicenter_bond(None, atoms).expect(free);
+                    context.register_multicenter_bond(None, atoms).expect(free);
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, .. }) => {
-                    ns.register_noncovalent_bond(None, atoms[0], atoms[1])
+                    context
+                        .register_noncovalent_bond(None, atoms[0], atoms[1])
                         .expect(free);
                 }
                 Delta::StereoAtom(StereoAtomDelta::Add { site, ligands, .. }) => {
-                    ns.register_stereo_atom(None, *site, ligands).expect(free);
+                    context
+                        .register_stereo_atom(None, *site, ligands)
+                        .expect(free);
                 }
                 Delta::StereoBond(StereoBondDelta::Add { site, ligands, .. }) => {
-                    ns.register_stereo_bond(None, *site, ligands).expect(free);
+                    context
+                        .register_stereo_bond(None, *site, ligands)
+                        .expect(free);
                 }
                 _ => {}
             }
         }
-        ns
+        context
     }
 
     /// Whether a keyword is free in the lhs + reaction-alias scope. The delta scope is checked by the
@@ -366,13 +372,17 @@ impl ReactionNamespace {
         self.atom_aliases
             .iter()
             .any(|(_, existing)| existing.as_ref() == dsl)
-            || self.lhs.atom_aliases().any(|(_, existing)| existing == dsl)
+            || self
+                .lhs
+                .metadata()
+                .iter_atom_aliases()
+                .any(|(_, existing)| existing == dsl)
     }
 
-    pub(super) fn lhs(&self) -> &MoleculeNamespace {
+    pub(super) fn lhs(&self) -> &MoleculeContext {
         &self.lhs
     }
-    pub(super) fn deltas(&self) -> &MoleculeNamespace {
+    pub(super) fn deltas(&self) -> &MoleculeContext {
         &self.deltas
     }
     pub(super) fn atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
@@ -614,25 +624,25 @@ impl ReactionInput {
         // and the reaction's top-level aliases. Every ref — entity and constraint — resolves against
         // it; `register_*` advances the delta counter and `ReactionMetadata` is projected from it at
         // the end. No forward refs: only entities bound earlier in delta order are visible.
-        let mut ns = ReactionNamespace::new(lhs_namespace);
+        let mut namespace = ReactionNamespace::new(lhs_namespace);
 
         // Top-level reaction aliases, bijective (a name colliding with an lhs alias, or a target
         // already aliased, errors); they resolve in delta atom-specs alongside the lhs aliases.
         for (name, dsl) in atom_aliases {
-            ns.register_atom_alias(name, dsl)?;
+            namespace.register_atom_alias(name, dsl)?;
         }
 
         let mut resolved = Deltas::new();
         for delta in deltas {
             match delta {
                 DeltaInput::AtomAdd(entry) => {
-                    let ast = resolve_atom_spec(entry.spec, &ns)?;
-                    let id = ns.register_atom(entry.keyword)?;
+                    let ast = resolve_atom_spec(entry.spec, &namespace)?;
+                    let id = namespace.register_atom(entry.keyword)?;
                     resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
                 }
                 DeltaInput::AtomRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "atom",
@@ -645,8 +655,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::AtomModify(r, update) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "atom",
@@ -658,9 +668,9 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::BondAdd(entry) => {
-                    let a = entry.first.resolve(&ns)?;
-                    let b = entry.second.resolve(&ns)?;
-                    let id = ns.register_bond(entry.keyword, a, b)?;
+                    let a = entry.first.resolve(&namespace)?;
+                    let b = entry.second.resolve(&namespace)?;
+                    let id = namespace.register_bond(entry.keyword, a, b)?;
                     resolved.push(Delta::Bond(BondDelta::Add {
                         id,
                         atoms: [a, b],
@@ -668,8 +678,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::BondRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "bond",
@@ -683,8 +693,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::BondModify(r, update) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "bond",
@@ -699,10 +709,10 @@ impl ReactionInput {
                     let donors = entry
                         .donors
                         .into_iter()
-                        .map(|d| d.resolve(&ns))
+                        .map(|d| d.resolve(&namespace))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let acceptor = entry.acceptor.resolve(&ns)?;
-                    let id = ns.register_dative_bond(entry.keyword, &donors, acceptor)?;
+                    let acceptor = entry.acceptor.resolve(&namespace)?;
+                    let id = namespace.register_dative_bond(entry.keyword, &donors, acceptor)?;
                     resolved.push(Delta::DativeBond(DativeBondDelta::Add {
                         id,
                         donors,
@@ -711,8 +721,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::DativeBondRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.dative_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.dative_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "dative bond",
@@ -728,8 +738,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::DativeBondModify(r, update) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.dative_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.dative_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "dative bond",
@@ -744,9 +754,9 @@ impl ReactionInput {
                     let atoms = entry
                         .atoms
                         .into_iter()
-                        .map(|a| a.resolve(&ns))
+                        .map(|a| a.resolve(&namespace))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let id = ns.register_aromatic_system(entry.keyword, &atoms)?;
+                    let id = namespace.register_aromatic_system(entry.keyword, &atoms)?;
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Add {
                         id,
                         atoms,
@@ -754,8 +764,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::AromaticSystemRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.aromatic_system_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.aromatic_system_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "aromatic system",
@@ -770,8 +780,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.aromatic_system_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.aromatic_system_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "aromatic system",
@@ -787,9 +797,9 @@ impl ReactionInput {
                     let atoms = entry
                         .atoms
                         .into_iter()
-                        .map(|a| a.resolve(&ns))
+                        .map(|a| a.resolve(&namespace))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let id = ns.register_multicenter_bond(entry.keyword, &atoms)?;
+                    let id = namespace.register_multicenter_bond(entry.keyword, &atoms)?;
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Add {
                         id,
                         atoms,
@@ -797,8 +807,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::MulticenterBondRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.multicenter_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.multicenter_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "multicenter bond",
@@ -813,8 +823,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.multicenter_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.multicenter_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "multicenter bond",
@@ -828,9 +838,9 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::NoncovalentBondAdd(entry) => {
-                    let first = entry.first.resolve(&ns)?;
-                    let second = entry.second.resolve(&ns)?;
-                    let id = ns.register_noncovalent_bond(entry.keyword, first, second)?;
+                    let first = entry.first.resolve(&namespace)?;
+                    let second = entry.second.resolve(&namespace)?;
+                    let id = namespace.register_noncovalent_bond(entry.keyword, first, second)?;
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                         id,
                         atoms: [first, second],
@@ -838,8 +848,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::NoncovalentBondRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.noncovalent_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.noncovalent_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "noncovalent bond",
@@ -853,8 +863,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.noncovalent_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.noncovalent_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "noncovalent bond",
@@ -868,13 +878,13 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::StereoAtomAdd(entry) => {
-                    let site = entry.site.resolve(&ns)?;
+                    let site = entry.site.resolve(&namespace)?;
                     let ligands = entry
                         .ligands
                         .into_iter()
-                        .map(|l| Ok(StereoLigand::new(l.atom.resolve(&ns)?, l.kind)))
+                        .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    let id = ns.register_stereo_atom(entry.keyword, site, &ligands)?;
+                    let id = namespace.register_stereo_atom(entry.keyword, site, &ligands)?;
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Add {
                         id,
                         site,
@@ -883,8 +893,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoAtomRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "stereo atom",
@@ -903,8 +913,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoAtomModify(r, rhs) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "stereo atom",
@@ -916,8 +926,8 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::StereoAtomSwap(r, kind) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo atom",
@@ -927,8 +937,8 @@ impl ReactionInput {
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Swap { id, kind }));
                 }
                 DeltaInput::StereoAtomMirror(r, kind) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo atom",
@@ -938,8 +948,8 @@ impl ReactionInput {
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Mirror { id, kind }));
                 }
                 DeltaInput::StereoAtomApply(r, kind, permutation) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo atom",
@@ -953,13 +963,13 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoBondAdd(entry) => {
-                    let site = entry.site.resolve(&ns)?;
+                    let site = entry.site.resolve(&namespace)?;
                     let ligands = entry
                         .ligands
                         .into_iter()
-                        .map(|l| Ok(StereoLigand::new(l.atom.resolve(&ns)?, l.kind)))
+                        .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    let id = ns.register_stereo_bond(entry.keyword, site, &ligands)?;
+                    let id = namespace.register_stereo_bond(entry.keyword, site, &ligands)?;
                     resolved.push(Delta::StereoBond(StereoBondDelta::Add {
                         id,
                         site,
@@ -968,8 +978,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoBondRemove(r) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "stereo bond",
@@ -988,8 +998,8 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "stereo bond",
@@ -1001,8 +1011,8 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::StereoBondSwap(r, kind) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo bond",
@@ -1012,8 +1022,8 @@ impl ReactionInput {
                     resolved.push(Delta::StereoBond(StereoBondDelta::Swap { id, kind }));
                 }
                 DeltaInput::StereoBondMirror(r, kind) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo bond",
@@ -1023,8 +1033,8 @@ impl ReactionInput {
                     resolved.push(Delta::StereoBond(StereoBondDelta::Mirror { id, kind }));
                 }
                 DeltaInput::StereoBondApply(r, kind, permutation) => {
-                    let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
+                    let id = r.resolve(&namespace)?;
+                    if namespace.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo bond",
@@ -1038,16 +1048,16 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::ConstraintAdd(dsl) => {
-                    let c = dsl.into_ast(&ns)?;
+                    let c = dsl.into_ast(&namespace)?;
                     resolved.push(Delta::Constraint(ConstraintDelta::Add(c)));
                 }
                 DeltaInput::ConstraintRemove(dsl) => {
-                    let c = dsl.into_ast(&ns)?;
+                    let c = dsl.into_ast(&namespace)?;
                     resolved.push(Delta::Constraint(ConstraintDelta::Remove(c)));
                 }
             }
         }
-        let metadata = ReactionMetadata::from(&ns);
+        let metadata = ReactionMetadata::from(&namespace);
         Ok((
             ReactionAst {
                 lhs,
@@ -4254,12 +4264,12 @@ mod tests {
         Err(ParseError::InvalidRef { kind: "bond", value: "[0 0]".to_string() })
     )]
     fn test_reaction_namespace_from_ast(
-        #[from(add_bond_reaction)] ns: ReactionNamespace,
+        #[from(add_bond_reaction)] namespace: ReactionNamespace,
         #[case] a: usize,
         #[case] b: usize,
         #[case] expected: Result<BondId, ParseError>,
     ) {
         let structural = BondRef::Structural([AtomRef::Index(a), AtomRef::Index(b)]);
-        assert_eq!(structural.resolve(&ns), expected);
+        assert_eq!(structural.resolve(&namespace), expected);
     }
 }

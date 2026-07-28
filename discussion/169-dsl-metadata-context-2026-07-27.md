@@ -734,7 +734,7 @@ the already-built metadata. Migrate molecule and subpattern parsing, public
 exports, tests, and documentation in the same change. Test count allocation,
 participant lookup, keyword lookup, collision rollback, and parsed metadata
 equivalence between tree and streaming parsers. This is breaking and goes
-red→green across the workspace. [dep: S2f]
+red→green across the workspace. **Implemented (green).** [dep: S2f]
 
 **S3b — `ReactionContext`.** In `dsl/reaction.rs`, rename
 `ReactionNamespace` to `ReactionContext`. Build `ReactionMetadata` directly
