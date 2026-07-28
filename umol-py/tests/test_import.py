@@ -279,6 +279,10 @@ def test_deferred_member(owner, name):
         (umol.MoleculeAst.pattern_fingerprint, "(self, /, *, config=None)"),
         (umol.MoleculeAst.structural_fingerprint, "(self, /, *, config)"),
         (
+            umol.ReactionAst.from_reaction_smiles,
+            "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
+        ),
+        (
             umol.ReactionAst.compose,
             "(self, /, other, *, algorithm=Ellipsis)",
         ),

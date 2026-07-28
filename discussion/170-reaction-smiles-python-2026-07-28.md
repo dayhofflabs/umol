@@ -352,7 +352,7 @@ the two reaction sides.
   propagation of non-default IO/model/resolve settings, and representative
   syntax and interpretation failures through each applicable entry point.
 
-### S2 — Python reaction-SMILES ingestion
+### S2 — Python reaction-SMILES ingestion **Done**
 
 #### S2a — Map reaction input errors to Python exceptions **Done**
 
@@ -369,7 +369,7 @@ the two reaction sides.
   including both sides where side context matters. Assert the exact Python
   exception type and message.
 
-#### S2b — Add `ReactionAst.from_reaction_smiles`
+#### S2b — Add `ReactionAst.from_reaction_smiles` **Done**
 
 - **Modules:** `umol-py/src/reaction.rs`,
   `umol-py/tests/test_reaction.py`, `umol-py/tests/test_import.py`

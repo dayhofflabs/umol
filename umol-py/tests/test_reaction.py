@@ -1,18 +1,25 @@
+import re
+
 import pytest
 
 from umol import (
+    AromaticityModel,
+    AromaticityResolveConfig,
     AtomAst,
     AtomDelta,
     AtomFieldChange,
+    ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     ContradictionError,
     Correspondence,
     Delta,
     Deltas,
     Element,
+    ElementScope,
     Entity,
     InvalidStructureError,
     MetadataError,
+    ModelConversionError,
     MoleculeAst,
     MoleculeCorrespondence,
     ParseError,
@@ -21,8 +28,16 @@ from umol import (
     ReactionDefaults,
     ReactionDerivation,
     ReactionMetadata,
+    ResolveConfig,
+    RingLimits,
+    SmilesIoConfig,
+    StereoResolveConfig,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
+    UnderdeterminedError,
+    ValenceEntry,
+    ValenceModel,
+    ValenceTable,
     ValueAst,
 )
 
@@ -694,6 +709,195 @@ def test_reactionast_from_sides_error(lhs_count, rhs_count, atom_pairs, message)
             rhs,
             (pair for pair in atom_pairs),
         )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "[CH4:1]>>[CH4:1]",
+            '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] '
+            ":bonds []}}",
+            id="mapped",
+        ),
+        pytest.param(
+            "[CH4:1]>>[CH4:1].[OH2:2]",
+            '{:deltas [{:atom {:add '
+            '"O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] '
+            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}',
+            id="one-sided",
+        ),
+        pytest.param(
+            "C>>O",
+            '{:deltas [{:atom {:remove 0}} {:atom {:add '
+            '"O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] '
+            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}',
+            id="unmapped",
+        ),
+    ],
+)
+def test_reaction_ast_from_reaction_smiles(source, expected):
+    assert ReactionAst.from_reaction_smiles(source) == ReactionAst.parse(expected)
+
+
+def test_reaction_ast_from_reaction_smiles_io_config():
+    with pytest.raises(
+        UnderdeterminedError,
+        match="^reactants: resolution underdetermined$",
+    ):
+        ReactionAst.from_reaction_smiles(
+            "C~C>>C.C",
+            io_config=SmilesIoConfig.lenient(),
+        )
+
+
+def test_reaction_ast_from_reaction_smiles_resolve_config():
+    reaction = ReactionAst.from_reaction_smiles(
+        "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(
+                delocalize_charge=False,
+                reset_aromatic_valence=False,
+            ),
+            stereo=StereoResolveConfig(),
+        ),
+    )
+
+    assert reaction == ReactionAst.parse(
+        '{:deltas [] :lhs {:aromatic-systems '
+        '[{:atoms [0 1 2] :type "[0,1,1]#c0#u0#s"}] '
+        ':atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" '
+        '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+        '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+        ':bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
+        '[1 2 "1#c0#u0#s#a"]]}}'
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "kwargs", "error_type", "message"),
+    [
+        pytest.param(" C>>C", {}, ParseError, "Leading whitespace", id="syntax"),
+        pytest.param(
+            "C[S@]C>>",
+            {},
+            ModelConversionError,
+            "reactants: tetrahedral stereo at atom 1 with 2 ligands, "
+            "expected 3 or 4 ligands",
+            id="model-conversion",
+        ),
+        pytest.param(
+            "[nH]1cccc1>>",
+            {
+                "chemistry_model": ChemistryModel(
+                    valence=ChemistryModel.default().valence,
+                    aromaticity=AromaticityModel.Clar(
+                        scope=ElementScope.Any(),
+                        ring_limits=RingLimits(),
+                    ),
+                    stereo=ChemistryModel.default().stereo,
+                )
+            },
+            ContradictionError,
+            "reactants: clar: non-benzenoid input: Clar model requires "
+            "benzenoid input but non-carbon aromatic atoms are present",
+            id="contradiction",
+        ),
+        pytest.param(
+            "*>>",
+            {},
+            UnderdeterminedError,
+            "reactants: resolution underdetermined",
+            id="underdetermined",
+        ),
+        pytest.param(
+            "c1ccccc1>>",
+            {
+                "chemistry_model": ChemistryModel(
+                    valence=ValenceModel.Counts(
+                        table=ValenceTable(
+                            entries={
+                                Element("C"): ValenceEntry(
+                                    target_covalences=[4],
+                                    aromatic_valences=[0],
+                                )
+                            }
+                        )
+                    ),
+                    aromaticity=AromaticityModel.Hmo(
+                        scope=ElementScope.Any(),
+                        stabilization_threshold=0.375,
+                    ),
+                    stereo=ChemistryModel.default().stereo,
+                )
+            },
+            RuntimeError,
+            "reactants: hmo: missing parameters: no Van-Catledge parameters "
+            "for C with 0 pi-electrons",
+            id="execution",
+        ),
+        pytest.param(
+            "[C:1].[O:1]>>[C:1]",
+            {},
+            ModelConversionError,
+            "atom-map class 1 cannot be projected into one correspondence "
+            "(reactant atoms: 2, product atoms: 1)",
+            id="ambiguous-map",
+        ),
+        pytest.param(
+            "C>O>C",
+            {},
+            ModelConversionError,
+            "reaction agents cannot be represented in ReactionAst",
+            id="agents",
+        ),
+    ],
+)
+def test_reaction_ast_from_reaction_smiles_error(
+    source,
+    kwargs,
+    error_type,
+    message,
+):
+    with pytest.raises(error_type, match=f"^{re.escape(message)}$"):
+        ReactionAst.from_reaction_smiles(source, **kwargs)
+
+
+def test_reaction_ast_from_reaction_smiles_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^ReactionAst.from_reaction_smiles\\(\\) takes 1 positional "
+            "arguments but 2 were given$"
+        ),
+    ):
+        ReactionAst.from_reaction_smiles(
+            "C>>C",
+            SmilesIoConfig.opensmiles(),
+        )
+
+
+def test_reaction_ast_from_reaction_smiles_ownership():
+    source = "[CH4:1]>>[CH4:1]"
+    io_config = SmilesIoConfig.opensmiles()
+    chemistry_model = ChemistryModel.default()
+    resolve_config = ResolveConfig(
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    reaction = ReactionAst.from_reaction_smiles(
+        source,
+        io_config=io_config,
+        chemistry_model=chemistry_model,
+        resolve_config=resolve_config,
+    )
+
+    del source, io_config, chemistry_model, resolve_config
+
+    assert reaction == ReactionAst.parse(
+        '{:deltas [] :lhs {:atoms '
+        '["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}'
+    )
 
 
 def test_reactionast_str_components():

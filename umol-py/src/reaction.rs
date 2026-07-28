@@ -15,9 +15,13 @@ use umol_ast::ast::{
 };
 use umol_ast::dsl::ReactionDsl as AstReactionDsl;
 use umol_graph::fingerprint::featurize_reaction;
+use umol_graph::ingest::ingest_reaction_smiles_with;
+use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
+use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_core::{
     Correspondence, NodeId, SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
+use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
 use crate::algorithm::{
     CommonSubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
@@ -28,12 +32,16 @@ use crate::correspondence::{
 use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
 use crate::error::{
-    contradiction_error, fingerprint_error, metadata_error, parse_error, InvalidStructureError,
+    contradiction_error, fingerprint_error, metadata_error, parse_error,
+    reaction_smiles_input_error, InvalidStructureError,
 };
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
 use crate::metadata::ReactionMetadata;
+use crate::model::ChemistryModel;
 use crate::molecule::MoleculeAst;
+use crate::resolve::ResolveConfig;
+use crate::smiles::SmilesIoConfig;
 
 /// Algorithms used to enumerate matches for reaction application.
 #[pyclass(eq, frozen, from_py_object)]
@@ -262,6 +270,36 @@ impl ReactionAst {
         let atom = atom_correspondence(atom_pairs, lhs.atoms().count(), rhs.atoms().count())?;
 
         Self::from_rust(py, AstReactionAst::from_sides(lhs, rhs, atom))
+    }
+
+    /// Ingest a determined reaction from reaction SMILES under explicit IO,
+    /// chemistry, and resolution policies.
+    #[staticmethod]
+    #[pyo3(signature = (
+        source,
+        *,
+        io_config=None,
+        chemistry_model=None,
+        resolve_config=None,
+    ))]
+    fn from_reaction_smiles(
+        py: Python<'_>,
+        source: &str,
+        io_config: Option<SmilesIoConfig>,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<Self> {
+        let io_config =
+            io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
+        let chemistry_model =
+            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        let reaction =
+            ingest_reaction_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
+                .map_err(reaction_smiles_input_error)?;
+
+        Self::from_rust(py, reaction)
     }
 
     /// The live left-hand molecule component.

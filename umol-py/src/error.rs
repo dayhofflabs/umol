@@ -87,7 +87,6 @@ pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
 }
 
 /// Map the resolved reaction-SMILES operation error onto the public Python taxonomy.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn reaction_smiles_input_error(error: GraphReactionSmilesInputError) -> PyErr {
     match error {
         GraphReactionSmilesInputError::Syntax(error) => ParseError::new_err(error.to_string()),
