@@ -815,6 +815,7 @@ half-designed alias-authoring surface in this stage. Add a Python
 entity kind, lhs/delta reaction scope, mutation collisions, exception
 types/messages, repr, and molecule metadata remapping through the existing
 Python `MoleculeCorrespondence`. This is additive and stays green.
+**Implemented (green).**
 [dep: S2i, S4d, S5a]
 
 ### S6 — Python DSL parse and render operations

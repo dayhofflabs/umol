@@ -65,7 +65,7 @@ use crate::{
     electrons::ElectronCountsAst,
     element::Element,
     error::{
-        ContradictionError, InvalidStructureError, ModelConversionError, ParseError,
+        ContradictionError, InvalidStructureError, MetadataError, ModelConversionError, ParseError,
         UnderdeterminedError,
     },
     fingerprint::config::{
@@ -78,6 +78,7 @@ use crate::{
         SignedHashedFeatureSet,
     },
     fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet},
+    metadata::{Entity, MoleculeMetadata, ReactionMetadata},
     model::{
         aromaticity::{AromaticityConfig, AromaticityModel, RingLimits},
         stereo::{StereoKindModel, StereoModel},
@@ -137,6 +138,8 @@ mod error;
 #[cfg(feature = "graph")]
 mod fingerprint;
 #[cfg(feature = "graph")]
+mod metadata;
+#[cfg(feature = "graph")]
 mod model;
 #[cfg(feature = "graph")]
 mod molecule;
@@ -190,6 +193,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "ModelConversionError",
             module.py().get_type::<ModelConversionError>(),
         )?;
+        module.add("MetadataError", module.py().get_type::<MetadataError>())?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add(
             "UnderdeterminedError",
@@ -255,6 +259,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionCombinedFingerprint>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
+        module.add_class::<Entity>()?;
+        module.add_class::<MoleculeMetadata>()?;
+        module.add_class::<ReactionMetadata>()?;
         module.add_class::<SubstructureSearchConfig>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;

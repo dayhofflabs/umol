@@ -256,6 +256,10 @@ impl MoleculeCorrespondence {
     pub(crate) fn from_rust(correspondence: AstMoleculeCorrespondence) -> Self {
         Self(correspondence)
     }
+
+    pub(crate) fn inner(&self) -> &AstMoleculeCorrespondence {
+        &self.0
+    }
 }
 
 #[cfg(test)]

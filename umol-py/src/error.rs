@@ -3,7 +3,7 @@
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::{create_exception, PyErr};
 use umol_ast::ast::Contradiction as AstContradiction;
-use umol_ast::dsl::ParseError as AstParseError;
+use umol_ast::dsl::{MetadataError as AstMetadataError, ParseError as AstParseError};
 use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
 use umol_graph::ingest::SmilesInputError as GraphSmilesInputError;
 
@@ -37,6 +37,13 @@ create_exception!(
 
 create_exception!(
     umol,
+    MetadataError,
+    PyException,
+    "Raised when DSL metadata violates namespace or AST-coherence invariants."
+);
+
+create_exception!(
+    umol,
     UnderdeterminedError,
     PyException,
     "Raised when an operation requires a determined molecular value."
@@ -50,6 +57,11 @@ pub(crate) fn parse_error(error: AstParseError) -> PyErr {
 /// Map an `umol_ast` contradiction onto the catchable `umol.ContradictionError`.
 pub(crate) fn contradiction_error(error: AstContradiction) -> PyErr {
     ContradictionError::new_err(error.to_string())
+}
+
+/// Map an `umol_ast` metadata error onto the catchable `umol.MetadataError`.
+pub(crate) fn metadata_error(error: AstMetadataError) -> PyErr {
+    MetadataError::new_err(error.to_string())
 }
 
 /// Map the resolved SMILES operation error onto the public Python taxonomy.
@@ -89,6 +101,8 @@ pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
 mod tests {
     use pyo3::prelude::*;
     use rstest::rstest;
+    use umol_ast::ast::{AtomId, BondId, Entity};
+    use umol_ast::dsl::MetadataError as AstMetadataError;
     use umol_graph::ingest::ingest_smiles;
     use umol_graph::ops::aromaticity::{
         AromaticityContradiction as GraphAromaticityContradiction,
@@ -120,6 +134,34 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "reached a contradiction"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::duplicate_keyword(
+        AstMetadataError::DuplicateKeyword("site".to_string()),
+        "duplicate keyword: site",
+    )]
+    #[case::duplicate_atom_alias(
+        AstMetadataError::DuplicateAtomAlias("carbon".to_string()),
+        "atom DSL already has alias: carbon",
+    )]
+    #[case::entity_out_of_range(
+        AstMetadataError::EntityOutOfRange(Entity::Atom(AtomId(2))),
+        "metadata entity is out of range: atom 2"
+    )]
+    #[case::entity_not_added(
+        AstMetadataError::EntityNotAdded(Entity::Bond(BondId(3))),
+        "metadata entity is not introduced by an add delta: bond 3"
+    )]
+    fn test_metadata_error(#[case] input: AstMetadataError, #[case] expected_message: &str) {
+        Python::attach(|py| {
+            let error = metadata_error(input);
+            assert!(error.is_instance_of::<MetadataError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
             );
         });
     }

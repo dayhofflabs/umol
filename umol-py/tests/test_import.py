@@ -74,6 +74,7 @@ PUBLIC_EXPORTS = frozenset(
     Element
     ElementAst
     ElementScope
+    Entity
     FluxionalityAst
     HashedFeatureSet
     HashedFingerprintConfig
@@ -84,11 +85,13 @@ PUBLIC_EXPORTS = frozenset(
     LigandSymmetryAst
     MaximumIndependentSetAlgorithm
     MemOp
+    MetadataError
     ModelConversionError
     MoleculeAst
     MoleculeConstraint
     MoleculeCorrespondence
     MoleculeDefaults
+    MoleculeMetadata
     MulticenterBondAst
     MulticenterBondConstraintAst
     MulticenterBondConstraintKey
@@ -121,6 +124,7 @@ PUBLIC_EXPORTS = frozenset(
     ReactionCombinedFingerprintConfig
     ReactionDefaults
     ReactionDerivation
+    ReactionMetadata
     ReactionSide
     RefinementRounds
     RelOp
