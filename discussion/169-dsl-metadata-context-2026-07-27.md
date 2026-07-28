@@ -460,7 +460,7 @@ Alias-specific whole-molecule rendering remains on `MoleculeMetadata`.
 Re-export the public trait from the same DSL surface as today and test that
 the generic reference renderers produce the existing positional and keyword
 forms. This is an internal rewire and stays green after its caller migration.
-[dep: S0a, S1c]
+**Implemented (green).** [dep: S0a, S1c]
 
 **S2b — `MoleculeMetadata`.** Replace the eight one-way maps in
 `MoleculeMetadata` with

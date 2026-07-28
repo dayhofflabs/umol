@@ -1100,6 +1100,24 @@ fn test_render_atom_entry(#[case] keyword: Option<&str>, #[case] expected: &str)
 }
 
 #[rstest]
+#[case::positional(MoleculeMetadata::new(), AtomId(2), "2")]
+#[case::keyword(
+    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    AtomId(2),
+    ":carbon",
+)]
+fn test_render_atom_ref(
+    #[case] metadata: MoleculeMetadata,
+    #[case] id: AtomId,
+    #[case] expected: &str,
+) {
+    assert_eq!(
+        render_atom_ref(id, &metadata),
+        read_string(expected).unwrap()
+    );
+}
+
+#[rstest]
 #[case::no_id(None, r#"[0 1 "1"]"#)]
 #[case::with_id(Some("b0"), r#"{:id :b0 :atoms [0 1] :type "1"}"#)]
 fn test_render_bond_entry(#[case] keyword: Option<&str>, #[case] expected: &str) {
@@ -1219,4 +1237,64 @@ fn test_render_stereo_bond_entry(#[case] keyword: Option<&str>, #[case] expected
         &meta,
     );
     assert_eq!(entry, read_string(expected).unwrap());
+}
+
+#[rstest]
+#[case::atom_positional(
+    MoleculeMetadata::new(),
+    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+    "2"
+)]
+#[case::atom_keyword(
+    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+    ":carbon",
+)]
+#[case::implicit_hydrogen_positional(
+    MoleculeMetadata::new(),
+    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+    "[:h 2]"
+)]
+#[case::implicit_hydrogen_keyword(
+    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+    "[:h :carbon]",
+)]
+#[case::lone_pair_positional(
+    MoleculeMetadata::new(),
+    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+    "[:lp 2]"
+)]
+#[case::lone_pair_keyword(
+    MoleculeMetadata::new().with_atom_keyword(AtomId(2), "carbon"),
+    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+    "[:lp :carbon]",
+)]
+fn test_render_stereo_ligand(
+    #[case] metadata: MoleculeMetadata,
+    #[case] ligand: StereoLigand,
+    #[case] expected: &str,
+) {
+    assert_eq!(
+        render_stereo_ligand(ligand, &metadata),
+        read_string(expected).unwrap()
+    );
+}
+
+#[rstest]
+#[case::positional(MoleculeMetadata::new(), BondId(2), "2")]
+#[case::keyword(
+    MoleculeMetadata::new().with_bond_keyword(BondId(2), "bond"),
+    BondId(2),
+    ":bond",
+)]
+fn test_render_bond_ref(
+    #[case] metadata: MoleculeMetadata,
+    #[case] id: BondId,
+    #[case] expected: &str,
+) {
+    assert_eq!(
+        render_bond_ref(id, &metadata),
+        read_string(expected).unwrap()
+    );
 }

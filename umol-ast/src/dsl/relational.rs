@@ -16,7 +16,7 @@ use umol_edn::{DeError, Edn, EdnKeyword, EdnMap, FromEdn, ToEdn};
 
 use super::atom::AtomConstraintDsl;
 use super::error::ParseError;
-use super::molecule::Metadata;
+use super::metadata::Metadata;
 use super::namespace::Namespace;
 use super::refs::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,

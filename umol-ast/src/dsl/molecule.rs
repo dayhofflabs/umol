@@ -31,6 +31,7 @@ use super::edn_utils::{
     required_key, two_atom_refs, unexpected_byte_kind,
 };
 use super::error::ParseError;
+use super::metadata::Metadata;
 use super::multicenter::MulticenterBondDsl;
 use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
@@ -327,21 +328,6 @@ impl MoleculeMetadata {
         self.add_atom_alias(name, atom);
         self
     }
-}
-
-/// The **render** query surface — `ref::denote` reads this to turn an AST id back into a surface
-/// ref (id → keyword, else index). The mirror of `Namespace`: `MoleculeMetadata` implements it, and
-/// later a reaction's `ReactionMetadata`. `denote` never emits the structural form, so `Metadata`
-/// carries no participant index — it is a subset of the namespace surface.
-pub trait Metadata {
-    fn atom_keyword(&self, id: AtomId) -> Option<&str>;
-    fn bond_keyword(&self, id: BondId) -> Option<&str>;
-    fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str>;
-    fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str>;
-    fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str>;
-    fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str>;
-    fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str>;
-    fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str>;
 }
 
 impl Metadata for MoleculeMetadata {
@@ -967,7 +953,7 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn
     }
 }
 
-fn render_atom_ref(id: AtomId, meta: &MoleculeMetadata) -> Edn<'static> {
+fn render_atom_ref(id: AtomId, meta: &impl Metadata) -> Edn<'static> {
     match meta.atom_keyword(id) {
         Some(keyword) => Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         None => Edn::Int(id.index() as i64),
@@ -1273,7 +1259,7 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
     Edn::Vector(entries.into())
 }
 
-pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &MoleculeMetadata) -> Edn<'static> {
+pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &impl Metadata) -> Edn<'static> {
     let atom = render_atom_ref(ligand.atom_id, meta);
     match ligand.kind {
         StereoLigandKind::Atom => atom,
@@ -1282,7 +1268,7 @@ pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &MoleculeMetadata
     }
 }
 
-fn render_bond_ref(id: BondId, meta: &MoleculeMetadata) -> Edn<'static> {
+fn render_bond_ref(id: BondId, meta: &impl Metadata) -> Edn<'static> {
     match meta.bond_keyword(id) {
         Some(keyword) => Edn::Keyword(EdnKeyword::owned(keyword.to_string())),
         None => Edn::Int(id.index() as i64),

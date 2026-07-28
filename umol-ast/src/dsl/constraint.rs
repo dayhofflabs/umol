@@ -18,7 +18,8 @@ use super::edn_utils::{
     unexpected_byte_kind,
 };
 use super::error::ParseError;
-use super::molecule::{read_molecule_input, Metadata, MoleculeDsl, MoleculeMetadata};
+use super::metadata::Metadata;
+use super::molecule::{read_molecule_input, MoleculeDsl, MoleculeMetadata};
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::NoncovalentBondConstraintDsl;

@@ -12,7 +12,7 @@ use super::edn_utils::{
     atoms_pair, atoms_vec, eof_err, parse_vec, read_map, read_vec, required_key, two_atom_refs,
 };
 use super::error::ParseError;
-use super::molecule::Metadata;
+use super::metadata::Metadata;
 use super::namespace::Namespace;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
