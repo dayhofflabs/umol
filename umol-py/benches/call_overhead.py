@@ -39,7 +39,7 @@ def main() -> None:
     )
     hashed_ecfp = partial(
         molecule.hashed_fingerprint,
-        config=HashedFingerprintConfig.Ecfp(),
+        config=HashedFingerprintConfig.Ecfp(radius=2),
     )
     hashed_morgan = partial(
         molecule.hashed_fingerprint,

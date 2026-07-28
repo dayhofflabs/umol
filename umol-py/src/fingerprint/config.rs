@@ -156,7 +156,7 @@ pub enum HashedFingerprintConfig {
         radius: u32,
         ring_config: RingConfig,
     },
-    #[pyo3(constructor = (*, radius=2, hashing_scheme=EcfpHashScheme::Xxh3Width64V1(), ring_config=RingConfig::default()))]
+    #[pyo3(constructor = (*, radius, hashing_scheme=EcfpHashScheme::Xxh3Width64V1(), ring_config=RingConfig::default()))]
     Ecfp {
         radius: u32,
         hashing_scheme: EcfpHashScheme,

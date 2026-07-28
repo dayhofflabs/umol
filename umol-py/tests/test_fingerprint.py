@@ -101,7 +101,7 @@ def test_ecfp_hash_scheme():
             "RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
-            HashedFingerprintConfig.Ecfp(),
+            HashedFingerprintConfig.Ecfp(radius=2),
             HashedFingerprintConfig.Ecfp(
                 radius=2,
                 hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
@@ -208,6 +208,7 @@ def test_hashed_fingerprint_config(value, expected, expected_repr):
         ),
         (
             HashedFingerprintConfig.Ecfp(
+                radius=2,
                 ring_config=RingConfig(
                     simple_cycle_algorithm=(
                         SimpleCycleEnumerationAlgorithm.ReadTarjan()
@@ -324,7 +325,7 @@ def test_structural_fingerprint_config(max_bonds):
     "molecule",
     [
         HashedFingerprintConfig.Morgan(),
-        HashedFingerprintConfig.Ecfp(),
+        HashedFingerprintConfig.Ecfp(radius=2),
         HashedFingerprintConfig.Wl(
             rounds=RefinementRounds.Fixed(rounds=3),
         ),
@@ -344,6 +345,7 @@ def test_reaction_combined_fingerprint_config(variant, variant_name, molecule):
     "constructor",
     [
         RefinementRounds.Fixed,
+        HashedFingerprintConfig.Ecfp,
         HashedFingerprintConfig.Wl,
         StructuralFingerprintConfig,
         ReactionCombinedFingerprintConfig.Difference,
@@ -435,7 +437,7 @@ def test_fingerprint_result_constructor_error(result_type):
             id="morgan-explicit-ring-config",
         ),
         (
-            HashedFingerprintConfig.Ecfp(),
+            HashedFingerprintConfig.Ecfp(radius=2),
             [
                 63839236075656913,
                 1189585227353469813,
@@ -447,6 +449,7 @@ def test_fingerprint_result_constructor_error(result_type):
         ),
         pytest.param(
             HashedFingerprintConfig.Ecfp(
+                radius=2,
                 ring_config=RingConfig(
                     simple_cycle_algorithm=(
                         SimpleCycleEnumerationAlgorithm.ReadTarjan()
@@ -521,11 +524,12 @@ def test_molecule_ast_hashed_fingerprint(ethanol, config, expected_ids):
             id="morgan-explicit-ring-config",
         ),
         (
-            HashedFingerprintConfig.Ecfp(),
+            HashedFingerprintConfig.Ecfp(radius=2),
             [(5513743581508886362, 1), (16149328945726899460, 2)],
         ),
         pytest.param(
             HashedFingerprintConfig.Ecfp(
+                radius=2,
                 ring_config=RingConfig(
                     simple_cycle_algorithm=(
                         SimpleCycleEnumerationAlgorithm.ReadTarjan()

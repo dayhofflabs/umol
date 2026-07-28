@@ -304,7 +304,7 @@ def test_public_operation_signature(operation, expected):
         ),
         (
             umol.HashedFingerprintConfig.Ecfp,
-            "(*, radius=2, hashing_scheme=Ellipsis, ring_config=Ellipsis)",
+            "(*, radius, hashing_scheme=Ellipsis, ring_config=Ellipsis)",
         ),
         (
             umol.HashedFingerprintConfig.Wl,
