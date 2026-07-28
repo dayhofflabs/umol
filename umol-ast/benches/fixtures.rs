@@ -17,8 +17,8 @@ pub const MOL_INDOLE: &str = r##"{:atoms [[:n "N"] [:c2 "C"] [:c3 "C"] [:c3a "C"
 
 pub const MOL_DIBORANE: &str = r##"{:atoms ["B" "H" "B" "H" "H" "H" "H" "H"]
  :bonds [[0 4 "1"] [0 5 "1"] [2 6 "1"] [2 7 "1"]]
- :multicenter-bonds [{:atoms [0 1 2] :type "[1,0,1]#e2"}
-               {:atoms [0 3 2] :type "[1,0,1]#e2"}]}"##;
+ :multicenter-bonds [{:atoms [0 1 2] :type "[1,1,0]#e2"}
+               {:atoms [0 3 2] :type "[0,1,1]#e2"}]}"##;
 
 pub const MOL_WITH_CONSTRAINTS: &str = r##"{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
  :bonds [{:id :b1 :atoms [:c1 :c2] :type "1"} {:id :b2 :atoms [:c2 :o] :type "1"}]
