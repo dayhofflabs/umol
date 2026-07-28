@@ -10,7 +10,9 @@ from umol import (
     Delta,
     Deltas,
     Element,
+    Entity,
     InvalidStructureError,
+    MetadataError,
     MoleculeAst,
     MoleculeCorrespondence,
     ParseError,
@@ -18,6 +20,7 @@ from umol import (
     ReactionAst,
     ReactionDefaults,
     ReactionDerivation,
+    ReactionMetadata,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
     ValueAst,
@@ -321,6 +324,280 @@ def test_reactionast_parse_keyword_error():
         )
 
 
+@pytest.mark.parametrize(
+    ("source", "lhs_entity", "delta_entity"),
+    [
+        pytest.param(
+            '{:lhs {:atoms [[:lhs "C"]]} '
+            ':deltas [{:atom {:add [:delta "O"]}}]}',
+            Entity.Atom(0),
+            Entity.Atom(1),
+            id="atom",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "C"] '
+            ':bonds [{:id :lhs :atoms [0 1] :type "1"}]} '
+            ':deltas [{:bond {:add '
+            '{:id :delta :atoms [0 1] :type "2"}}}]}',
+            Entity.Bond(0),
+            Entity.Bond(1),
+            id="bond",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "N"] '
+            ':dative-bonds [{:id :lhs :donors [0] '
+            ':acceptor 1 :type "1#R"}]} '
+            ':deltas [{:dative-bond {:add '
+            '{:id :delta :donors [0] :acceptor 1 :type "1#R"}}}]}',
+            Entity.DativeBond(0),
+            Entity.DativeBond(1),
+            id="dative-bond",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "C"] '
+            ':aromatic-systems [{:id :lhs :atoms [0 1] :type "*#e2"}]} '
+            ':deltas [{:aromatic-system {:add '
+            '{:id :delta :atoms [0 1] :type "*#e2"}}}]}',
+            Entity.AromaticSystem(0),
+            Entity.AromaticSystem(1),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["B" "H" "B"] '
+            ':multicenter-bonds [{:id :lhs :atoms [0 1 2] '
+            ':type "[1,0,1]#e2"}]} '
+            ':deltas [{:multicenter-bond {:add '
+            '{:id :delta :atoms [0 1 2] :type "[1,0,1]#e2"}}}]}',
+            Entity.MulticenterBond(0),
+            Entity.MulticenterBond(1),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["N" "H"] '
+            ':noncovalent-bonds [{:id :lhs :atoms [0 1] :type "Hbd"}]} '
+            ':deltas [{:noncovalent-bond {:add '
+            '{:id :delta :atoms [0 1] :type "Hbd"}}}]}',
+            Entity.NoncovalentBond(0),
+            Entity.NoncovalentBond(1),
+            id="noncovalent-bond",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+            ':stereo-atoms [{:id :lhs :site 0 :ligands [1 2 3 4] '
+            ':type "Th1"}]} '
+            ':deltas [{:stereo-atom {:add '
+            '{:id :delta :site 0 :ligands [1 2 3 4] :type "Th2"}}}]}',
+            Entity.StereoAtom(0),
+            Entity.StereoAtom(1),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "C" "C" "C"] '
+            ':bonds [{:id :first :atoms [0 1] :type "2"} '
+            '{:id :second :atoms [2 3] :type "2"}] '
+            ':stereo-bonds [{:id :lhs :site :first '
+            ':ligands [2 3] :type "Ct1"}]} '
+            ':deltas [{:stereo-bond {:add '
+            '{:id :delta :site :second :ligands [0 1] :type "Ct2"}}}]}',
+            Entity.StereoBond(0),
+            Entity.StereoBond(1),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_reactionast_parse_with_metadata(source, lhs_entity, delta_entity):
+    reaction, metadata = ReactionAst.parse_with_metadata(source)
+
+    rendered = reaction.render_with_metadata(metadata)
+    reparsed, reparsed_metadata = ReactionAst.parse_with_metadata(rendered)
+
+    assert metadata.lhs.keyword(lhs_entity) == "lhs"
+    assert metadata.lhs.entity("lhs") == lhs_entity
+    assert metadata.delta_keyword(delta_entity) == "delta"
+    assert metadata.delta_entity("delta") == delta_entity
+    assert reparsed == reaction
+    assert reparsed_metadata == metadata
+    assert reparsed.render_with_metadata(reparsed_metadata) == rendered
+
+
+def test_reactionast_parse_with_metadata_aliases():
+    source = (
+        '{:lhs {:atoms [:lhs-c] :atom-aliases [:lhs-c "C"]} '
+        ':atom-aliases [:delta-o "O"] '
+        ':deltas [{:atom {:add [:added :delta-o]}}]}'
+    )
+
+    reaction, metadata = ReactionAst.parse_with_metadata(source)
+    rendered = reaction.render_with_metadata(metadata)
+    reparsed, reparsed_metadata = ReactionAst.parse_with_metadata(rendered)
+
+    assert repr(metadata.lhs) == (
+        "MoleculeMetadata(keywords=[], atom_alias_count=1)"
+    )
+    assert repr(metadata) == (
+        "ReactionMetadata(lhs=MoleculeMetadata(keywords=[], "
+        "atom_alias_count=1), "
+        'delta_keywords=[(Entity.Atom(1), "added")], '
+        "reaction_atom_alias_count=1)"
+    )
+    assert reparsed == reaction
+    assert reparsed_metadata == metadata
+    assert reparsed.render_with_metadata(reparsed_metadata) == rendered
+
+
+def test_reactionast_parse_with_metadata_defaults():
+    reaction, metadata = ReactionAst.parse_with_metadata(
+        '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
+        ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
+        defaults=ReactionDefaults.ground(),
+    )
+
+    assert reaction == ReactionAst(
+        MoleculeAst.from_parts(
+            [
+                AtomAst.parse(
+                    "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
+                )
+            ]
+        ),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.Add(
+                        id=1,
+                        ast=AtomAst.parse(
+                            "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"
+                        ),
+                    )
+                )
+            ]
+        ),
+    )
+    assert metadata == ReactionMetadata()
+
+
+def test_reactionast_parse_with_metadata_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^ReactionAst.parse_with_metadata\\(\\) takes 1 positional "
+            "arguments but 2 were given$"
+        ),
+    ):
+        ReactionAst.parse_with_metadata(
+            '{:lhs {:atoms ["C"]} :deltas []}',
+            ReactionDefaults.ground(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("reaction", "defaults", "expected"),
+    [
+        pytest.param(
+            ReactionAst(
+                MoleculeAst.from_parts([AtomAst(Element("C"))]),
+                Deltas(
+                    [
+                        Delta.Atom(
+                            AtomDelta.Add(
+                                id=1,
+                                ast=AtomAst(Element("O")),
+                            )
+                        )
+                    ]
+                ),
+            ),
+            ReactionDefaults(),
+            '{:deltas [{:atom {:add "O"}}] '
+            ':lhs {:atoms ["C"] :bonds []}}',
+            id="required",
+        ),
+        pytest.param(
+            ReactionAst(
+                MoleculeAst.from_parts(
+                    [
+                        AtomAst.parse(
+                            "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
+                        )
+                    ]
+                ),
+                Deltas(
+                    [
+                        Delta.Atom(
+                            AtomDelta.Add(
+                                id=1,
+                                ast=AtomAst.parse(
+                                    "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"
+                                ),
+                            )
+                        )
+                    ]
+                ),
+            ),
+            ReactionDefaults.ground(),
+            '{:deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}] '
+            ':lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}}',
+            id="ground",
+        ),
+    ],
+)
+def test_reactionast_render(reaction, defaults, expected):
+    assert reaction.render(defaults=defaults) == expected
+
+
+def test_reactionast_render_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match="^ReactionAst.render\\(\\) takes 0 positional arguments but 1 was given$",
+    ):
+        ReactionAst().render(ReactionDefaults())
+
+
+def test_reactionast_render_with_metadata():
+    reaction, metadata = ReactionAst.parse_with_metadata(
+        '{:lhs {:atoms [[:carbon "C"] [:oxygen "O"]]} '
+        ':deltas [{:atom {:add [:nitrogen "N"]}}]}'
+    )
+
+    assert reaction.render_with_metadata(metadata) == (
+        '{:deltas [{:atom {:add [:nitrogen "N"]}}] '
+        ':lhs {:atoms [[:carbon "C"] [:oxygen "O"]] :bonds []}}'
+    )
+    assert reaction.render() == (
+        '{:deltas [{:atom {:add "N"}}] '
+        ':lhs {:atoms ["C" "O"] :bonds []}}'
+    )
+
+
+def test_reactionast_render_with_metadata_error():
+    metadata = ReactionMetadata()
+    metadata.set_delta_keyword(Entity.Atom(1), "absent")
+
+    with pytest.raises(
+        MetadataError,
+        match=(
+            "^metadata entity is not introduced by an add delta: atom 1$"
+        ),
+    ):
+        ReactionAst(
+            MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        ).render_with_metadata(metadata)
+
+
+def test_reactionast_render_with_metadata_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^ReactionAst.render_with_metadata\\(\\) takes 1 positional "
+            "arguments but 2 were given$"
+        ),
+    ):
+        ReactionAst().render_with_metadata(
+            ReactionMetadata(),
+            ReactionDefaults(),
+        )
+
+
 def test_reactionast_from_sides():
     lhs = MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))])
     rhs = MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("N"))])
@@ -425,8 +702,10 @@ def test_reactionast_str_components():
     reaction.lhs.atoms[0].charge = 1
     reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O")))))
 
-    assert str(reaction) == (
-        '{:deltas [{:atom {:add "O"}}] :lhs {:atoms ["C#c+"] :bonds []}}'
+    assert str(reaction) == reaction.render()
+    assert reaction.render() == (
+        '{:deltas [{:atom {:add "O"}}] '
+        ':lhs {:atoms ["C#c+"] :bonds []}}'
     )
 
 

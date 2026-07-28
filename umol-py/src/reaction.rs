@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    Canonicalize, IntoAst, MoleculeAst as AstMoleculeAst,
+    Canonicalize, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation,
     SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
@@ -27,9 +27,12 @@ use crate::correspondence::{
 };
 use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
-use crate::error::{contradiction_error, fingerprint_error, parse_error, InvalidStructureError};
+use crate::error::{
+    contradiction_error, fingerprint_error, metadata_error, parse_error, InvalidStructureError,
+};
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
+use crate::metadata::ReactionMetadata;
 use crate::molecule::MoleculeAst;
 
 /// Algorithms used to enumerate matches for reaction application.
@@ -198,6 +201,44 @@ impl ReactionAst {
         Self::from_rust(py, reaction)
     }
 
+    /// Parse a reaction and retain its persistent DSL metadata.
+    #[staticmethod]
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse_with_metadata(
+        py: Python<'_>,
+        text: &str,
+        defaults: Option<ReactionDefaults>,
+    ) -> PyResult<(Self, ReactionMetadata)> {
+        let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
+        let dsl = AstReactionDsl::from_str(text).map_err(parse_error)?;
+        let metadata = ReactionMetadata::from_rust(dsl.metadata().clone());
+        Ok((Self::from_rust(py, dsl.into_ast(&defaults))?, metadata))
+    }
+
+    /// Render a canonical positional DSL representation without persistent metadata.
+    #[pyo3(signature = (*, defaults=None))]
+    fn render(&self, py: Python<'_>, defaults: Option<ReactionDefaults>) -> String {
+        let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
+        AstReactionDsl::from_ast(&self.to_rust(py), &defaults).to_string()
+    }
+
+    /// Render a canonical DSL representation with coherent persistent metadata.
+    #[pyo3(signature = (metadata, *, defaults=None))]
+    fn render_with_metadata(
+        &self,
+        py: Python<'_>,
+        metadata: &ReactionMetadata,
+        defaults: Option<ReactionDefaults>,
+    ) -> PyResult<String> {
+        let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
+        let lowered = AstReactionDsl::from_ast(&self.to_rust(py), &defaults)
+            .into_parts()
+            .0;
+        AstReactionDsl::new(lowered, metadata.to_rust())
+            .map(|dsl| dsl.to_string())
+            .map_err(metadata_error)
+    }
+
     /// Construct a reaction by comparing two molecule snapshots under an atom correspondence.
     #[staticmethod]
     fn from_sides(
@@ -330,7 +371,7 @@ impl ReactionAst {
     }
 
     fn __str__(&self, py: Python<'_>) -> String {
-        self.to_rust(py).to_string()
+        self.render(py, None)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -487,7 +528,8 @@ mod tests {
         Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
         DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
         DativeBondId as AstDativeBondId, Delta as AstDelta, Deltas as AstDeltas,
-        MoleculeAst as AstMoleculeAst, MoleculeConstraint as AstMoleculeConstraint,
+        Entity as AstEntity, MoleculeAst as AstMoleculeAst,
+        MoleculeConstraint as AstMoleculeConstraint,
         MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeParts as AstMoleculeParts,
         MulticenterBondAst as AstMulticenterBondAst,
         MulticenterBondDelta as AstMulticenterBondDelta, MulticenterBondId as AstMulticenterBondId,
@@ -500,6 +542,10 @@ mod tests {
         StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
         StereoLigandKind as AstStereoLigandKind, ValueAst as AstValueAst,
     };
+    use umol_ast::dsl::{
+        AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata,
+        ReactionMetadata as AstReactionMetadata,
+    };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element as ChemElement;
     use umol_graph::ingest::ingest_smiles;
@@ -507,7 +553,7 @@ mod tests {
     use super::*;
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
-    use crate::error::{ContradictionError, ParseError};
+    use crate::error::{ContradictionError, MetadataError, ParseError};
     use crate::fingerprint::config::{
         EcfpHashScheme, HashedFingerprintConfig, RefinementRounds, WlHashScheme,
     };
@@ -871,6 +917,160 @@ mod tests {
             assert_eq!(
                 ReactionAst::parse(py, text, defaults).unwrap().to_rust(py),
                 expected.parse::<AstReactionAst>().unwrap()
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_parse_with_metadata() {
+        Python::attach(|py| {
+            let (reaction, metadata) = ReactionAst::parse_with_metadata(
+                py,
+                concat!(
+                    r#"{:lhs {:atoms [[:lhs :lhs-c]] :atom-aliases [:lhs-c "C"]} "#,
+                    r#":atom-aliases [:delta-o "O"] "#,
+                    r#":deltas [{:atom {:add [:added :delta-o]}}]}"#,
+                ),
+                None,
+            )
+            .unwrap();
+            let metadata = metadata.to_rust();
+
+            assert_eq!(
+                reaction.to_rust(py),
+                r#"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}"#
+                    .parse()
+                    .unwrap()
+            );
+            assert_eq!(
+                metadata.lhs().keyword(AstEntity::Atom(AstAtomId(0))),
+                Some("lhs")
+            );
+            assert_eq!(
+                metadata.delta_keyword(AstEntity::Atom(AstAtomId(1))),
+                Some("added")
+            );
+            assert_eq!(
+                metadata.lhs().atom_alias("lhs-c"),
+                Some(&AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+            );
+            assert_eq!(
+                metadata.atom_alias("delta-o"),
+                Some(&AstAtomDsl(AstAtomAst::from_element(ChemElement::O)))
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_parse_with_metadata_defaults() {
+        Python::attach(|py| {
+            let (reaction, metadata) = ReactionAst::parse_with_metadata(
+                py,
+                concat!(
+                    r#"{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} "#,
+                    r#":deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}"#,
+                ),
+                Some(ReactionDefaults::ground()),
+            )
+            .unwrap();
+
+            assert_eq!(
+                reaction.to_rust(py),
+                concat!(
+                    r#"{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} "#,
+                    r#":deltas [{:atom {:add "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}"#,
+                )
+                .parse()
+                .unwrap()
+            );
+            assert_eq!(
+                metadata,
+                ReactionMetadata::from_rust(AstReactionMetadata::default())
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::required(
+        r#"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}"#.parse().unwrap(),
+        None,
+        r#"{:deltas [{:atom {:add "O"}}] :lhs {:atoms ["C"] :bonds []}}"#
+    )]
+    #[case::ground(
+        concat!(
+            r#"{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} "#,
+            r#":deltas [{:atom {:add "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}"#,
+        ).parse().unwrap(),
+        Some(ReactionDefaults::ground()),
+        concat!(
+            r#"{:deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}] "#,
+            r#":lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}}"#,
+        )
+    )]
+    fn test_reaction_ast_render(
+        #[case] reaction: AstReactionAst,
+        #[case] defaults: Option<ReactionDefaults>,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            assert_eq!(
+                ReactionAst::from_rust(py, reaction)
+                    .unwrap()
+                    .render(py, defaults),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_render_with_metadata() {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(
+                py,
+                r#"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}"#
+                    .parse()
+                    .unwrap(),
+            )
+            .unwrap();
+            let mut lhs = AstMoleculeMetadata::new();
+            lhs.set_keyword(AstEntity::Atom(AstAtomId(0)), "lhs")
+                .unwrap();
+            let mut metadata = AstReactionMetadata::from(lhs);
+            metadata
+                .set_delta_keyword(AstEntity::Atom(AstAtomId(1)), "added")
+                .unwrap();
+
+            assert_eq!(
+                reaction
+                    .render_with_metadata(py, &ReactionMetadata::from_rust(metadata), None,)
+                    .unwrap(),
+                concat!(
+                    r#"{:deltas [{:atom {:add [:added "O"]}}] "#,
+                    r#":lhs {:atoms [[:lhs "C"]] :bonds []}}"#,
+                )
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_render_with_metadata_error() {
+        Python::attach(|py| {
+            let reaction =
+                ReactionAst::from_rust(py, r#"{:lhs {:atoms ["C"]} :deltas []}"#.parse().unwrap())
+                    .unwrap();
+            let mut metadata = AstReactionMetadata::default();
+            metadata
+                .set_delta_keyword(AstEntity::Atom(AstAtomId(1)), "absent")
+                .unwrap();
+
+            let error = reaction
+                .render_with_metadata(py, &ReactionMetadata::from_rust(metadata), None)
+                .unwrap_err();
+
+            assert!(error.is_instance_of::<MetadataError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "metadata entity is not introduced by an add delta: atom 1"
             );
         });
     }
@@ -2309,6 +2509,7 @@ mod tests {
             let reaction = ReactionAst::from_rust(py, input).unwrap();
 
             assert_eq!(reaction.__str__(py), expected);
+            assert_eq!(reaction.__str__(py), reaction.render(py, None));
         });
     }
 

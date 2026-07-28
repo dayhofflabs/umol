@@ -841,7 +841,8 @@ keywords across all entity families, reaction aliases, explicit defaults,
 metadata-free positional rendering, incompatible metadata, keyword-only
 arguments, and `str(reaction) == reaction.render()`. This is additive except
 for the corrected `__str__` implementation; it goes red→green with Python
-expectations updated in the same subitem. [dep: S5b, S6a]
+expectations updated in the same subitem. **Implemented (green).**
+[dep: S5b, S6a]
 
 ### S7 — Cross-cutting verification and documentation
 

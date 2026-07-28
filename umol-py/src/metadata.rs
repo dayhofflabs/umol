@@ -213,18 +213,10 @@ impl ReactionMetadata {
 }
 
 impl ReactionMetadata {
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API used by metadata-aware DSL operations"
-    )]
     pub(crate) fn from_rust(metadata: AstReactionMetadata) -> Self {
         Self(metadata)
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API used by metadata-aware DSL operations"
-    )]
     pub(crate) fn to_rust(&self) -> AstReactionMetadata {
         self.0.clone()
     }
