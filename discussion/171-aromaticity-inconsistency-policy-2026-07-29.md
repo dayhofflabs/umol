@@ -331,7 +331,7 @@ Focused tables cover MDL furan rejection, Daylight furan acceptance, missing and
 assertions, vacuous projections, contribution mismatch, an already conformant system, and an
 existing system rejected by the selected model. They assert the complete `AromaticityDerivation`.
 
-#### S0c — Stereo perception and derivation
+#### S0c — Stereo perception and derivation **Done**
 
 **Module:** `umol-graph/src/ops/stereo.rs`, `umol-graph/src/ops.rs`
 
