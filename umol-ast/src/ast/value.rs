@@ -773,20 +773,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_match(ValueAst::Lit(3), 3, true)]
-    #[case::lit_mismatch(ValueAst::Lit(3), 4, false)]
-    #[case::undetermined(ValueAst::Undetermined, 3, false)]
-    #[case::litset(ValueAst::lit_set([1, 2]), 1, false)]
-    fn test_value_ast_as_lit_matches(
-        #[case] ast: ValueAst,
-        #[case] value: i64,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.as_lit_matches(value), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::undetermined(ValueAst::Undetermined, true)]
     #[case::lit(ValueAst::Lit(3), false)]
     #[case::litset(ValueAst::lit_set([1, 2]), false)]

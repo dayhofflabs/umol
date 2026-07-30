@@ -433,13 +433,13 @@ pub(crate) fn derive_charge_equalization(
         };
         atom_updates.push((
             atom_idx,
-            atom.charge().as_lit_ok_or_else(err)?,
+            atom.charge().as_lit().ok_or_else(err)?,
             e,
-            k.as_lit_ok_or_else(err)?,
+            k.as_lit().ok_or_else(err)?,
         ));
     }
 
-    let mut accumulated = system.charge.as_lit_or(0);
+    let mut accumulated = system.charge.as_lit().unwrap_or(0);
     let mut new_counts = Vec::with_capacity(atom_updates.len());
     let mut updates = Vec::new();
     for (atom_idx, c, e, k) in atom_updates {

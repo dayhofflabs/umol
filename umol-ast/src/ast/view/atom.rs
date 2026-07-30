@@ -387,7 +387,8 @@ impl<'a> AtomView<'a> {
             constraints.set(AtomConstraintAst::aromatic_valence(
                 AromaticValenceAst::aromatic(
                     self.aromatic_valence()
-                        .as_lit_expect("aromatic valence should be Lit"),
+                        .as_lit()
+                        .expect("aromatic valence should be Lit"),
                 ),
             ));
         } else if self
@@ -407,7 +408,8 @@ impl<'a> AtomView<'a> {
             constraints.set(AtomConstraintAst::multicenter_valence(
                 MulticenterValenceAst::multicenter(
                     self.multicenter_valence()
-                        .as_lit_expect("multicenter valence should be Lit"),
+                        .as_lit()
+                        .expect("multicenter valence should be Lit"),
                 ),
             ));
         } else if include_missing {

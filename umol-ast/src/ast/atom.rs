@@ -1072,20 +1072,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_match(ElementAst::Lit(Element::C), Element::C, true)]
-    #[case::lit_mismatch(ElementAst::Lit(Element::C), Element::N, false)]
-    #[case::undetermined(ElementAst::Undetermined, Element::C, false)]
-    #[case::litset(ElementAst::lit_set([Element::C, Element::N]), Element::C, false)]
-    fn test_element_ast_as_lit_matches(
-        #[case] ast: ElementAst,
-        #[case] value: Element,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.as_lit_matches(value), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::lit(ElementAst::Lit(Element::C), false)]
     #[case::undetermined(ElementAst::Undetermined, true)]
     #[case::litset(ElementAst::lit_set([Element::C, Element::N]), false)]
@@ -1230,21 +1216,6 @@ mod tests {
     #[case::var_in(IsotopeMassAst::var_in("m", [12]), None)]
     fn test_isotope_mass_ast_as_lit(#[case] ast: IsotopeMassAst, #[case] expected: Option<u32>) {
         assert_eq!(ast.as_lit(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_match(IsotopeMassAst::Lit(12), 12, true)]
-    #[case::lit_mismatch(IsotopeMassAst::Lit(12), 13, false)]
-    #[case::natural(IsotopeMassAst::Natural, 0, false)]
-    #[case::undetermined(IsotopeMassAst::Undetermined, 12, false)]
-    #[case::litset(IsotopeMassAst::lit_set([12, 13]), 12, false)]
-    fn test_isotope_mass_ast_as_lit_matches(
-        #[case] ast: IsotopeMassAst,
-        #[case] value: u32,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.as_lit_matches(value), expected);
     }
 
     #[rustfmt::skip]

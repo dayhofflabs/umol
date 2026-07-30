@@ -13,24 +13,30 @@ use umol_ast::ast::{AsLit, AtomAst};
 pub fn compare_valence_preference(a: &AtomAst, b: &AtomAst) -> Ordering {
     let ha = a
         .implicit_hydrogens
-        .as_lit_expect("valence preference requires literal implicit hydrogens");
+        .as_lit()
+        .expect("valence preference requires literal implicit hydrogens");
     let hb = b
         .implicit_hydrogens
-        .as_lit_expect("valence preference requires literal implicit hydrogens");
+        .as_lit()
+        .expect("valence preference requires literal implicit hydrogens");
     let na = a
         .lone_pairs
-        .as_lit_expect("valence preference requires literal lone pairs");
+        .as_lit()
+        .expect("valence preference requires literal lone pairs");
     let nb = b
         .lone_pairs
-        .as_lit_expect("valence preference requires literal lone pairs");
+        .as_lit()
+        .expect("valence preference requires literal lone pairs");
     let ua = a
         .spin
         .unpaired
-        .as_lit_expect("valence preference requires literal unpaired electrons");
+        .as_lit()
+        .expect("valence preference requires literal unpaired electrons");
     let ub = b
         .spin
         .unpaired
-        .as_lit_expect("valence preference requires literal unpaired electrons");
+        .as_lit()
+        .expect("valence preference requires literal unpaired electrons");
     ha.cmp(&hb).then(na.cmp(&nb)).then(ub.cmp(&ua))
 }
 

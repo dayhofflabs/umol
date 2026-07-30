@@ -402,19 +402,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_match(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKind::HydrogenBond, true)]
-    #[case::lit_mismatch(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKind::Ionic, false)]
-    #[case::undetermined(NoncovalentBondKindAst::Undetermined, NoncovalentBondKind::HydrogenBond, false)]
-    fn test_noncovalent_bond_kind_ast_as_lit_matches(
-        #[case] ast: NoncovalentBondKindAst,
-        #[case] value: NoncovalentBondKind,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.as_lit_matches(value), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::undetermined(NoncovalentBondKindAst::Undetermined, true)]
     #[case::lit(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), false)]
     fn test_noncovalent_bond_kind_ast_is_undetermined(

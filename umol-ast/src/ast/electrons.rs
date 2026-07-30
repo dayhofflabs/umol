@@ -166,20 +166,6 @@ mod tests {
         assert_eq!(ast.is_ground(), expected.is_some());
     }
 
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_match(ElectronCountsAst::Lit(vec![1, 1, 1]), vec![1, 1, 1], true)]
-    #[case::lit_mismatch(ElectronCountsAst::Lit(vec![1, 1, 1]), vec![2, 2, 2], false)]
-    #[case::lit_len_mismatch(ElectronCountsAst::Lit(vec![1, 1, 1]), vec![1, 1], false)]
-    #[case::undetermined(ElectronCountsAst::Undetermined, vec![1, 1, 1], false)]
-    fn test_electron_counts_ast_as_lit_matches(
-        #[case] ast: ElectronCountsAst,
-        #[case] value: Vec<i64>,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.as_lit_matches(value), expected);
-    }
-
     #[rstest]
     #[case::undetermined(ElectronCountsAst::Undetermined, true)]
     #[case::lit(ElectronCountsAst::Lit(vec![1, 1, 1]), false)]

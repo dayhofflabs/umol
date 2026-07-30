@@ -50,12 +50,14 @@ impl CountsInput {
                 .constraints
                 .valence()
                 .unwrap_or(&ValueAst::Undetermined)
-                .as_lit_or(0),
+                .as_lit()
+                .unwrap_or(0),
             accepted_pairs: atom
                 .constraints
                 .accepted_pairs()
                 .unwrap_or(&ValueAst::Undetermined)
-                .as_lit_or(0),
+                .as_lit()
+                .unwrap_or(0),
             is_aromatic: atom
                 .constraints
                 .aromatic_valence()
@@ -65,8 +67,8 @@ impl CountsInput {
 
     fn for_molecule_atom(atom: AtomView<'_>) -> Self {
         Self {
-            valence: atom.valence().as_lit_or(0),
-            accepted_pairs: atom.accepted_pairs().as_lit_or(0),
+            valence: atom.valence().as_lit().unwrap_or(0),
+            accepted_pairs: atom.accepted_pairs().as_lit().unwrap_or(0),
             is_aromatic: atom.is_in_aromatic_system()
                 || atom
                     .neighbors()
@@ -191,7 +193,7 @@ impl<'a> CountsValence<'a> {
         let Some(element) = atom.element().as_lit() else {
             return Solution::Underdetermined(());
         };
-        let charge = atom.charge().as_lit_or(0);
+        let charge = atom.charge().as_lit().unwrap_or(0);
         let input = CountsInput::for_molecule_atom(atom);
         match self.select_candidate(atom.ast, input) {
             Ok(_) => Solution::Determined(()),
