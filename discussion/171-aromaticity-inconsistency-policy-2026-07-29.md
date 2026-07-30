@@ -312,7 +312,7 @@ Focused tables cover cyclopentadienyl anion, tropylium cation, a heterogeneous a
 non-literal input, and multiple systems. They assert charge conservation, π-electron conservation,
 field preservation, and idempotence.
 
-#### S0b — Aromatic perception and derivation
+#### S0b — Aromatic perception and derivation **Done**
 
 **Module:** `umol-graph/src/ops/aromaticity.rs`
 

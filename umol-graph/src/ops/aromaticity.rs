@@ -6,8 +6,9 @@
 //! the resolver (validates `#a` hints filled in by atom-typing), the
 //! aromatizer (discovers aromatic systems from a Kekulé bond-order layout),
 //! and the validator (verifies pre-existing aromatic systems against the
-//! model). Each entity composes [`AromaticityPerception::find_systems`] with
-//! its own per-atom electron-counting closure.
+//! model). [`AromaticityPerception::derive`] is the standard AST-facing
+//! operation; [`AromaticityPerception::find_systems`] remains available when
+//! the caller supplies another per-atom electron source.
 //!
 //! Mutation — pattern-match charge equalization, system insertion, bond
 //! marking — is exposed via [`AromaticityPerception::add_systems`].
@@ -15,6 +16,8 @@
 pub mod clar;
 pub mod hmo;
 pub mod hueckel_rule;
+
+use std::collections::BTreeSet;
 
 pub use clar::{ClarAromaticity, ClarError};
 pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
@@ -74,6 +77,33 @@ impl Default for AromaticityConfig {
             maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
         }
     }
+}
+
+/// Policy-free result of aromaticity perception and projection comparison.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AromaticityDerivation {
+    /// Aromatic systems accepted by the selected model.
+    pub systems: Vec<(Vec<AtomId>, AromaticSystemAst)>,
+    /// Non-vacuous projections and existing systems that disagree with perception.
+    pub mismatches: Vec<AromaticityMismatch>,
+}
+
+/// A projection or existing aromatic system that disagrees with perception.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AromaticityMismatch {
+    AtomProjection {
+        atom: AtomId,
+    },
+    BondProjection {
+        bond: BondId,
+    },
+    ExistingSystem {
+        system: AromaticSystemId,
+    },
+    ElectronContribution {
+        system: AromaticSystemId,
+        atom: AtomId,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -155,6 +185,138 @@ impl AromaticityPerception {
         let mut sorted = systems;
         sorted.sort_by(|a, b| a.0.first().cmp(&b.0.first()));
         Ok(Solution::Determined(sorted))
+    }
+
+    /// Perceive aromatic systems from AST projections and compare every
+    /// non-vacuous projection and existing system with the result.
+    pub fn derive(
+        &self,
+        ast: &MoleculeAst,
+        config: AromaticityConfig,
+    ) -> Result<Solution<AromaticityDerivation, AromaticityContradiction>, AromaticityError> {
+        if ast.atoms().iter().any(|atom| {
+            matches!(
+                atom.ast.constraints.aromatic_valence(),
+                Some(AromaticValenceAst::Aromatic(value))
+                    if !matches!(value, ValueAst::Lit(_))
+            )
+        }) || ast
+            .aromatic_systems()
+            .iter()
+            .any(|system| matches!(system.ast.electrons, ElectronCountsAst::Undetermined))
+        {
+            return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+        }
+
+        let systems = match self.find_systems(ast, config, |atom| {
+            match atom.ast.constraints.aromatic_valence() {
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(value))) => {
+                    u8::try_from(*value).ok()
+                }
+                Some(AromaticValenceAst::Aromatic(_)) | Some(AromaticValenceAst::NotAromatic) => {
+                    None
+                }
+                Some(AromaticValenceAst::Undetermined) | None => match atom.aromatic_valence() {
+                    ValueAst::Lit(value) => u8::try_from(value).ok(),
+                    _ => None,
+                },
+            }
+        })? {
+            Solution::Determined(systems) => systems,
+            Solution::Underdetermined(_) => {
+                return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+            }
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+
+        let system_members: Vec<BTreeSet<AtomId>> = systems
+            .iter()
+            .map(|(atoms, _)| atoms.iter().copied().collect())
+            .collect();
+        let accepted_atoms: BTreeSet<AtomId> = system_members.iter().flatten().copied().collect();
+        let accepted_bonds: BTreeSet<BondId> = ast
+            .bonds()
+            .iter()
+            .filter(|bond| {
+                let [first, second] = bond.atom_ids();
+                system_members
+                    .iter()
+                    .any(|members| members.contains(&first) && members.contains(&second))
+            })
+            .map(|bond| bond.id)
+            .collect();
+
+        let mut mismatches = BTreeSet::new();
+        for atom in ast.atoms().iter() {
+            let expected = match atom.ast.constraints.aromatic_valence() {
+                Some(AromaticValenceAst::Aromatic(_)) => Some(true),
+                Some(AromaticValenceAst::NotAromatic) => Some(false),
+                Some(AromaticValenceAst::Undetermined) | None => None,
+            };
+            if expected.is_some_and(|expected| expected != accepted_atoms.contains(&atom.id)) {
+                mismatches.insert(AromaticityMismatch::AtomProjection { atom: atom.id });
+            }
+        }
+        for bond in ast.bonds().iter() {
+            if let BooleanAst::Lit(expected) = bond.ast.constraints.aromatic() {
+                if expected != accepted_bonds.contains(&bond.id) {
+                    mismatches.insert(AromaticityMismatch::BondProjection { bond: bond.id });
+                }
+            }
+        }
+
+        for existing in ast.aromatic_systems().iter() {
+            let mut atoms: Vec<AtomId> = existing.atom_ids().collect();
+            atoms.sort_unstable();
+            let Some((perceived_atoms, perceived)) =
+                systems.iter().find(|(candidate, _)| candidate == &atoms)
+            else {
+                mismatches.insert(AromaticityMismatch::ExistingSystem {
+                    system: existing.id,
+                });
+                continue;
+            };
+
+            let (
+                ElectronCountsAst::Lit(existing_electrons),
+                ElectronCountsAst::Lit(perceived_electrons),
+            ) = (&existing.ast.electrons, &perceived.electrons)
+            else {
+                return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+            };
+            if existing_electrons.len() != atoms.len()
+                || perceived_electrons.len() != perceived_atoms.len()
+            {
+                mismatches.insert(AromaticityMismatch::ExistingSystem {
+                    system: existing.id,
+                });
+                continue;
+            }
+
+            let existing_contributions: Vec<(AtomId, i64)> = existing
+                .atom_ids()
+                .zip(existing_electrons.iter().copied())
+                .collect();
+            for (&atom, &perceived_electrons) in perceived_atoms.iter().zip(perceived_electrons) {
+                if existing_contributions
+                    .iter()
+                    .find_map(|&(candidate, electrons)| (candidate == atom).then_some(electrons))
+                    != Some(perceived_electrons)
+                {
+                    mismatches.insert(AromaticityMismatch::ElectronContribution {
+                        system: existing.id,
+                        atom,
+                    });
+                }
+            }
+        }
+
+        Ok(Solution::Determined(AromaticityDerivation {
+            systems,
+            mismatches: mismatches.into_iter().collect(),
+        }))
     }
 
     /// Add perceived systems to the AST.
@@ -327,7 +489,7 @@ mod tests {
         AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeParts,
         SpinStateAst, ValueAst,
     };
-    use umol_ast::mol_dsl_ground;
+    use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
 
@@ -435,6 +597,215 @@ mod tests {
             Solution::Underdetermined(_) => Solution::Underdetermined(()),
             Solution::Contradictory(c) => Solution::Contradictory(c),
         }
+    }
+
+    #[rstest]
+    #[case::daylight_furan(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+                AromaticSystemAst::from_electrons(vec![2, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_spin(SpinStateAst::closed_shell()),
+            )],
+            mismatches: vec![],
+        }),
+    )]
+    #[case::mdl_furan(
+        AromaticityModel::mdl(),
+        mol_dsl!(r#"{
+            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![],
+            mismatches: vec![
+                AromaticityMismatch::AtomProjection { atom: AtomId(0) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(1) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(2) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(3) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(4) },
+                AromaticityMismatch::BondProjection { bond: BondId(0) },
+                AromaticityMismatch::BondProjection { bond: BondId(1) },
+                AromaticityMismatch::BondProjection { bond: BondId(2) },
+                AromaticityMismatch::BondProjection { bond: BondId(3) },
+                AromaticityMismatch::BondProjection { bond: BondId(4) },
+            ],
+        }),
+    )]
+    #[case::missing_and_extra_projections(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#h" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#a" "C"]
+            :bonds [[0 1 "1#a!"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"] [6 7 "1#a"]]
+            :aromatic-systems [{
+                :atoms [0 1 2 3 4 5]
+                :type "[1,1,1,1,1,1]"
+            }]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![(
+                vec![
+                    AtomId(0),
+                    AtomId(1),
+                    AtomId(2),
+                    AtomId(3),
+                    AtomId(4),
+                    AtomId(5),
+                ],
+                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_spin(SpinStateAst::closed_shell()),
+            )],
+            mismatches: vec![
+                AromaticityMismatch::AtomProjection { atom: AtomId(6) },
+                AromaticityMismatch::BondProjection { bond: BondId(0) },
+                AromaticityMismatch::BondProjection { bond: BondId(6) },
+            ],
+        }),
+    )]
+    #[case::vacuous_projections(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a*" "C#a*" "C#a*" "C#a*" "C#a*" "C#a*"]
+            :bonds [[0 1 "1#a*"] [1 2 "1#a*"] [2 3 "1#a*"] [3 4 "1#a*"]
+                    [4 5 "1#a*"] [5 0 "1#a*"]]
+            :aromatic-systems [{
+                :atoms [0 1 2 3 4 5]
+                :type "[1,1,1,1,1,1]"
+            }]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![(
+                vec![
+                    AtomId(0),
+                    AtomId(1),
+                    AtomId(2),
+                    AtomId(3),
+                    AtomId(4),
+                    AtomId(5),
+                ],
+                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_spin(SpinStateAst::closed_shell()),
+            )],
+            mismatches: vec![],
+        }),
+    )]
+    #[case::electron_contribution(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{
+                :atoms [0 1 2 3 4 5]
+                :type "[2,1,1,1,1,1]"
+            }]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![(
+                vec![
+                    AtomId(0),
+                    AtomId(1),
+                    AtomId(2),
+                    AtomId(3),
+                    AtomId(4),
+                    AtomId(5),
+                ],
+                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_spin(SpinStateAst::closed_shell()),
+            )],
+            mismatches: vec![AromaticityMismatch::ElectronContribution {
+                system: AromaticSystemId(0),
+                atom: AtomId(0),
+            }],
+        }),
+    )]
+    #[case::conformant_system(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{
+                :atoms [0 1 2 3 4 5]
+                :type "[1,1,1,1,1,1]"
+            }]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![(
+                vec![
+                    AtomId(0),
+                    AtomId(1),
+                    AtomId(2),
+                    AtomId(3),
+                    AtomId(4),
+                    AtomId(5),
+                ],
+                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_spin(SpinStateAst::closed_shell()),
+            )],
+            mismatches: vec![],
+        }),
+    )]
+    #[case::existing_system_rejected(
+        AromaticityModel::mdl(),
+        mol_dsl!(r#"{
+            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]
+            :aromatic-systems [{
+                :atoms [0 1 2 3 4]
+                :type "[2,1,1,1,1]"
+            }]
+        }"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![],
+            mismatches: vec![
+                AromaticityMismatch::AtomProjection { atom: AtomId(0) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(1) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(2) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(3) },
+                AromaticityMismatch::AtomProjection { atom: AtomId(4) },
+                AromaticityMismatch::BondProjection { bond: BondId(0) },
+                AromaticityMismatch::BondProjection { bond: BondId(1) },
+                AromaticityMismatch::BondProjection { bond: BondId(2) },
+                AromaticityMismatch::BondProjection { bond: BondId(3) },
+                AromaticityMismatch::BondProjection { bond: BondId(4) },
+                AromaticityMismatch::ExistingSystem {
+                    system: AromaticSystemId(0),
+                },
+            ],
+        }),
+    )]
+    #[case::non_ground_assertion(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+        }"#),
+        Solution::Underdetermined(AromaticityDerivation::default()),
+    )]
+    fn test_aromaticity_perception_derive(
+        #[case] model: AromaticityModel,
+        #[case] ast: MoleculeAst,
+        #[case] expected: Solution<AromaticityDerivation, AromaticityContradiction>,
+    ) {
+        assert_eq!(
+            AromaticityPerception::new(&model)
+                .derive(&ast, AromaticityConfig::default())
+                .unwrap(),
+            expected
+        );
     }
 
     #[rstest]
