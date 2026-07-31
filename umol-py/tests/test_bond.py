@@ -7,7 +7,7 @@ from umol import (
     BondConstraintKey,
     BondConstraintsAst,
     BooleanAst,
-    CisTransStereo,
+    CisTransConfiguration,
     CisTransStereoAst,
     Element,
     MoleculeAst,
@@ -248,7 +248,7 @@ def test_bondconstraints_aromatic_property():
 
 def test_bondconstraints_cis_trans_stereo_config():
     cs = BondConstraintsAst([])
-    cs.cis_trans_stereo = CisTransStereo.E
+    cs.cis_trans_stereo = CisTransConfiguration.E
     assert cs.cis_trans_stereo == CisTransStereoAst.Stereo(StereoCoset.Lit(1))
 
 

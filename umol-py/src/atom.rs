@@ -114,6 +114,49 @@ impl ElementAst {
     }
 }
 
+/// Exact ground isotope mass: the natural isotopic mixture or a specific mass number.
+#[pyclass(from_py_object)]
+#[derive(Clone, Copy)]
+pub enum IsotopeMass {
+    Natural(),
+    MassNumber(u32),
+}
+
+#[pymethods]
+impl IsotopeMass {
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::Natural() => ("Natural", 0),
+            Self::MassNumber(_) => ("MassNumber", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "IsotopeMass", variant, arity)
+    }
+}
+
+impl IsotopeMass {
+    pub(crate) fn from_rust(mass: AstIsotopeMass) -> Self {
+        match mass {
+            AstIsotopeMass::Natural => Self::Natural(),
+            AstIsotopeMass::MassNumber(mass) => Self::MassNumber(mass),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> AstIsotopeMass {
+        match self {
+            Self::Natural() => AstIsotopeMass::Natural,
+            Self::MassNumber(mass) => AstIsotopeMass::MassNumber(mass),
+        }
+    }
+}
+
 /// Isotope-mass expression: undetermined, the natural isotopic mixture, a single
 /// mass number, a finite mass set, or a variable with an optional mass-set restriction.
 #[pyclass]
@@ -127,13 +170,9 @@ pub enum IsotopeMassAst {
 
 #[pymethods]
 impl IsotopeMassAst {
-    /// The single mass number this resolves to, or `None` when it is not a bare
-    /// literal (undetermined, the natural mixture, a set, or a variable).
-    fn as_lit(&self) -> Option<u32> {
-        match self.to_rust().as_lit() {
-            Some(AstIsotopeMass::MassNumber(mass)) => Some(mass),
-            Some(AstIsotopeMass::Natural) | None => None,
-        }
+    /// The exact isotope-mass value, or `None` when this expression is not ground.
+    fn as_lit(&self) -> Option<IsotopeMass> {
+        self.to_rust().as_lit().map(IsotopeMass::from_rust)
     }
 
     fn __eq__(&self, other: &Self) -> bool {
@@ -712,7 +751,7 @@ mod tests {
         AtomConstraintsUpdate, TetrahedralStereoArg,
     };
     use crate::convert::into_py_variant;
-    use crate::stereo::{TetrahedralStereo, TetrahedralStereoAst};
+    use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
 
     #[rstest]
     #[case(AstElementAst::Undetermined)]
@@ -754,11 +793,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstIsotopeMassAst::Lit(13), Some(13))]
-    #[case(AstIsotopeMassAst::Natural, None)]
+    #[case(AstIsotopeMassAst::Lit(13), Some(AstIsotopeMass::MassNumber(13)))]
+    #[case(AstIsotopeMassAst::Natural, Some(AstIsotopeMass::Natural))]
     #[case(AstIsotopeMassAst::Undetermined, None)]
-    fn test_isotope_mass_ast_as_lit(#[case] ast: AstIsotopeMassAst, #[case] expected: Option<u32>) {
-        assert_eq!(IsotopeMassAst::from_rust(&ast).as_lit(), expected);
+    fn test_isotope_mass_ast_as_lit(
+        #[case] ast: AstIsotopeMassAst,
+        #[case] expected: Option<AstIsotopeMass>,
+    ) {
+        assert_eq!(
+            IsotopeMassAst::from_rust(&ast)
+                .as_lit()
+                .map(IsotopeMass::to_rust),
+            expected
+        );
     }
 
     fn carbon_oxygen(py: Python<'_>) -> Py<MoleculeAst> {
@@ -1590,7 +1637,10 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             constraints
-                .set_tetrahedral_stereo(py, TetrahedralStereoArg::Config(TetrahedralStereo::Cw))
+                .set_tetrahedral_stereo(
+                    py,
+                    TetrahedralStereoArg::Config(TetrahedralConfiguration::Cw),
+                )
                 .unwrap();
             match constraints.tetrahedral_stereo(py).unwrap().unwrap() {
                 TetrahedralStereoAst::Stereo(coset) => {

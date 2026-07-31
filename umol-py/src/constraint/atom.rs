@@ -6,9 +6,10 @@ use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_ast::ast::{
-    AromaticValenceAst as AstAromaticValenceAst, AtomConstraintAst as AstAtomConstraintAst,
-    AtomConstraintKey as AstAtomConstraintKey, AtomConstraintsAst as AstAtomConstraintsAst,
-    AtomId as AstAtomId, MulticenterValenceAst as AstMulticenterValenceAst,
+    AromaticValence as AstAromaticValence, AromaticValenceAst as AstAromaticValenceAst, AsLit,
+    AtomConstraintAst as AstAtomConstraintAst, AtomConstraintKey as AstAtomConstraintKey,
+    AtomConstraintsAst as AstAtomConstraintsAst, AtomId as AstAtomId,
+    MulticenterValence as AstMulticenterValence, MulticenterValenceAst as AstMulticenterValenceAst,
     RingScope as AstRingScope, TetrahedralStereoAst as AstTetrahedralStereoAst,
 };
 
@@ -16,8 +17,56 @@ use super::ring::{RingMembershipAst, RingScope};
 use crate::atom::AtomAst;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
-use crate::stereo::{TetrahedralStereo, TetrahedralStereoAst};
+use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
 use crate::value::{ValueArg, ValueAst};
+
+/// Exact ground aromatic-valence state.
+#[pyclass(from_py_object)]
+#[derive(Clone, Copy)]
+pub enum AromaticValence {
+    NotAromatic(),
+    Aromatic(i64),
+}
+
+#[pymethods]
+impl AromaticValence {
+    /// Aromatic-valence count, identifying explicit non-aromaticity with zero.
+    fn valence_count(&self) -> i64 {
+        self.to_rust().valence_count()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::NotAromatic() => ("NotAromatic", 0),
+            Self::Aromatic(_) => ("Aromatic", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "AromaticValence", variant, arity)
+    }
+}
+
+impl AromaticValence {
+    pub(crate) fn from_rust(valence: AstAromaticValence) -> Self {
+        match valence {
+            AstAromaticValence::NotAromatic => Self::NotAromatic(),
+            AstAromaticValence::Aromatic(valence) => Self::Aromatic(valence),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> AstAromaticValence {
+        match self {
+            Self::NotAromatic() => AstAromaticValence::NotAromatic,
+            Self::Aromatic(valence) => AstAromaticValence::Aromatic(valence),
+        }
+    }
+}
 
 /// Aromatic-valence state: undetermined, explicitly not aromatic, or aromatic with
 /// an aromatic-valence count. `Aromatic` coerces `int | ValueAst` on construction.
@@ -30,6 +79,11 @@ pub enum AromaticValenceAst {
 
 #[pymethods]
 impl AromaticValenceAst {
+    /// The exact aromatic-valence state, or `None` when this expression is not ground.
+    pub(crate) fn as_lit(&self, py: Python<'_>) -> Option<AromaticValence> {
+        self.to_rust(py).as_lit().map(AromaticValence::from_rust)
+    }
+
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -91,6 +145,54 @@ impl AromaticValenceArg {
     }
 }
 
+/// Exact ground multicenter-valence state.
+#[pyclass(from_py_object)]
+#[derive(Clone, Copy)]
+pub enum MulticenterValence {
+    NotMulticenter(),
+    Multicenter(i64),
+}
+
+#[pymethods]
+impl MulticenterValence {
+    /// Multicenter-valence count, identifying explicit non-multicenter participation with zero.
+    fn valence_count(&self) -> i64 {
+        self.to_rust().valence_count()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::NotMulticenter() => ("NotMulticenter", 0),
+            Self::Multicenter(_) => ("Multicenter", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "MulticenterValence", variant, arity)
+    }
+}
+
+impl MulticenterValence {
+    pub(crate) fn from_rust(valence: AstMulticenterValence) -> Self {
+        match valence {
+            AstMulticenterValence::NotMulticenter => Self::NotMulticenter(),
+            AstMulticenterValence::Multicenter(valence) => Self::Multicenter(valence),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> AstMulticenterValence {
+        match self {
+            Self::NotMulticenter() => AstMulticenterValence::NotMulticenter,
+            Self::Multicenter(valence) => AstMulticenterValence::Multicenter(valence),
+        }
+    }
+}
+
 /// Multicenter-valence state: undetermined, explicitly not multicenter, or
 /// multicenter with a multicenter-valence count.
 #[pyclass]
@@ -102,6 +204,11 @@ pub enum MulticenterValenceAst {
 
 #[pymethods]
 impl MulticenterValenceAst {
+    /// The exact multicenter-valence state, or `None` when this expression is not ground.
+    pub(crate) fn as_lit(&self, py: Python<'_>) -> Option<MulticenterValence> {
+        self.to_rust(py).as_lit().map(MulticenterValence::from_rust)
+    }
+
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -170,7 +277,7 @@ impl MulticenterValenceArg {
 #[derive(FromPyObject)]
 pub(crate) enum TetrahedralStereoArg {
     Flag(bool),
-    Config(TetrahedralStereo),
+    Config(TetrahedralConfiguration),
     Ast(Py<TetrahedralStereoAst>),
 }
 
@@ -180,10 +287,10 @@ impl TetrahedralStereoArg {
             Self::Flag(false) => AstTetrahedralStereoAst::NotStereo,
             Self::Flag(true) => {
                 return Err(PyValueError::new_err(
-                    "tetrahedral_stereo = True is not meaningful; use TetrahedralStereo.Ccw/Cw or False",
+                    "tetrahedral_stereo = True is not meaningful; use TetrahedralConfiguration.Ccw/Cw or False",
                 ))
             }
-            Self::Config(ts) => ts.to_rust(),
+            Self::Config(ts) => ts.to_rust().into(),
             Self::Ast(a) => a.bind(py).borrow().to_rust(py),
         })
     }
@@ -1647,6 +1754,31 @@ mod tests {
     }
 
     #[rstest]
+    #[case(
+        AstAromaticValenceAst::NotAromatic,
+        Some(AstAromaticValence::NotAromatic)
+    )]
+    #[case(
+        AstAromaticValenceAst::aromatic(2),
+        Some(AstAromaticValence::Aromatic(2))
+    )]
+    #[case(AstAromaticValenceAst::Undetermined, None)]
+    pub(crate) fn test_aromatic_valence_ast_as_lit(
+        #[case] ast: AstAromaticValenceAst,
+        #[case] expected: Option<AstAromaticValence>,
+    ) {
+        Python::attach(|py| {
+            assert_eq!(
+                AromaticValenceAst::from_rust(py, &ast)
+                    .unwrap()
+                    .as_lit(py)
+                    .map(AromaticValence::to_rust),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
     #[case(AstMulticenterValenceAst::Undetermined)]
     #[case(AstMulticenterValenceAst::NotMulticenter)]
     #[case(AstMulticenterValenceAst::multicenter(2))]
@@ -1657,6 +1789,31 @@ mod tests {
                     .unwrap()
                     .to_rust(py),
                 ast
+            );
+        });
+    }
+
+    #[rstest]
+    #[case(
+        AstMulticenterValenceAst::NotMulticenter,
+        Some(AstMulticenterValence::NotMulticenter)
+    )]
+    #[case(
+        AstMulticenterValenceAst::multicenter(3),
+        Some(AstMulticenterValence::Multicenter(3))
+    )]
+    #[case(AstMulticenterValenceAst::Undetermined, None)]
+    pub(crate) fn test_multicenter_valence_ast_as_lit(
+        #[case] ast: AstMulticenterValenceAst,
+        #[case] expected: Option<AstMulticenterValence>,
+    ) {
+        Python::attach(|py| {
+            assert_eq!(
+                MulticenterValenceAst::from_rust(py, &ast)
+                    .unwrap()
+                    .as_lit(py)
+                    .map(MulticenterValence::to_rust),
+                expected
             );
         });
     }

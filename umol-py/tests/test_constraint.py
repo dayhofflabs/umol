@@ -1,6 +1,7 @@
 import pytest
 
 from umol import (
+    AromaticValence,
     AromaticValenceAst,
     AtomAst,
     AtomConstraintAst,
@@ -8,11 +9,12 @@ from umol import (
     AtomConstraintsAst,
     Element,
     MoleculeAst,
+    MulticenterValence,
     MulticenterValenceAst,
     RingMembershipAst,
     RingScope,
     StereoCoset,
-    TetrahedralStereo,
+    TetrahedralConfiguration,
     TetrahedralStereoAst,
     ValueAst,
 )
@@ -28,10 +30,26 @@ def test_aromaticvalenceast_not_aromatic():
     assert AromaticValenceAst.NotAromatic() == AromaticValenceAst.NotAromatic()
 
 
+def test_aromaticvalenceast_as_lit():
+    assert AromaticValenceAst.NotAromatic().as_lit() == AromaticValence.NotAromatic()
+    assert AromaticValenceAst.Aromatic(2).as_lit() == AromaticValence.Aromatic(2)
+    assert AromaticValenceAst.Undetermined().as_lit() is None
+    assert AromaticValence.NotAromatic().valence_count() == 0
+    assert AromaticValence.Aromatic(2).valence_count() == 2
+
+
 def test_multicentervalenceast_multicenter():
     assert MulticenterValenceAst.Multicenter(ValueAst.Lit(2)) == MulticenterValenceAst.Multicenter(
         ValueAst.Lit(2)
     )
+
+
+def test_multicentervalenceast_as_lit():
+    assert MulticenterValenceAst.NotMulticenter().as_lit() == MulticenterValence.NotMulticenter()
+    assert MulticenterValenceAst.Multicenter(3).as_lit() == MulticenterValence.Multicenter(3)
+    assert MulticenterValenceAst.Undetermined().as_lit() is None
+    assert MulticenterValence.NotMulticenter().valence_count() == 0
+    assert MulticenterValence.Multicenter(3).valence_count() == 3
 
 
 def test_ringscope_size():
@@ -302,7 +320,7 @@ def test_atomconstraints_multicenter_valence_int():
 
 def test_atomconstraints_tetrahedral_stereo_config():
     cs = AtomConstraintsAst([])
-    cs.tetrahedral_stereo = TetrahedralStereo.Cw
+    cs.tetrahedral_stereo = TetrahedralConfiguration.Cw
     assert cs.tetrahedral_stereo == TetrahedralStereoAst.Stereo(StereoCoset.Lit(1))
 
 
@@ -349,10 +367,16 @@ def test_multicentervalenceast_multicenter_int():
     assert MulticenterValenceAst.Multicenter(2) == MulticenterValenceAst.Multicenter(ValueAst.Lit(2))
 
 
-def test_tetrahedralstereo_enum():
-    assert TetrahedralStereo.Ccw == TetrahedralStereo.Ccw
-    assert TetrahedralStereo.Ccw != TetrahedralStereo.Cw
-    assert len({TetrahedralStereo.Cw, TetrahedralStereo.Cw, TetrahedralStereo.Ccw}) == 2
+def test_tetrahedralconfiguration_enum():
+    assert TetrahedralConfiguration.Ccw == TetrahedralConfiguration.Ccw
+    assert TetrahedralConfiguration.Ccw != TetrahedralConfiguration.Cw
+    assert len(
+        {
+            TetrahedralConfiguration.Cw,
+            TetrahedralConfiguration.Cw,
+            TetrahedralConfiguration.Ccw,
+        }
+    ) == 2
 
 
 def test_atomconstraint_eq_hash():

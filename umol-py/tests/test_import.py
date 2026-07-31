@@ -16,6 +16,7 @@ PUBLIC_EXPORTS = frozenset(
     AromaticSystemFieldChange
     AromaticSystemView
     AromaticSystemViews
+    AromaticValence
     AromaticValenceAst
     AromaticityConfig
     AromaticityModel
@@ -45,6 +46,7 @@ PUBLIC_EXPORTS = frozenset(
     BondViews
     BooleanAst
     ChemistryModel
+    CisTransConfiguration
     CisTransStereo
     CisTransStereoAst
     CommonSubgraphEnumerationAlgorithm
@@ -80,6 +82,7 @@ PUBLIC_EXPORTS = frozenset(
     HashedFingerprintConfig
     InconsistencyPolicy
     InvalidStructureError
+    IsotopeMass
     IsotopeMassAst
     LigandPermutation
     LigandSymmetryAst
@@ -101,6 +104,7 @@ PUBLIC_EXPORTS = frozenset(
     MulticenterBondFieldChange
     MulticenterBondView
     MulticenterBondViews
+    MulticenterValence
     MulticenterValenceAst
     NoncovalentBondAst
     NoncovalentBondConstraintAst
@@ -179,6 +183,7 @@ PUBLIC_EXPORTS = frozenset(
     SubgraphIsomorphismAlgorithm
     SubstructureMatchAlgorithm
     SubstructureSearchConfig
+    TetrahedralConfiguration
     TetrahedralStereo
     TetrahedralStereoAst
     Topicity

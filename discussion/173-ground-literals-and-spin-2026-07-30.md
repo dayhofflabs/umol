@@ -671,8 +671,9 @@ remaining.
   collapsing behavior through `valence_count()`, and migrate electron-counting, aromaticity, and
   valence callers. Add focused unit and property cases distinguishing structural absence from
   present zero while preserving equal numerical contribution. **Breaking (red→green).** [dep: S1b]
-- **S1d — `umol-py`: expose the exact carriers.** Rename the existing `TetrahedralStereo` and
-  `CisTransStereo` configuration shorthands to `TetrahedralConfiguration` and
+- **S1d — `umol-py`: expose the exact carriers.**
+  **Done.** Rename the existing `TetrahedralStereo` and `CisTransStereo` configuration shorthands
+  to `TetrahedralConfiguration` and
   `CisTransConfiguration`, bind all five exact carriers, and make each Python `as_lit()` return
   the carrier or `None`. Expose both carrier `valence_count()` methods. Update exports, import
   tests, unit tests, and Python fixtures without using Python primitive sentinels.

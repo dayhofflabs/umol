@@ -7,6 +7,7 @@ from umol import (
     AtomConstraintsAst,
     Element,
     ElementAst,
+    IsotopeMass,
     IsotopeMassAst,
     MemOp,
     MoleculeAst,
@@ -335,8 +336,9 @@ def test_elementast_as_lit():
 
 
 def test_isotopemassast_as_lit():
-    assert IsotopeMassAst.Lit(13).as_lit() == 13
-    assert IsotopeMassAst.Natural().as_lit() is None
+    assert IsotopeMassAst.Lit(13).as_lit() == IsotopeMass.MassNumber(13)
+    assert IsotopeMassAst.Natural().as_lit() == IsotopeMass.Natural()
+    assert IsotopeMassAst.Undetermined().as_lit() is None
 
 
 def test_valueast_as_lit():

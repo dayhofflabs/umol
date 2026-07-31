@@ -408,7 +408,7 @@ mod tests {
     use crate::boolean::BooleanArg;
     use crate::constraint::bond::{BondConstraintAst, BondConstraintKey, BondConstraintsUpdate};
     use crate::convert::into_py_variant;
-    use crate::stereo::{CisTransStereo, CisTransStereoArg, CisTransStereoAst};
+    use crate::stereo::{CisTransConfiguration, CisTransStereoArg, CisTransStereoAst};
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
@@ -893,7 +893,7 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             constraints
-                .set_cis_trans_stereo(py, CisTransStereoArg::Config(CisTransStereo::E))
+                .set_cis_trans_stereo(py, CisTransStereoArg::Config(CisTransConfiguration::E))
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::Stereo(coset) => {

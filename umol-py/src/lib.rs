@@ -12,7 +12,7 @@ use crate::{
         SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
     aromatic::{AromaticSystemAst, AromaticSystemView, AromaticSystemViews},
-    atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst},
+    atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMass, IsotopeMassAst},
     bond::{BondAst, BondView, BondViews},
     boolean::BooleanAst,
     constraint::{
@@ -21,8 +21,9 @@ use crate::{
             AromaticSystemConstraintsView,
         },
         atom::{
-            AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
-            AtomConstraintsView, AtomRingSizeCounts, MulticenterValenceAst,
+            AromaticValence, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
+            AtomConstraintsAst, AtomConstraintsView, AtomRingSizeCounts, MulticenterValence,
+            MulticenterValenceAst,
         },
         bond::{
             BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
@@ -99,11 +100,11 @@ use crate::{
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::SpinStateAst,
     stereo::{
-        CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
+        CisTransConfiguration, CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomAst, StereoAtomView, StereoAtomViews,
         StereoBondAst, StereoBondView, StereoBondViews, StereoConfigurationAst, StereoCoset,
         StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
-        TetrahedralStereo, TetrahedralStereoAst, Topicity,
+        TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoAst, Topicity,
     },
     substructure::SubstructureSearchConfig,
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
@@ -278,12 +279,15 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ValuePredicate>()?;
         module.add_class::<ValueAst>()?;
         module.add_class::<ElementAst>()?;
+        module.add_class::<IsotopeMass>()?;
         module.add_class::<IsotopeMassAst>()?;
         module.add_class::<SpinStateAst>()?;
         module.add_class::<AtomAst>()?;
         module.add_class::<AtomView>()?;
         module.add_class::<AtomViews>()?;
+        module.add_class::<AromaticValence>()?;
         module.add_class::<AromaticValenceAst>()?;
+        module.add_class::<MulticenterValence>()?;
         module.add_class::<MulticenterValenceAst>()?;
         module.add_class::<RingScope>()?;
         module.add_class::<RingMembershipAst>()?;
@@ -338,8 +342,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoCoset>()?;
         module.add_class::<TetrahedralStereoAst>()?;
         module.add_class::<TetrahedralStereo>()?;
+        module.add_class::<TetrahedralConfiguration>()?;
         module.add_class::<CisTransStereoAst>()?;
         module.add_class::<CisTransStereo>()?;
+        module.add_class::<CisTransConfiguration>()?;
         module.add_class::<StereoKind>()?;
         module.add_class::<StereoLigandKind>()?;
         module.add_class::<StereoLigand>()?;
