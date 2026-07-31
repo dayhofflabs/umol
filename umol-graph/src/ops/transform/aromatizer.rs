@@ -105,7 +105,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst, MoleculeParts,
-        RingConfig, SpinStateAst,
+        RingConfig, UnpairedElectronsAst,
     };
     use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
@@ -119,7 +119,7 @@ mod tests {
     fn kekule_carbon() -> AtomAst {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = ValueAst::Lit(0);
-        atom.spin = SpinStateAst::closed_shell();
+        atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
         atom
     }
 

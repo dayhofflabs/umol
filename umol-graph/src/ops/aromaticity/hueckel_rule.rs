@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, RingView,
-    SpinStateAst,
+    UnpairedElectronsAst,
 };
 use umol_graph_core::UnionFind;
 
@@ -98,7 +98,7 @@ impl HueckelRuleAromaticity {
                 atoms,
                 AromaticSystemAst::from_electrons(electrons)
                     .with_charge(0)
-                    .with_spin(SpinStateAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             ));
         }
 

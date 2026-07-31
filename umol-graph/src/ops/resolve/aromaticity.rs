@@ -166,7 +166,7 @@ impl AromaticityResolver {
 mod tests {
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
-        AromaticSystemId, BondConstraintKey, BondId, RingConfig, SpinStateAst, ValueAst,
+        AromaticSystemId, BondConstraintKey, BondId, RingConfig, UnpairedElectronsAst, ValueAst,
     };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_graph_core::{
@@ -234,7 +234,7 @@ mod tests {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
                     ast: AromaticSystemAst::from_electrons(vec![1; 6])
                         .with_charge(0)
-                        .with_spin(SpinStateAst::closed_shell()),
+                        .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(0)),

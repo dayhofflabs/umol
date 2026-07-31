@@ -1,10 +1,10 @@
-//! Multicenter-bond resolver: fills `MulticenterBondAst` charge / spin
+//! Multicenter-bond resolver: fills `MulticenterBondAst` charge and unpaired-electron
 //! defaults parallel to `BondsResolver`.
 
 use thiserror::Error;
 use umol_ast::ast::{
-    Edit, Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, SpinStateAst,
-    TransactionError, ValueAst,
+    Edit, Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, TransactionError,
+    UnpairedElectronsAst, ValueAst,
 };
 use umol_utils::solution::Solution;
 
@@ -25,22 +25,24 @@ impl MulticenterBondsResolver {
         Self
     }
 
-    /// Construct charge and spin default edits without mutating `ast`.
+    /// Construct charge and unpaired-electron default edits without mutating `ast`.
     pub fn plan(&self, ast: &MoleculeAst) -> Vec<Edit> {
         let mut edits = Vec::new();
         for bond_id in ast.multicenter_bonds().ids() {
             let bond = ast.multicenter_bond(bond_id).ast;
-            let mut selected_spin = bond.spin.clone();
+            let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = MulticenterBondUpdate::default();
             if matches!(bond.charge, ValueAst::Undetermined) {
                 update.charge = Some(ValueAst::Lit(0));
             }
-            if selected_spin.is_undetermined() {
-                selected_spin = SpinStateAst::closed_shell();
+            if selected_unpaired_electrons.is_undetermined() {
+                selected_unpaired_electrons = UnpairedElectronsAst::closed_shell();
             } else {
-                selected_spin.high_spin_complete();
+                selected_unpaired_electrons.high_spin_complete();
             }
-            update.spin = bond.spin.difference_to(&selected_spin);
+            update.unpaired_electrons = bond
+                .unpaired_electrons
+                .difference_to(&selected_unpaired_electrons);
             edits.extend(Edit::for_multicenter_bond_update(
                 MulticenterBondHandle::Id(bond_id),
                 bond,
@@ -85,24 +87,24 @@ mod tests {
             },
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                change: MulticenterBondFieldChange::Spin {
-                    old: SpinStateAst::default(),
-                    new: SpinStateAst::closed_shell(),
+                change: MulticenterBondFieldChange::UnpairedElectrons {
+                    old: UnpairedElectronsAst::default(),
+                    new: UnpairedElectronsAst::closed_shell(),
                 },
             },
         ]
     )]
-    #[case::partial_spin(
+    #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["B" "H" "B"]
                        :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c-#s3"}]}"#),
         vec![Edit::ModifyMulticenterBondField {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-            change: MulticenterBondFieldChange::Spin {
-                old: SpinStateAst {
-                    unpaired: ValueAst::Undetermined,
+            change: MulticenterBondFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsAst {
+                    count: ValueAst::Undetermined,
                     multiplicity: ValueAst::Lit(3),
                 },
-                new: SpinStateAst::from((2_u8, 3_u8)),
+                new: UnpairedElectronsAst::from((2_u8, 3_u8)),
             },
         }]
     )]
@@ -121,7 +123,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::partial_spin(
+    #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["B" "H" "B"]
                        :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#s3"}]}"#),
         mol_dsl!(r#"{:atoms ["B" "H" "B"]

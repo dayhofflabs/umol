@@ -116,7 +116,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, BondAst, MoleculeAst, MoleculeParts,
-        RingConfig, SpinStateAst, ValueAst,
+        RingConfig, UnpairedElectronsAst, ValueAst,
     };
     use umol_chem::element::Element;
     use umol_graph_core::{
@@ -144,7 +144,7 @@ mod tests {
                 atom.charge = ValueAst::Lit(0);
                 atom.implicit_hydrogens = ValueAst::Lit(1);
                 atom.lone_pairs = ValueAst::Lit(0);
-                atom.spin = SpinStateAst::closed_shell();
+                atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
                 atom.constraints.set(AtomConstraintAst::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
                 ));

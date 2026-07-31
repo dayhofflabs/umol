@@ -9,7 +9,8 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet,
+    UnpairedElectronsAst,
 };
 use umol_chem::element::Element;
 use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
@@ -88,7 +89,7 @@ impl ClarAromaticity {
             atoms,
             AromaticSystemAst::from_electrons(electrons)
                 .with_charge(0)
-                .with_spin(SpinStateAst::closed_shell()),
+                .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
         )])
     }
 }

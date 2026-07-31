@@ -6,7 +6,7 @@
 
 use umol_ast::ast::{
     AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoAst, MoleculeAst,
-    MoleculeConstraint, MoleculeParts, SpinStateAst, ValueAst,
+    MoleculeConstraint, MoleculeParts, UnpairedElectronsAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
@@ -81,7 +81,7 @@ impl IntoAst<MoleculeAst> for PerceivedMolecule {
             }),
             Constraint::Molecule(MoleculeConstraint::SpinSum {
                 atoms: None,
-                spin: SpinStateAst::from((multiplicity - 1, multiplicity)),
+                spin: UnpairedElectronsAst::from((multiplicity - 1, multiplicity)),
             }),
         ]);
         MoleculeAst::from_parts(MoleculeParts {
@@ -137,7 +137,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::new(ValueAst::Lit(2)))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
-                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((0u8, 1u8)) }),
+                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::from((0u8, 1u8)) }),
             ]),
             ..Default::default()
         })
@@ -155,7 +155,7 @@ mod tests {
             atoms: vec![AtomAst::new(ElementAst::Lit(O))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(-1) }),
-                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((1u8, 2u8)) }),
+                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::from((1u8, 2u8)) }),
             ]),
             ..Default::default()
         })

@@ -1,10 +1,11 @@
-//! Covalent-bond resolver: fills `BondAst` charge / spin defaults on bonds
+//! Covalent-bond resolver: fills `BondAst` charge and unpaired-electron defaults on bonds
 //! whose corresponding inherent slots are still `Undetermined` after the
 //! valence and aromaticity passes.
 
 use thiserror::Error;
 use umol_ast::ast::{
-    BondHandle, BondUpdate, Edit, Lattice, MoleculeAst, SpinStateAst, TransactionError, ValueAst,
+    BondHandle, BondUpdate, Edit, Lattice, MoleculeAst, TransactionError, UnpairedElectronsAst,
+    ValueAst,
 };
 use umol_utils::solution::Solution;
 
@@ -25,22 +26,24 @@ impl BondsResolver {
         Self
     }
 
-    /// Construct charge and spin default edits without mutating `ast`.
+    /// Construct charge and unpaired-electron default edits without mutating `ast`.
     pub fn plan(&self, ast: &MoleculeAst) -> Vec<Edit> {
         let mut edits = Vec::new();
         for bond_id in ast.bonds().ids() {
             let bond = ast.bond(bond_id).ast;
-            let mut selected_spin = bond.spin.clone();
+            let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = BondUpdate::default();
             if matches!(bond.charge, ValueAst::Undetermined) {
                 update.charge = Some(ValueAst::Lit(0));
             }
-            if selected_spin.is_undetermined() {
-                selected_spin = SpinStateAst::closed_shell();
+            if selected_unpaired_electrons.is_undetermined() {
+                selected_unpaired_electrons = UnpairedElectronsAst::closed_shell();
             } else {
-                selected_spin.high_spin_complete();
+                selected_unpaired_electrons.high_spin_complete();
             }
-            update.spin = bond.spin.difference_to(&selected_spin);
+            update.unpaired_electrons = bond
+                .unpaired_electrons
+                .difference_to(&selected_unpaired_electrons);
             edits.extend(Edit::for_bond_update(
                 BondHandle::Id(bond_id),
                 bond,
@@ -84,23 +87,23 @@ mod tests {
             },
             Edit::ModifyBondField {
                 id: BondHandle::Id(BondId(0)),
-                change: BondFieldChange::Spin {
-                    old: SpinStateAst::default(),
-                    new: SpinStateAst::closed_shell(),
+                change: BondFieldChange::UnpairedElectrons {
+                    old: UnpairedElectronsAst::default(),
+                    new: UnpairedElectronsAst::closed_shell(),
                 },
             },
         ]
     )]
-    #[case::partial_spin(
+    #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c+#s3"]]}"#),
         vec![Edit::ModifyBondField {
             id: BondHandle::Id(BondId(0)),
-            change: BondFieldChange::Spin {
-                old: SpinStateAst {
-                    unpaired: ValueAst::Undetermined,
+            change: BondFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsAst {
+                    count: ValueAst::Undetermined,
                     multiplicity: ValueAst::Lit(3),
                 },
-                new: SpinStateAst::from((2_u8, 3_u8)),
+                new: UnpairedElectronsAst::from((2_u8, 3_u8)),
             },
         }]
     )]
@@ -115,7 +118,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::partial_spin(
+    #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#s3"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c0#u2#s3"]]}"#)
     )]

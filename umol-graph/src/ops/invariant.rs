@@ -9,9 +9,11 @@ use std::ops::RangeInclusive;
 use thiserror::Error;
 use umol_ast::ast::{
     aromatic_covalence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
-    AtomId, ElementAst, Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
+    AtomId, ElementAst, Lattice, MoleculeAst, MulticenterValenceAst, UnpairedElectronsAst,
+    ValueAst,
 };
 use umol_chem::element::Element;
+use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_utils::solution::Solution;
 
 pub struct ValenceInvariants;
@@ -51,7 +53,7 @@ impl ValenceInvariants {
             atom.charge.as_lit(),
             atom.implicit_hydrogens.as_lit(),
             atom.lone_pairs.as_lit(),
-            atom.spin.unpaired.as_lit(),
+            atom.unpaired_electrons.count.as_lit(),
         ) else {
             return Solution::Underdetermined(());
         };
@@ -152,7 +154,7 @@ impl ValenceInvariants {
         let Some(lone_pairs) = atom.lone_pairs().as_lit() else {
             return Solution::Underdetermined(());
         };
-        let Some(unpaired) = atom.spin().unpaired.as_lit() else {
+        let Some(unpaired) = atom.unpaired_electrons().count.as_lit() else {
             return Solution::Underdetermined(());
         };
         let valence = match atom
@@ -345,7 +347,7 @@ impl ValenceInvariants {
             0..=((element.valence_capacity() / 2) as i64),
         );
         let unpaired_range = enumeration_values(
-            &atom.spin().unpaired,
+            &atom.unpaired_electrons().count,
             0..=(element.max_unpaired_electrons() as i64),
         );
 
@@ -375,7 +377,8 @@ impl ValenceInvariants {
                         if orbital != electron {
                             continue;
                         }
-                        let Some(multiplicity) = enumerate_multiplicity(atom.spin(), unpaired)
+                        let Some(multiplicity) =
+                            enumerate_multiplicity(atom.unpaired_electrons(), unpaired)
                         else {
                             continue;
                         };
@@ -384,8 +387,8 @@ impl ValenceInvariants {
                             charge: ValueAst::Lit(charge),
                             implicit_hydrogens: ValueAst::Lit(implicit_h),
                             lone_pairs: ValueAst::Lit(lone_pairs),
-                            spin: SpinStateAst {
-                                unpaired: ValueAst::Lit(unpaired),
+                            unpaired_electrons: UnpairedElectronsAst {
+                                count: ValueAst::Lit(unpaired),
                                 multiplicity: ValueAst::Lit(multiplicity),
                             },
                             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(
@@ -406,17 +409,18 @@ impl ValenceInvariants {
     }
 }
 
-fn enumerate_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
-    let multiplicity = match spin.multiplicity {
+fn enumerate_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) -> Option<i64> {
+    let multiplicity = match unpaired_electrons.multiplicity {
         ValueAst::Lit(m) => m,
-        ValueAst::Undetermined => unpaired + 1,
+        ValueAst::Undetermined => count + 1,
         _ => return None,
     };
-    let spin = SpinStateAst {
-        unpaired: ValueAst::Lit(unpaired),
-        multiplicity: ValueAst::Lit(multiplicity),
-    };
-    spin.as_lit().map(|_| multiplicity)
+    SpinState::try_from(UnpairedElectrons {
+        count,
+        multiplicity,
+    })
+    .ok()
+    .map(|_| multiplicity)
 }
 
 /// Compute number of atomic spin orbitals involved in topology (shared and unshared)
@@ -480,7 +484,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst, IsotopeMassAst,
-        MoleculeAst, MoleculeParts, SpinStateAst, ValueAst,
+        MoleculeAst, MoleculeParts, UnpairedElectronsAst, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -494,7 +498,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -505,7 +509,7 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -517,7 +521,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(99),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -539,7 +543,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         },
         Solution::Determined(()),
@@ -550,7 +554,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
                 AromaticValenceAst::NotAromatic,
             )),
@@ -564,7 +568,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
                 AromaticValenceAst::Aromatic(ValueAst::Lit(0)),
             )),
@@ -578,7 +582,7 @@ mod tests {
             charge: ValueAst::Undetermined,
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         },
         Solution::Underdetermined(()),
@@ -589,7 +593,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(99),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         },
         Solution::Contradictory(ValenceMismatch::OrbitalCount { atom_id: AtomId(0), orbital_count: 198, electron_count: 103 }),
@@ -608,7 +612,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
     )]
@@ -622,7 +626,7 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -632,7 +636,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
@@ -642,7 +646,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(99),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -656,7 +660,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(2),
-            spin: SpinStateAst::from((2_u8, 3_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -666,18 +670,18 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(2),
-            spin: SpinStateAst::from((2_u8, 3_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
-    // Spin fully ground to a non-maximal but valid coupling (3 unpaired as a
+    // Unpaired electrons fully ground to a non-maximal but valid coupling (3 unpaired as a
     // doublet); lone pairs open and fixed by conservation to 1.
-    #[case::ground_spin_state(
+    #[case::ground_unpaired_electrons(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::N),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
-            spin: SpinStateAst::from((3_u8, 2_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((3_u8, 2_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -687,7 +691,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(1),
-            spin: SpinStateAst::from((3_u8, 2_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((3_u8, 2_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
@@ -699,8 +703,8 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst {
-                unpaired: ValueAst::Undetermined,
+            unpaired_electrons: UnpairedElectronsAst {
+                count: ValueAst::Undetermined,
                 multiplicity: ValueAst::Lit(1),
             },
             ..Default::default()
@@ -712,27 +716,27 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((2_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((2_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
-    // Spin pinned to a physically impossible pair (2 unpaired, multiplicity 2):
+    // Unpaired electrons pinned to a physically impossible pair (2 unpaired, multiplicity 2):
     // the only conservation-valid count is incompatible, so no candidate.
-    #[case::inconsistent_spin(
+    #[case::inconsistent_unpaired_electrons(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((2_u8, 2_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
         vec![],
     )]
-    // Spin fully open: unpaired fixed by conservation to 2, multiplicity
+    // Both components open: unpaired fixed by conservation to 2, multiplicity
     // defaulted by `into_ground` to the maximum (triplet carbene).
-    #[case::open_spin(
+    #[case::open_unpaired_electrons(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
@@ -747,7 +751,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((2_u8, 3_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
@@ -767,7 +771,7 @@ mod tests {
             charge: ValueAst::Lit(-1),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(3),
-            spin: SpinStateAst::from((1_u8, 2_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((1_u8, 2_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
@@ -779,7 +783,7 @@ mod tests {
             isotope_mass: IsotopeMassAst::Lit(13),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
@@ -789,7 +793,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]

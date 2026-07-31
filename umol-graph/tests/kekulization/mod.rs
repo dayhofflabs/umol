@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use rstest::rstest;
 use umol_ast::ast::{
     AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
-    ElementAst, IntoAst, SpinStateAst, ValueAst,
+    ElementAst, IntoAst, UnpairedElectronsAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
@@ -16,7 +16,7 @@ struct KekulizationFixture {
     participants: Vec<AtomId>,
     electrons: Vec<i64>,
     charge: i64,
-    spin: SpinStateAst,
+    unpaired_electrons: UnpairedElectronsAst,
     elements: Vec<ElementAst>,
     nonzero_atom_charges: Vec<(AtomId, i64)>,
     nonzero_lone_pairs: Vec<(AtomId, i64)>,
@@ -29,7 +29,7 @@ struct KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![ElementAst::Lit(Element::C); 6],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
@@ -41,7 +41,7 @@ struct KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::N),
             ElementAst::Lit(Element::C),
@@ -60,7 +60,7 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::N),
             ElementAst::Lit(Element::C),
@@ -78,7 +78,7 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::O),
             ElementAst::Lit(Element::C),
@@ -96,7 +96,7 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::S),
             ElementAst::Lit(Element::C),
@@ -114,7 +114,7 @@ struct KekulizationFixture {
         participants: (0..7).map(AtomId).collect(),
         electrons: vec![0, 1, 1, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::B),
             ElementAst::Lit(Element::C),
@@ -134,7 +134,7 @@ struct KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::B),
             ElementAst::Lit(Element::C),
@@ -153,7 +153,7 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1],
         charge: -1,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![ElementAst::Lit(Element::C); 5],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
@@ -165,7 +165,7 @@ struct KekulizationFixture {
         participants: (0..7).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1, 1],
         charge: 1,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![ElementAst::Lit(Element::C); 7],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
@@ -177,7 +177,7 @@ struct KekulizationFixture {
         participants: (0..10).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![ElementAst::Lit(Element::C); 10],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
@@ -189,7 +189,7 @@ struct KekulizationFixture {
         participants: (0..9).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1, 1, 1, 1, 1],
         charge: 0,
-        spin: SpinStateAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
         elements: vec![
             ElementAst::Lit(Element::N),
             ElementAst::Lit(Element::C),
@@ -223,7 +223,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
         participants: system.atom_ids().collect(),
         electrons: electrons.clone(),
         charge: *charge,
-        spin: system.spin().clone(),
+        unpaired_electrons: system.unpaired_electrons().clone(),
         elements: molecule
             .atoms()
             .iter()
@@ -409,9 +409,9 @@ fn test_kekulization_fixture_output(
         let expected_lone_pairs = before_lone_pairs + i64::from(system_charge == -1);
         assert_eq!(after.lone_pairs, ValueAst::Lit(expected_lone_pairs));
         assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
-        assert_eq!(after.spin, before.spin);
+        assert_eq!(after.unpaired_electrons, before.unpaired_electrons);
         if system_charge != 0 {
-            assert_eq!(after.spin, SpinStateAst::from((0, 1)));
+            assert_eq!(after.unpaired_electrons, UnpairedElectronsAst::from((0, 1)));
         }
     }
 }

@@ -40,8 +40,8 @@ pub enum KekulizerError {
     UndeterminedElectrons(AromaticSystemId),
     #[error("charge is undetermined for aromatic system {0:?}")]
     UndeterminedCharge(AromaticSystemId),
-    #[error("spin is undetermined for aromatic system {0:?}")]
-    UndeterminedSpin(AromaticSystemId),
+    #[error("unpaired electrons are undetermined for aromatic system {0:?}")]
+    UndeterminedUnpairedElectrons(AromaticSystemId),
     #[error(
         "aromatic system {system:?} has {member_count} members but {electron_count} electron contributions"
     )]
@@ -154,10 +154,11 @@ impl MatchingInput {
         let ValueAst::Lit(charge) = view.charge() else {
             return Err(KekulizerError::UndeterminedCharge(system));
         };
-        let (ValueAst::Lit(unpaired), ValueAst::Lit(multiplicity)) =
-            (&view.spin().unpaired, &view.spin().multiplicity)
-        else {
-            return Err(KekulizerError::UndeterminedSpin(system));
+        let (ValueAst::Lit(unpaired), ValueAst::Lit(multiplicity)) = (
+            &view.unpaired_electrons().count,
+            &view.unpaired_electrons().multiplicity,
+        ) else {
+            return Err(KekulizerError::UndeterminedUnpairedElectrons(system));
         };
         if (*unpaired, *multiplicity) != (0, 1) {
             return Err(KekulizerError::OpenShell(system));
@@ -619,9 +620,9 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]#u0#s1"}]}"#),
         KekulizerError::UndeterminedCharge(AromaticSystemId(0))
     )]
-    #[case::undetermined_spin(
+    #[case::undetermined_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]#c0#u0"}]}"#),
-        KekulizerError::UndeterminedSpin(AromaticSystemId(0))
+        KekulizerError::UndeterminedUnpairedElectrons(AromaticSystemId(0))
     )]
     #[case::electron_count_mismatch(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1]#c0#u0#s1"}]}"#),

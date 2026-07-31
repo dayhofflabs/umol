@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, SpinStateAst,
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, UnpairedElectronsAst,
 };
 use umol_chem::element::Element;
 use umol_graph_core::{ConnectedComponentsAlgorithm, NodeId};
@@ -127,7 +127,7 @@ impl HmoAromaticity {
                     atoms,
                     AromaticSystemAst::from_electrons(electrons)
                         .with_charge(0)
-                        .with_spin(SpinStateAst::closed_shell()),
+                        .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
                 ));
             }
         }

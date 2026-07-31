@@ -703,7 +703,7 @@ S1 ends with exact literal projection having the same structural meaning in Rust
   expectations. Update parser roundtrip properties and sweep `fuzz_entity_strings`,
   `fuzz_molecule`, `fuzz_reaction`, and their spin-bearing seeds. **Breaking caller migration
   (red→green within S2).** [dep: S2a, S2b]
-- **S2d — `umol-graph`, `umol-io`, `umol-geometric*`: migrate AST consumers.** Update
+- **S2d — `umol-graph`, `umol-io`, `umol-geometric*`: migrate AST consumers.** **Done.** Update
   resolution, valence, aromaticity, transformation, validation, TableIR raising, and geometric
   conversion to the renamed AST and entity fields. Bring unit and conformance suites, examples,
   fixtures, snapshots, and benchmarks into conformance. **Breaking caller migration

@@ -393,7 +393,7 @@ impl AromaticityPerception {
 ///   1,2-azaborine: heterogeneous → skip. Charges (when present) stay on
 ///   the heteroatom.
 ///
-/// Spin is not modified.
+/// Unpaired-electron fields are not modified.
 fn equalize_charges(
     ast: &mut MoleculeAst,
     system_idx: AromaticSystemId,
@@ -487,7 +487,7 @@ mod tests {
     use umol_ast::ast::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
         AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeParts,
-        SpinStateAst, ValueAst,
+        UnpairedElectronsAst, ValueAst,
     };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
@@ -535,7 +535,7 @@ mod tests {
     fn aromatic(element: Element, pi: i64) -> AtomAst {
         let mut atom = AtomAst::from_element(element);
         atom.charge = ValueAst::Lit(0);
-        atom.spin = SpinStateAst::closed_shell();
+        atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
         atom.constraints.set(AtomConstraintAst::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
         ));
@@ -611,7 +611,7 @@ mod tests {
                 vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
                 AromaticSystemAst::from_electrons(vec![2, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_spin(SpinStateAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
             mismatches: vec![],
         }),
@@ -661,7 +661,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_spin(SpinStateAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
             mismatches: vec![
                 AromaticityMismatch::AtomProjection { atom: AtomId(6) },
@@ -693,7 +693,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_spin(SpinStateAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
             mismatches: vec![],
         }),
@@ -721,7 +721,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_spin(SpinStateAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
             mismatches: vec![AromaticityMismatch::ElectronContribution {
                 system: AromaticSystemId(0),
@@ -752,7 +752,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_spin(SpinStateAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
             mismatches: vec![],
         }),

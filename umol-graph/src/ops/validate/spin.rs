@@ -1,6 +1,6 @@
 //! Per-entity spin-coupling parity check: a literal `(unpaired, multiplicity)`
 //! pair must satisfy `multiplicity = unpaired - 2k + 1` for some `k ∈
-//! 0..=unpaired/2`. Runs on any entity carrying a `SpinStateAst` (atom,
+//! 0..=unpaired/2`. Runs on any entity carrying a `UnpairedElectronsAst` (atom,
 //! aromatic system, multicenter bond).
 //!
 //! Stub: always returns `Determined`. Implementation pending; complete literal

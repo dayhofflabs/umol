@@ -9,7 +9,7 @@ use umol_ast::ast::MoleculeParts;
 use umol_ast::ast::{
     aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
     AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edit, IsotopeMassAst, Lattice,
-    MoleculeAst, SpinStateAst, TransactionError, ValueAst,
+    MoleculeAst, TransactionError, UnpairedElectronsAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
@@ -279,7 +279,8 @@ impl<'a> CountsValence<'a> {
                 else {
                     continue;
                 };
-                let Some(multiplicity) = derive_multiplicity(&atom.spin, unpaired) else {
+                let Some(multiplicity) = derive_multiplicity(&atom.unpaired_electrons, unpaired)
+                else {
                     continue;
                 };
                 let derived = derive_atom(
@@ -343,7 +344,10 @@ fn derive_lone_pairs_and_unpaired(
     nonbonding: i64,
 ) -> Option<(i64, i64)> {
     let max_lone_pairs = i64::from(element.valence_capacity()) / 2;
-    match (atom.lone_pairs.as_lit(), atom.spin.unpaired.as_lit()) {
+    match (
+        atom.lone_pairs.as_lit(),
+        atom.unpaired_electrons.count.as_lit(),
+    ) {
         (Some(lone_pairs), Some(unpaired)) => {
             if unpaired + 2 * lone_pairs == nonbonding {
                 Some((lone_pairs, unpaired))
@@ -353,7 +357,12 @@ fn derive_lone_pairs_and_unpaired(
         }
         (Some(lone_pairs), None) => {
             let unpaired = nonbonding - 2 * lone_pairs;
-            if unpaired < 0 || !atom.spin.unpaired.matches(&ValueAst::Lit(unpaired)) {
+            if unpaired < 0
+                || !atom
+                    .unpaired_electrons
+                    .count
+                    .matches(&ValueAst::Lit(unpaired))
+            {
                 return None;
             }
             Some((lone_pairs, unpaired))
@@ -392,8 +401,8 @@ fn derive_atom(
     AtomAst {
         implicit_hydrogens: ValueAst::Lit(implicit_hydrogens),
         lone_pairs: ValueAst::Lit(lone_pairs),
-        spin: SpinStateAst {
-            unpaired: ValueAst::Lit(unpaired),
+        unpaired_electrons: UnpairedElectronsAst {
+            count: ValueAst::Lit(unpaired),
             multiplicity: ValueAst::Lit(multiplicity),
         },
         constraints: AtomConstraintsAst::from_iter([
@@ -408,14 +417,14 @@ fn derive_atom(
     }
 }
 
-fn derive_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
-    let multiplicity = match spin.multiplicity {
+fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) -> Option<i64> {
+    let multiplicity = match unpaired_electrons.multiplicity {
         ValueAst::Lit(multiplicity) => multiplicity,
-        ValueAst::Undetermined => unpaired.checked_add(1)?,
+        ValueAst::Undetermined => count.checked_add(1)?,
         _ => return None,
     };
     SpinState::try_from(UnpairedElectrons {
-        count: unpaired,
+        count,
         multiplicity,
     })
     .ok()?;
@@ -434,51 +443,51 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::explicit_triplet(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
         2,
         Some(3),
     )]
     #[case::explicit_open_shell_singlet(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
         2,
         Some(1),
     )]
     #[case::incompatible(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) },
         2,
         None,
     )]
     #[case::negative_multiplicity(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(-1) },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(-1) },
         2,
         None,
     )]
     #[case::derived(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
         2,
         Some(3),
     )]
     #[case::negative_count(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
         -1,
         None,
     )]
     #[case::pattern(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::lit_set([1, 3]) },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::lit_set([1, 3]) },
         2,
         None,
     )]
     #[case::overflow(
-        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
         i64::MAX,
         None,
     )]
     fn test_derive_multiplicity(
-        #[case] spin: SpinStateAst,
-        #[case] unpaired: i64,
+        #[case] unpaired_electrons: UnpairedElectronsAst,
+        #[case] count: i64,
         #[case] expected: Option<i64>,
     ) {
-        assert_eq!(derive_multiplicity(&spin, unpaired), expected);
+        assert_eq!(derive_multiplicity(&unpaired_electrons, count), expected);
     }
 
     #[rstest]
@@ -511,9 +520,9 @@ mod tests {
                 },
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
-                    change: AtomFieldChange::Spin {
-                        old: SpinStateAst::default(),
-                        new: SpinStateAst::from((0_u8, 1_u8)),
+                    change: AtomFieldChange::UnpairedElectrons {
+                        old: UnpairedElectronsAst::default(),
+                        new: UnpairedElectronsAst::from((0_u8, 1_u8)),
                     },
                 },
                 Edit::ModifyAtomConstraint {

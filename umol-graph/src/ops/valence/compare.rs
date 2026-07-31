@@ -28,13 +28,13 @@ pub fn compare_valence_preference(a: &AtomAst, b: &AtomAst) -> Ordering {
         .as_lit()
         .expect("valence preference requires literal lone pairs");
     let ua = a
-        .spin
-        .unpaired
+        .unpaired_electrons
+        .count
         .as_lit()
         .expect("valence preference requires literal unpaired electrons");
     let ub = b
-        .spin
-        .unpaired
+        .unpaired_electrons
+        .count
         .as_lit()
         .expect("valence preference requires literal unpaired electrons");
     ha.cmp(&hb).then(na.cmp(&nb)).then(ub.cmp(&ua))
@@ -44,27 +44,32 @@ pub fn compare_valence_preference(a: &AtomAst, b: &AtomAst) -> Ordering {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_ast::ast::{AtomAst, SpinStateAst, ValueAst};
+    use umol_ast::ast::{AtomAst, ElementAst, UnpairedElectronsAst, ValueAst};
     use umol_chem::element::Element;
 
     use super::*;
 
-    fn atom(h: i64, n: i64, u: i64) -> AtomAst {
-        let mut a = AtomAst::from_element(Element::C);
-        a.implicit_hydrogens = ValueAst::Lit(h);
-        a.lone_pairs = ValueAst::Lit(n);
-        a.spin = SpinStateAst {
-            unpaired: ValueAst::Lit(u),
-            multiplicity: ValueAst::Lit(1),
-        };
-        a
-    }
-
     #[rstest]
-    #[case::higher_h(atom(3, 0, 0), atom(1, 1, 0), Ordering::Greater)]
-    #[case::higher_n(atom(1, 1, 0), atom(3, 0, 0), Ordering::Less)]
-    #[case::lower_u(atom(3, 0, 0), atom(3, 0, 2), Ordering::Greater)]
-    #[case::equal(atom(2, 1, 0), atom(2, 1, 0), Ordering::Equal)]
+    #[case::higher_h(
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(3), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(1), lone_pairs: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        Ordering::Greater,
+    )]
+    #[case::higher_n(
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(1), lone_pairs: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(3), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        Ordering::Less,
+    )]
+    #[case::lower_u(
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(3), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(3), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((2_u8, 1_u8)), ..Default::default() },
+        Ordering::Greater,
+    )]
+    #[case::equal(
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(2), lone_pairs: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: ValueAst::Lit(2), lone_pairs: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        Ordering::Equal,
+    )]
     fn test_compare_valence_preference(
         #[case] a: AtomAst,
         #[case] b: AtomAst,
@@ -79,12 +84,34 @@ mod tests {
     }
 
     #[rstest]
-    fn test_compare_valence_preference_max_by_picks_higher_h() {
-        let candidates = [atom(1, 1, 0), atom(3, 0, 0), atom(2, 0, 0)];
+    fn test_compare_valence_preference_iterator() {
+        let candidates = [
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                implicit_hydrogens: ValueAst::Lit(1),
+                lone_pairs: ValueAst::Lit(1),
+                unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                ..Default::default()
+            },
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                implicit_hydrogens: ValueAst::Lit(3),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                ..Default::default()
+            },
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                implicit_hydrogens: ValueAst::Lit(2),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                ..Default::default()
+            },
+        ];
         let best = candidates
             .iter()
             .max_by(|a, b| compare_valence_preference(a, b))
             .unwrap();
-        assert_eq!(best.implicit_hydrogens.as_lit(), Some(3));
+        assert_eq!(best, &candidates[1]);
     }
 }

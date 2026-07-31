@@ -234,7 +234,7 @@ fn verdict(any_undetermined: bool) -> Solution<(), ValidatorContradiction> {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst, AtomConstraintAst, MoleculeAst, RingConfig, SpinStateAst, ValueAst,
+        AtomAst, AtomConstraintAst, MoleculeAst, RingConfig, UnpairedElectronsAst, ValueAst,
     };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
@@ -362,7 +362,7 @@ mod tests {
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
         atom.implicit_hydrogens = ValueAst::Lit(hydrogens);
-        atom.spin = SpinStateAst::from((0_u8, 1_u8));
+        atom.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
         if let Some(v) = valence {
             atom.constraints
                 .set(AtomConstraintAst::Valence(ValueAst::Lit(v)));
