@@ -753,9 +753,9 @@ test/fuzz inputs.
   `MulticenterBond` with their concrete IDs. Accumulate underdetermination without allowing it to
   mask a later contradiction. Add table tests for every entity kind and property tests over
   generated mixed entity states. **Additive behavior (green).** [dep: S4a]
-- **S4c — the same module and constraint traversal: inspect coupling constraints.** Recursively
-  inspect `UnpairedElectronCoupling` leaves in `And`, `Or`, and `Not` trees, report the containing
-  top-level `constraint_index` for invalid targets, and leave every non-vacuous coupling
+- **S4c — the same module and constraint traversal: inspect coupling constraints.** **Done.**
+  Recursively inspect `UnpairedElectronCoupling` leaves in `And`, `Or`, and `Not` trees, report the
+  containing top-level `constraint_index` for invalid targets, and leave every non-vacuous coupling
   underdetermined until the angular-momentum operation exists. Test nested trees, vacuous
   constraints, invalid targets, and valid-but-not-yet-evaluated targets. **Additive behavior
   (green).** [dep: S3a, S4a]

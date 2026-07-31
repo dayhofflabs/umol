@@ -1,11 +1,12 @@
-//! Spin-state invariant validation. A complete literal unpaired-electron count
-//! and multiplicity must form a physically valid [`SpinState`]; a pair with
-//! either component still non-literal is underdetermined.
+//! Spin-state invariant validation for entity fields and molecule-level
+//! unpaired-electron coupling targets. A complete literal unpaired-electron
+//! count and multiplicity must form a physically valid [`SpinState`]; a pair
+//! with either component still non-literal is underdetermined.
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemId, AsLit, AtomAst, AtomId, BondId, MoleculeAst, MulticenterBondId,
-    UnpairedElectronsAst,
+    AromaticSystemId, AsLit, AtomAst, AtomId, BondId, Constraint, Lattice, MoleculeAst,
+    MoleculeConstraint, MulticenterBondId, UnpairedElectronsAst,
 };
 use umol_chem::error::SpinStateError;
 use umol_chem::spin::SpinState;
@@ -18,18 +19,23 @@ pub struct SpinInvariantsValidator;
 pub enum SpinInvariantsContradiction {
     #[error("atom has invalid unpaired electrons: {error}")]
     Atom { error: SpinStateError },
-    #[error("molecule atom {id} has invalid unpaired electrons: {error}")]
-    MoleculeAtom { id: AtomId, error: SpinStateError },
-    #[error("bond {id} has invalid unpaired electrons: {error}")]
-    Bond { id: BondId, error: SpinStateError },
-    #[error("aromatic system {id} has invalid unpaired electrons: {error}")]
+    #[error("molecule atom {atom} has invalid unpaired electrons: {error}")]
+    MoleculeAtom { atom: AtomId, error: SpinStateError },
+    #[error("bond {bond} has invalid unpaired electrons: {error}")]
+    Bond { bond: BondId, error: SpinStateError },
+    #[error("aromatic system {system} has invalid unpaired electrons: {error}")]
     AromaticSystem {
-        id: AromaticSystemId,
+        system: AromaticSystemId,
         error: SpinStateError,
     },
-    #[error("multicenter bond {id} has invalid unpaired electrons: {error}")]
+    #[error("multicenter bond {bond} has invalid unpaired electrons: {error}")]
     MulticenterBond {
-        id: MulticenterBondId,
+        bond: MulticenterBondId,
+        error: SpinStateError,
+    },
+    #[error("unpaired-electron coupling in constraint {constraint_index} is invalid: {error}")]
+    UnpairedElectronCoupling {
+        constraint_index: usize,
         error: SpinStateError,
     },
 }
@@ -51,7 +57,10 @@ impl SpinInvariantsValidator {
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
-                        SpinInvariantsContradiction::MoleculeAtom { id: atom.id, error },
+                        SpinInvariantsContradiction::MoleculeAtom {
+                            atom: atom.id,
+                            error,
+                        },
                     ));
                 }
             }
@@ -62,7 +71,7 @@ impl SpinInvariantsValidator {
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(SpinInvariantsContradiction::Bond {
-                        id: bond.id,
+                        bond: bond.id,
                         error,
                     }));
                 }
@@ -75,7 +84,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::AromaticSystem {
-                            id: system.id,
+                            system: system.id,
                             error,
                         },
                     ));
@@ -88,7 +97,24 @@ impl SpinInvariantsValidator {
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
-                        SpinInvariantsContradiction::MulticenterBond { id: bond.id, error },
+                        SpinInvariantsContradiction::MulticenterBond {
+                            bond: bond.id,
+                            error,
+                        },
+                    ));
+                }
+            }
+        }
+        for (constraint_index, constraint) in ast.constraints().iter().enumerate() {
+            match validate_couplings_in_constraint(constraint) {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => any_undetermined = true,
+                Solution::Contradictory(error) => {
+                    return Ok(Solution::Contradictory(
+                        SpinInvariantsContradiction::UnpairedElectronCoupling {
+                            constraint_index,
+                            error,
+                        },
                     ));
                 }
             }
@@ -107,6 +133,44 @@ impl SpinInvariantsValidator {
     ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
         Ok(validate_unpaired_electrons(&atom.unpaired_electrons)
             .map_contradiction(|error| SpinInvariantsContradiction::Atom { error }))
+    }
+}
+
+fn validate_couplings_in_constraint(constraint: &Constraint) -> Solution<(), SpinStateError> {
+    match constraint {
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+            unpaired_electrons,
+            ..
+        }) => {
+            if unpaired_electrons.is_undetermined() {
+                return Solution::Determined(());
+            }
+            match validate_unpaired_electrons(unpaired_electrons) {
+                Solution::Contradictory(error) => Solution::Contradictory(error),
+                Solution::Determined(()) | Solution::Underdetermined(()) => {
+                    Solution::Underdetermined(())
+                }
+            }
+        }
+        Constraint::And(children) | Constraint::Or(children) => {
+            let mut any_undetermined = false;
+            for child in children {
+                match validate_couplings_in_constraint(child) {
+                    Solution::Determined(()) => {}
+                    Solution::Underdetermined(()) => any_undetermined = true,
+                    Solution::Contradictory(error) => {
+                        return Solution::Contradictory(error);
+                    }
+                }
+            }
+            if any_undetermined {
+                Solution::Underdetermined(())
+            } else {
+                Solution::Determined(())
+            }
+        }
+        Constraint::Not(child) => validate_couplings_in_constraint(child),
+        _ => Solution::Determined(()),
     }
 }
 
@@ -237,7 +301,7 @@ mod tests {
             ..Default::default()
         },
         Solution::Contradictory(SpinInvariantsContradiction::MoleculeAtom {
-            id: AtomId(1),
+            atom: AtomId(1),
             error: SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::DOUBLET },
         }),
     )]
@@ -255,7 +319,7 @@ mod tests {
             ..Default::default()
         },
         Solution::Contradictory(SpinInvariantsContradiction::Bond {
-            id: BondId(1),
+            bond: BondId(1),
             error: SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::DOUBLET },
         }),
     )]
@@ -269,7 +333,7 @@ mod tests {
             ..Default::default()
         },
         Solution::Contradictory(SpinInvariantsContradiction::AromaticSystem {
-            id: AromaticSystemId(1),
+            system: AromaticSystemId(1),
             error: SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::DOUBLET },
         }),
     )]
@@ -283,7 +347,7 @@ mod tests {
             ..Default::default()
         },
         Solution::Contradictory(SpinInvariantsContradiction::MulticenterBond {
-            id: MulticenterBondId(1),
+            bond: MulticenterBondId(1),
             error: SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::DOUBLET },
         }),
     )]
@@ -302,11 +366,163 @@ mod tests {
             ..Default::default()
         },
         Solution::Contradictory(SpinInvariantsContradiction::MulticenterBond {
-            id: MulticenterBondId(0),
+            bond: MulticenterBondId(0),
             error: SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::DOUBLET },
         }),
     )]
     fn test_spin_invariants_validator_validate(
+        #[case] parts: MoleculeParts,
+        #[case] expected: Solution<(), SpinInvariantsContradiction>,
+    ) {
+        assert_eq!(
+            SpinInvariantsValidator
+                .validate(MoleculeAst::from_parts(parts))
+                .unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unrelated_constraint(
+        MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            ..Default::default()
+        },
+        Solution::Determined(()),
+    )]
+    #[case::vacuous_coupling(
+        MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::default(),
+            }).into(),
+            ..Default::default()
+        },
+        Solution::Determined(()),
+    )]
+    #[case::partial_coupling(
+        MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst {
+                    count: ValueAst::Lit(2),
+                    multiplicity: ValueAst::Undetermined,
+                },
+            }).into(),
+            ..Default::default()
+        },
+        Solution::Underdetermined(()),
+    )]
+    #[case::valid_coupling_not_yet_evaluated(
+        MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+            }).into(),
+            ..Default::default()
+        },
+        Solution::Underdetermined(()),
+    )]
+    #[case::invalid_coupling(
+        MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+            }).into(),
+            ..Default::default()
+        },
+        Solution::Contradictory(SpinInvariantsContradiction::UnpairedElectronCoupling {
+            constraint_index: 0,
+            error: SpinStateError::Incompatible {
+                unpaired_electrons: 2,
+                multiplicity: SpinMultiplicity::DOUBLET,
+            },
+        }),
+    )]
+    #[case::invalid_coupling_nested_in_and_or_not(
+        MoleculeParts {
+            constraints: vec![
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                Constraint::Or(vec![
+                    Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                    Constraint::And(vec![Constraint::Not(Box::new(Constraint::Molecule(
+                        MoleculeConstraint::UnpairedElectronCoupling {
+                            atoms: None,
+                            unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                        },
+                    )))]),
+                ]),
+            ].into(),
+            ..Default::default()
+        },
+        Solution::Contradictory(SpinInvariantsContradiction::UnpairedElectronCoupling {
+            constraint_index: 1,
+            error: SpinStateError::Incompatible {
+                unpaired_electrons: 2,
+                multiplicity: SpinMultiplicity::DOUBLET,
+            },
+        }),
+    )]
+    #[case::valid_coupling_nested_in_not(
+        MoleculeParts {
+            constraints: Constraint::Not(Box::new(Constraint::Molecule(
+                MoleculeConstraint::UnpairedElectronCoupling {
+                    atoms: None,
+                    unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                },
+            ))).into(),
+            ..Default::default()
+        },
+        Solution::Underdetermined(()),
+    )]
+    #[case::earlier_underdetermination_does_not_mask_invalid_coupling(
+        MoleculeParts {
+            constraints: vec![
+                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                    atoms: None,
+                    unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                }),
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                    atoms: None,
+                    unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                }),
+            ].into(),
+            ..Default::default()
+        },
+        Solution::Contradictory(SpinInvariantsContradiction::UnpairedElectronCoupling {
+            constraint_index: 2,
+            error: SpinStateError::Incompatible {
+                unpaired_electrons: 2,
+                multiplicity: SpinMultiplicity::DOUBLET,
+            },
+        }),
+    )]
+    #[case::underdetermined_entity_does_not_mask_invalid_coupling(
+        MoleculeParts {
+            atoms: vec![AtomAst {
+                unpaired_electrons: UnpairedElectronsAst {
+                    count: ValueAst::Undetermined,
+                    multiplicity: ValueAst::Lit(1),
+                },
+                ..Default::default()
+            }],
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+            }).into(),
+            ..Default::default()
+        },
+        Solution::Contradictory(SpinInvariantsContradiction::UnpairedElectronCoupling {
+            constraint_index: 0,
+            error: SpinStateError::Incompatible {
+                unpaired_electrons: 2,
+                multiplicity: SpinMultiplicity::DOUBLET,
+            },
+        }),
+    )]
+    fn test_spin_invariants_validator_validate_constraints(
         #[case] parts: MoleculeParts,
         #[case] expected: Solution<(), SpinInvariantsContradiction>,
     ) {
@@ -361,22 +577,22 @@ mod tests {
             };
             let expected = if atom_state == 2 {
                 Solution::Contradictory(SpinInvariantsContradiction::MoleculeAtom {
-                    id: AtomId(0),
+                    atom: AtomId(0),
                     error,
                 })
             } else if bond_state == 2 {
                 Solution::Contradictory(SpinInvariantsContradiction::Bond {
-                    id: BondId(0),
+                    bond: BondId(0),
                     error,
                 })
             } else if aromatic_state == 2 {
                 Solution::Contradictory(SpinInvariantsContradiction::AromaticSystem {
-                    id: AromaticSystemId(0),
+                    system: AromaticSystemId(0),
                     error,
                 })
             } else if multicenter_state == 2 {
                 Solution::Contradictory(SpinInvariantsContradiction::MulticenterBond {
-                    id: MulticenterBondId(0),
+                    bond: MulticenterBondId(0),
                     error,
                 })
             } else if [atom_state, bond_state, aromatic_state, multicenter_state].contains(&1) {
