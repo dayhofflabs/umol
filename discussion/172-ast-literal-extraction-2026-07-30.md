@@ -3,7 +3,8 @@
 Status: **Informational**
 Date: 2026-07-30
 Relates: [168](168-api-hygiene-2026-07-27.md),
-[171](171-aromaticity-inconsistency-policy-2026-07-29.md)
+[171](171-aromaticity-inconsistency-policy-2026-07-29.md),
+[173](173-ground-literals-and-spin-2026-07-30.md)
 
 ## Scope
 
@@ -15,7 +16,8 @@ into an error, a skipped candidate, a fallback, or a panic.
 
 This document records the layered policy for literal extraction and the coordination surfaces used
 to keep it consistent. It is not an implementation plan. The Rustdoc pass and any concrete ground-view
-design are separate work.
+design are separate work. The exact relationship among `AsLit`, `Lattice::is_ground`, and physical
+spin validation is developed in doc 173.
 
 ## Existing primitive
 
