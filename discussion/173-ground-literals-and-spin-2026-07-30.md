@@ -783,7 +783,7 @@ test/fuzz inputs.
 
 ### S6 — Verify and close the migration
 
-- **S6a — active specification and source audit:** search active Rust, Python, DSL specification,
+- **S6a — active specification and source audit:** **Done.** Search active Rust, Python, DSL specification,
   test, benchmark, fixture, snapshot, property strategy, fuzz target, and named seed files for
   stale `SpinStateAst`, `SpinStateUpdate`, entity `spin`, `SpinSum`, old stereo shorthand names,
   `aromatic_increment`, and fixed-enum multiplicity assumptions. Correct findings in their owning

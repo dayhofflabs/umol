@@ -277,8 +277,8 @@ impl Display for MulticenterBondUpdateDsl {
                 fmt_charge(f, charge)?;
             }
         }
-        if let Some(unpaired) = &self.0.unpaired_electrons.count {
-            fmt_update_value_field(f, "#u", unpaired)?;
+        if let Some(unpaired_electrons) = &self.0.unpaired_electrons.count {
+            fmt_update_value_field(f, "#u", unpaired_electrons)?;
         }
         if let Some(multiplicity) = &self.0.unpaired_electrons.multiplicity {
             fmt_update_value_field(f, "#s", multiplicity)?;
@@ -528,7 +528,7 @@ mod tests {
     #[case::charge_neg("[1,1,1]#c-2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(-2), unpaired_electrons: UnpairedElectronsAst::default(), constraints: MulticenterBondConstraintsAst::new() }))]
     #[case::electron_count("[1,1,1]#e6", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(6))]) }))]
     #[case::electron_count_bare("[1,1,1]#e", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(1))]) }))]
-    #[case::unpaired("[1,1,1]#u1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: MulticenterBondConstraintsAst::new() }))]
+    #[case::unpaired_electrons("[1,1,1]#u1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: MulticenterBondConstraintsAst::new() }))]
     #[case::mult("[1,1,1]#s2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: MulticenterBondConstraintsAst::new() }))]
     #[case::charge_electron_count("[1,1,1]#c+#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::default(), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(2))]) }))]
     #[case::full("[1,1,1]#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(2))]) }))]
@@ -565,7 +565,7 @@ mod tests {
     #[case::undetermined("*")]
     #[case::charge("[1,1,1]#c+1")]
     #[case::electron_count("[1,1,1]#e6")]
-    #[case::unpaired("[1,1,1]#u2")]
+    #[case::unpaired_electrons("[1,1,1]#u2")]
     #[case::explicit_mult("[1,1,1]#s2")]
     fn test_multicenter_bond_dsl_display_roundtrip(#[case] input: &str) {
         let dsl = parse_multicenter_bond(input).unwrap();

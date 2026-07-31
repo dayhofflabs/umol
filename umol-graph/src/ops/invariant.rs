@@ -45,16 +45,23 @@ impl ValenceInvariants {
 
     /// Verdict for a standalone atom. Topology-derived valences default to zero;
     /// only a non-negative literal constraint raises them. `Underdetermined`
-    /// when element / charge / implicit-H / lone-pairs / unpaired are not all
+    /// when element / charge / implicit-H / lone-pairs / unpaired electrons are not all
     /// `Lit`.
     pub fn check_atom(atom: &AtomAst) -> Solution<(), ValenceMismatch> {
-        let (Some(element), Some(charge), Some(implicit_h), Some(lone_pairs), Some(unpaired)) = (
+        let (
+            Some(element),
+            Some(charge),
+            Some(implicit_h),
+            Some(lone_pairs),
+            Some(unpaired_electrons),
+        ) = (
             atom.element.as_lit(),
             atom.charge.as_lit(),
             atom.implicit_hydrogens.as_lit(),
             atom.lone_pairs.as_lit(),
             atom.unpaired_electrons.count.as_lit(),
-        ) else {
+        )
+        else {
             return Solution::Underdetermined(());
         };
         let valence = match atom
@@ -109,7 +116,7 @@ impl ValenceInvariants {
             _ => return Solution::Underdetermined(()),
         };
         let orbital = orbital_count(
-            unpaired,
+            unpaired_electrons,
             lone_pairs,
             donated,
             accepted,
@@ -154,7 +161,7 @@ impl ValenceInvariants {
         let Some(lone_pairs) = atom.lone_pairs().as_lit() else {
             return Solution::Underdetermined(());
         };
-        let Some(unpaired) = atom.unpaired_electrons().count.as_lit() else {
+        let Some(unpaired_electrons) = atom.unpaired_electrons().count.as_lit() else {
             return Solution::Underdetermined(());
         };
         let valence = match atom
@@ -224,7 +231,7 @@ impl ValenceInvariants {
             _ => return Solution::Underdetermined(()),
         };
         let orbital = orbital_count(
-            unpaired,
+            unpaired_electrons,
             lone_pairs,
             donated,
             accepted,
@@ -346,7 +353,7 @@ impl ValenceInvariants {
             atom.lone_pairs(),
             0..=((element.valence_capacity() / 2) as i64),
         );
-        let unpaired_range = enumeration_values(
+        let unpaired_electron_range = enumeration_values(
             &atom.unpaired_electrons().count,
             0..=(element.max_unpaired_electrons() as i64),
         );
@@ -355,9 +362,9 @@ impl ValenceInvariants {
         for charge in charge_range {
             for &implicit_h in &implicit_h_range {
                 for &lone_pairs in &lone_pair_range {
-                    for &unpaired in &unpaired_range {
+                    for &unpaired_electrons in &unpaired_electron_range {
                         let orbital = orbital_count(
-                            unpaired,
+                            unpaired_electrons,
                             lone_pairs,
                             donated,
                             accepted,
@@ -378,7 +385,7 @@ impl ValenceInvariants {
                             continue;
                         }
                         let Some(multiplicity) =
-                            enumerate_multiplicity(atom.unpaired_electrons(), unpaired)
+                            enumerate_multiplicity(atom.unpaired_electrons(), unpaired_electrons)
                         else {
                             continue;
                         };
@@ -388,7 +395,7 @@ impl ValenceInvariants {
                             implicit_hydrogens: ValueAst::Lit(implicit_h),
                             lone_pairs: ValueAst::Lit(lone_pairs),
                             unpaired_electrons: UnpairedElectronsAst {
-                                count: ValueAst::Lit(unpaired),
+                                count: ValueAst::Lit(unpaired_electrons),
                                 multiplicity: ValueAst::Lit(multiplicity),
                             },
                             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(
@@ -426,7 +433,7 @@ fn enumerate_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64)
 /// Compute number of atomic spin orbitals involved in topology (shared and unshared)
 #[allow(clippy::complexity)]
 fn orbital_count(
-    unpaired: i64,
+    unpaired_electrons: i64,
     lone_pairs: i64,
     donated_pairs: i64,
     accepted_pairs: i64,
@@ -436,7 +443,7 @@ fn orbital_count(
     multicenter_valence: i64,
 ) -> i64 {
     let aromatic_covalence = aromatic_covalence(aromatic_valence);
-    unpaired
+    unpaired_electrons
         + 2 * lone_pairs
         + 2 * donated_pairs
         + 2 * accepted_pairs
@@ -674,7 +681,7 @@ mod tests {
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
-    // Unpaired electrons fully ground to a non-maximal but valid coupling (3 unpaired as a
+    // Unpaired electrons fully ground to a non-maximal but valid coupling (3 electrons as a
     // doublet); lone pairs open and fixed by conservation to 1.
     #[case::ground_unpaired_electrons(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
@@ -695,8 +702,8 @@ mod tests {
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
-    // Multiplicity is ground (singlet), unpaired open: conservation fixes
-    // unpaired to 2, the meet keeps the pinned multiplicity (open-shell singlet).
+    // Multiplicity is ground (singlet), unpaired-electron count open: conservation fixes the
+    // count to 2, and the meet keeps the pinned multiplicity (open-shell singlet).
     #[case::ground_multiplicity(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
@@ -720,7 +727,7 @@ mod tests {
             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
-    // Unpaired electrons pinned to a physically impossible pair (2 unpaired, multiplicity 2):
+    // Unpaired electrons pinned to a physically impossible pair (count 2, multiplicity 2):
     // the only conservation-valid count is incompatible, so no candidate.
     #[case::inconsistent_unpaired_electrons(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
@@ -734,7 +741,7 @@ mod tests {
         AtomId(0),
         vec![],
     )]
-    // Both components open: unpaired fixed by conservation to 2, multiplicity
+    // Both components open: unpaired-electron count fixed by conservation to 2, multiplicity
     // defaulted by `into_ground` to the maximum (triplet carbene).
     #[case::open_unpaired_electrons(
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {

@@ -156,7 +156,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
             },
             unpaired_electrons: UnpairedElectronsAst {
                 count: match self.unpaired_electrons {
-                    Some(unpaired) => ValueAst::Lit(unpaired as i64),
+                    Some(unpaired_electrons) => ValueAst::Lit(unpaired_electrons as i64),
                     None => ValueAst::Undetermined,
                 },
                 multiplicity: match self.multiplicity {

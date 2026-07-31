@@ -154,13 +154,13 @@ impl MatchingInput {
         let ValueAst::Lit(charge) = view.charge() else {
             return Err(KekulizerError::UndeterminedCharge(system));
         };
-        let (ValueAst::Lit(unpaired), ValueAst::Lit(multiplicity)) = (
+        let (ValueAst::Lit(unpaired_electrons), ValueAst::Lit(multiplicity)) = (
             &view.unpaired_electrons().count,
             &view.unpaired_electrons().multiplicity,
         ) else {
             return Err(KekulizerError::UndeterminedUnpairedElectrons(system));
         };
-        if (*unpaired, *multiplicity) != (0, 1) {
+        if (*unpaired_electrons, *multiplicity) != (0, 1) {
             return Err(KekulizerError::OpenShell(system));
         }
         if charge.abs() > 1 {

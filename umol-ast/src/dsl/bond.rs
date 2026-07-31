@@ -242,8 +242,8 @@ impl Display for BondUpdateDsl {
                 fmt_charge(f, charge)?;
             }
         }
-        if let Some(unpaired) = &update.unpaired_electrons.count {
-            fmt_update_value_field(f, "#u", unpaired)?;
+        if let Some(unpaired_electrons) = &update.unpaired_electrons.count {
+            fmt_update_value_field(f, "#u", unpaired_electrons)?;
         }
         if let Some(multiplicity) = &update.unpaired_electrons.multiplicity {
             fmt_update_value_field(f, "#s", multiplicity)?;
@@ -743,7 +743,7 @@ mod tests {
     #[case::charge_minus("#c-", BondPredicate::Charge(ValueAst::Lit(-1)))]
     #[case::charge_zero("#c0", BondPredicate::Charge(ValueAst::Lit(0)))]
     #[case::charge_undetermined("#c*", BondPredicate::Charge(ValueAst::Undetermined))]
-    #[case::unpaired("#u2", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(2))))]
+    #[case::unpaired_electrons("#u2", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(2))))]
     #[case::unpaired_omit("#u", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(1))))]
     #[case::unpaired_undetermined("#u*", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Undetermined)))]
     #[case::multiplicity("#s3", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(3))))]

@@ -251,11 +251,11 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::Radicals(radicals) => {
-                for (idx, (unpaired, multiplicity)) in radicals {
+                for (idx, (unpaired_electrons, multiplicity)) in radicals {
                     let Some(atom) = mol.atoms.get_mut(idx as usize) else {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
                     };
-                    atom.unpaired_electrons = Some(unpaired);
+                    atom.unpaired_electrons = Some(unpaired_electrons);
                     atom.multiplicity = multiplicity;
                 }
             }
@@ -413,12 +413,12 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::Radicals(radicals) => {
-                for (idx, unpaired) in radicals {
+                for (idx, unpaired_electrons) in radicals {
                     let Some(atom) = mol.atoms.get_mut(idx as usize) else {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
                     };
-                    atom.unpaired_electrons = Some(unpaired.0);
-                    atom.multiplicity = unpaired.1;
+                    atom.unpaired_electrons = Some(unpaired_electrons.0);
+                    atom.multiplicity = unpaired_electrons.1;
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
@@ -1575,8 +1575,10 @@ fn parse_radicals(input: &[u8]) -> IResult<&[u8], CxEntry> {
     let result: Vec<_> = groups
         .into_iter()
         .flat_map(|(code, indices)| {
-            let unpaired = convert_radical_code(code);
-            indices.into_iter().map(move |idx| (idx, unpaired))
+            let unpaired_electrons = convert_radical_code(code);
+            indices
+                .into_iter()
+                .map(move |idx| (idx, unpaired_electrons))
         })
         .collect();
 

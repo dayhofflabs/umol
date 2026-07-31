@@ -223,8 +223,8 @@ impl Display for AtomUpdateDsl {
         if let Some(lone_pairs) = &update.lone_pairs {
             fmt_update_value_field(f, "#n", lone_pairs)?;
         }
-        if let Some(unpaired) = &update.unpaired_electrons.count {
-            fmt_update_value_field(f, "#u", unpaired)?;
+        if let Some(unpaired_electrons) = &update.unpaired_electrons.count {
+            fmt_update_value_field(f, "#u", unpaired_electrons)?;
         }
         if let Some(multiplicity) = &update.unpaired_electrons.multiplicity {
             fmt_update_value_field(f, "#s", multiplicity)?;
@@ -1325,7 +1325,7 @@ mod tests {
     #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
-    #[case::unpaired("C#u2", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::unpaired_electrons("C#u2", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::unpaired_no_canonicalization("C#u{1}", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: ValueAst::lit_set([1]), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::unpaired_omit("C#u", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multiplicity("C#s3", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1600,7 +1600,7 @@ mod tests {
     #[case::h_omit("#h", AtomPredicate::ImplicitHydrogens(ValueAst::Lit(1)))]
     #[case::lone_pairs("#n2", AtomPredicate::LonePairs(ValueAst::Lit(2)))]
     #[case::lone_pairs_omit("#n", AtomPredicate::LonePairs(ValueAst::Lit(1)))]
-    #[case::unpaired("#u2", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(2))))]
+    #[case::unpaired_electrons("#u2", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(2))))]
     #[case::unpaired_omit("#u", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(1))))]
     #[case::multiplicity("#s3", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(3))))]
     #[case::multiplicity_omit("#s", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(1))))]

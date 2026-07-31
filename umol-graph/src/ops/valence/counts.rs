@@ -1,6 +1,6 @@
 //! Counts valence resolver: candidate selection picks the first table
 //! covalence ≥ `v` (targets sorted smallest to largest), splits `covalence − v`
-//! between implicit H and aromatic increment, then assigns lone pairs and unpaired
+//! between implicit H and aromatic covalence, then assigns lone pairs and unpaired electrons
 //! electrons from the nonbonding budget. Literals constrain each step.
 
 use thiserror::Error;
@@ -274,18 +274,19 @@ impl<'a> CountsValence<'a> {
                 if nonbonding < 0 {
                     continue;
                 }
-                let Some((lone_pairs, unpaired)) =
-                    derive_lone_pairs_and_unpaired(atom, element, nonbonding)
+                let Some((lone_pairs, unpaired_electrons)) =
+                    derive_lone_pairs_and_unpaired_electrons(atom, element, nonbonding)
                 else {
                     continue;
                 };
-                let Some(multiplicity) = derive_multiplicity(&atom.unpaired_electrons, unpaired)
+                let Some(multiplicity) =
+                    derive_multiplicity(&atom.unpaired_electrons, unpaired_electrons)
                 else {
                     continue;
                 };
                 let derived = derive_atom(
                     implicit_hydrogens,
-                    unpaired,
+                    unpaired_electrons,
                     multiplicity,
                     lone_pairs,
                     valence,
@@ -338,7 +339,7 @@ fn candidate_aromatic_valences(
     }
 }
 
-fn derive_lone_pairs_and_unpaired(
+fn derive_lone_pairs_and_unpaired_electrons(
     atom: &AtomAst,
     element: Element,
     nonbonding: i64,
@@ -348,27 +349,27 @@ fn derive_lone_pairs_and_unpaired(
         atom.lone_pairs.as_lit(),
         atom.unpaired_electrons.count.as_lit(),
     ) {
-        (Some(lone_pairs), Some(unpaired)) => {
-            if unpaired + 2 * lone_pairs == nonbonding {
-                Some((lone_pairs, unpaired))
+        (Some(lone_pairs), Some(unpaired_electrons)) => {
+            if unpaired_electrons + 2 * lone_pairs == nonbonding {
+                Some((lone_pairs, unpaired_electrons))
             } else {
                 None
             }
         }
         (Some(lone_pairs), None) => {
-            let unpaired = nonbonding - 2 * lone_pairs;
-            if unpaired < 0
+            let unpaired_electrons = nonbonding - 2 * lone_pairs;
+            if unpaired_electrons < 0
                 || !atom
                     .unpaired_electrons
                     .count
-                    .matches(&ValueAst::Lit(unpaired))
+                    .matches(&ValueAst::Lit(unpaired_electrons))
             {
                 return None;
             }
-            Some((lone_pairs, unpaired))
+            Some((lone_pairs, unpaired_electrons))
         }
-        (None, Some(unpaired)) => {
-            let remaining = nonbonding - unpaired;
+        (None, Some(unpaired_electrons)) => {
+            let remaining = nonbonding - unpaired_electrons;
             if remaining < 0 || remaining % 2 != 0 {
                 return None;
             }
@@ -376,22 +377,22 @@ fn derive_lone_pairs_and_unpaired(
             if lone_pairs > max_lone_pairs || !atom.lone_pairs.matches(&ValueAst::Lit(lone_pairs)) {
                 return None;
             }
-            Some((lone_pairs, unpaired))
+            Some((lone_pairs, unpaired_electrons))
         }
         (None, None) => {
-            let unpaired = nonbonding % 2;
-            let lone_pairs = (nonbonding - unpaired) / 2;
+            let unpaired_electrons = nonbonding % 2;
+            let lone_pairs = (nonbonding - unpaired_electrons) / 2;
             if lone_pairs > max_lone_pairs {
                 return None;
             }
-            Some((lone_pairs, unpaired))
+            Some((lone_pairs, unpaired_electrons))
         }
     }
 }
 
 fn derive_atom(
     implicit_hydrogens: i64,
-    unpaired: i64,
+    unpaired_electrons: i64,
     multiplicity: i64,
     lone_pairs: i64,
     valence: i64,
@@ -402,7 +403,7 @@ fn derive_atom(
         implicit_hydrogens: ValueAst::Lit(implicit_hydrogens),
         lone_pairs: ValueAst::Lit(lone_pairs),
         unpaired_electrons: UnpairedElectronsAst {
-            count: ValueAst::Lit(unpaired),
+            count: ValueAst::Lit(unpaired_electrons),
             multiplicity: ValueAst::Lit(multiplicity),
         },
         constraints: AtomConstraintsAst::from_iter([

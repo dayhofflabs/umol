@@ -4,12 +4,12 @@
 #
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
-cc a9c89daf385c8e25b771da799280f8d5bfe1024407a0d3dfa1cd33f919c6e745 # shrinks to a = AromaticSystemAst { electrons: [], charge: Lit(0), spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([]) }, b = AromaticSystemAst { electrons: [], charge: Lit(1), spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([]) }, c = AromaticSystemAst { electrons: [], charge: Undetermined, spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([]) }
-cc 3a82e2efcf5d4441d49dc7926f5adb801e6ca38c3046257ddd84f1bc51c26446 # shrinks to a = AromaticSystemConstraints([ElectronCount(Lit(0))]), b = AromaticSystemConstraints([ElectronCount(Lit(1))]), c = AromaticSystemConstraints([])
-cc b844153aa274e37c6931045b9d0e80830116c4725a9f4dc14b15061369ff95b3 # shrinks to a = Aromatic(Lit(2)), b = Aromatic(Lit(0)), c = NotAromatic
-cc 17d21a81e590ed26b5dce1e8db44d3e1f0d6531d794a734956064659e9836495 # shrinks to a = Lit(H), b = Lit(C), c = Lit(H)
-cc c2dd541d3501c37ceb63889012cfe7a4e640485c6f682f7f0933c963a6079638 # shrinks to a = Stereo(Expr(LitSet([1]))), b = Stereo(Expr(LitSet([1]))), c = NotStereo
-cc 8cee6e7d7d96c823529a549916b9b298cd4c02266bb1753677b06a158b290a5f # shrinks to a = Expr(LitSet([2])), b = Expr(LitSet([2])), c = Undetermined
-cc e8ec2ab0798a5eedcfa700e12aa0eaba67a33878f7fc73bfa5a599ed61ef1104 # shrinks to a = AromaticSystemConstraints([]), b = AromaticSystemConstraints([ElectronCount(LitSet({0}))]), c = AromaticSystemConstraints([])
-cc a98d0e2732bb14505a92ecec05362c28471645f40a9ad48222ed68103763b2e5 # shrinks to a = AromaticSystemAst { electrons: [], charge: Undetermined, spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([ElectronCount(LitSet({0}))]) }, b = AromaticSystemAst { electrons: [], charge: Undetermined, spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([]) }, c = AromaticSystemAst { electrons: [], charge: Undetermined, spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([]) }
-cc 9b753dd1f4fea5811b66417e312e07e8d2efe724dd0c6fede3655f942f3abed1 # shrinks to a = Stereo(LitSet({0})), b = Undetermined, c = Undetermined
+cc a9c89daf385c8e25b771da799280f8d5bfe1024407a0d3dfa1cd33f919c6e745
+cc 3a82e2efcf5d4441d49dc7926f5adb801e6ca38c3046257ddd84f1bc51c26446
+cc b844153aa274e37c6931045b9d0e80830116c4725a9f4dc14b15061369ff95b3
+cc 17d21a81e590ed26b5dce1e8db44d3e1f0d6531d794a734956064659e9836495
+cc c2dd541d3501c37ceb63889012cfe7a4e640485c6f682f7f0933c963a6079638
+cc 8cee6e7d7d96c823529a549916b9b298cd4c02266bb1753677b06a158b290a5f
+cc e8ec2ab0798a5eedcfa700e12aa0eaba67a33878f7fc73bfa5a599ed61ef1104
+cc a98d0e2732bb14505a92ecec05362c28471645f40a9ad48222ed68103763b2e5
+cc 9b753dd1f4fea5811b66417e312e07e8d2efe724dd0c6fede3655f942f3abed1

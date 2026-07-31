@@ -125,7 +125,7 @@ macro_rules! spin {
     }};
 }
 
-/// Validated (unpaired, multiplicity) pair.
+/// Validated unpaired-electron count and multiplicity pair.
 ///
 /// Invariant: `m <= u + 1` and `m` has the same parity as `u+1`, where
 /// `m = u8::from(multiplicity)` and `u = unpaired_electrons`.

@@ -45,8 +45,8 @@ impl UnpairedElectronsAst {
     pub fn high_spin_complete(&mut self) {
         match (&self.count, &self.multiplicity) {
             (ValueAst::Undetermined, ValueAst::Lit(m)) => {
-                let unpaired = *m - 1;
-                self.count = ValueAst::Lit(unpaired);
+                let unpaired_electrons = *m - 1;
+                self.count = ValueAst::Lit(unpaired_electrons);
             }
             (ValueAst::Lit(u), ValueAst::Undetermined) => {
                 let multiplicity = u + 1;
@@ -143,17 +143,22 @@ mod tests {
     #[case::multiplicity_undetermined((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Undetermined) }, UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined })]
     #[case::both((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) }, (0_u8, 1_u8).into())]
     fn test_unpaired_electrons_ast_update(
-        #[case] spin: UnpairedElectronsAst,
+        #[case] unpaired_electrons: UnpairedElectronsAst,
         #[case] update: UnpairedElectronsUpdate,
         #[case] expected: UnpairedElectronsAst,
     ) {
-        assert_eq!(spin.update(&update), expected);
+        assert_eq!(unpaired_electrons.update(&update), expected);
     }
 
     #[rstest]
     #[case::empty((2_u8, 3_u8).into())]
-    fn test_unpaired_electrons_ast_update_identity(#[case] spin: UnpairedElectronsAst) {
-        assert_eq!(spin.update(&UnpairedElectronsUpdate::default()), spin);
+    fn test_unpaired_electrons_ast_update_identity(
+        #[case] unpaired_electrons: UnpairedElectronsAst,
+    ) {
+        assert_eq!(
+            unpaired_electrons.update(&UnpairedElectronsUpdate::default()),
+            unpaired_electrons,
+        );
     }
 
     #[rustfmt::skip]
@@ -162,11 +167,11 @@ mod tests {
     #[case::count_undetermined((2_u8, 3_u8).into(), UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None })]
     #[case::both((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) })]
     fn test_unpaired_electrons_ast_difference_to(
-        #[case] spin: UnpairedElectronsAst,
+        #[case] unpaired_electrons: UnpairedElectronsAst,
         #[case] other: UnpairedElectronsAst,
         #[case] expected: UnpairedElectronsUpdate,
     ) {
-        assert_eq!(spin.difference_to(&other), expected);
+        assert_eq!(unpaired_electrons.difference_to(&other), expected);
     }
 
     #[rstest]
@@ -175,11 +180,11 @@ mod tests {
         UnpairedElectronsAst { count: ValueAst::lit_set([2]), multiplicity: ValueAst::lit_set([1]) },
     )]
     fn test_unpaired_electrons_ast_difference_to_identity(
-        #[case] spin: UnpairedElectronsAst,
+        #[case] unpaired_electrons: UnpairedElectronsAst,
         #[case] other: UnpairedElectronsAst,
     ) {
         assert_eq!(
-            spin.difference_to(&other),
+            unpaired_electrons.difference_to(&other),
             UnpairedElectronsUpdate::default()
         );
     }
