@@ -1,11 +1,11 @@
 //! Aromaticity validator. Wraps [`AromaticityPerception`] and verifies that
 //! the aromatic systems already in the AST agree with what perception
 //! independently finds. Input contract: AST atoms carry filled-in
-//! `AromaticValence::Aromatic(Lit(n))` (atom-typing has run) and the AST
+//! `AromaticValenceAst::Aromatic(Lit(n))` (atom-typing has run) and the AST
 //! already carries one or more `AromaticSystemAst` entries.
 
 use thiserror::Error;
-use umol_ast::ast::{AromaticValenceAst, AtomId, MoleculeAst, ValueAst};
+use umol_ast::ast::{AromaticValence, AromaticValenceAst, AsLit, AtomId, MoleculeAst};
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
@@ -59,8 +59,9 @@ impl AromaticityConformanceValidator {
                 .constraints
                 .aromatic_valence()
                 .unwrap_or(&AromaticValenceAst::Undetermined)
+                .as_lit()
             {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                Some(AromaticValence::Aromatic(n)) if n >= 0 => Some(n as u8),
                 _ => None,
             }
         })?;

@@ -790,15 +790,12 @@ impl AromaticValenceAst {
         matches!(self, Self::Aromatic(_))
     }
 
-    pub fn aromatic_increment(&self) -> ValueAst {
-        match self {
-            Self::Aromatic(v) => match v.as_lit() {
-                Some(a) => ValueAst::Lit(aromatic_increment(a)),
-                None => ValueAst::Undetermined,
-            },
-            Self::NotAromatic => ValueAst::Lit(0),
-            Self::Undetermined => ValueAst::Undetermined,
-        }
+    pub fn aromatic_covalence(&self) -> ValueAst {
+        self.as_lit()
+            .map(AromaticValence::valence_count)
+            .map(aromatic_covalence)
+            .map(ValueAst::Lit)
+            .unwrap_or(ValueAst::Undetermined)
     }
 
     /// Pattern matches value.
@@ -907,8 +904,8 @@ impl AsLit for AromaticValenceAst {
     }
 }
 
-/// Compute aromatic increment from aromatic valence.
-pub fn aromatic_increment(aromatic_valence: i64) -> i64 {
+/// Covalence supplied by aromatic bonding at the given aromatic valence.
+pub const fn aromatic_covalence(aromatic_valence: i64) -> i64 {
     match aromatic_valence {
         1 => 1,
         _ => 0,
@@ -1248,11 +1245,11 @@ mod tests {
     #[case::aromatic_one(AromaticValenceAst::aromatic(1), ValueAst::Lit(1))]
     #[case::aromatic_zero(AromaticValenceAst::aromatic(0), ValueAst::Lit(0))]
     #[case::aromatic_two(AromaticValenceAst::aromatic(2), ValueAst::Lit(0))]
-    fn test_aromatic_valence_ast_aromatic_increment(
+    fn test_aromatic_valence_ast_aromatic_covalence(
         #[case] v: AromaticValenceAst,
         #[case] expected: ValueAst,
     ) {
-        assert_eq!(v.aromatic_increment(), expected);
+        assert_eq!(v.aromatic_covalence(), expected);
     }
 
     #[rstest]

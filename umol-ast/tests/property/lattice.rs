@@ -133,6 +133,16 @@ proptest! {
     }
 
     #[test]
+    fn test_aromatic_valence_ast_aromatic_covalence(
+        valence in any::<i64>(),
+    ) {
+        let ast = AromaticValenceAst::from(AromaticValence::Aromatic(valence));
+        let expected = if valence == 1 { 1 } else { 0 };
+        prop_assert_eq!(aromatic_covalence(valence), expected);
+        prop_assert_eq!(ast.aromatic_covalence(), ValueAst::Lit(expected));
+    }
+
+    #[test]
     fn test_multicenter_valence_ast_as_lit_laws(
         a in raw_multicenter_valence_ast_strategy(),
         b in raw_multicenter_valence_ast_strategy(),

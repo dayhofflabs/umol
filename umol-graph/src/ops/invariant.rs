@@ -8,8 +8,8 @@ use std::ops::RangeInclusive;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst,
-    Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
+    aromatic_covalence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
+    AtomId, ElementAst, Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_utils::solution::Solution;
@@ -82,22 +82,28 @@ impl ValenceInvariants {
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let aromatic_valence = match atom
+        let aromatic_constraint = atom
             .constraints
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined)
+            .unwrap_or(&AromaticValenceAst::Undetermined);
+        let aromatic_valence = match aromatic_constraint
+            .as_lit()
+            .map(|valence| valence.valence_count())
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if *v >= 0 => *v,
-            AromaticValenceAst::NotAromatic | AromaticValenceAst::Undetermined => 0,
+            Some(valence) if valence >= 0 => valence,
+            None if aromatic_constraint.is_undetermined() => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let multicenter_valence = match atom
+        let multicenter_constraint = atom
             .constraints
             .multicenter_valence()
-            .unwrap_or(&MulticenterValenceAst::Undetermined)
+            .unwrap_or(&MulticenterValenceAst::Undetermined);
+        let multicenter_valence = match multicenter_constraint
+            .as_lit()
+            .map(|valence| valence.valence_count())
         {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if *v >= 0 => *v,
-            MulticenterValenceAst::NotMulticenter | MulticenterValenceAst::Undetermined => 0,
+            Some(valence) if valence >= 0 => valence,
+            None if multicenter_constraint.is_undetermined() => 0,
             _ => return Solution::Underdetermined(()),
         };
         let orbital = orbital_count(
@@ -185,27 +191,31 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let aromatic_valence = match atom
+        let aromatic_constraint = atom
             .constraints()
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined)
+            .unwrap_or(&AromaticValenceAst::Undetermined);
+        let aromatic_valence = match aromatic_constraint
+            .as_lit()
+            .map(|valence| valence.valence_count())
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if *v >= 0 => *v,
-            AromaticValenceAst::NotAromatic => 0,
-            AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
+            Some(valence) if valence >= 0 => valence,
+            None if aromatic_constraint.is_undetermined() => match atom.aromatic_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
         };
-        let multicenter_valence = match atom
+        let multicenter_constraint = atom
             .constraints()
             .multicenter_valence()
-            .unwrap_or(&MulticenterValenceAst::Undetermined)
+            .unwrap_or(&MulticenterValenceAst::Undetermined);
+        let multicenter_valence = match multicenter_constraint
+            .as_lit()
+            .map(|valence| valence.valence_count())
         {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if *v >= 0 => *v,
-            MulticenterValenceAst::NotMulticenter => 0,
-            MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
+            Some(valence) if valence >= 0 => valence,
+            None if multicenter_constraint.is_undetermined() => match atom.multicenter_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
@@ -294,27 +304,31 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let aromatic_valence = match atom
+        let aromatic_constraint = atom
             .constraints()
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined)
+            .unwrap_or(&AromaticValenceAst::Undetermined);
+        let aromatic_valence = match aromatic_constraint
+            .as_lit()
+            .map(|valence| valence.valence_count())
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if *v >= 0 => *v,
-            AromaticValenceAst::NotAromatic => 0,
-            AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
+            Some(valence) if valence >= 0 => valence,
+            None if aromatic_constraint.is_undetermined() => match atom.aromatic_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let multicenter_valence = match atom
+        let multicenter_constraint = atom
             .constraints()
             .multicenter_valence()
-            .unwrap_or(&MulticenterValenceAst::Undetermined)
+            .unwrap_or(&MulticenterValenceAst::Undetermined);
+        let multicenter_valence = match multicenter_constraint
+            .as_lit()
+            .map(|valence| valence.valence_count())
         {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if *v >= 0 => *v,
-            MulticenterValenceAst::NotMulticenter => 0,
-            MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
+            Some(valence) if valence >= 0 => valence,
+            None if multicenter_constraint.is_undetermined() => match atom.multicenter_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
@@ -417,7 +431,7 @@ fn orbital_count(
     aromatic_valence: i64,
     multicenter_valence: i64,
 ) -> i64 {
-    let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
+    let aromatic_covalence = aromatic_covalence(aromatic_valence);
     unpaired
         + 2 * lone_pairs
         + 2 * donated_pairs
@@ -425,7 +439,7 @@ fn orbital_count(
         + 2 * implicit_h
         + 2 * valence
         + aromatic_valence
-        + aromatic_increment
+        + aromatic_covalence
         + multicenter_valence
 }
 
@@ -438,11 +452,11 @@ fn electron_count(
     aromatic_valence: i64,
     accepted_pairs: i64,
 ) -> i64 {
-    let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
+    let aromatic_covalence = aromatic_covalence(aromatic_valence);
     (element.valence_electrons() as i64) - charge
         + implicit_h
         + valence
-        + aromatic_increment
+        + aromatic_covalence
         + 2 * accepted_pairs
 }
 
@@ -526,6 +540,34 @@ mod tests {
             lone_pairs: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
             spin: SpinStateAst::from((0_u8, 1_u8)),
+            ..Default::default()
+        },
+        Solution::Determined(()),
+    )]
+    #[case::not_aromatic(
+        AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(4),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
+                AromaticValenceAst::NotAromatic,
+            )),
+            ..Default::default()
+        },
+        Solution::Determined(()),
+    )]
+    #[case::aromatic_zero(
+        AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(4),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
+                AromaticValenceAst::Aromatic(ValueAst::Lit(0)),
+            )),
             ..Default::default()
         },
         Solution::Determined(()),

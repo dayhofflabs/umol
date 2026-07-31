@@ -6,8 +6,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticValenceAst, AtomConstraintAst, AtomHandle, AtomId, AtomUpdate,
-    BondConstraintAst, BondHandle, BondUpdate, BooleanAst, Edit, MoleculeAst, ValueAst,
+    AromaticSystemAst, AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst, AtomHandle,
+    AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate, BooleanAst, Edit, MoleculeAst,
 };
 use umol_utils::solution::Solution;
 
@@ -68,8 +68,9 @@ impl AromaticityResolver {
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceAst::Undetermined)
+                    .as_lit()
                 {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    Some(AromaticValence::Aromatic(n)) if n >= 0 => Some(n as u8),
                     _ => None,
                 }
             })?;
@@ -164,7 +165,9 @@ impl AromaticityResolver {
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{AromaticSystemId, BondConstraintKey, BondId, RingConfig, SpinStateAst};
+    use umol_ast::ast::{
+        AromaticSystemId, BondConstraintKey, BondId, RingConfig, SpinStateAst, ValueAst,
+    };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_graph_core::{
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,

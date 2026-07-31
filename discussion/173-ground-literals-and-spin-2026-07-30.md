@@ -667,10 +667,10 @@ remaining.
   forms; update the relevant property strategies and inspect the constraint/entity-string fuzz
   targets and seeds for both absent and zero-valued forms. **Breaking (red→green).** [dep: S1a]
 - **S1c — `umol-ast/src/ast/view/atom.rs` and `umol-graph`: clarify aromatic calculations.**
-  Rename `aromatic_increment` to `aromatic_covalence`, retain the calculation-specific collapsing
-  behavior through `valence_count()`, and migrate electron-counting, aromaticity, and valence
-  callers. Add focused unit and property cases distinguishing structural absence from present
-  zero while preserving equal numerical contribution. **Breaking (red→green).** [dep: S1b]
+  **Done.** Rename `aromatic_increment` to `aromatic_covalence`, retain the calculation-specific
+  collapsing behavior through `valence_count()`, and migrate electron-counting, aromaticity, and
+  valence callers. Add focused unit and property cases distinguishing structural absence from
+  present zero while preserving equal numerical contribution. **Breaking (red→green).** [dep: S1b]
 - **S1d — `umol-py`: expose the exact carriers.** Rename the existing `TetrahedralStereo` and
   `CisTransStereo` configuration shorthands to `TetrahedralConfiguration` and
   `CisTransConfiguration`, bind all five exact carriers, and make each Python `as_lit()` return

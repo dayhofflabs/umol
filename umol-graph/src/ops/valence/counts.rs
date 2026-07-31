@@ -7,7 +7,7 @@ use thiserror::Error;
 #[cfg(test)]
 use umol_ast::ast::MoleculeParts;
 use umol_ast::ast::{
-    aromatic_increment, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
+    aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
     AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edit, IsotopeMassAst, Lattice,
     MoleculeAst, SpinStateAst, TransactionError, ValueAst,
 };
@@ -265,7 +265,7 @@ impl<'a> CountsValence<'a> {
                     continue;
                 }
                 if let Some(b) = bonding_budget {
-                    if implicit_hydrogens + aromatic_increment(aromatic_valence) > b {
+                    if implicit_hydrogens + aromatic_covalence(aromatic_valence) > b {
                         continue;
                     }
                 }

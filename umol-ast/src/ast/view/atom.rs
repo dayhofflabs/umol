@@ -198,7 +198,7 @@ impl<'a> AtomView<'a> {
     }
 
     /// Electrons gained from aromatic system this atom belongs to.
-    pub fn aromatic_increment(&self) -> ValueAst {
+    pub fn aromatic_covalence(&self) -> ValueAst {
         match self.aromatic_valence() {
             ValueAst::Lit(1) => ValueAst::Lit(1),
             ValueAst::Lit(_) => ValueAst::Lit(0),
@@ -293,9 +293,9 @@ impl<'a> AtomView<'a> {
     }
 
     /// Covalence, count of electrons gained by atom from electron sharing.
-    /// `valence + implicit_hydrogens + aromatic_increment`.
+    /// `valence + implicit_hydrogens + aromatic_covalence`.
     pub fn covalence(&self) -> ValueAst {
-        self.valence() + self.implicit_hydrogens() + self.aromatic_increment()
+        self.valence() + self.implicit_hydrogens() + self.aromatic_covalence()
     }
 
     pub fn is_in_dative_bond(&self) -> bool {
@@ -741,6 +741,62 @@ mod tests {
     }
 
     #[rstest]
+    #[case::not_in_system(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        }),
+        ValueAst::Lit(0),
+    )]
+    #[case::aromatic_one(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            aromatic: vec![(
+                vec![AtomId(0)],
+                AromaticSystemAst::from_electrons(vec![1]),
+            )],
+            ..Default::default()
+        }),
+        ValueAst::Lit(1),
+    )]
+    #[case::aromatic_zero(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            aromatic: vec![(
+                vec![AtomId(0)],
+                AromaticSystemAst::from_electrons(vec![0]),
+            )],
+            ..Default::default()
+        }),
+        ValueAst::Lit(0),
+    )]
+    #[case::aromatic_two(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            aromatic: vec![(
+                vec![AtomId(0)],
+                AromaticSystemAst::from_electrons(vec![2]),
+            )],
+            ..Default::default()
+        }),
+        ValueAst::Lit(0),
+    )]
+    #[case::undetermined(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemAst::default())],
+            ..Default::default()
+        }),
+        ValueAst::Undetermined,
+    )]
+    fn test_atom_view_aromatic_covalence(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(molecule.atom(AtomId(0)).aromatic_covalence(), expected);
+    }
+
+    #[rstest]
     #[case::in_system(AtomId(0), true)]
     #[case::not_in_system(AtomId(3), false)]
     fn test_atom_view_is_in_aromatic_system(
@@ -1130,8 +1186,9 @@ mod tests {
 
     #[fixture]
     fn dative_pair() -> MoleculeAst {
-        // H₃N→BH₃: N (3 H) donates a pair to B (3 H). Covalence = v+h+ai for
-        // both = 3; the dative bond (donated on N, accepted on B) is excluded.
+        // H₃N→BH₃: N (3 H) donates a pair to B (3 H). Localized valence plus
+        // implicit hydrogens plus aromatic covalence is 3 for both; the dative
+        // bond (donated on N, accepted on B) is excluded.
         MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![
                 AtomAst::from_element(Element::N).with_implicit_hydrogens(3_i64),

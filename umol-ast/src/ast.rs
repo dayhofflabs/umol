@@ -42,7 +42,7 @@ pub use bond::{BondAst, BondUpdate};
 pub use boolean::BooleanAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{
-    aromatic_increment, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
+    aromatic_covalence, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
     AromaticSystemConstraintsAst, AromaticValence, AromaticValenceAst, AtomConstraintAst,
     AtomConstraintKey, AtomConstraintsAst, BondConstraintAst, BondConstraintKey,
     BondConstraintsAst, Constraint, Constraints, DativeBondConstraintAst, DativeBondConstraintKey,
