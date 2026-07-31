@@ -514,7 +514,7 @@ mod tests {
         Some(2),
         Some(1),
         Some(2),
-        Some(SpinMultiplicity::Singlet),
+        Some(SpinMultiplicity::SINGLET),
         AtomAst {
             element: ElementAst::Undetermined,
             isotope_mass: IsotopeMassAst::Lit(13),

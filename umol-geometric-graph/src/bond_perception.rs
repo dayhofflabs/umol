@@ -210,7 +210,7 @@ mod tests {
     }
 
     fn mol(elements: &[Element], coords: &[f64]) -> Molecule {
-        Molecule::from_cartesian_angstrom(elements.to_vec(), coords, 0, SpinMultiplicity::Singlet)
+        Molecule::from_cartesian_angstrom(elements.to_vec(), coords, 0, SpinMultiplicity::SINGLET)
     }
 
     fn sorted_bonds(r: &BondPerceptionResult) -> Vec<(usize, usize, u8)> {

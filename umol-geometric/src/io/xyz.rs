@@ -103,7 +103,7 @@ pub fn parse_xyz_with(
 
 /// Parse an XYZ string into a `Molecule` with default charge and multiplicity.
 pub fn parse_xyz(input: &str) -> Result<(Molecule, String), ParseError> {
-    parse_xyz_with(input, 0, SpinMultiplicity::Singlet)
+    parse_xyz_with(input, 0, SpinMultiplicity::SINGLET)
 }
 
 /// Format a molecule as an XYZ string.
@@ -164,11 +164,14 @@ H   -0.24000000    0.93000000    0.00000000
         #[case] expected_comment: &'static str,
         #[case] expected_elements: Vec<Element>,
     ) {
-        let result = parse_xyz_with(input, 1, SpinMultiplicity::Doublet);
+        let multiplicity = SpinMultiplicity::new(11).unwrap();
+        let result = parse_xyz_with(input, 1, multiplicity);
         assert!(result.is_ok());
         let (mol, comment) = result.unwrap();
         assert_eq!(comment, expected_comment);
         assert_eq!(mol.atom_count(), expected_atom_count);
+        assert_eq!(mol.charge(), 1);
+        assert_eq!(mol.multiplicity(), multiplicity);
         let elements = (0..mol.atom_count())
             .map(|index: usize| mol.element(index))
             .collect::<Vec<_>>();
@@ -188,6 +191,8 @@ H   -0.24000000    0.93000000    0.00000000
         let (mol, comment) = result.unwrap();
         assert_eq!(comment, expected_comment);
         assert_eq!(mol.atom_count(), expected_atom_count);
+        assert_eq!(mol.charge(), 0);
+        assert_eq!(mol.multiplicity(), SpinMultiplicity::SINGLET);
         let elements = (0..mol.atom_count())
             .map(|index: usize| mol.element(index))
             .collect::<Vec<_>>();

@@ -1,6 +1,6 @@
 //! The perceived-molecule boundary type. Bond perception over a geometric
 //! `Molecule` yields per-atom elements, perceived bond orders, and the geometry's
-//! total charge and spin; the type lifts into a `MoleculeAst` via [`IntoAst`].
+//! total charge and multiplicity; the type lifts into a `MoleculeAst` via [`IntoAst`].
 //! Resolution of the lifted AST (hydrogens, per-atom valence, aromaticity) is the
 //! caller's job.
 
@@ -15,7 +15,7 @@ use umol_geometric::molecule::Molecule;
 use crate::bond_perception::{perceive_bonds, BondPerceptionConfig};
 
 /// A molecule perceived from 3D geometry: the per-atom elements, the perceived
-/// bonds, and the geometry's total charge and spin. This is the boundary between
+/// bonds, and the geometry's total charge and multiplicity. This is the boundary between
 /// the geometric model and the AST — it lifts into a `MoleculeAst` via [`IntoAst`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct PerceivedMolecule {
@@ -24,7 +24,7 @@ pub struct PerceivedMolecule {
     /// Total molecular charge carried over from the geometry.
     pub charge: i32,
     /// Total spin multiplicity carried over from the geometry.
-    pub spin: SpinMultiplicity,
+    pub multiplicity: SpinMultiplicity,
     /// Perceived bonds as `(atom_i, atom_j, order)`.
     pub bonds: Vec<(usize, usize, u8)>,
     /// Whether bond perception satisfied every valence constraint.
@@ -35,13 +35,13 @@ pub struct PerceivedMolecule {
 
 impl PerceivedMolecule {
     /// Perceive bonds over `mol` and bundle the result with the geometry's
-    /// elements, charge, and spin into the boundary type.
+    /// elements, charge, and multiplicity into the boundary type.
     pub fn perceive(mol: &Molecule, config: &BondPerceptionConfig) -> Self {
         let result = perceive_bonds(mol, config);
         Self {
             elements: (0..mol.atom_count()).map(|i| mol.element(i)).collect(),
             charge: mol.charge(),
-            spin: mol.multiplicity(),
+            multiplicity: mol.multiplicity(),
             bonds: result.bonds,
             feasible: result.feasible,
             valence_residuals: result.valence_residuals,
@@ -73,7 +73,7 @@ impl IntoAst<MoleculeAst> for PerceivedMolecule {
                 )
             })
             .collect();
-        let multiplicity = u8::from(self.spin);
+        let multiplicity = u8::from(self.multiplicity);
         let constraints = Constraints::from_iter([
             Constraint::Molecule(MoleculeConstraint::ChargeSum {
                 atoms: None,
@@ -112,12 +112,12 @@ mod tests {
                 0.000, 0.000, 0.000, 0.960, 0.000, 0.000, -0.240, 0.930, 0.000,
             ],
             0,
-            SpinMultiplicity::Singlet,
+            SpinMultiplicity::SINGLET,
         );
         let perceived = PerceivedMolecule::perceive(&water, &BondPerceptionConfig::default());
         assert_eq!(perceived.elements, vec![O, H, H]);
         assert_eq!(perceived.charge, 0);
-        assert_eq!(perceived.spin, SpinMultiplicity::Singlet);
+        assert_eq!(perceived.multiplicity, SpinMultiplicity::SINGLET);
         assert_eq!(perceived.bonds, vec![(0, 1, 1), (0, 2, 1)]);
         assert!(perceived.feasible);
     }
@@ -127,7 +127,7 @@ mod tests {
         PerceivedMolecule {
             elements: vec![C, C],
             charge: 0,
-            spin: SpinMultiplicity::Singlet,
+            multiplicity: SpinMultiplicity::SINGLET,
             bonds: vec![(0, 1, 2)],
             feasible: true,
             valence_residuals: vec![0, 0],
@@ -146,7 +146,7 @@ mod tests {
         PerceivedMolecule {
             elements: vec![O],
             charge: -1,
-            spin: SpinMultiplicity::Doublet,
+            multiplicity: SpinMultiplicity::DOUBLET,
             bonds: vec![],
             feasible: true,
             valence_residuals: vec![0],

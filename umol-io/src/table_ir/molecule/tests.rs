@@ -446,7 +446,7 @@ fn test_molecule_try_from_roundtrip() {
                 valence: Some(4),
                 lone_pairs: Some(1),
                 unpaired_electrons: Some(2),
-                multiplicity: Some(SpinMultiplicity::Singlet),
+                multiplicity: Some(SpinMultiplicity::SINGLET),
                 aromatic: None,
                 chirality: Some(Chirality::Unspecified),
                 class: Some(7),

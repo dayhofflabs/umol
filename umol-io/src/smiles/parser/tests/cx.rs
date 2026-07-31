@@ -160,7 +160,12 @@ fn test_cx_atom_values(#[case] input: &[u8], #[case] expected: Vec<Option<String
 #[rustfmt::skip]
 #[rstest]
 #[case::monovalent(b"C |^1:0|", 1, None)]
-#[case::divalent_triplet(b"C |^4:0|", 2, Some(SpinMultiplicity::Triplet))]
+#[case::divalent(b"C |^2:0|", 2, None)]
+#[case::divalent_singlet(b"C |^3:0|", 2, Some(SpinMultiplicity::SINGLET))]
+#[case::divalent_triplet(b"C |^4:0|", 2, Some(SpinMultiplicity::TRIPLET))]
+#[case::trivalent(b"C |^5:0|", 3, None)]
+#[case::trivalent_doublet(b"C |^6:0|", 3, Some(SpinMultiplicity::DOUBLET))]
+#[case::trivalent_quartet(b"C |^7:0|", 3, Some(SpinMultiplicity::QUARTET))]
 fn test_cx_radicals(
     #[case] input: &[u8],
     #[case] expected_unpaired: u8,

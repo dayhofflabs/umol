@@ -636,7 +636,7 @@ migrations.
   checked conversions, compatibility boundaries, serialization, and the `UnpairedElectrons`
   conversion roundtrip. **Breaking (red→green within S0).** [dep: S0a]
 - **S0c — `umol-io`, `umol-geometric`, `umol-geometric-graph`: migrate physical-spin
-  consumers.** Update TableIR, CXSMILES and CTfile radical handling, geometric molecule
+  consumers.** **Done.** Update TableIR, CXSMILES and CTfile radical handling, geometric molecule
   conversion, and their fixtures to use the numeric multiplicity API and approved field names.
   Preserve external-format behavior in the unit and parsing-conformance suites; sweep the
   OpenSMILES fuzz target and seeds that exercise radicals. **Breaking caller migration

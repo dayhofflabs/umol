@@ -174,12 +174,17 @@ impl Molecule {
         elements: Vec<Element>,
         coords: &[f64],
         charge: i32,
-        spin: SpinMultiplicity,
+        multiplicity: SpinMultiplicity,
     ) -> Self {
         let n = elements.len();
         assert_eq!(coords.len(), 3 * n, "coords must have 3*N elements");
         let matrix = DMatrix::from_fn(3, n, |r, c| Length::angstrom(coords[3 * c + r]).as_bohr());
-        Self::from_parts(elements, Coordinates::Cartesian(matrix), charge, spin)
+        Self::from_parts(
+            elements,
+            Coordinates::Cartesian(matrix),
+            charge,
+            multiplicity,
+        )
     }
 
     /// Create a molecule from elements and Cartesian coordinates in Bohr.
@@ -190,12 +195,17 @@ impl Molecule {
         elements: Vec<Element>,
         coords: &[f64],
         charge: i32,
-        spin: SpinMultiplicity,
+        multiplicity: SpinMultiplicity,
     ) -> Self {
         let n = elements.len();
         assert_eq!(coords.len(), 3 * n, "coords must have 3*N elements");
         let matrix = DMatrix::from_fn(3, n, |r, c| coords[3 * c + r]);
-        Self::from_parts(elements, Coordinates::Cartesian(matrix), charge, spin)
+        Self::from_parts(
+            elements,
+            Coordinates::Cartesian(matrix),
+            charge,
+            multiplicity,
+        )
     }
 
     /// Detect point group symmetry. Returns a new molecule with the discovered
@@ -316,7 +326,7 @@ impl Molecule {
             elements: gen_elements,
             coordinates: Coordinates::Cartesian(matrix),
             charge: 0,
-            multiplicity: SpinMultiplicity::Singlet,
+            multiplicity: SpinMultiplicity::SINGLET,
             group: result.group,
             representation: result.representation,
             equivalence_sets: eq_sets,
@@ -918,7 +928,7 @@ mod tests {
     use super::*;
 
     fn mol(elements: &[Element], coords: &[f64]) -> Molecule {
-        Molecule::from_cartesian_angstrom(elements.to_vec(), coords, 0, SpinMultiplicity::Singlet)
+        Molecule::from_cartesian_angstrom(elements.to_vec(), coords, 0, SpinMultiplicity::SINGLET)
     }
 
     // Water: O-H 0.96 Å, H-O-H 104.5°

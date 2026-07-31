@@ -1552,11 +1552,11 @@ fn convert_radical_code(code: u8) -> (u8, Option<SpinMultiplicity>) {
     match code {
         1 => (1, None),
         2 => (2, None),
-        3 => (2, Some(SpinMultiplicity::Singlet)),
-        4 => (2, Some(SpinMultiplicity::Triplet)),
+        3 => (2, Some(SpinMultiplicity::SINGLET)),
+        4 => (2, Some(SpinMultiplicity::TRIPLET)),
         5 => (3, None),
-        6 => (3, Some(SpinMultiplicity::Doublet)),
-        7 => (3, Some(SpinMultiplicity::Quartet)),
+        6 => (3, Some(SpinMultiplicity::DOUBLET)),
+        7 => (3, Some(SpinMultiplicity::QUARTET)),
         _ => (1, None),
     }
 }

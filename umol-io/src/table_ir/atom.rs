@@ -618,7 +618,7 @@ mod tests {
             valence: Some(3),
             lone_pairs: None,
             unpaired_electrons: Some(1),
-            multiplicity: Some(SpinMultiplicity::Doublet),
+            multiplicity: Some(SpinMultiplicity::DOUBLET),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
@@ -635,7 +635,7 @@ mod tests {
         assert_eq!(extended.valence, Some(3));
         assert_eq!(extended.lone_pairs, None);
         assert_eq!(extended.unpaired_electrons, Some(1));
-        assert_eq!(extended.multiplicity, Some(SpinMultiplicity::Doublet));
+        assert_eq!(extended.multiplicity, Some(SpinMultiplicity::DOUBLET));
         assert_eq!(extended.aromatic, Some(true));
         assert_eq!(extended.chirality, Some(Chirality::Clockwise));
         assert_eq!(extended.class, Some(5));
@@ -736,7 +736,7 @@ mod tests {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: Some(1),
-            multiplicity: Some(SpinMultiplicity::Doublet),
+            multiplicity: Some(SpinMultiplicity::DOUBLET),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
