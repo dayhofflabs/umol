@@ -232,12 +232,16 @@ fn verdict(any_undetermined: bool) -> Solution<(), ValidatorContradiction> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst, AtomConstraintAst, MoleculeAst, RingConfig, UnpairedElectronsAst, ValueAst,
+        AtomAst, AtomConstraintAst, AtomId, Constraint, ElementAst, MoleculeAst,
+        MoleculeConstraint, MoleculeParts, RingConfig, UnpairedElectronsAst, ValueAst,
     };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
+    use umol_chem::error::SpinStateError;
+    use umol_chem::spin::SpinMultiplicity;
     use umol_graph_core::{
         AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
     };
@@ -307,6 +311,56 @@ mod tests {
     #[rstest]
     #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
+    #[case::invalid_spin(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst {
+                element: ElementAst::Lit(Element::C),
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Lit(2),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+            SpinInvariantsContradiction::MoleculeAtom {
+                atom: AtomId(0),
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )),
+    )]
+    #[case::valid_coupling_not_yet_evaluated(
+        MoleculeAst::from_parts(MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+            }).into(),
+            ..Default::default()
+        }),
+        Solution::Underdetermined(()),
+    )]
+    #[case::invalid_coupling(
+        MoleculeAst::from_parts(MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+            }).into(),
+            ..Default::default()
+        }),
+        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+            SpinInvariantsContradiction::UnpairedElectronCoupling {
+                constraint_index: 0,
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )),
+    )]
     fn test_validator_validate(
         #[case] molecule: MoleculeAst,
         #[case] expected: Solution<(), ValidatorContradiction>,
@@ -330,15 +384,89 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_validator_validate_invariants() {
-        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+    #[case::ground(
+        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+        Solution::Determined(()),
+    )]
+    #[case::partial_spin(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst {
+                element: ElementAst::Lit(Element::C),
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Lit(4),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst {
+                    count: ValueAst::Lit(0),
+                    multiplicity: ValueAst::Undetermined,
+                },
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        Solution::Underdetermined(()),
+    )]
+    #[case::invalid_spin(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst {
+                element: ElementAst::Lit(Element::C),
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Lit(2),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+            SpinInvariantsContradiction::MoleculeAtom {
+                atom: AtomId(0),
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )),
+    )]
+    #[case::valid_coupling_not_yet_evaluated(
+        MoleculeAst::from_parts(MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+            }).into(),
+            ..Default::default()
+        }),
+        Solution::Underdetermined(()),
+    )]
+    #[case::invalid_coupling(
+        MoleculeAst::from_parts(MoleculeParts {
+            constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                atoms: None,
+                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+            }).into(),
+            ..Default::default()
+        }),
+        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+            SpinInvariantsContradiction::UnpairedElectronCoupling {
+                constraint_index: 0,
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )),
+    )]
+    fn test_validator_validate_invariants(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: Solution<(), ValidatorContradiction>,
+    ) {
         let model = ChemistryModel::default();
         assert_eq!(
             Validator::new(&model)
                 .validate_invariants(&molecule)
                 .unwrap(),
-            Solution::Determined(())
+            expected,
         );
     }
 
@@ -355,14 +483,38 @@ mod tests {
     }
 
     #[rstest]
-    #[case::methane(4, None)]
-    #[case::with_valence_constraint(3, Some(1))]
-    fn test_validator_validate_atom(#[case] hydrogens: i64, #[case] valence: Option<i64>) {
+    #[case::methane(4, None, UnpairedElectronsAst::from((0_u8, 1_u8)), Solution::Determined(()))]
+    #[case::with_valence_constraint(3, Some(1), UnpairedElectronsAst::from((0_u8, 1_u8)), Solution::Determined(()))]
+    #[case::partial_spin(
+        4,
+        None,
+        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Undetermined },
+        Solution::Underdetermined(()),
+    )]
+    #[case::invalid_spin(
+        2,
+        None,
+        UnpairedElectronsAst::from((2_u8, 2_u8)),
+        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+            SpinInvariantsContradiction::Atom {
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )),
+    )]
+    fn test_validator_validate_atom(
+        #[case] hydrogens: i64,
+        #[case] valence: Option<i64>,
+        #[case] unpaired_electrons: UnpairedElectronsAst,
+        #[case] expected: Solution<(), ValidatorContradiction>,
+    ) {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
         atom.implicit_hydrogens = ValueAst::Lit(hydrogens);
-        atom.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
+        atom.unpaired_electrons = unpaired_electrons;
         if let Some(v) = valence {
             atom.constraints
                 .set(AtomConstraintAst::Valence(ValueAst::Lit(v)));
@@ -370,7 +522,59 @@ mod tests {
         let model = ChemistryModel::default();
         assert_eq!(
             Validator::new(&model).validate_atom(&atom).unwrap(),
-            Solution::Determined(())
+            expected,
         );
+    }
+
+    proptest! {
+        #[test]
+        fn test_validator_validate_atom_spin(
+            count in 0_u8..5,
+            multiplicity in 0_u8..8,
+        ) {
+            let atom = AtomAst {
+                element: ElementAst::Lit(Element::C),
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Lit(4 - i64::from(count)),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst::from((count, multiplicity)),
+                ..Default::default()
+            };
+            let expected = SpinInvariantsValidator
+                .validate_atom(&atom)
+                .unwrap()
+                .map_contradiction(ValidatorContradiction::SpinInvariants);
+            let model = ChemistryModel::default();
+
+            prop_assert_eq!(Validator::new(&model).validate_atom(&atom).unwrap(), expected);
+        }
+
+        #[test]
+        fn test_validator_validate_invariants_spin(
+            count in 0_u8..5,
+            multiplicity in 0_u8..8,
+        ) {
+            let molecule = MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst {
+                    element: ElementAst::Lit(Element::C),
+                    charge: ValueAst::Lit(0),
+                    implicit_hydrogens: ValueAst::Lit(4 - i64::from(count)),
+                    lone_pairs: ValueAst::Lit(0),
+                    unpaired_electrons: UnpairedElectronsAst::from((count, multiplicity)),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            let expected = SpinInvariantsValidator
+                .validate(&molecule)
+                .unwrap()
+                .map_contradiction(ValidatorContradiction::SpinInvariants);
+            let model = ChemistryModel::default();
+
+            prop_assert_eq!(
+                Validator::new(&model).validate_invariants(&molecule).unwrap(),
+                expected,
+            );
+        }
     }
 }

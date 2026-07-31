@@ -554,6 +554,8 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{AromaticSystemId, AtomId, MoleculeAst};
     use umol_ast::{mol_dsl, mol_dsl_ground};
+    use umol_chem::error::SpinStateError;
+    use umol_chem::spin::SpinMultiplicity;
 
     use super::*;
 
@@ -762,15 +764,29 @@ mod tests {
             duplicates: vec![AtomId(1)],
         }
     )]
+    #[case::spin_invariant(
+        mol_dsl_ground!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        (0..6).map(AtomId).collect(),
+        KekulizerError::PostLocalizationSpinInvariant(
+            SpinInvariantsContradiction::MoleculeAtom {
+                atom: AtomId(0),
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )
+    )]
     fn test_kekulizer_transform_into_error(
         #[case] input: MoleculeAst,
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizerError,
     ) {
-        let mut ast = input;
+        let mut ast = input.clone();
         let result =
             Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut ast);
         assert_eq!(result, Err(expected));
+        assert_eq!(ast, input);
     }
 
     #[rstest]

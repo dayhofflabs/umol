@@ -759,7 +759,7 @@ test/fuzz inputs.
   underdetermined until the angular-momentum operation exists. Test nested trees, vacuous
   constraints, invalid targets, and valid-but-not-yet-evaluated targets. **Additive behavior
   (green).** [dep: S3a, S4a]
-- **S4d — composite validation and consumers:** verify `Validator::validate_atom`,
+- **S4d — composite validation and consumers:** **Done.** Verify `Validator::validate_atom`,
   `validate_invariants`, and transformation callers propagate the new contradictions and
   underdetermination exactly. Add integration/property cases and run the resolution,
   aromaticity, and kekulization conformance suites affected by the formerly inert validator.
