@@ -789,7 +789,7 @@ test/fuzz inputs.
   `aromatic_increment`, and fixed-enum multiplicity assumptions. Correct findings in their owning
   earlier subitem rather than treating S6 as a cleanup bucket. **Verification (green).** [dep:
   S0d, S1d, S2e, S3d, S4d, S5c]
-- **S6b — full validation gate:** run formatting and workspace clippy/tests; the extended
+- **S6b — full validation gate:** **Done.** Run formatting and workspace clippy/tests; the extended
   `umol-ast` and relevant `umol-graph-core` property suites; IO and graph conformance suites; the
   Python 3.13 binding build and pytest suite; fuzz-target builds and replay of all affected named
   seeds; and benchmark compilation for changed benches. Update doc 173 and status tracking only

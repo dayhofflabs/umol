@@ -279,6 +279,36 @@ Three named operations with visibly different contracts, rather than one call wi
 The completeness guarantee is what composition depends on, so it should be legible at the call site
 rather than hidden in an argument.
 
+### Expose the per-overlap composite
+
+`ReactionAst::compose(other, algorithm)` is currently the only entry point, and it enumerates every
+overlap internally. The per-overlap primitive already exists in `compose.rs` — its doc comment
+describes "the sequential composite for one overlap of A's product with `b`'s reactant" — but it is
+private. `ReactionAst::apply_at` is the corresponding public primitive on the application side; there
+is no `compose_at`.
+
+Making it public is the single addition that keeps every question above open:
+
+- maximum-overlap composition = call the existing maximum common subgraph operation, then
+  `compose_at`. No library change, no new named method.
+- filtered composition = enumerate, apply any predicate, `compose_at` each survivor.
+- anything a caller invents that was not anticipated here.
+
+Without it, a caller who wants either variant is blocked and has to ask, which means usage evidence
+arrives only as feature requests from people who have already given up. With it, the patterns appear
+in consumer code, and whichever recurs can be promoted to a named method on evidence rather than on a
+guess about what callers want.
+
+It commits to nothing else in this document: not `compose_maximum`, not an overlap filter API, not the
+ZDD, and not the connected variant. Suggested shape:
+
+```rust
+pub fn compose_at(&self, other: &ReactionAst, overlap: &GraphCorrespondence) -> Option<ReactionAst>
+```
+
+returning `None` on an inadmissible overlap or a dangling application, matching the existing internal
+contract.
+
 ## References
 
 - Minato, [*Zero-Suppressed BDDs for Set Manipulation in Combinatorial
