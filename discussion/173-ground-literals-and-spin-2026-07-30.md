@@ -725,16 +725,16 @@ workspace. It ends with no compatibility aliases or stale code/specification nam
   traversal. Update unit and property tests, including all-atoms and explicit-subset forms.
   **Breaking (red→green within S3).** [dep: S2a, S2b]
 - **S3b — `umol-ast/src/dsl/constraint.rs`, DSL specification: replace the serialized form.**
-  Implement the approved `:unpaired-electron-coupling` and nested
+  **Done.** Implement the approved `:unpaired-electron-coupling` and nested
   `:unpaired-electrons {:count ... :multiplicity ...}` grammar, raising, lowering, rendering, and
   parse/render roundtrips. Replace the `mol_spin_sum` fuzz seed and add partial and complete
   coupling seeds; sweep molecule and reaction fuzz corpora for the old form. **Breaking caller
   migration (red→green within S3).** [dep: S3a]
-- **S3c — downstream Rust consumers:** migrate geometric conversion and every remaining AST,
+- **S3c — downstream Rust consumers:** **Done.** Migrate geometric conversion and every remaining AST,
   graph, IO, fixture, example, benchmark, property, and conformance reference to the new
   constraint. Preserve the existing all-atoms scope semantics. **Breaking caller migration
   (red→green within S3).** [dep: S3a, S3b]
-- **S3d — `umol-py`: migrate the constraint binding.** Rename the Python variant, constructor
+- **S3d — `umol-py`: migrate the constraint binding.** **Done.** Rename the Python variant, constructor
   keywords, dictionary form, repr, and tests to `UnpairedElectronCoupling` and
   `unpaired_electrons`. **Breaking caller migration (red→green within S3).** [dep: S3a, S3b]
 

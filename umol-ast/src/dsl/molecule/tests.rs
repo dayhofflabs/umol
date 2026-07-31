@@ -451,13 +451,14 @@ fn test_molecule_dsl_edn_roundtrip_connected_constraint() {
 }
 
 /// `to_edn` drops vacuous molecule-level constraints — `ChargeSum`/`BondOrderSum`
-/// with `Undetermined` sum, `SpinSum` with `Undetermined` spin — during lowering;
+/// with `Undetermined` sum, `UnpairedElectronCoupling` with undetermined
+/// unpaired electrons — during lowering;
 /// the surviving molecule constraints are exactly those left after render → reparse.
 #[rustfmt::skip]
 #[rstest]
 #[case::charge_sum_vacuous(vec![MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined }], vec![])]
 #[case::bond_order_sum_vacuous(vec![MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Undetermined }], vec![])]
-#[case::spin_sum_vacuous(vec![MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }], vec![])]
+#[case::unpaired_electron_coupling_vacuous(vec![MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }], vec![])]
 #[case::vacuous_dropped_concrete_kept(
     vec![
         MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined },
@@ -753,7 +754,7 @@ fn test_molecule_dsl_required_field_missing_streaming(#[case] source: &str) {
 #[case::noncovalent_ends_satisfy(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 4} {:valence 1}]]}]}"##)]
 // MoleculeConstraint variants (via flattened keys)
 #[case::molecule_charge_sum(r##"{:atoms ["C" "N"] :bonds [] :constraints [{:charge-sum {:atoms [0 1] :sum 0}}]}"##)]
-#[case::molecule_spin_sum(r##"{:atoms ["C"] :bonds [] :constraints [{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}]}"##)]
+#[case::molecule_unpaired_electron_coupling(r##"{:atoms ["C"] :bonds [] :constraints [{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}]}"##)]
 // Anchor with multiple entity kinds (exercises all 6 ref-pair readers)
 #[case::sub_pattern_anchor_bonds_and_atoms(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:sub-pattern {:anchor {:atoms [[0 0]] :bonds [[0 0]]} :pattern {:atoms ["N" "N"] :bonds [[0 1 "1"]]}}}]}"##)]
 fn test_molecule_dsl_streaming_per_variant_parity(#[case] source: &str) {

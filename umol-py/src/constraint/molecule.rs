@@ -82,7 +82,11 @@ pub enum RelationalConstraint {
 #[pyclass]
 pub enum MoleculeConstraint {
     ChargeSum(Option<Vec<u32>>, Py<ValueAst>),
-    SpinSum(Option<Vec<u32>>, Py<UnpairedElectronsAst>),
+    #[pyo3(constructor = (atoms, unpaired_electrons))]
+    UnpairedElectronCoupling {
+        atoms: Option<Vec<u32>>,
+        unpaired_electrons: Py<UnpairedElectronsAst>,
+    },
     BondOrderSum(Option<Vec<u32>>, Py<ValueAst>),
     Connected(Option<Vec<u32>>),
     SubPattern(Py<SubPatternAnchor>, Py<MoleculeAst>),
@@ -519,14 +523,35 @@ impl MoleculeConstraint {
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            Self::ChargeSum(_, _) => ("ChargeSum", 2),
-            Self::SpinSum(_, _) => ("SpinSum", 2),
-            Self::BondOrderSum(_, _) => ("BondOrderSum", 2),
-            Self::Connected(_) => ("Connected", 1),
-            Self::SubPattern(_, _) => ("SubPattern", 2),
-        };
-        variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", variant, arity)
+        match &*slf.bind(py).borrow() {
+            Self::ChargeSum(_, _) => {
+                variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "ChargeSum", 2)
+            }
+            Self::UnpairedElectronCoupling { .. } => {
+                let object = slf.bind(py).as_any();
+                let atoms = object.getattr("atoms")?.repr()?.extract::<String>()?;
+                let unpaired_electrons = object
+                    .getattr("unpaired_electrons")?
+                    .repr()?
+                    .extract::<String>()?;
+                Ok(format!(
+                    "MoleculeConstraint.UnpairedElectronCoupling(atoms={atoms}, \
+                     unpaired_electrons={unpaired_electrons})"
+                ))
+            }
+            Self::BondOrderSum(_, _) => variant_repr(
+                slf.bind(py).as_any(),
+                "MoleculeConstraint",
+                "BondOrderSum",
+                2,
+            ),
+            Self::Connected(_) => {
+                variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "Connected", 1)
+            }
+            Self::SubPattern(_, _) => {
+                variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "SubPattern", 2)
+            }
+        }
     }
 }
 
@@ -539,12 +564,18 @@ impl MoleculeConstraint {
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
                 into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
             ),
-            AstMoleculeConstraint::SpinSum { atoms, spin } => Self::SpinSum(
-                atoms
+            AstMoleculeConstraint::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => Self::UnpairedElectronCoupling {
+                atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-                Py::new(py, UnpairedElectronsAst::from_rust(py, spin)?)?,
-            ),
+                unpaired_electrons: Py::new(
+                    py,
+                    UnpairedElectronsAst::from_rust(py, unpaired_electrons)?,
+                )?,
+            },
             AstMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
                 bonds
                     .as_ref()
@@ -571,11 +602,14 @@ impl MoleculeConstraint {
                     .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
                 sum: sum.bind(py).borrow().to_rust(py),
             },
-            Self::SpinSum(atoms, spin) => AstMoleculeConstraint::SpinSum {
+            Self::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => AstMoleculeConstraint::UnpairedElectronCoupling {
                 atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
-                spin: spin.bind(py).borrow().to_rust(py),
+                unpaired_electrons: unpaired_electrons.bind(py).borrow().to_rust(py),
             },
             Self::BondOrderSum(bonds, sum) => AstMoleculeConstraint::BondOrderSum {
                 bonds: bonds
@@ -1319,9 +1353,9 @@ mod tests {
         atoms: Some(Vec::new()),
         sum: AstValueAst::Lit(2),
     })]
-    #[case::spin_sum(AstMoleculeConstraint::SpinSum {
+    #[case::unpaired_electron_coupling(AstMoleculeConstraint::UnpairedElectronCoupling {
         atoms: Some(vec![AstAtomId(3), AstAtomId(4)]),
-        spin: AstUnpairedElectronsAst::from((1, 2)),
+        unpaired_electrons: AstUnpairedElectronsAst::from((1, 2)),
     })]
     #[case::bond_order_sum(AstMoleculeConstraint::BondOrderSum {
         bonds: Some(vec![AstBondId(5), AstBondId(6)]),

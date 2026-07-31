@@ -157,7 +157,7 @@ An empty string **`:type ""`** is a **parse error** for **every** structural sub
 
 **`:atom-aliases`**. The **`atom-alias-list`** defines named atom shorthands scoped to the enclosing molecule map. It is a flat vector of alternating keyword/atom-spec pairs. Each value **MUST** be an **EDN string** carrying an **atom-string** payload. An **`atom-entry`** that is a bare **keyword** (not a string and not in a **`[id entry]`** position) is an alias reference and **MUST** resolve to a key in **`:atom-aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error. Alias definitions **MUST** be bijective: no two alias names **MAY** map to the same atom definition.
 
-**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, sub-pattern anchors, and boolean combinators live here. The canonical grammar appears in **§7.7**. Whole-molecule charge and spin assertions are written as **`{:charge-sum {:sum n}}`** and **`{:spin-sum {:spin spin-literal}}`** entries (omit `:atoms` to range over the whole molecule); a subset is selected by adding `:atoms [...]`. There is no top-level **`:charge`** or **`:spin`** key on the molecule map.
+**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, sub-pattern anchors, and boolean combinators live here. The canonical grammar appears in **§7.7**. Whole-molecule charge and unpaired-electron coupling assertions are written as **`{:charge-sum {:sum n}}`** and **`{:unpaired-electron-coupling {:unpaired-electrons {:count n :multiplicity m}}}`** entries (omit `:atoms` to range over the whole molecule); a subset is selected by adding `:atoms [...]`. There is no top-level **`:charge`** or **`:spin`** key on the molecule map.
 
 **Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-spec* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
 
@@ -853,11 +853,12 @@ relational-constraint ::=
   | { :stereo-bond-any-ligand         [stereo-bond-ref atom-constraint-form]  }
 
 molecule-constraint ::=
-    { :charge-sum     { [:atoms [atom-ref+]]? :sum value-expr } }
-  | { :spin-sum       { [:atoms [atom-ref+]]? :spin spin-literal } }
-  | { :bond-order-sum { [:bonds [bond-ref+]]? :sum value-expr } }
-  | { :connected      { [:atoms [atom-ref+]]? } }
-  | { :sub-pattern    { :anchor anchor-spec :pattern molecule-map } }
+    { :charge-sum                 { [:atoms [atom-ref+]]? :sum value-expr } }
+  | { :unpaired-electron-coupling { [:atoms [atom-ref+]]?
+                                     :unpaired-electrons unpaired-electrons-form } }
+  | { :bond-order-sum             { [:bonds [bond-ref+]]? :sum value-expr } }
+  | { :connected                  { [:atoms [atom-ref+]]? } }
+  | { :sub-pattern                { :anchor anchor-spec :pattern molecule-map } }
 
 combinator-constraint ::=
     { :and [constraint-entry+] }
@@ -895,7 +896,7 @@ boolean ::= true | false | :undetermined
 (* without :size, the total ring count. :count is required.                 *)
 ring-membership-form ::= { :size nat :count value-expr } | { :count value-expr }
 
-spin-literal ::= { :unpaired value-expr :multiplicity value-expr }
+unpaired-electrons-form ::= { :count value-expr :multiplicity value-expr }
 
 aromatic-system-constraint-form  ::= { :electron-count value-expr }
 multicenter-bond-constraint-form ::= { :electron-count value-expr }
@@ -963,7 +964,7 @@ stereo-bond-ref      ::= int | keyword | { :site bond-ref :ligands [ligand-ref+]
 
 **Anchor cardinality.** Each keyed slot in **`anchor-spec`** is optional and may appear at most once; if present, it is a vector of **`(target-side-ref, pattern-side-ref)`** pairs of the same entity kind. An empty **`anchor-spec`** denotes an unanchored sub-pattern (the pattern can embed anywhere). Target-side refs resolve against the outer molecule's metadata; pattern-side refs against the pattern molecule's metadata.
 
-**Molecule-scope subset selectors.** `:charge-sum`, `:spin-sum`, `:bond-order-sum`, and `:connected` accept an **optional** `:atoms` (or `:bonds`) vector. When **omitted**, the predicate ranges over **every** atom (or bond) in the molecule, including atoms added by future structural growth. When **present**, the predicate ranges over the listed entities only. An empty vector `[]` is **distinct** from omission: it selects no entities.
+**Molecule-scope subset selectors.** `:charge-sum`, `:unpaired-electron-coupling`, `:bond-order-sum`, and `:connected` accept an **optional** `:atoms` (or `:bonds`) vector. When **omitted**, the predicate ranges over **every** atom (or bond) in the molecule, including atoms added by future structural growth. When **present**, the predicate ranges over the listed entities only. An empty vector `[]` is **distinct** from omission: it selects no entities.
 
 **Sub-pattern materialization.** A **`:sub-pattern`** **`:pattern`** is a full **molecule-map**; its inner constraints are evaluated independently from the outer constraint tree. The pattern carries **no defaults** — values pass through verbatim — so a pattern's atom **`charge: undetermined`** stays **`undetermined`** at match time and behaves as a wildcard (**§5.1.4**); zero-defaulting that would apply to a ground input does **not** apply inside a pattern.
 

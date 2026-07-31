@@ -54,8 +54,8 @@ impl IntoAst<MoleculeAst> for PerceivedMolecule {
 
     /// Each atom carries only its element; hydrogens, per-atom charge, and per-atom
     /// spin are left undetermined for the caller's resolver. The total charge and
-    /// spin become molecule-scope `ChargeSum` / `SpinSum` constraints over the whole
-    /// molecule.
+    /// spin become molecule-scope `ChargeSum` / `UnpairedElectronCoupling`
+    /// constraints over the whole molecule.
     fn into_ast(self, _ctx: &Self::Ctx) -> MoleculeAst {
         let atoms: Vec<AtomAst> = self
             .elements
@@ -79,9 +79,9 @@ impl IntoAst<MoleculeAst> for PerceivedMolecule {
                 atoms: None,
                 sum: ValueAst::Lit(i64::from(self.charge)),
             }),
-            Constraint::Molecule(MoleculeConstraint::SpinSum {
+            Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
-                spin: UnpairedElectronsAst::from((multiplicity - 1, multiplicity)),
+                unpaired_electrons: UnpairedElectronsAst::from((multiplicity - 1, multiplicity)),
             }),
         ]);
         MoleculeAst::from_parts(MoleculeParts {
@@ -137,7 +137,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::new(ValueAst::Lit(2)))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
-                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::from((0u8, 1u8)) }),
+                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0u8, 1u8)) }),
             ]),
             ..Default::default()
         })
@@ -155,7 +155,7 @@ mod tests {
             atoms: vec![AtomAst::new(ElementAst::Lit(O))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(-1) }),
-                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::from((1u8, 2u8)) }),
+                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((1u8, 2u8)) }),
             ]),
             ..Default::default()
         })

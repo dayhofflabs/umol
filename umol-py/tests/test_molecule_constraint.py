@@ -6,11 +6,26 @@ from umol import (
     MoleculeConstraint,
     RelationalConstraint,
     SubPatternAnchor,
+    UnpairedElectronsAst,
 )
 
 
 def connected_constraint():
     return Constraint.Molecule(MoleculeConstraint.Connected(None))
+
+
+def test_moleculeconstraint_unpaired_electron_coupling():
+    constraint = MoleculeConstraint.UnpairedElectronCoupling(
+        atoms=[2, 3],
+        unpaired_electrons=UnpairedElectronsAst(1, 2),
+    )
+
+    assert constraint.atoms == [2, 3]
+    assert constraint.unpaired_electrons == UnpairedElectronsAst(1, 2)
+    assert repr(constraint) == (
+        "MoleculeConstraint.UnpairedElectronCoupling(atoms=[2, 3], "
+        "unpaired_electrons=UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2)))"
+    )
 
 
 def test_subpatternanchor_fields():

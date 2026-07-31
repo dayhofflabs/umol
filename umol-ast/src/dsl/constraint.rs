@@ -78,22 +78,22 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
     }
 }
 
-pub(super) fn read_spin_state(
+pub(super) fn read_unpaired_electrons(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<UnpairedElectronsAst, EdnError> {
-    let mut unpaired = None;
+    let mut count = None;
     let mut multiplicity = None;
     read_map(de, |d, key| {
         match key {
-            "unpaired" => unpaired = Some(read_value_dsl(d)?.into_ast(&())),
+            "count" => count = Some(read_value_dsl(d)?.into_ast(&())),
             "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ast(&())),
             _ => d.read_skip_value()?,
         }
         Ok(())
     })?;
     Ok(UnpairedElectronsAst {
-        count: unpaired.ok_or_else(|| missing("unpaired", "spin"))?,
-        multiplicity: multiplicity.ok_or_else(|| missing("multiplicity", "spin"))?,
+        count: count.ok_or_else(|| missing("count", "unpaired-electrons"))?,
+        multiplicity: multiplicity.ok_or_else(|| missing("multiplicity", "unpaired-electrons"))?,
     })
 }
 
@@ -1008,20 +1008,21 @@ pub(super) fn read_molecule_constraint_dsl(
                 sum: sum.ok_or_else(|| missing("sum", "charge-sum"))?,
             }
         }
-        "spin-sum" => {
+        "unpaired-electron-coupling" => {
             let mut atoms = None;
-            let mut spin = None;
+            let mut unpaired_electrons = None;
             read_map(de, |d, k| {
                 match k {
                     "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
-                    "spin" => spin = Some(read_spin_state(d)?),
+                    "unpaired-electrons" => unpaired_electrons = Some(read_unpaired_electrons(d)?),
                     _ => d.read_skip_value()?,
                 }
                 Ok(())
             })?;
-            MoleculeConstraintDsl::SpinSum {
+            MoleculeConstraintDsl::UnpairedElectronCoupling {
                 atoms,
-                spin: spin.ok_or_else(|| missing("spin", "spin-sum"))?,
+                unpaired_electrons: unpaired_electrons
+                    .ok_or_else(|| missing("unpaired-electrons", "unpaired-electron-coupling"))?,
             }
         }
         "bond-order-sum" => {
@@ -1148,9 +1149,11 @@ pub(super) fn read_constraint_dsl(
         "and" => ConstraintDsl::And(read_vec(de, read_constraint_dsl)?),
         "or" => ConstraintDsl::Or(read_vec(de, read_constraint_dsl)?),
         "not" => ConstraintDsl::Not(Box::new(read_constraint_dsl(de)?)),
-        "charge-sum" | "spin-sum" | "bond-order-sum" | "connected" | "sub-pattern" => {
-            ConstraintDsl::Molecule(read_molecule_constraint_dsl(de, key.as_str())?)
-        }
+        "charge-sum"
+        | "unpaired-electron-coupling"
+        | "bond-order-sum"
+        | "connected"
+        | "sub-pattern" => ConstraintDsl::Molecule(read_molecule_constraint_dsl(de, key.as_str())?),
         k if RELATIONAL_KEYS.contains(&k) => {
             ConstraintDsl::Relational(read_relational_constraint_dsl(de, k)?)
         }
@@ -1190,12 +1193,13 @@ pub(super) fn read_constraints_dsl(
 }
 
 /// Surface DSL wrapper around `MoleculeConstraint`. EDN form is a single-key
-/// map keyed by the variant: `{:charge-sum {...}}`, `{:spin-sum {...}}`,
-/// `{:bond-order-sum {...}}`, `{:connected {...}}`, `{:sub-pattern {...}}`.
+/// map keyed by the variant: `{:charge-sum {...}}`,
+/// `{:unpaired-electron-coupling {...}}`, `{:bond-order-sum {...}}`,
+/// `{:connected {...}}`, `{:sub-pattern {...}}`.
 ///
-/// For `ChargeSum` / `SpinSum` / `BondOrderSum` / `Connected`, the
-/// `atoms` (or `bonds`) field is `None` to denote the entire molecule's
-/// atoms (or bonds). Empty subset must be expressed explicitly as
+/// For `ChargeSum` / `UnpairedElectronCoupling` / `BondOrderSum` /
+/// `Connected`, the `atoms` (or `bonds`) field is `None` to denote the entire
+/// molecule's atoms (or bonds). Empty subset must be expressed explicitly as
 /// `Some(vec![])`.
 ///
 /// `SubPattern` carries a `Box<MoleculeAst>` directly: defaults are a
@@ -1209,9 +1213,9 @@ pub enum MoleculeConstraintDsl {
         atoms: Option<Vec<AtomRef>>,
         sum: ValueDsl,
     },
-    SpinSum {
+    UnpairedElectronCoupling {
         atoms: Option<Vec<AtomRef>>,
-        spin: UnpairedElectronsAst,
+        unpaired_electrons: UnpairedElectronsAst,
     },
     BondOrderSum {
         bonds: Option<Vec<BondRef>>,
@@ -1277,9 +1281,9 @@ impl MoleculeConstraintDsl {
             MoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
                 unpaired_electrons,
-            } => Self::SpinSum {
+            } => Self::UnpairedElectronCoupling {
                 atoms: denote_atom_subset(atoms, meta),
-                spin: unpaired_electrons.clone(),
+                unpaired_electrons: unpaired_electrons.clone(),
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: denote_bond_subset(bonds, meta),
@@ -1308,9 +1312,12 @@ impl MoleculeConstraintDsl {
                 atoms: resolve_atom_subset(atoms, namespace)?,
                 sum: sum.into_ast(&()),
             },
-            Self::SpinSum { atoms, spin } => MoleculeConstraint::UnpairedElectronCoupling {
+            Self::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: resolve_atom_subset(atoms, namespace)?,
-                unpaired_electrons: spin,
+                unpaired_electrons,
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
                 bonds: resolve_bond_subset(bonds, namespace)?,
@@ -1359,16 +1366,18 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                 let (atoms, sum) = parse_sum_map::<AtomRef>(v, "charge-sum", "atoms")?;
                 Self::ChargeSum { atoms, sum }
             }
-            "spin-sum" => {
-                let m = expect_map(v, "spin-sum")?;
+            "unpaired-electron-coupling" => {
+                let m = expect_map(v, "unpaired-electron-coupling")?;
                 let atoms = parse_optional_refs::<AtomRef>(m, "atoms")?;
-                let spin_edn = m.get_keyword("spin").ok_or_else(|| DeError::MissingField {
-                    key: "spin".into(),
-                    path: vec!["spin-sum".into()],
-                })?;
-                Self::SpinSum {
+                let unpaired_electrons_edn =
+                    m.get_keyword("unpaired-electrons")
+                        .ok_or_else(|| DeError::MissingField {
+                            key: "unpaired-electrons".into(),
+                            path: vec!["unpaired-electron-coupling".into()],
+                        })?;
+                Self::UnpairedElectronCoupling {
                     atoms,
-                    spin: parse_spin(spin_edn)?,
+                    unpaired_electrons: parse_unpaired_electrons(unpaired_electrons_edn)?,
                 }
             }
             "bond-order-sum" => {
@@ -1421,13 +1430,19 @@ impl ToEdn for MoleculeConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         let (key, value) = match self {
             Self::ChargeSum { atoms, sum } => ("charge-sum", render_sum_map("atoms", atoms, sum)),
-            Self::SpinSum { atoms, spin } => {
+            Self::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => {
                 let mut m = EdnMap::with_capacity(2);
                 if let Some(refs) = atoms {
                     m.insert(Edn::keyword("atoms"), render_refs(refs));
                 }
-                m.insert(Edn::keyword("spin"), render_spin(spin));
-                ("spin-sum", Edn::Map(m))
+                m.insert(
+                    Edn::keyword("unpaired-electrons"),
+                    render_unpaired_electrons(unpaired_electrons),
+                );
+                ("unpaired-electron-coupling", Edn::Map(m))
             }
             Self::BondOrderSum { bonds, sum } => {
                 ("bond-order-sum", render_sum_map("bonds", bonds, sum))
@@ -1808,35 +1823,35 @@ fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &ValueDs
     Edn::Map(m)
 }
 
-fn parse_spin(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeError> {
-    let m = expect_map(edn, "spin")?;
-    let unpaired = m
-        .get_keyword("unpaired")
+fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeError> {
+    let m = expect_map(edn, "unpaired-electrons")?;
+    let count = m
+        .get_keyword("count")
         .ok_or_else(|| DeError::MissingField {
-            key: "unpaired".into(),
-            path: vec!["spin".into()],
+            key: "count".into(),
+            path: vec!["unpaired-electrons".into()],
         })?;
     let multiplicity = m
         .get_keyword("multiplicity")
         .ok_or_else(|| DeError::MissingField {
             key: "multiplicity".into(),
-            path: vec!["spin".into()],
+            path: vec!["unpaired-electrons".into()],
         })?;
     Ok(UnpairedElectronsAst {
-        count: ValueDsl::from_edn(unpaired)?.into_ast(&()),
+        count: ValueDsl::from_edn(count)?.into_ast(&()),
         multiplicity: ValueDsl::from_edn(multiplicity)?.into_ast(&()),
     })
 }
 
-fn render_spin(spin: &UnpairedElectronsAst) -> Edn<'static> {
+fn render_unpaired_electrons(unpaired_electrons: &UnpairedElectronsAst) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     m.insert(
-        Edn::keyword("unpaired"),
-        ValueDsl::from_ast(&spin.count, &()).to_edn(),
+        Edn::keyword("count"),
+        ValueDsl::from_ast(&unpaired_electrons.count, &()).to_edn(),
     );
     m.insert(
         Edn::keyword("multiplicity"),
-        ValueDsl::from_ast(&spin.multiplicity, &()).to_edn(),
+        ValueDsl::from_ast(&unpaired_electrons.multiplicity, &()).to_edn(),
     );
     Edn::Map(m)
 }
@@ -1930,9 +1945,11 @@ impl<'de> FromEdn<'de> for ConstraintDsl {
             "or" => Self::Or(parse_constraint_vec(v, "or")?),
             "not" => Self::Not(Box::new(ConstraintDsl::from_edn(v)?)),
             // Molecule-scope keys: delegate to MoleculeConstraintDsl.
-            "charge-sum" | "spin-sum" | "bond-order-sum" | "connected" | "sub-pattern" => {
-                Self::Molecule(MoleculeConstraintDsl::from_edn(edn)?)
-            }
+            "charge-sum"
+            | "unpaired-electron-coupling"
+            | "bond-order-sum"
+            | "connected"
+            | "sub-pattern" => Self::Molecule(MoleculeConstraintDsl::from_edn(edn)?),
             k if RELATIONAL_KEYS.contains(&k) => {
                 Self::Relational(RelationalConstraintDsl::from_edn(edn)?)
             }
@@ -2291,9 +2308,10 @@ mod tests {
     #[rstest]
     #[case::charge_sum(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }, "{:charge-sum {:atoms [0 1] :sum 0}}")]
     #[case::charge_sum_all(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }, "{:charge-sum {:sum 0}}")]
-    #[case::spin_sum(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() },
-        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}")]
-    #[case::spin_sum_all(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: (0_u8, 1_u8).into() }, "{:spin-sum {:spin {:unpaired 0 :multiplicity 1}}}")]
+    #[case::unpaired_electron_coupling(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() },
+        "{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}")]
+    #[case::unpaired_electron_coupling_all(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: (0_u8, 1_u8).into() },
+        "{:unpaired-electron-coupling {:unpaired-electrons {:count 0 :multiplicity 1}}}")]
     #[case::valence(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: ValueAst::Lit(4) },
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
     #[case::bond_order_sum_all(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(0) }, "{:bond-order-sum {:sum 0}}")]
@@ -2500,8 +2518,8 @@ mod tests {
     #[case::molecule_connected(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1)]) }), "{:connected {:atoms [0 1]}}")]
     #[case::molecule_charge_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
         "{:charge-sum {:atoms [0 1] :sum 0}}")]
-    #[case::molecule_spin_sum(Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() }),
-        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}")]
+    #[case::molecule_unpaired_electron_coupling(Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() }),
+        "{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}")]
     #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: ValueAst::Lit(4) }),
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
     #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
