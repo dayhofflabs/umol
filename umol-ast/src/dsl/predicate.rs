@@ -61,28 +61,28 @@ pub(crate) fn ring_membership(i: &mut &str) -> PResult<RingMembershipAst> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SpinPredicate {
-    Unpaired(ValueAst),
+pub enum UnpairedElectronsPredicate {
+    Count(ValueAst),
     Multiplicity(ValueAst),
 }
 
-pub(crate) fn apply_spin_pair(
-    spin: &mut UnpairedElectronsAst,
-    pred: SpinPredicate,
-    dup: fn(String) -> ParseError,
+pub(crate) fn apply_unpaired_electrons_predicate(
+    unpaired_electrons: &mut UnpairedElectronsAst,
+    predicate: UnpairedElectronsPredicate,
+    duplicate_error: fn(String) -> ParseError,
 ) -> Result<(), ParseError> {
-    match pred {
-        SpinPredicate::Unpaired(v) => {
-            if !matches!(&spin.count, ValueAst::Undetermined) {
-                return Err(dup("#u".to_string()));
+    match predicate {
+        UnpairedElectronsPredicate::Count(v) => {
+            if !matches!(&unpaired_electrons.count, ValueAst::Undetermined) {
+                return Err(duplicate_error("#u".to_string()));
             }
-            spin.count = v;
+            unpaired_electrons.count = v;
         }
-        SpinPredicate::Multiplicity(v) => {
-            if !matches!(&spin.multiplicity, ValueAst::Undetermined) {
-                return Err(dup("#s".to_string()));
+        UnpairedElectronsPredicate::Multiplicity(v) => {
+            if !matches!(&unpaired_electrons.multiplicity, ValueAst::Undetermined) {
+                return Err(duplicate_error("#s".to_string()));
             }
-            spin.multiplicity = v;
+            unpaired_electrons.multiplicity = v;
         }
     }
     Ok(())
@@ -103,11 +103,11 @@ pub(crate) fn fmt_charge(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Resul
     }
 }
 
-pub(crate) fn fmt_spin_pair(
+pub(crate) fn fmt_unpaired_electrons(
     f: &mut fmt::Formatter<'_>,
-    spin: &UnpairedElectronsAst,
+    unpaired_electrons: &UnpairedElectronsAst,
 ) -> fmt::Result {
-    match &spin.count {
+    match &unpaired_electrons.count {
         ValueAst::Undetermined => {}
         ValueAst::Lit(1) => write!(f, "#u")?,
         ValueAst::Lit(n) => write!(f, "#u{}", n)?,
@@ -116,7 +116,7 @@ pub(crate) fn fmt_spin_pair(
             fmt_value(f, v)?;
         }
     }
-    match &spin.multiplicity {
+    match &unpaired_electrons.multiplicity {
         ValueAst::Undetermined => {}
         ValueAst::Lit(1) => write!(f, "#s")?,
         ValueAst::Lit(n) => write!(f, "#s{}", n)?,
@@ -169,73 +169,80 @@ pub(crate) fn fmt_ring_membership(
 
 /// Fill defaults on a `UnpairedElectronsAst` per the given modes. Shared across
 /// atom/bond/aromatic-system/multicenter-bond DSL lowering (all entities that
-/// carry a spin state except `NoncovalentBond`).
-pub(crate) fn raise_spin(
-    spin: &mut UnpairedElectronsAst,
-    u_mode: UnpairedElectronsDefault,
-    m_mode: MultiplicityDefault,
+/// carry an unpaired-electron state except `NoncovalentBond`).
+pub(crate) fn raise_unpaired_electrons(
+    unpaired_electrons: &mut UnpairedElectronsAst,
+    count_default: UnpairedElectronsDefault,
+    multiplicity_default: MultiplicityDefault,
 ) {
-    let u = mem::replace(&mut spin.count, ValueAst::Undetermined);
-    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
-    let resolved_u = if matches!(u, ValueAst::Undetermined) {
-        match u_mode {
+    let count = mem::replace(&mut unpaired_electrons.count, ValueAst::Undetermined);
+    let multiplicity = mem::replace(&mut unpaired_electrons.multiplicity, ValueAst::Undetermined);
+    let resolved_count = if matches!(count, ValueAst::Undetermined) {
+        match count_default {
             UnpairedElectronsDefault::Zero => ValueAst::Lit(0),
             UnpairedElectronsDefault::Required => ValueAst::Undetermined,
-            UnpairedElectronsDefault::Derived => match &m {
-                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
+            UnpairedElectronsDefault::Derived => match &multiplicity {
+                ValueAst::Lit(value) => ValueAst::Lit(value - 1),
                 _ => ValueAst::Undetermined,
             },
         }
     } else {
-        u
+        count
     };
-    let resolved_m = if matches!(m, ValueAst::Undetermined) {
-        match m_mode {
+    let resolved_multiplicity = if matches!(multiplicity, ValueAst::Undetermined) {
+        match multiplicity_default {
             MultiplicityDefault::Required => ValueAst::Undetermined,
-            MultiplicityDefault::Derived => match &resolved_u {
-                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
+            MultiplicityDefault::Derived => match &resolved_count {
+                ValueAst::Lit(value) => ValueAst::Lit(value + 1),
                 _ => ValueAst::Undetermined,
             },
         }
     } else {
-        m
+        multiplicity
     };
-    spin.count = resolved_u;
-    spin.multiplicity = resolved_m;
+    unpaired_electrons.count = resolved_count;
+    unpaired_electrons.multiplicity = resolved_multiplicity;
 }
 
-/// Strip defaults from a `UnpairedElectronsAst` per the given modes. Compute `strip_m`
+/// Strip defaults from a `UnpairedElectronsAst` per the given modes. Compute
+/// `strip_multiplicity`
 /// first so that under (Derived, Derived) the tie-break keeps `u` explicit:
-/// `strip_u` under `Derived` backs off when `strip_m` has already fired, so at
+/// `strip_count` under `Derived` backs off when `strip_multiplicity` has already fired, so at
 /// most one of the two is stripped and re-raising recovers the original AST.
-pub(crate) fn lower_spin(
-    spin: &mut UnpairedElectronsAst,
-    u_mode: UnpairedElectronsDefault,
-    m_mode: MultiplicityDefault,
+pub(crate) fn lower_unpaired_electrons(
+    unpaired_electrons: &mut UnpairedElectronsAst,
+    count_default: UnpairedElectronsDefault,
+    multiplicity_default: MultiplicityDefault,
 ) {
-    let uu = if let ValueAst::Lit(n) = spin.count {
+    let literal_count = if let ValueAst::Lit(n) = unpaired_electrons.count {
         Some(n)
     } else {
         None
     };
-    let mm = if let ValueAst::Lit(n) = spin.multiplicity {
+    let literal_multiplicity = if let ValueAst::Lit(n) = unpaired_electrons.multiplicity {
         Some(n)
     } else {
         None
     };
-    let derived = matches!((uu, mm), (Some(u), Some(m)) if m == u + 1);
+    let derived = matches!(
+        (literal_count, literal_multiplicity),
+        (Some(count), Some(multiplicity)) if multiplicity == count + 1
+    );
 
-    let strip_m = matches!(m_mode, MultiplicityDefault::Derived) && derived;
-    let strip_u = match u_mode {
-        UnpairedElectronsDefault::Zero => uu == Some(0),
-        UnpairedElectronsDefault::Derived => derived && mm.is_some() && !strip_m,
+    let strip_multiplicity =
+        matches!(multiplicity_default, MultiplicityDefault::Derived) && derived;
+    let strip_count = match count_default {
+        UnpairedElectronsDefault::Zero => literal_count == Some(0),
+        UnpairedElectronsDefault::Derived => {
+            derived && literal_multiplicity.is_some() && !strip_multiplicity
+        }
         UnpairedElectronsDefault::Required => false,
     };
-    if strip_u {
-        spin.count = ValueAst::Undetermined;
+    if strip_count {
+        unpaired_electrons.count = ValueAst::Undetermined;
     }
-    if strip_m {
-        spin.multiplicity = ValueAst::Undetermined;
+    if strip_multiplicity {
+        unpaired_electrons.multiplicity = ValueAst::Undetermined;
     }
 }
 
@@ -245,17 +252,6 @@ mod tests {
     use rstest::*;
 
     use super::*;
-
-    #[fixture]
-    fn spin(
-        #[default(ValueAst::Undetermined)] count: ValueAst,
-        #[default(ValueAst::Undetermined)] multiplicity: ValueAst,
-    ) -> UnpairedElectronsAst {
-        UnpairedElectronsAst {
-            count,
-            multiplicity,
-        }
-    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -330,41 +326,75 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::sets_unpaired(spin(ValueAst::Undetermined, ValueAst::Undetermined), SpinPredicate::Unpaired(ValueAst::Lit(1)),
-        spin(ValueAst::Lit(1), ValueAst::Undetermined))]
-    #[case::sets_multiplicity(spin(ValueAst::Undetermined, ValueAst::Undetermined), SpinPredicate::Multiplicity(ValueAst::Lit(2)),
-        spin(ValueAst::Undetermined, ValueAst::Lit(2)))]
-    #[case::sets_unpaired_over_existing_multiplicity(spin(ValueAst::Undetermined, ValueAst::Lit(2)), SpinPredicate::Unpaired(ValueAst::Lit(1)),
-        spin(ValueAst::Lit(1), ValueAst::Lit(2)))]
-    #[case::sets_multiplicity_over_existing_unpaired(spin(ValueAst::Lit(0), ValueAst::Undetermined), SpinPredicate::Multiplicity(ValueAst::Lit(1)),
-        spin(ValueAst::Lit(0), ValueAst::Lit(1)))]
-    fn test_apply_spin_pair(
+    #[case::count(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }, UnpairedElectronsPredicate::Count(ValueAst::Lit(1)),
+        UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined })]
+    #[case::multiplicity(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }, UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(2)),
+        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) })]
+    #[case::count_with_multiplicity(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, UnpairedElectronsPredicate::Count(ValueAst::Lit(1)),
+        UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Lit(2) })]
+    #[case::multiplicity_with_count(UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Undetermined }, UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(1)),
+        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(1) })]
+    fn test_apply_unpaired_electrons_predicate(
         #[case] mut initial: UnpairedElectronsAst,
-        #[case] pred: SpinPredicate,
+        #[case] predicate: UnpairedElectronsPredicate,
         #[case] expected: UnpairedElectronsAst,
     ) {
-        apply_spin_pair(&mut initial, pred, ParseError::DuplicateAtomPredicate).unwrap();
+        apply_unpaired_electrons_predicate(
+            &mut initial,
+            predicate,
+            ParseError::DuplicateAtomPredicate,
+        )
+        .unwrap();
         assert_eq!(initial, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::duplicate_unpaired(spin(ValueAst::Lit(1), ValueAst::Undetermined), SpinPredicate::Unpaired(ValueAst::Lit(2)),
+    #[case::count(UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, UnpairedElectronsPredicate::Count(ValueAst::Lit(2)),
         ParseError::DuplicateAtomPredicate("#u".to_string()))]
-    #[case::duplicate_multiplicity(spin(ValueAst::Undetermined, ValueAst::Lit(2)), SpinPredicate::Multiplicity(ValueAst::Lit(3)),
+    #[case::multiplicity(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(3)),
         ParseError::DuplicateAtomPredicate("#s".to_string()))]
-    fn test_apply_spin_pair_error(
+    fn test_apply_unpaired_electrons_predicate_error(
         #[case] mut initial: UnpairedElectronsAst,
-        #[case] pred: SpinPredicate,
+        #[case] predicate: UnpairedElectronsPredicate,
         #[case] expected: ParseError,
     ) {
-        let err = apply_spin_pair(&mut initial, pred, ParseError::DuplicateAtomPredicate)
-            .unwrap_err();
+        let err = apply_unpaired_electrons_predicate(
+            &mut initial,
+            predicate,
+            ParseError::DuplicateAtomPredicate,
+        )
+        .unwrap_err();
         assert_eq!(err, expected);
     }
 
-    /// For every (initial u, m) pair reachable after parsing the seven canonical DSL fragments (`""`, `"#u0"`, `"#u1"`, `"#m1"`, `"#m2"`,
-    /// `"#u1#m1"`, `"#u1#m2"`) under each of the six mode combinations, the raised `(u, m)` must match the expected value.
+    #[rstest]
+    #[case::undetermined(UnpairedElectronsAst::default(), "")]
+    #[case::count_one(UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, "#u")]
+    #[case::count(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, "#u2")]
+    #[case::multiplicity_one(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, "#s")]
+    #[case::multiplicity(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, "#s3")]
+    #[case::complete(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) }, "#u2#s")]
+    fn test_fmt_unpaired_electrons(
+        #[case] unpaired_electrons: UnpairedElectronsAst,
+        #[case] expected: &str,
+    ) {
+        struct DisplayUnpairedElectrons(UnpairedElectronsAst);
+
+        impl fmt::Display for DisplayUnpairedElectrons {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                fmt_unpaired_electrons(f, &self.0)
+            }
+        }
+
+        assert_eq!(
+            DisplayUnpairedElectrons(unpaired_electrons).to_string(),
+            expected
+        );
+    }
+
+    /// For every (initial u, s) pair reachable after parsing the seven canonical DSL fragments (`""`, `"#u0"`, `"#u1"`, `"#s1"`, `"#s2"`,
+    /// `"#u1#s1"`, `"#u1#s2"`) under each of the six mode combinations, the raised `(u, s)` must match the expected value.
     #[rustfmt::skip]
     #[rstest]
     // u: Zero, m: Derived
@@ -415,18 +445,25 @@ mod tests {
     #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
     #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
     #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
-    fn test_raise_spin(
-        #[case] init_u: ValueAst,
-        #[case] init_m: ValueAst,
-        #[case] u_mode: UnpairedElectronsDefault,
-        #[case] m_mode: MultiplicityDefault,
-        #[case] expected_u: ValueAst,
-        #[case] expected_m: ValueAst,
+    fn test_raise_unpaired_electrons(
+        #[case] initial_count: ValueAst,
+        #[case] initial_multiplicity: ValueAst,
+        #[case] count_default: UnpairedElectronsDefault,
+        #[case] multiplicity_default: MultiplicityDefault,
+        #[case] expected_count: ValueAst,
+        #[case] expected_multiplicity: ValueAst,
     ) {
-        let mut spin = UnpairedElectronsAst { count: init_u, multiplicity: init_m };
-        raise_spin(&mut spin, u_mode, m_mode);
-        assert_eq!(spin.count, expected_u);
-        assert_eq!(spin.multiplicity, expected_m);
+        let mut unpaired_electrons = UnpairedElectronsAst {
+            count: initial_count,
+            multiplicity: initial_multiplicity,
+        };
+        raise_unpaired_electrons(
+            &mut unpaired_electrons,
+            count_default,
+            multiplicity_default,
+        );
+        assert_eq!(unpaired_electrons.count, expected_count);
+        assert_eq!(unpaired_electrons.multiplicity, expected_multiplicity);
     }
 
     /// Per-mode lowering: covers the AST states reachable by raising the canonical DSL fragments, plus (U, U) where applicable.
@@ -466,18 +503,25 @@ mod tests {
     #[case::dd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
     #[case::dd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
     #[case::dd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
-    fn test_lower_spin(
-        #[case] init_u: ValueAst,
-        #[case] init_m: ValueAst,
-        #[case] u_mode: UnpairedElectronsDefault,
-        #[case] m_mode: MultiplicityDefault,
-        #[case] expected_u: ValueAst,
-        #[case] expected_m: ValueAst,
+    fn test_lower_unpaired_electrons(
+        #[case] initial_count: ValueAst,
+        #[case] initial_multiplicity: ValueAst,
+        #[case] count_default: UnpairedElectronsDefault,
+        #[case] multiplicity_default: MultiplicityDefault,
+        #[case] expected_count: ValueAst,
+        #[case] expected_multiplicity: ValueAst,
     ) {
-        let mut spin = UnpairedElectronsAst { count: init_u, multiplicity: init_m };
-        lower_spin(&mut spin, u_mode, m_mode);
-        assert_eq!(spin.count, expected_u);
-        assert_eq!(spin.multiplicity, expected_m);
+        let mut unpaired_electrons = UnpairedElectronsAst {
+            count: initial_count,
+            multiplicity: initial_multiplicity,
+        };
+        lower_unpaired_electrons(
+            &mut unpaired_electrons,
+            count_default,
+            multiplicity_default,
+        );
+        assert_eq!(unpaired_electrons.count, expected_count);
+        assert_eq!(unpaired_electrons.multiplicity, expected_multiplicity);
     }
 
     /// AST preservation: the raised AST is a fixed point of `lower → raise`. Lowering strips default content; re-raising the result must recover the same AST.
@@ -525,18 +569,29 @@ mod tests {
     #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
     #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
     #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
-    fn test_spin_roundtrip_preserves_ast(
-        #[case] init_u: ValueAst,
-        #[case] init_m: ValueAst,
-        #[case] u_mode: UnpairedElectronsDefault,
-        #[case] m_mode: MultiplicityDefault,
+    fn test_unpaired_electrons_defaults_roundtrip(
+        #[case] initial_count: ValueAst,
+        #[case] initial_multiplicity: ValueAst,
+        #[case] count_default: UnpairedElectronsDefault,
+        #[case] multiplicity_default: MultiplicityDefault,
     ) {
-        let mut raised = UnpairedElectronsAst { count: init_u, multiplicity: init_m };
-        raise_spin(&mut raised, u_mode, m_mode);
+        let mut raised = UnpairedElectronsAst {
+            count: initial_count,
+            multiplicity: initial_multiplicity,
+        };
+        raise_unpaired_electrons(&mut raised, count_default, multiplicity_default);
 
         let mut lowered_then_raised = raised.clone();
-        lower_spin(&mut lowered_then_raised, u_mode, m_mode);
-        raise_spin(&mut lowered_then_raised, u_mode, m_mode);
+        lower_unpaired_electrons(
+            &mut lowered_then_raised,
+            count_default,
+            multiplicity_default,
+        );
+        raise_unpaired_electrons(
+            &mut lowered_then_raised,
+            count_default,
+            multiplicity_default,
+        );
 
         assert_eq!(lowered_then_raised, raised);
     }

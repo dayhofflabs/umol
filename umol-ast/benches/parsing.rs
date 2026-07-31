@@ -50,7 +50,7 @@ fn bench_atom_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("atom_dsl");
     bench_pair::<AtomDsl>(&mut g, "plain", r##""C""##);
     bench_pair::<AtomDsl>(&mut g, "charge", r##""N#c+""##);
-    bench_pair::<AtomDsl>(&mut g, "full", r##""C#c+1#R+#v4""##);
+    bench_pair::<AtomDsl>(&mut g, "full", r##""C#c+1#h3#u0#s1#R+#v4""##);
     g.finish();
 }
 

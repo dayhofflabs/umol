@@ -350,7 +350,7 @@ pub(crate) fn partial_unpaired_electrons_update_strategy(
 
 /// `UnpairedElectronsAst` with at least one of `count` / `multiplicity` not
 /// `Undetermined`. Used inside `MoleculeConstraint::SpinSum` and similar
-/// where a fully-vacuous spin state would elide on render.
+/// where a fully vacuous unpaired-electron state would elide on render.
 pub(crate) fn non_vacuous_unpaired_electrons_strategy(
 ) -> impl Strategy<Value = UnpairedElectronsAst> {
     (value_basic(0..=6), value_basic(1..=7))
@@ -358,7 +358,9 @@ pub(crate) fn non_vacuous_unpaired_electrons_strategy(
             count: u,
             multiplicity: m,
         })
-        .prop_filter("non-vacuous spin", |s| !s.is_undetermined())
+        .prop_filter("non-vacuous unpaired-electron state", |s| {
+            !s.is_undetermined()
+        })
 }
 
 /// Simple value strategy used inside constraint values: `Undetermined`,
@@ -1691,8 +1693,8 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
             .prop_map(|atoms| Constraint::Molecule(MoleculeConstraint::Connected { atoms }))
             .boxed();
         // Vacuous molecule-level constraints (Undetermined sum / fully
-        // Undetermined spin) elide on render and would break round-trip;
-        // restrict the value/spin strategies accordingly.
+        // undetermined unpaired-electron state) elide on render and would break round-trip;
+        // restrict the value and unpaired-electron strategies accordingly.
         let molecule_charge_sum = (
             optional_atoms.clone(),
             constraint_inner_value_strategy(-3..=3),

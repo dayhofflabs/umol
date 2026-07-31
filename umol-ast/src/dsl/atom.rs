@@ -21,8 +21,9 @@ use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::operators::{mem_op, mem_op_str};
 use super::predicate::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
-    optional_value, raise_spin, ring_membership, SpinPredicate,
+    apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_ring_membership,
+    fmt_unpaired_electrons, lower_unpaired_electrons, optional_value, raise_unpaired_electrons,
+    ring_membership, UnpairedElectronsPredicate,
 };
 use super::stereo::{
     fmt_tetrahedral_stereo_config, tetrahedral_stereo_config, TetrahedralStereoDsl,
@@ -300,12 +301,12 @@ fn apply_update_predicates(
                     return Err(ParseError::DuplicateAtomPredicate("#n".to_string()));
                 }
             }
-            AtomPredicate::Spin(SpinPredicate::Unpaired(value)) => {
+            AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(value)) => {
                 if update.unpaired_electrons.count.replace(value).is_some() {
                     return Err(ParseError::DuplicateAtomPredicate("#u".to_string()));
                 }
             }
-            AtomPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
+            AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(value)) => {
                 if update
                     .unpaired_electrons
                     .multiplicity
@@ -364,7 +365,7 @@ pub enum AtomPredicate {
     Charge(ValueAst),
     ImplicitHydrogens(ValueAst),
     LonePairs(ValueAst),
-    Spin(SpinPredicate),
+    UnpairedElectrons(UnpairedElectronsPredicate),
     Constraint(AtomConstraintAst),
 }
 
@@ -385,10 +386,10 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
             .parse_next(i),
         "#n" => optional_value.map(AtomPredicate::LonePairs).parse_next(i),
         "#u" => optional_value
-            .map(|v| AtomPredicate::Spin(SpinPredicate::Unpaired(v)))
+            .map(|v| AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(v)))
             .parse_next(i),
         "#s" => optional_value
-            .map(|v| AtomPredicate::Spin(SpinPredicate::Multiplicity(v)))
+            .map(|v| AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(v)))
             .parse_next(i),
         "#v" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraintAst::Valence(v)))
@@ -619,10 +620,10 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
                 }
                 ast.lone_pairs = v;
             }
-            AtomPredicate::Spin(sp) => {
-                apply_spin_pair(
+            AtomPredicate::UnpairedElectrons(predicate) => {
+                apply_unpaired_electrons_predicate(
                     &mut ast.unpaired_electrons,
-                    sp,
+                    predicate,
                     ParseError::DuplicateAtomPredicate,
                 )?;
             }
@@ -645,7 +646,7 @@ fn fmt_atom_ast(f: &mut fmt::Formatter<'_>, ast: &AtomAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_value_field(f, "#h", &ast.implicit_hydrogens)?;
     fmt_value_field(f, "#n", &ast.lone_pairs)?;
-    fmt_spin_pair(f, &ast.unpaired_electrons)
+    fmt_unpaired_electrons(f, &ast.unpaired_electrons)
 }
 
 fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
@@ -827,7 +828,7 @@ pub(crate) fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    raise_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
     raise_atom_constraints(constraints, cfg);
 }
 
@@ -921,7 +922,7 @@ pub(crate) fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     ) {
         *lone_pairs = ValueAst::Undetermined;
     }
-    lower_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    lower_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
     lower_atom_constraints(constraints, cfg);
 }
 
@@ -1417,7 +1418,7 @@ mod tests {
     #[rstest]
     #[case::dup_hydrogens("#h1#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
     #[case::dup_undetermined_charge("#c*#c1", ParseError::DuplicateAtomPredicate("#c".to_string()))]
-    #[case::dup_undetermined_spin("#u*#u1", ParseError::DuplicateAtomPredicate("#u".to_string()))]
+    #[case::duplicate_undetermined_count("#u*#u1", ParseError::DuplicateAtomPredicate("#u".to_string()))]
     fn test_parse_atom_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_atom_update(input).unwrap_err(), expected);
     }
@@ -1599,10 +1600,10 @@ mod tests {
     #[case::h_omit("#h", AtomPredicate::ImplicitHydrogens(ValueAst::Lit(1)))]
     #[case::lone_pairs("#n2", AtomPredicate::LonePairs(ValueAst::Lit(2)))]
     #[case::lone_pairs_omit("#n", AtomPredicate::LonePairs(ValueAst::Lit(1)))]
-    #[case::unpaired("#u2", AtomPredicate::Spin(SpinPredicate::Unpaired(ValueAst::Lit(2))))]
-    #[case::unpaired_omit("#u", AtomPredicate::Spin(SpinPredicate::Unpaired(ValueAst::Lit(1))))]
-    #[case::multiplicity("#s3", AtomPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(3))))]
-    #[case::multiplicity_omit("#s", AtomPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(1))))]
+    #[case::unpaired("#u2", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(2))))]
+    #[case::unpaired_omit("#u", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(1))))]
+    #[case::multiplicity("#s3", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(3))))]
+    #[case::multiplicity_omit("#s", AtomPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(1))))]
     #[case::valence("#v4", AtomPredicate::Constraint(AtomConstraintAst::Valence(ValueAst::Lit(4))))]
     #[case::total_valence("#V5", AtomPredicate::Constraint(AtomConstraintAst::TotalValence(ValueAst::Lit(5))))]
     #[case::total_valence_omit("#V", AtomPredicate::Constraint(AtomConstraintAst::TotalValence(ValueAst::Lit(1))))]

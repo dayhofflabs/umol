@@ -15,8 +15,8 @@ use super::config::{AromaticSystemDefaults, NumericDefault};
 use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
 use super::predicate::{
-    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
-    SpinPredicate,
+    apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_unpaired_electrons,
+    lower_unpaired_electrons, optional_value, raise_unpaired_electrons, UnpairedElectronsPredicate,
 };
 use super::value::{fmt_value, ValueDsl};
 use crate::ast::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
@@ -154,7 +154,7 @@ pub(crate) fn aromatic_system(i: &mut &str) -> PResult<AromaticSystemDsl> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AromaticSystemPredicate {
     Charge(ValueAst),
-    Spin(SpinPredicate),
+    UnpairedElectrons(UnpairedElectronsPredicate),
     Electrons(ValueAst),
 }
 
@@ -164,10 +164,16 @@ fn aromatic_system_predicate(i: &mut &str) -> PResult<AromaticSystemPredicate> {
     match prefix {
         "#c" => charge.map(AromaticSystemPredicate::Charge).parse_next(i),
         "#u" => optional_value
-            .map(|v| AromaticSystemPredicate::Spin(SpinPredicate::Unpaired(v)))
+            .map(|v| {
+                AromaticSystemPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(v))
+            })
             .parse_next(i),
         "#s" => optional_value
-            .map(|v| AromaticSystemPredicate::Spin(SpinPredicate::Multiplicity(v)))
+            .map(|v| {
+                AromaticSystemPredicate::UnpairedElectrons(
+                    UnpairedElectronsPredicate::Multiplicity(v),
+                )
+            })
             .parse_next(i),
         "#e" => optional_value
             .map(AromaticSystemPredicate::Electrons)
@@ -194,10 +200,10 @@ fn apply_predicates(
                 }
                 ast.charge = v;
             }
-            AromaticSystemPredicate::Spin(sp) => {
-                apply_spin_pair(
+            AromaticSystemPredicate::UnpairedElectrons(predicate) => {
+                apply_unpaired_electrons_predicate(
                     &mut ast.unpaired_electrons,
-                    sp,
+                    predicate,
                     ParseError::DuplicateAromaticSystemPredicate,
                 )?;
             }
@@ -225,7 +231,7 @@ fn electron_count_value(ast: &AromaticSystemAst) -> Option<&ValueAst> {
 fn fmt_aromatic_system_ast(f: &mut fmt::Formatter<'_>, ast: &AromaticSystemAst) -> fmt::Result {
     fmt_electron_counts(f, &ast.electrons)?;
     fmt_charge(f, &ast.charge)?;
-    fmt_spin_pair(f, &ast.unpaired_electrons)?;
+    fmt_unpaired_electrons(f, &ast.unpaired_electrons)?;
     if let Some(v) = electron_count_value(ast) {
         fmt_electrons(f, v)?;
     }
@@ -339,14 +345,18 @@ fn apply_update_predicates(
                     ));
                 }
             }
-            AromaticSystemPredicate::Spin(SpinPredicate::Unpaired(value)) => {
+            AromaticSystemPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(
+                value,
+            )) => {
                 if update.unpaired_electrons.count.replace(value).is_some() {
                     return Err(ParseError::DuplicateAromaticSystemPredicate(
                         "#u".to_string(),
                     ));
                 }
             }
-            AromaticSystemPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
+            AromaticSystemPredicate::UnpairedElectrons(
+                UnpairedElectronsPredicate::Multiplicity(value),
+            ) => {
                 if update
                     .unpaired_electrons
                     .multiplicity
@@ -398,7 +408,7 @@ fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    raise_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
@@ -415,7 +425,7 @@ fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
     ) {
         *charge = ValueAst::Undetermined;
     }
-    lower_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    lower_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

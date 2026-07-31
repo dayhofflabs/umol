@@ -137,7 +137,7 @@ An empty string **`:type ""`** is a **parse error** for **every** structural sub
 
 **Dative bond entry.** A dative bond entry binds a **single acceptor** to **one or more donors** (a coordination center): **`:acceptor`** names the atom accepting the electron pair(s); **`:donors`** is a **vector** of one or more donating atoms. The leading **`order`** token of the **`dative-string`** payload (**§7.10**) records the number of donated pairs; one shared **`:type`** covers every donor→acceptor edge of the entry. The **`:acceptor`** and every donor **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.10**) — order plus optional aromatic constraint (**`#a`**) and the ring-membership predicate (**`#R`**); its leading order parallels the bond-string's (**§7.4** / **§7.5**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donors`** / **`:acceptor`** assignment.
 
-**Multicenter entry.** The mandatory **`:type`** slot carries a **`multicenter-string`** payload (**§7.9**) — a leading **electron counts** specification then per-system charge, spin, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
+**Multicenter entry.** The mandatory **`:type`** slot carries a **`multicenter-string`** payload (**§7.9**) — a leading **electron counts** specification then per-system charge, unpaired-electron count and multiplicity, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
 
 **Per-atom electron counts (aromatic and multicenter entries).** The **per-atom** electron contributions are the **mandatory leading** specification of the **`aromatic-string`** / **`multicenter-string`** (**§7.8** / **§7.9**), not a map key: a leading **`*`** (the whole vector undetermined) **or** a **`[n,n,…]`** vector of concrete integers, one per member atom. A concrete vector **MUST** have the same length as the entry's **`:atoms`** vector — position **`i`** is the contribution of the atom at position **`i`** of **`:atoms`**. The electron counts are independent of the optional **`#e`** total — when both are present, downstream validation **MAY** require their **sum** to equal **`#e`** on ground inputs.
 
@@ -536,10 +536,10 @@ glyph     ::= '=' | '\'' | '/'
 
 | Form | Inherent fields |
 |------|-----------------|
-| atom | element, isotope mass (**`#i`**), charge (**`#c`**), implicit hydrogens (**`#h`**), lone pairs (**`#n`**), spin (unpaired **`#u`**, multiplicity **`#s`**) |
-| localized bond | order, charge (**`#c`**), spin (**`#u`**, **`#s`**) |
-| aromatic system | charge (**`#c`**), spin (**`#u`**, **`#s`**), π-electron count (**`#e`**) |
-| multicenter bond | charge (**`#c`**), spin (**`#u`**, **`#s`**), electron count (**`#e`**) |
+| atom | element, isotope mass (**`#i`**), charge (**`#c`**), implicit hydrogens (**`#h`**), lone pairs (**`#n`**), unpaired-electron count (**`#u`**) and multiplicity (**`#s`**) |
+| localized bond | order, charge (**`#c`**), unpaired-electron count (**`#u`**) and multiplicity (**`#s`**) |
+| aromatic system | charge (**`#c`**), unpaired-electron count (**`#u`**) and multiplicity (**`#s`**), π-electron count (**`#e`**) |
+| multicenter bond | charge (**`#c`**), unpaired-electron count (**`#u`**) and multiplicity (**`#s`**), electron count (**`#e`**) |
 | dative bond | a single **`:acceptor`** and its one-or-more **`:donors`** atoms — the assignment on the map entry (**§4**) — plus the leading **`order`** token of the dative-string (number of donated electron pairs; **§7.10**). |
 | noncovalent bond | interaction kind (**`Hbd`**, **`Xbd`**, **`Ybd`**, **`Ion`**, **`Vdw`**) |
 | stereo atom | coordination **`class`** (geometry) and **`coset`** configuration index (the **`:type`** payload, **§7.12**). The bearing **`:site`** atom and ordered **`:ligands`** frame (**§4**) are the relation's participants, not payload fields. |
@@ -1001,7 +1001,7 @@ Combinator subtrees, relational leaves, and molecule-scope leaves are never move
 
 ### 7.8 Aromatic system subgrammar
 
-**Aromatic-string** uses a **separate** namespace from **atom-string** and **bond-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on aromatic systems (**§7.2**). It carries **per-aromatic-system** state — overall **charge** (**`#c`**) and **spin** (**`#u`**, **`#s`**) as inherent fields, and an **optional asserted total π-electron count** (**`#e<n>`**) as an inline constraint — as the **`:type`** value of an **`aromatic-system-entry`** (**§4**). The **per-atom** π contributions are the **mandatory leading `electron-counts`** of this string (below), not a separate map key.
+**Aromatic-string** uses a **separate** namespace from **atom-string** and **bond-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on aromatic systems (**§7.2**). It carries **per-aromatic-system** state — overall **charge** (**`#c`**), unpaired-electron count (**`#u`**), and multiplicity (**`#s`**) as inherent fields, and an **optional asserted total π-electron count** (**`#e<n>`**) as an inline constraint — as the **`:type`** value of an **`aromatic-system-entry`** (**§4**). The **per-atom** π contributions are the **mandatory leading `electron-counts`** of this string (below), not a separate map key.
 
 ```
 aromatic-string ::= electron-counts aromatic-predicate*
@@ -1028,11 +1028,11 @@ aromatic-predicate ::= '#' tag payload
 
 **`#e<n>` semantics.** **`#e<n>`** asserts the system's total π-electron count and parses to an inline aromatic-system constraint (`AromaticSystemConstraint::ElectronCount(n)`) on the entry's constraint store, **not** to a direct field. The per-atom contributions in the string's leading **`electron-counts`** are the canonical data; **`#e<n>`** is the optional total assertion that downstream validation cross-checks against their **sum** on ground inputs. **`#e`** is omitted from the canonical entity-string form when no `ElectronCount` constraint is present.
 
-**No canonical-constraint equivalent for charge / spin.** Aromatic-system charge (**`#c`**), unpaired electrons (**`#u`**), and spin multiplicity (**`#s`**) live as direct fields on the aromatic-system entity (set by the aromatic-string predicates above) and have **no** canonical **`:constraints`** form.
+**No canonical-constraint equivalent for charge / unpaired-electron state.** Aromatic-system charge (**`#c`**), unpaired electrons (**`#u`**), and spin multiplicity (**`#s`**) live as direct fields on the aromatic-system entity (set by the aromatic-string predicates above) and have **no** canonical **`:constraints`** form.
 
 ### 7.9 Multicenter-bond subgrammar
 
-**Multicenter-string** uses a **separate** namespace from **atom-string**, **bond-string**, and **aromatic-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on multicenter bonds (**§7.2**). It carries **per-multicenter-bond** state — overall **charge** (**`#c`**) and **spin** (**`#u`**, **`#s`**) as inherent fields, and an **optional asserted total electron count** (**`#e<n>`**) as an inline constraint — as the **`:type`** value of a **`multicenter-bond-entry`** (**§4**). The **per-atom** electron contributions are the **mandatory leading `electron-counts`** of this string (below), not a separate map key.
+**Multicenter-string** uses a **separate** namespace from **atom-string**, **bond-string**, and **aromatic-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on multicenter bonds (**§7.2**). It carries **per-multicenter-bond** state — overall **charge** (**`#c`**), unpaired-electron count (**`#u`**), and multiplicity (**`#s`**) as inherent fields, and an **optional asserted total electron count** (**`#e<n>`**) as an inline constraint — as the **`:type`** value of a **`multicenter-bond-entry`** (**§4**). The **per-atom** electron contributions are the **mandatory leading `electron-counts`** of this string (below), not a separate map key.
 
 ```
 multicenter-string ::= electron-counts multicenter-predicate*

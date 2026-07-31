@@ -61,7 +61,7 @@ proptest! {
 
     /// `BondDsl::ToEdn` ↔ `FromEdn` round-trips for any generated bond
     /// shape. Non-canonical bonds render as bond strings; canonical
-    /// shapes (order-only, no charge / spin / non-aromatic constraints,
+    /// shapes (order-only, no charge / unpaired-electron fields / non-aromatic constraints,
     /// or order-1 with the `Aromatic` flag) render as keyword shorthands.
     #[test]
     fn test_bond_dsl_to_edn_from_edn_roundtrip(bond in bond_ast_strategy()) {

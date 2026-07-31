@@ -698,7 +698,7 @@ S1 ends with exact literal projection having the same structural meaning in Rust
   edit/undo/delta roundtrips under partial component updates. **Breaking caller migration
   (red→green within S2).** [dep: S2a]
 - **S2c — `umol-ast/src/dsl`, `umol-ast/spec/umol-dsl-spec.md`: migrate parsing and
-  rendering.** Rename Rust DSL fields and internal types while retaining `#u`/`#s`; update
+  rendering.** **Done.** Rename Rust DSL fields and internal types while retaining `#u`/`#s`; update
   defaults, raising/lowering, EDN-shaped forms, parsing benchmarks, fixtures, and serialization
   expectations. Update parser roundtrip properties and sweep `fuzz_entity_strings`,
   `fuzz_molecule`, `fuzz_reaction`, and their spin-bearing seeds. **Breaking caller migration

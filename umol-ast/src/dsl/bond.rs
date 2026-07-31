@@ -17,8 +17,9 @@ use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::predicate::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
-    optional_value, raise_spin, ring_membership, SpinPredicate,
+    apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_ring_membership,
+    fmt_unpaired_electrons, lower_unpaired_electrons, optional_value, raise_unpaired_electrons,
+    ring_membership, UnpairedElectronsPredicate,
 };
 use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTransStereoDsl};
 use super::value::{fmt_value, value};
@@ -304,12 +305,12 @@ fn apply_update_predicates(
                     return Err(ParseError::DuplicateBondPredicate("#c".to_string()));
                 }
             }
-            BondPredicate::Spin(SpinPredicate::Unpaired(value)) => {
+            BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(value)) => {
                 if update.unpaired_electrons.count.replace(value).is_some() {
                     return Err(ParseError::DuplicateBondPredicate("#u".to_string()));
                 }
             }
-            BondPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
+            BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(value)) => {
                 if update
                     .unpaired_electrons
                     .multiplicity
@@ -370,7 +371,7 @@ fn constraint_tag(c: &BondConstraintAst) -> &'static str {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BondPredicate {
     Charge(ValueAst),
-    Spin(SpinPredicate),
+    UnpairedElectrons(UnpairedElectronsPredicate),
     Constraint(BondConstraintAst),
 }
 
@@ -380,10 +381,10 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
     match prefix {
         "#c" => charge.map(BondPredicate::Charge).parse_next(i),
         "#u" => optional_value
-            .map(|v| BondPredicate::Spin(SpinPredicate::Unpaired(v)))
+            .map(|v| BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(v)))
             .parse_next(i),
         "#s" => optional_value
-            .map(|v| BondPredicate::Spin(SpinPredicate::Multiplicity(v)))
+            .map(|v| BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(v)))
             .parse_next(i),
         "#a" => boolean
             .map(|b| BondPredicate::Constraint(BondConstraintAst::Aromatic(b.0)))
@@ -411,10 +412,10 @@ fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(),
                 }
                 ast.charge = v;
             }
-            BondPredicate::Spin(sp) => {
-                apply_spin_pair(
+            BondPredicate::UnpairedElectrons(predicate) => {
+                apply_unpaired_electrons_predicate(
                     &mut ast.unpaired_electrons,
-                    sp,
+                    predicate,
                     ParseError::DuplicateBondPredicate,
                 )?;
             }
@@ -439,7 +440,7 @@ fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
     }
 
     fmt_charge(f, &ast.charge)?;
-    fmt_spin_pair(f, &ast.unpaired_electrons)
+    fmt_unpaired_electrons(f, &ast.unpaired_electrons)
 }
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintAst) -> fmt::Result {
@@ -472,7 +473,7 @@ pub(crate) fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     ) {
         *charge = ValueAst::Undetermined;
     }
-    lower_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    lower_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
     lower_bond_constraints(constraints, cfg);
 }
 
@@ -492,7 +493,7 @@ pub(crate) fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    raise_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
     raise_bond_constraints(constraints, cfg);
 }
 
@@ -742,12 +743,12 @@ mod tests {
     #[case::charge_minus("#c-", BondPredicate::Charge(ValueAst::Lit(-1)))]
     #[case::charge_zero("#c0", BondPredicate::Charge(ValueAst::Lit(0)))]
     #[case::charge_undetermined("#c*", BondPredicate::Charge(ValueAst::Undetermined))]
-    #[case::unpaired("#u2", BondPredicate::Spin(SpinPredicate::Unpaired(ValueAst::Lit(2))))]
-    #[case::unpaired_omit("#u", BondPredicate::Spin(SpinPredicate::Unpaired(ValueAst::Lit(1))))]
-    #[case::unpaired_undetermined("#u*", BondPredicate::Spin(SpinPredicate::Unpaired(ValueAst::Undetermined)))]
-    #[case::multiplicity("#s3", BondPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(3))))]
-    #[case::multiplicity_omit("#s", BondPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(1))))]
-    #[case::multiplicity_undetermined("#s*", BondPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Undetermined)))]
+    #[case::unpaired("#u2", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(2))))]
+    #[case::unpaired_omit("#u", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Lit(1))))]
+    #[case::unpaired_undetermined("#u*", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(ValueAst::Undetermined)))]
+    #[case::multiplicity("#s3", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(3))))]
+    #[case::multiplicity_omit("#s", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Lit(1))))]
+    #[case::multiplicity_undetermined("#s*", BondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Multiplicity(ValueAst::Undetermined)))]
     #[case::aromatic("#a", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     #[case::aromatic_plus("#a+", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     #[case::aromatic_false("#a!", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(false))))]
@@ -890,7 +891,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::charge_before_spin("2#s3#c+", "2#c+#s3")]
+    #[case::charge_before_multiplicity("2#s3#c+", "2#c+#s3")]
     #[case::aromatic_before_ring("2#R2#a", "2#a#R2")]
     #[case::stereo_before_ring("1#R2#C1", "1#C1#R2")]
     fn test_bond_render_canonical_order(#[case] input: &str, #[case] expected_canonical: &str) {

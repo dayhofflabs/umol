@@ -15,8 +15,8 @@ use super::config::{MulticenterBondDefaults, NumericDefault};
 use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
 use super::predicate::{
-    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
-    SpinPredicate,
+    apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_unpaired_electrons,
+    lower_unpaired_electrons, optional_value, raise_unpaired_electrons, UnpairedElectronsPredicate,
 };
 use super::value::{fmt_value, ValueDsl};
 use crate::ast::constraint::MulticenterBondConstraintAst;
@@ -156,7 +156,7 @@ pub(crate) fn multicenter_bond(i: &mut &str) -> PResult<MulticenterBondDsl> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MulticenterBondPredicate {
     Charge(ValueAst),
-    Spin(SpinPredicate),
+    UnpairedElectrons(UnpairedElectronsPredicate),
     Electrons(ValueAst),
 }
 
@@ -166,10 +166,16 @@ fn multicenter_bond_predicate(i: &mut &str) -> PResult<MulticenterBondPredicate>
     match prefix {
         "#c" => charge.map(MulticenterBondPredicate::Charge).parse_next(i),
         "#u" => optional_value
-            .map(|v| MulticenterBondPredicate::Spin(SpinPredicate::Unpaired(v)))
+            .map(|v| {
+                MulticenterBondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(v))
+            })
             .parse_next(i),
         "#s" => optional_value
-            .map(|v| MulticenterBondPredicate::Spin(SpinPredicate::Multiplicity(v)))
+            .map(|v| {
+                MulticenterBondPredicate::UnpairedElectrons(
+                    UnpairedElectronsPredicate::Multiplicity(v),
+                )
+            })
             .parse_next(i),
         "#e" => optional_value
             .map(MulticenterBondPredicate::Electrons)
@@ -196,10 +202,10 @@ fn apply_predicates(
                 }
                 ast.charge = v;
             }
-            MulticenterBondPredicate::Spin(sp) => {
-                apply_spin_pair(
+            MulticenterBondPredicate::UnpairedElectrons(predicate) => {
+                apply_unpaired_electrons_predicate(
                     &mut ast.unpaired_electrons,
-                    sp,
+                    predicate,
                     ParseError::DuplicateMulticenterBondPredicate,
                 )?;
             }
@@ -227,7 +233,7 @@ fn electron_count_value(ast: &MulticenterBondAst) -> Option<&ValueAst> {
 fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_electron_counts(f, &ast.electrons)?;
     fmt_charge(f, &ast.charge)?;
-    fmt_spin_pair(f, &ast.unpaired_electrons)?;
+    fmt_unpaired_electrons(f, &ast.unpaired_electrons)?;
     if let Some(v) = electron_count_value(ast) {
         fmt_electrons(f, v)?;
     }
@@ -341,14 +347,18 @@ fn apply_update_predicates(
                     ));
                 }
             }
-            MulticenterBondPredicate::Spin(SpinPredicate::Unpaired(value)) => {
+            MulticenterBondPredicate::UnpairedElectrons(UnpairedElectronsPredicate::Count(
+                value,
+            )) => {
                 if update.unpaired_electrons.count.replace(value).is_some() {
                     return Err(ParseError::DuplicateMulticenterBondPredicate(
                         "#u".to_string(),
                     ));
                 }
             }
-            MulticenterBondPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
+            MulticenterBondPredicate::UnpairedElectrons(
+                UnpairedElectronsPredicate::Multiplicity(value),
+            ) => {
                 if update
                     .unpaired_electrons
                     .multiplicity
@@ -400,7 +410,7 @@ fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    raise_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
@@ -417,7 +427,7 @@ fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
     ) {
         *charge = ValueAst::Undetermined;
     }
-    lower_spin(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
+    lower_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -3613,7 +3613,7 @@ mod tests {
         r##"{:lhs {:atoms [[:c "C#u2#s3"]]} :deltas [{:atom {:modify [:c "#s1"]}}]}"##,
         UnpairedElectronsAst::from((2_u8, 1_u8)),
     )]
-    fn test_reaction_input_into_ast_atom_modify_spin(
+    fn test_reaction_input_into_ast_atom_modify_unpaired_electrons(
         #[case] input: &str,
         #[case] new: UnpairedElectronsAst,
     ) {
@@ -3738,7 +3738,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_modify_spin() {
+    fn test_reaction_input_into_ast_bond_modify_unpaired_electrons() {
         let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1#u2#s3"}]} :deltas [{:bond {:modify [:b1 "#s1"]}}]}"##;
         let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
@@ -4334,9 +4334,9 @@ mod tests {
     #[rstest]
     #[case::modify(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##)]
     #[case::modify_undetermined(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c*"]}}]}"##)]
-    #[case::modify_spin_component(r##"{:lhs {:atoms [[:c "C#u2#s3"]]} :deltas [{:atom {:modify [:c "#s1"]}}]}"##)]
+    #[case::modify_unpaired_electrons_component(r##"{:lhs {:atoms [[:c "C#u2#s3"]]} :deltas [{:atom {:modify [:c "#s1"]}}]}"##)]
     #[case::bond_modify_undetermined(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "*"]}}]}"##)]
-    #[case::bond_modify_spin_component(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1#u2#s3"}]} :deltas [{:bond {:modify [:b1 "#s1"]}}]}"##)]
+    #[case::bond_modify_unpaired_electrons_component(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1#u2#s3"}]} :deltas [{:bond {:modify [:b1 "#s1"]}}]}"##)]
     #[case::bond_modify_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1#R(6)"}]} :deltas [{:bond {:modify [:b1 "#R(6)*"]}}]}"##)]
     #[case::reaction_alias(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add :nu}}] :atom-aliases [:nu "O#h1#c-1"] }"##)]
     #[case::alias_scopes(r##"{:lhs {:atoms [:lo] :atom-aliases [:lo "C"]} :deltas [{:atom {:add :hi}}] :atom-aliases [:hi "N"]}"##)]
@@ -4369,10 +4369,10 @@ mod tests {
     #[case::stereo_bond_stereogenicity_removal(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct0#g/"}]} :deltas [{:stereo-bond {:modify [0 "Ct#g*"]}}]}"##)]
     #[case::dative_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]} :deltas [{:dative-bond {:modify [0 "#a*"]}}]}"##)]
     #[case::aromatic_modify_undetermined(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "*"]}}]}"##)]
-    #[case::aromatic_modify_spin_component(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "#s1"]}}]}"##)]
+    #[case::aromatic_modify_unpaired_electrons_component(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "#s1"]}}]}"##)]
     #[case::aromatic_constraint_removal(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:modify [0 "#e*"]}}]}"##)]
     #[case::multicenter_modify_undetermined(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "[1,1]#c0#u2#s3#e2"}]} :deltas [{:multicenter-bond {:modify [0 "*"]}}]}"##)]
-    #[case::multicenter_modify_spin_component(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "[1,1]#c0#u2#s3#e2"}]} :deltas [{:multicenter-bond {:modify [0 "#s1"]}}]}"##)]
+    #[case::multicenter_modify_unpaired_electrons_component(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "[1,1]#c0#u2#s3#e2"}]} :deltas [{:multicenter-bond {:modify [0 "#s1"]}}]}"##)]
     #[case::multicenter_constraint_removal(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:modify [0 "#e*"]}}]}"##)]
     #[case::stereo_atom_topicity_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)*"]}}]}"##)]
     #[case::stereo_atom_topicity_change(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)/"]}}]}"##)]
@@ -4403,7 +4403,7 @@ mod tests {
             );
             count += 1;
         }
-        assert_eq!(count, 31);
+        assert_eq!(count, 32);
     }
 
     #[rustfmt::skip]
