@@ -10,6 +10,16 @@ use strum::{Display, EnumString, FromRepr};
 
 use crate::error::SpinStateError;
 
+/// Exact unpaired-electron count and spin multiplicity.
+///
+/// This pair preserves structurally complete values without imposing the
+/// physical invariants enforced by [`SpinState`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct UnpairedElectrons {
+    pub count: i64,
+    pub multiplicity: i64,
+}
+
 /// Spin multiplicity descriptor. Discriminant equals the canonical 2S+1 value.
 #[derive(
     Debug,
@@ -305,10 +315,82 @@ impl<'de> Deserialize<'de> for SpinState {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+
+    #[rstest]
+    fn test_unpaired_electrons_fields() {
+        let unpaired_electrons = UnpairedElectrons {
+            count: 2,
+            multiplicity: 3,
+        };
+
+        assert_eq!(unpaired_electrons.count, 2);
+        assert_eq!(unpaired_electrons.multiplicity, 3);
+    }
+
+    #[rstest]
+    fn test_unpaired_electrons_eq() {
+        let left = UnpairedElectrons {
+            count: -1,
+            multiplicity: 0,
+        };
+        let right = UnpairedElectrons {
+            count: -1,
+            multiplicity: 0,
+        };
+
+        assert_eq!(left, right);
+    }
+
+    #[rstest]
+    #[case::count(
+        UnpairedElectrons { count: 1, multiplicity: 5 },
+        UnpairedElectrons { count: 2, multiplicity: 1 },
+        Ordering::Less,
+    )]
+    #[case::multiplicity(
+        UnpairedElectrons { count: 2, multiplicity: 1 },
+        UnpairedElectrons { count: 2, multiplicity: 3 },
+        Ordering::Less,
+    )]
+    #[case::equal(
+        UnpairedElectrons { count: 2, multiplicity: 3 },
+        UnpairedElectrons { count: 2, multiplicity: 3 },
+        Ordering::Equal,
+    )]
+    fn test_unpaired_electrons_cmp(
+        #[case] left: UnpairedElectrons,
+        #[case] right: UnpairedElectrons,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(left.cmp(&right), expected);
+    }
+
+    #[rstest]
+    #[case::physical(
+        UnpairedElectrons { count: 2, multiplicity: 3 },
+        r#"{"count":2,"multiplicity":3}"#,
+    )]
+    #[case::unvalidated(
+        UnpairedElectrons { count: -1, multiplicity: 0 },
+        r#"{"count":-1,"multiplicity":0}"#,
+    )]
+    fn test_unpaired_electrons_serde(
+        #[case] unpaired_electrons: UnpairedElectrons,
+        #[case] expected: &str,
+    ) {
+        let serialized = serde_json::to_string(&unpaired_electrons).unwrap();
+        assert_eq!(serialized, expected);
+        assert_eq!(
+            serde_json::from_str::<UnpairedElectrons>(&serialized).unwrap(),
+            unpaired_electrons,
+        );
+    }
 
     #[rstest]
     #[case(1, SpinMultiplicity::Singlet)]

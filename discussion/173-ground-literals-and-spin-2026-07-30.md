@@ -1,6 +1,6 @@
 # 173 — Ground literals and spin-state boundaries
 
-Status: **Proposed**
+Status: **In Progress**
 Date: 2026-07-30
 Relates: [061](061-spin-state-builder-2026-03-22.md),
 [172](172-ast-literal-extraction-2026-07-30.md),
@@ -17,7 +17,8 @@ three operations that are currently mixed in some `AsLit` implementations:
 
 The general extraction policy remains in doc 172. This document covers the underlying literal
 contract, the exceptional leaf types, and the relation among the existing spin types and validation
-stages. It is not yet an implementation plan.
+stages. The concrete `Ground<T>` API is tracked separately in doc 175; the staged plan below
+covers this document's exact-literal and spin migration.
 
 The implementation is a repository-wide semantic migration, not only a type rename. Every stage
 must sweep the affected DSL specification, unit tests, property-test strategies and properties,
@@ -622,9 +623,9 @@ migrations.
 
 ### S0 — Establish the physical spin types
 
-- **S0a — `umol-chem/src/spin.rs`: add `UnpairedElectrons`.** Add the exact `i64` pair carrier with
-  the approved field names and ordinary value-type trait implementations. Add unit tests for
-  construction, equality, ordering, and serialization. **Additive (green).** [dep: none]
+- **S0a — `umol-chem/src/spin.rs`: add `UnpairedElectrons`.** **Done.** Add the exact `i64` pair
+  carrier with the approved field names and ordinary value-type trait implementations. Add unit
+  tests for construction, equality, ordering, and serialization. **Additive (green).** [dep: none]
 - **S0b — `umol-chem/src/spin.rs`, `error.rs`: replace `SpinMultiplicity` and clean
   `SpinState`.** Replace the ten-variant enum with the `NonZeroU8` newtype, associated conventional
   constants and lookups, numeric display/serialization, and checked `new`. Replace the
