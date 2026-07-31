@@ -749,6 +749,12 @@ impl From<Vec<AtomConstraintAst>> for AtomConstraintsAst {
 /// Aromatic-valence state of an atom: `Undetermined`, explicitly
 /// `NotAromatic`, or participating in an aromatic system with the given
 /// aromatic-valence count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AromaticValence {
+    NotAromatic,
+    Aromatic(i64),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticValenceAst {
     #[default]
@@ -791,6 +797,15 @@ impl AromaticValenceAst {
             Self::Aromatic(v) => v.matches(&ValueAst::Lit(value)),
             Self::NotAromatic => value == 0,
             Self::Undetermined => true,
+        }
+    }
+}
+
+impl From<AromaticValence> for AromaticValenceAst {
+    fn from(valence: AromaticValence) -> Self {
+        match valence {
+            AromaticValence::NotAromatic => Self::NotAromatic,
+            AromaticValence::Aromatic(valence) => Self::Aromatic(ValueAst::Lit(valence)),
         }
     }
 }
@@ -894,6 +909,12 @@ pub fn aromatic_increment(aromatic_valence: i64) -> i64 {
 /// Multicenter-valence state of an atom: `Undetermined`, explicitly
 /// `NotMulticenter`, or participating in a multicenter bond with the given
 /// multicenter-valence count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MulticenterValence {
+    NotMulticenter,
+    Multicenter(i64),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MulticenterValenceAst {
     #[default]
@@ -925,6 +946,15 @@ impl MulticenterValenceAst {
             Self::Multicenter(v) => v.matches(&ValueAst::Lit(value)),
             Self::NotMulticenter => value == 0,
             Self::Undetermined => true,
+        }
+    }
+}
+
+impl From<MulticenterValence> for MulticenterValenceAst {
+    fn from(valence: MulticenterValence) -> Self {
+        match valence {
+            MulticenterValence::NotMulticenter => Self::NotMulticenter,
+            MulticenterValence::Multicenter(valence) => Self::Multicenter(ValueAst::Lit(valence)),
         }
     }
 }
@@ -1155,6 +1185,19 @@ mod tests {
     }
 
     #[rstest]
+    #[case::not_aromatic(AromaticValence::NotAromatic, AromaticValenceAst::NotAromatic)]
+    #[case::aromatic(
+        AromaticValence::Aromatic(1),
+        AromaticValenceAst::Aromatic(ValueAst::Lit(1))
+    )]
+    fn test_aromatic_valence_ast_from(
+        #[case] valence: AromaticValence,
+        #[case] expected: AromaticValenceAst,
+    ) {
+        assert_eq!(AromaticValenceAst::from(valence), expected);
+    }
+
+    #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, false)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, false)]
     #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), true)]
@@ -1335,6 +1378,22 @@ mod tests {
         #[case] expected: MulticenterValenceAst,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::not_multicenter(
+        MulticenterValence::NotMulticenter,
+        MulticenterValenceAst::NotMulticenter
+    )]
+    #[case::multicenter(
+        MulticenterValence::Multicenter(2),
+        MulticenterValenceAst::Multicenter(ValueAst::Lit(2))
+    )]
+    fn test_multicenter_valence_ast_from(
+        #[case] valence: MulticenterValence,
+        #[case] expected: MulticenterValenceAst,
+    ) {
+        assert_eq!(MulticenterValenceAst::from(valence), expected);
     }
 
     #[rustfmt::skip]

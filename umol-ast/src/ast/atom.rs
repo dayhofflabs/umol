@@ -508,6 +508,12 @@ impl Lattice for ElementAst {
 /// `?x`, or membership-restricted `?x :: {…}`). Positive-only — no negation
 /// and no complement (the mass domain is open). `Natural` is a distinct
 /// ground, disjoint from every specific mass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum IsotopeMass {
+    Natural,
+    MassNumber(u32),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IsotopeMassAst {
     #[default]
@@ -549,6 +555,15 @@ impl IsotopeMassAst {
 impl From<u32> for IsotopeMassAst {
     fn from(mass: u32) -> Self {
         Self::Lit(mass)
+    }
+}
+
+impl From<IsotopeMass> for IsotopeMassAst {
+    fn from(mass: IsotopeMass) -> Self {
+        match mass {
+            IsotopeMass::Natural => Self::Natural,
+            IsotopeMass::MassNumber(mass) => Self::Lit(mass),
+        }
     }
 }
 
@@ -1177,6 +1192,16 @@ mod tests {
     #[case::positive(13, IsotopeMassAst::Lit(13))]
     #[case::zero(0, IsotopeMassAst::Lit(0))]
     fn test_isotope_mass_ast_from(#[case] mass: u32, #[case] expected: IsotopeMassAst) {
+        assert_eq!(IsotopeMassAst::from(mass), expected);
+    }
+
+    #[rstest]
+    #[case::natural(IsotopeMass::Natural, IsotopeMassAst::Natural)]
+    #[case::mass_number(IsotopeMass::MassNumber(13), IsotopeMassAst::Lit(13))]
+    fn test_isotope_mass_ast_from_isotope_mass(
+        #[case] mass: IsotopeMass,
+        #[case] expected: IsotopeMassAst,
+    ) {
         assert_eq!(IsotopeMassAst::from(mass), expected);
     }
 

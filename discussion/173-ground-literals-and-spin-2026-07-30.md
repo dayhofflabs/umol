@@ -653,7 +653,7 @@ remaining.
 ### S1 — Correct exact projection for the exceptional leaves
 
 - **S1a — `umol-ast/src/ast/{atom,constraint/atom,stereo}.rs`: add exact carriers and
-  configuration enums.** Add `IsotopeMass`, `AromaticValence`, `MulticenterValence`,
+  configuration enums.** **Done.** Add `IsotopeMass`, `AromaticValence`, `MulticenterValence`,
   `TetrahedralStereo`, and `CisTransStereo`, plus `TetrahedralConfiguration` and
   `CisTransConfiguration`. Test every variant and its canonical value semantics.
   **Additive (green).** [dep: none]

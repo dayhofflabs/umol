@@ -575,6 +575,32 @@ impl Lattice for StereoConfigurationAst {
 /// undetermined, explicitly not-stereo, or a stereo center with a coset. The
 /// geometry is the type's identity (`$kind`), so the coset folds/meets under that
 /// constant kind — no kind field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TetrahedralStereo {
+    NotStereo,
+    Stereo(u32),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CisTransStereo {
+    NotStereo,
+    Stereo(u32),
+}
+
+/// Named tetrahedral configurations and their canonical coset indices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TetrahedralConfiguration {
+    Ccw,
+    Cw,
+}
+
+/// Named cis/trans configurations and their canonical coset indices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CisTransConfiguration {
+    Z,
+    E,
+}
+
 macro_rules! stereo_site {
     ($name:ident, $kind:expr) => {
         #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -688,6 +714,54 @@ macro_rules! stereo_site {
 
 stereo_site! { TetrahedralStereoAst, StereoKind::Tetrahedral }
 stereo_site! { CisTransStereoAst, StereoKind::CisTrans }
+
+impl From<TetrahedralStereo> for TetrahedralStereoAst {
+    fn from(stereo: TetrahedralStereo) -> Self {
+        match stereo {
+            TetrahedralStereo::NotStereo => Self::NotStereo,
+            TetrahedralStereo::Stereo(coset) => Self::Stereo(StereoCoset::Lit(coset)),
+        }
+    }
+}
+
+impl From<CisTransStereo> for CisTransStereoAst {
+    fn from(stereo: CisTransStereo) -> Self {
+        match stereo {
+            CisTransStereo::NotStereo => Self::NotStereo,
+            CisTransStereo::Stereo(coset) => Self::Stereo(StereoCoset::Lit(coset)),
+        }
+    }
+}
+
+impl From<TetrahedralConfiguration> for TetrahedralStereo {
+    fn from(configuration: TetrahedralConfiguration) -> Self {
+        match configuration {
+            TetrahedralConfiguration::Ccw => Self::Stereo(0),
+            TetrahedralConfiguration::Cw => Self::Stereo(1),
+        }
+    }
+}
+
+impl From<CisTransConfiguration> for CisTransStereo {
+    fn from(configuration: CisTransConfiguration) -> Self {
+        match configuration {
+            CisTransConfiguration::Z => Self::Stereo(0),
+            CisTransConfiguration::E => Self::Stereo(1),
+        }
+    }
+}
+
+impl From<TetrahedralConfiguration> for TetrahedralStereoAst {
+    fn from(configuration: TetrahedralConfiguration) -> Self {
+        TetrahedralStereo::from(configuration).into()
+    }
+}
+
+impl From<CisTransConfiguration> for CisTransStereoAst {
+    fn from(configuration: CisTransConfiguration) -> Self {
+        CisTransStereo::from(configuration).into()
+    }
+}
 
 /// Operator-expression term: a `Var` (with optional finite domain), a literal
 /// `Lit`/`LitSet` base, or one of these under the permutation-action operators
@@ -1144,6 +1218,64 @@ mod tests {
     #[case::kind_mismatch(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), false)]
     fn test_stereo_configuration_ast_matches(#[case] pattern: StereoConfigurationAst, #[case] target: StereoConfigurationAst, #[case] expected: bool) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::not_stereo(TetrahedralStereo::NotStereo, TetrahedralStereoAst::NotStereo)]
+    #[case::stereo(
+        TetrahedralStereo::Stereo(1),
+        TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))
+    )]
+    fn test_tetrahedral_stereo_ast_from(
+        #[case] stereo: TetrahedralStereo,
+        #[case] expected: TetrahedralStereoAst,
+    ) {
+        assert_eq!(TetrahedralStereoAst::from(stereo), expected);
+    }
+
+    #[rstest]
+    #[case::ccw(
+        TetrahedralConfiguration::Ccw,
+        TetrahedralStereoAst::Stereo(StereoCoset::Lit(0))
+    )]
+    #[case::cw(
+        TetrahedralConfiguration::Cw,
+        TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))
+    )]
+    fn test_tetrahedral_stereo_ast_from_configuration(
+        #[case] configuration: TetrahedralConfiguration,
+        #[case] expected: TetrahedralStereoAst,
+    ) {
+        assert_eq!(TetrahedralStereoAst::from(configuration), expected);
+    }
+
+    #[rstest]
+    #[case::not_stereo(CisTransStereo::NotStereo, CisTransStereoAst::NotStereo)]
+    #[case::stereo(
+        CisTransStereo::Stereo(1),
+        CisTransStereoAst::Stereo(StereoCoset::Lit(1))
+    )]
+    fn test_cis_trans_stereo_ast_from(
+        #[case] stereo: CisTransStereo,
+        #[case] expected: CisTransStereoAst,
+    ) {
+        assert_eq!(CisTransStereoAst::from(stereo), expected);
+    }
+
+    #[rstest]
+    #[case::z(
+        CisTransConfiguration::Z,
+        CisTransStereoAst::Stereo(StereoCoset::Lit(0))
+    )]
+    #[case::e(
+        CisTransConfiguration::E,
+        CisTransStereoAst::Stereo(StereoCoset::Lit(1))
+    )]
+    fn test_cis_trans_stereo_ast_from_configuration(
+        #[case] configuration: CisTransConfiguration,
+        #[case] expected: CisTransStereoAst,
+    ) {
+        assert_eq!(CisTransStereoAst::from(configuration), expected);
     }
 
     #[rustfmt::skip]
