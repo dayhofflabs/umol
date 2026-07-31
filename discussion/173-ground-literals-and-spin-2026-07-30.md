@@ -1,6 +1,6 @@
 # 173 — Ground literals and spin-state boundaries
 
-Status: **In Progress**
+Status: **Completed**
 Date: 2026-07-30
 Relates: [061](061-spin-state-builder-2026-03-22.md),
 [172](172-ast-literal-extraction-2026-07-30.md),

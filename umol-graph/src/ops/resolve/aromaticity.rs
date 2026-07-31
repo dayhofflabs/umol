@@ -1,26 +1,31 @@
 //! Aromaticity resolver. Perception reads aromatic valence constraints from the
-//! materialized valence stage; planning emits complete aromatic systems,
-//! optional charge delocalization atom updates, and localized bond aromatic
-//! constraints without mutating the source molecule.
+//! materialized valence stage; planning emits complete aromatic systems and
+//! localized bond aromatic constraints without mutating the source molecule.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst, AtomHandle,
-    AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate, BooleanAst, Edit, MoleculeAst,
+    AromaticSystemAst, AromaticValenceAst, AtomConstraintAst, AtomHandle, AtomId, AtomUpdate,
+    BondConstraintAst, BondHandle, BondUpdate, BooleanAst, Edit, MoleculeAst,
 };
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
-    derive_charge_equalization, AromaticityConfig, AromaticityContradiction, AromaticityError,
-    AromaticityPerception,
+    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
 };
 use crate::ops::model::AromaticityModel;
+
+/// How aromaticity resolution handles assertions that disagree with perception.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AromaticityInconsistencyPolicy {
+    Keep,
+    Error,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AromaticityResolveConfig {
     pub perception: AromaticityConfig,
-    pub delocalize_charge: bool,
+    pub inconsistency: AromaticityInconsistencyPolicy,
     pub reset_aromatic_valence: bool,
 }
 
@@ -28,7 +33,7 @@ impl Default for AromaticityResolveConfig {
     fn default() -> Self {
         Self {
             perception: AromaticityConfig::default(),
-            delocalize_charge: true,
+            inconsistency: AromaticityInconsistencyPolicy::Error,
             reset_aromatic_valence: false,
         }
     }
@@ -57,29 +62,32 @@ impl AromaticityResolver {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<Vec<Edit>, AromaticityContradiction>, AromaticityError> {
-        let outcome = self
-            .perception
-            .find_systems(ast, self.config.perception, |view| {
-                if view.is_in_aromatic_system() {
-                    return None;
-                }
-                match view
-                    .ast
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceAst::Undetermined)
-                    .as_lit()
-                {
-                    Some(AromaticValence::Aromatic(n)) if n >= 0 => Some(n as u8),
-                    _ => None,
-                }
-            })?;
+        let outcome = self.perception.derive(ast, self.config.perception)?;
 
         match outcome {
-            Solution::Determined(systems) => {
+            Solution::Determined(derivation) => {
+                if self.config.inconsistency == AromaticityInconsistencyPolicy::Error {
+                    if let Some(&mismatch) = derivation.mismatches.first() {
+                        return Ok(Solution::Contradictory(mismatch.into()));
+                    }
+                }
+
+                let existing: BTreeSet<Vec<AtomId>> = ast
+                    .aromatic_systems()
+                    .iter()
+                    .map(|system| {
+                        let mut atoms: Vec<AtomId> = system.atom_ids().collect();
+                        atoms.sort_unstable();
+                        atoms
+                    })
+                    .collect();
                 let mut edits = Vec::new();
-                for (atoms, system) in systems {
-                    edits.extend(self.plan_system(ast, atoms, system)?);
+                for (atoms, system) in derivation.systems {
+                    let mut key = atoms.clone();
+                    key.sort_unstable();
+                    if !existing.contains(&key) {
+                        edits.extend(self.plan_system(ast, atoms, system));
+                    }
                 }
                 Ok(Solution::Determined(edits))
             }
@@ -111,18 +119,15 @@ impl AromaticityResolver {
         ast: &MoleculeAst,
         atoms: Vec<AtomId>,
         system: AromaticSystemAst,
-    ) -> Result<Vec<Edit>, AromaticityError> {
-        let (system, charge_updates) = if self.config.delocalize_charge {
-            derive_charge_equalization(ast, &atoms, &system)?
-        } else {
-            (system, Vec::new())
-        };
-        let mut atom_updates: BTreeMap<AtomId, AtomUpdate> = charge_updates.into_iter().collect();
+    ) -> Vec<Edit> {
+        let mut atom_updates = Vec::new();
         if self.config.reset_aromatic_valence {
             for &atom_id in &atoms {
-                atom_updates.entry(atom_id).or_default().constraints.set(
-                    AtomConstraintAst::AromaticValence(AromaticValenceAst::Undetermined),
-                );
+                let mut update = AtomUpdate::default();
+                update.constraints.set(AtomConstraintAst::AromaticValence(
+                    AromaticValenceAst::Undetermined,
+                ));
+                atom_updates.push((atom_id, update));
             }
         }
 
@@ -158,7 +163,7 @@ impl AromaticityResolver {
                 &update,
             ));
         }
-        Ok(edits)
+        edits
     }
 }
 
@@ -175,6 +180,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::ops::aromaticity::AromaticityMismatch;
     use crate::ops::model::{ElementScope, RingLimits};
 
     #[fixture]
@@ -203,7 +209,7 @@ mod tests {
             AromaticityResolveConfig::default(),
             AromaticityResolveConfig {
                 perception: AromaticityConfig::default(),
-                delocalize_charge: true,
+                inconsistency: AromaticityInconsistencyPolicy::Error,
                 reset_aromatic_valence: false,
             }
         );
@@ -224,7 +230,7 @@ mod tests {
                         maximum_independent_set_algorithm:
                             MaximumIndependentSetAlgorithm::BranchAndBound,
                     },
-                    delocalize_charge: true,
+                    inconsistency: AromaticityInconsistencyPolicy::Error,
                     reset_aromatic_valence: false,
                 },
             )
@@ -271,36 +277,57 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_plan_identity(aromaticity_model: AromaticityModel) {
-        let molecule = mol_dsl!(
-            r#"{
+    #[case::conformant(
+        AromaticityModel::daylight(),
+        AromaticityResolveConfig::default(),
+        mol_dsl!(r#"{
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
-        }"#
-        );
+        }"#)
+    )]
+    #[case::rejected_projections(
+        AromaticityModel::mdl(),
+        AromaticityResolveConfig {
+            perception: AromaticityConfig::default(),
+            inconsistency: AromaticityInconsistencyPolicy::Keep,
+            reset_aromatic_valence: false,
+        },
+        mol_dsl!(r#"{
+            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
+                    [3 4 :aromatic] [4 0 :aromatic]]
+        }"#)
+    )]
+    #[case::rejected_existing_system(
+        AromaticityModel::mdl(),
+        AromaticityResolveConfig {
+            perception: AromaticityConfig::default(),
+            inconsistency: AromaticityInconsistencyPolicy::Keep,
+            reset_aromatic_valence: false,
+        },
+        mol_dsl!(r#"{
+            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
+                    [3 4 :aromatic] [4 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]
+        }"#)
+    )]
+    fn test_aromaticity_resolver_plan_identity(
+        #[case] model: AromaticityModel,
+        #[case] config: AromaticityResolveConfig,
+        #[case] molecule: MoleculeAst,
+    ) {
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).plan(&molecule),
+            AromaticityResolver::with_config(&model, config).plan(&molecule),
             Ok(Solution::Determined(Vec::new()))
         );
     }
 
     #[rstest]
-    #[case::homogeneous_delocalized(
-        AromaticityResolveConfig::default(),
-        mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
-                              :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
-        ValueAst::Lit(1),
-        vec![ValueAst::Lit(0); 3],
-        vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 3]
-    )]
     #[case::homogeneous_localized(
-        AromaticityResolveConfig {
-            perception: AromaticityConfig::default(),
-            delocalize_charge: false,
-            reset_aromatic_valence: false,
-        },
+        AromaticityResolveConfig::default(),
         mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
         ValueAst::Lit(0),
@@ -324,10 +351,33 @@ mod tests {
         ],
         vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 6]
     )]
+    #[case::accepted_system_with_rejected_projections(
+        AromaticityResolveConfig {
+            perception: AromaticityConfig::default(),
+            inconsistency: AromaticityInconsistencyPolicy::Keep,
+            reset_aromatic_valence: false,
+        },
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
+                    "C#h3#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        ValueAst::Lit(0),
+        vec![ValueAst::Lit(0); 7],
+        vec![
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+        ]
+    )]
     #[case::reset_source_constraints(
         AromaticityResolveConfig {
             perception: AromaticityConfig::default(),
-            delocalize_charge: true,
+            inconsistency: AromaticityInconsistencyPolicy::Error,
             reset_aromatic_valence: true,
         },
         benzene(),
@@ -375,6 +425,19 @@ mod tests {
     }
 
     #[rstest]
+    fn test_aromaticity_resolver_resolve_identity(
+        aromaticity_model: AromaticityModel,
+        mut benzene: MoleculeAst,
+    ) {
+        let resolver = AromaticityResolver::new(&aromaticity_model);
+        assert_eq!(resolver.resolve(&mut benzene), Ok(Solution::Determined(())));
+        let expected = benzene.clone();
+
+        assert_eq!(resolver.resolve(&mut benzene), Ok(Solution::Determined(())));
+        assert_eq!(benzene, expected);
+    }
+
+    #[rstest]
     #[case::clar_heterocycle(
         AromaticityModel::Clar {
             scope: ElementScope::Any,
@@ -385,6 +448,14 @@ mod tests {
         AromaticityContradiction::ClarNonBenzenoid(
             "Clar model requires benzenoid input but non-carbon aromatic atoms are present".to_string()
         )
+    )]
+    #[case::projection_mismatch(
+        AromaticityModel::mdl(),
+        mol_dsl_ground!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                              :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
+        AromaticityContradiction::Mismatch(AromaticityMismatch::AtomProjection {
+            atom: AtomId(0),
+        })
     )]
     fn test_aromaticity_resolver_resolve_contradiction(
         #[case] model: AromaticityModel,
@@ -397,19 +468,5 @@ mod tests {
             Ok(Solution::Contradictory(expected))
         );
         assert_eq!(molecule, original);
-    }
-
-    #[rstest]
-    fn test_aromaticity_resolver_resolve_error(
-        aromaticity_model: AromaticityModel,
-        mut benzene: MoleculeAst,
-    ) {
-        benzene.atom_mut(AtomId(0)).ast.charge = ValueAst::Undetermined;
-        let original = benzene.clone();
-        assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).resolve(&mut benzene),
-            Err(AromaticityError::NonGroundAtom(AtomId(0)))
-        );
-        assert_eq!(benzene, original);
     }
 }

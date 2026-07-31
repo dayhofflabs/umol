@@ -3,6 +3,7 @@ import pytest
 from umol import (
     AromaticValenceAst,
     AromaticityConfig,
+    AromaticityInconsistencyPolicy,
     AromaticityResolveConfig,
     AutomorphismAlgorithm,
     ChemistryModel,
@@ -53,7 +54,7 @@ def test_resolved_smiles_workflow():
                     MaximumIndependentSetAlgorithm.BranchAndBound()
                 ),
             ),
-            delocalize_charge=False,
+            inconsistency=AromaticityInconsistencyPolicy.Error,
             reset_aromatic_valence=False,
         ),
         stereo=StereoResolveConfig(
@@ -92,7 +93,10 @@ def test_resolved_smiles_workflow():
     assert molecule == independent
     assert io_config == SmilesIoConfig.lenient()
     assert chemistry_model == ChemistryModel.default()
-    assert resolve_config.aromaticity.delocalize_charge is False
+    assert (
+        resolve_config.aromaticity.inconsistency
+        == AromaticityInconsistencyPolicy.Error
+    )
     assert resolve_config.stereo.inconsistency == InconsistencyPolicy.Error
 
     molecule.atoms[0].charge = 3

@@ -2,11 +2,75 @@ import pytest
 
 from umol import (
     AromaticityConfig,
+    AromaticityInconsistencyPolicy,
     AromaticityResolveConfig,
     InconsistencyPolicy,
     ResolveConfig,
     StereoResolveConfig,
 )
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        (
+            AromaticityInconsistencyPolicy.Keep,
+            AromaticityInconsistencyPolicy.Keep,
+            True,
+        ),
+        (
+            AromaticityInconsistencyPolicy.Error,
+            AromaticityInconsistencyPolicy.Error,
+            True,
+        ),
+        (
+            AromaticityInconsistencyPolicy.Keep,
+            AromaticityInconsistencyPolicy.Error,
+            False,
+        ),
+    ],
+)
+def test_aromaticity_inconsistency_policy_equality(left, right, expected):
+    assert (left == right) is expected
+
+
+def test_aromaticity_inconsistency_policy_hash():
+    policies = {
+        AromaticityInconsistencyPolicy.Keep: "keep",
+        AromaticityInconsistencyPolicy.Error: "error",
+    }
+
+    assert policies[AromaticityInconsistencyPolicy.Keep] == "keep"
+    assert policies[AromaticityInconsistencyPolicy.Error] == "error"
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [
+        (
+            AromaticityInconsistencyPolicy.Keep,
+            "AromaticityInconsistencyPolicy.Keep",
+        ),
+        (
+            AromaticityInconsistencyPolicy.Error,
+            "AromaticityInconsistencyPolicy.Error",
+        ),
+    ],
+)
+def test_aromaticity_inconsistency_policy_repr(policy, expected):
+    assert repr(policy) == expected
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        AromaticityInconsistencyPolicy.Keep,
+        AromaticityInconsistencyPolicy.Error,
+    ],
+)
+def test_aromaticity_inconsistency_policy_mutation(policy):
+    with pytest.raises(AttributeError):
+        policy.value = "changed"
 
 
 @pytest.mark.parametrize(
@@ -65,33 +129,33 @@ def test_aromaticity_resolve_config_default():
     config = AromaticityResolveConfig()
 
     assert config.perception == AromaticityConfig()
-    assert config.delocalize_charge is True
+    assert config.inconsistency == AromaticityInconsistencyPolicy.Error
     assert config.reset_aromatic_valence is False
     assert config == AromaticityResolveConfig()
 
 
 @pytest.mark.parametrize(
-    ("delocalize_charge", "reset_aromatic_valence"),
+    ("inconsistency", "reset_aromatic_valence"),
     [
-        (True, False),
-        (False, False),
-        (True, True),
-        (False, True),
+        (AromaticityInconsistencyPolicy.Keep, False),
+        (AromaticityInconsistencyPolicy.Error, False),
+        (AromaticityInconsistencyPolicy.Keep, True),
+        (AromaticityInconsistencyPolicy.Error, True),
     ],
 )
 def test_aromaticity_resolve_config_new(
-    delocalize_charge, reset_aromatic_valence
+    inconsistency, reset_aromatic_valence
 ):
     perception = AromaticityConfig()
     config = AromaticityResolveConfig(
         perception=perception,
-        delocalize_charge=delocalize_charge,
+        inconsistency=inconsistency,
         reset_aromatic_valence=reset_aromatic_valence,
     )
 
     assert config.perception == perception
     assert config.perception is not perception
-    assert config.delocalize_charge is delocalize_charge
+    assert config.inconsistency == inconsistency
     assert config.reset_aromatic_valence is reset_aromatic_valence
 
 
@@ -113,12 +177,12 @@ def test_aromaticity_resolve_config_new_error():
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
-            "delocalize_charge=True, "
+            "inconsistency=AromaticityInconsistencyPolicy.Error, "
             "reset_aromatic_valence=False)",
         ),
         (
             AromaticityResolveConfig(
-                delocalize_charge=False,
+                inconsistency=AromaticityInconsistencyPolicy.Keep,
                 reset_aromatic_valence=True,
             ),
             "AromaticityResolveConfig(perception=AromaticityConfig("
@@ -129,7 +193,7 @@ def test_aromaticity_resolve_config_new_error():
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
-            "delocalize_charge=False, "
+            "inconsistency=AromaticityInconsistencyPolicy.Keep, "
             "reset_aromatic_valence=True)",
         ),
     ],
@@ -142,7 +206,7 @@ def test_aromaticity_resolve_config_repr(config, expected):
     ("field", "value"),
     [
         ("perception", AromaticityConfig()),
-        ("delocalize_charge", False),
+        ("inconsistency", AromaticityInconsistencyPolicy.Keep),
         ("reset_aromatic_valence", True),
     ],
 )
@@ -235,7 +299,7 @@ def test_resolve_config_default():
     [
         (
             AromaticityResolveConfig(
-                delocalize_charge=False,
+                inconsistency=AromaticityInconsistencyPolicy.Keep,
                 reset_aromatic_valence=True,
             ),
             StereoResolveConfig(),
@@ -265,7 +329,7 @@ def test_resolve_config_new_error():
     [
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(
-                delocalize_charge=False,
+                inconsistency=AromaticityInconsistencyPolicy.Keep,
                 reset_aromatic_valence=False,
             ),
             stereo=StereoResolveConfig(),
@@ -290,7 +354,7 @@ def test_resolve_config_equality(other):
         (
             ResolveConfig(
                 aromaticity=AromaticityResolveConfig(
-                    delocalize_charge=False,
+                    inconsistency=AromaticityInconsistencyPolicy.Keep,
                     reset_aromatic_valence=True,
                 ),
                 stereo=StereoResolveConfig(
@@ -306,7 +370,8 @@ def test_resolve_config_equality(other):
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
-            "delocalize_charge=False, reset_aromatic_valence=True), "
+            "inconsistency=AromaticityInconsistencyPolicy.Keep, "
+            "reset_aromatic_valence=True), "
             "stereo=StereoResolveConfig(reset_stereo_constraints=True, "
             "inconsistency=InconsistencyPolicy.Strip))",
         ),

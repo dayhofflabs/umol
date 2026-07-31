@@ -357,7 +357,7 @@ stereo can derive and compare their relations without an operational policy.
 
 ### S1 — Resolver contract migration
 
-#### S1a — Aromatic resolver and Python configuration
+#### S1a — Aromatic resolver and Python configuration **Done**
 
 **Module:** `umol-graph/src/ops/aromaticity.rs`,
 `umol-graph/src/ops/resolve/aromaticity.rs`, `umol-graph/src/ops/resolve.rs`,
@@ -475,10 +475,11 @@ without resolver policy or mutation. `cargo test -p umol-graph` passes.
 
 Add molecule and reaction SMILES table cases proving that MDL furan, thiophene, and pyrrole return
 the exact aromatic contradiction by default, while explicit `Keep` preserves the unmatched
-projections without adding a system. Retain positive MDL pyridine/benzene and Daylight
-furan/thiophene/pyrrole references. Update charge-sensitive resolution fixtures and snapshots to the
-localized representation; do not normalize them through `DelocalizeCharge` in expected-value
-construction.
+projections without adding a system. Add the bare-n `c1cccn1` case from doc 174 as an interim
+regression: default ingestion returns the exact nitrogen projection contradiction instead of the old
+closed-shell C4H4N result. Retain positive MDL pyridine/benzene and Daylight furan/thiophene/pyrrole
+references. Update charge-sensitive resolution fixtures and snapshots to the localized
+representation; do not normalize them through `DelocalizeCharge` in expected-value construction.
 
 #### S3b — Python ingestion propagation
 

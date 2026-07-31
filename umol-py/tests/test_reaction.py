@@ -811,7 +811,6 @@ def test_reaction_ast_from_reaction_smiles_resolve_config():
         "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(
-                delocalize_charge=False,
                 reset_aromatic_valence=False,
             ),
             stereo=StereoResolveConfig(),

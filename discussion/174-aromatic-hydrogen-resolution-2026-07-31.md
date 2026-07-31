@@ -62,7 +62,7 @@ integer bond orders, which a lowercase ring does not have until it is kekulized,
 to kekulize first. This is a defect in OpenSMILES, not in our reading of it. Kekulize-then-count is the
 only interpretation that makes the rule executable.
 
-Observed behaviour on bare aromatic heteroatoms (2026-07-31):
+Observed behaviour on bare aromatic heteroatoms before doc 171 S1a (2026-07-31):
 
 | input | RDKit | umol |
 | --- | --- | --- |
@@ -72,13 +72,19 @@ Observed behaviour on bare aromatic heteroatoms (2026-07-31):
 | `O=c1ccccn1` 2-pyridone, bare n | rejected | rejected |
 | `c1cc[nH]c1`, `c1c[nH]cn1`, `c1ccoc1` | accepted | accepted |
 
-RDKit refuses rather than guessing. We accept and emit a structure that is not a molecule: `c1cccn1`
-returns **C4H4N**, a neutral species with 25 valence electrons and no radical marker, carrying `#a`
-on every atom with no aromatic system to project from. That is the dangling-projection state of doc
-171 reached by a second route — ingest-time kekulization failure rather than model refusal.
+RDKit refuses rather than guessing. Before doc 171 S1a, umol accepted `c1cccn1` as **C4H4N**. That is
+the composition of the pyrrolyl radical, not "a structure that is not a molecule". The emitted state
+was nevertheless wrong: it described a neutral closed-shell species despite the odd electron count,
+carried `#a` on every atom, and materialized no aromatic system. That was the dangling-projection
+state of doc 171 reached by a second route — ingest-time kekulization failure rather than model
+refusal.
 
-**Accepting is worse than rejecting here.** Doc 171's policy should be widened to cover any path that
-leaves aromatic projections without a materialized relation, not only a model declining a system.
+Doc 171 S1a now rejects this state with
+`AromaticityMismatch::AtomProjection { atom: AtomId(0) }` and rolls back the preceding valence edits.
+That is the correct interim behavior: rejection is preferable to silently emitting the closed-shell
+state. It is not the desired final behavior for a DSL input that explicitly fixes the nitrogen at
+`#h0`. That input should remain a useful positive case for pyrrolyl: resolution should derive
+`#n0 #u1 #s2 #a2` at nitrogen and materialize `[2,1,1,1,1]`, preserving the aromatic π sextet.
 
 ## The circularity
 
@@ -97,12 +103,18 @@ solution.
 
 ## What the resolver does today
 
-The registry already carries both candidate states:
+The registry carries the relevant closed-shell and radical candidate states:
 
 ```toml
 "N #n #v2 #a",   # C5H5N        pyridine-type: one lone pair, one pi electron, no H
 "N #v2 #a2 #h",  # C4H4NH       pyrrole-type: no lone pair, two pi electrons, one H
+"N #u #v2 #a2",  # C4H4N        pyrrolyl radical: no localized lone pair, two pi electrons, no H
 ```
+
+The pyrrolyl row grounds as `#h0 #n0 #u1 #s2 #v2 #a2`. The existing nonaromatic
+`"N #n #u #v2"` row remains distinct: it grounds as not aromatic and cannot satisfy an
+aromatic-valence projection. `#n1` and `#a2` would count the same pair twice and are incompatible
+descriptions of the pyrrolyl state.
 
 Resolution was run directly on aromatic-flagged rings with charge pinned to zero and `#h` left
 undetermined (`MoleculeDefaults::new()`, default `ChemistryModel`):
@@ -110,12 +122,13 @@ undetermined (`MoleculeDefaults::new()`, default `ChemistryModel`):
 | input | verdict | result |
 | --- | --- | --- |
 | pyrrole, `#h` open | `Determined` | **correct** — `[1,1,1,1,2]#c0` materialized, N is `#h1 #a2` |
-| pyrrole, `#h0` pinned | `Determined` | no aromatic system; N `#h0 #n1 #a1`; `#a` flags dangling |
-| pyridine, `#h` open | `Determined` | **wrong** — N is `#h1 #a2` in a six-ring; 7 π electrons; no system |
-| imidazole, `#h` open | `Determined` | **wrong** — *both* nitrogens `#a2`; no system |
+| pyrrole, `#h0` pinned | `Contradictory` | exact aromatic projection mismatch; input retained |
+| pyridine, `#h` open | `Contradictory` | valence selects N `#h1 #a2`; aromatic projection mismatch |
+| imidazole, `#h` open | `Contradictory` | valence selects both nitrogens as `#a2`; aromatic projection mismatch |
 
-Leaving the hydrogen open fixes the case that was broken and breaks the two that worked. All four
-report `Determined`, including the three that are chemically wrong.
+Leaving the hydrogen open fixes the case that was broken and makes the other two fail safely. Before
+doc 171 S1a all four reported `Determined`, including the three chemically wrong results; they now
+fail instead of escaping as dangling projections.
 
 **The cause is where the candidate set collapses, not the direction of the pipeline.** The valence
 phase narrows to a set and then selects a single winner with `compare_valence_preference`, a local
@@ -153,6 +166,7 @@ preference order:
 | `c1cccn1` | N `#h1 #a2`, one aromatic system `[1,1,1,1,2]` |
 | `c1ccncc1` | N `#h0 #n1 #a1`, one aromatic system `[1,1,1,1,1,1]` |
 | `c1cncn1` | one N `#a1`, one N `#h1 #a2`, one aromatic system |
+| pyrrole DSL with N `#h0` | N `#h0 #n0 #u1 #s2 #a2`, one aromatic system `[2,1,1,1,1]` |
 
 Add the corrected F420 structure as a fourth case once completion is implemented: unique solution,
 C29H36N5O18P.

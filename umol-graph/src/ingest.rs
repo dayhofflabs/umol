@@ -276,7 +276,10 @@ mod tests {
     use super::*;
     use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
     use crate::ops::model::{AromaticityModel, ElementScope, RingLimits, ValenceModel};
-    use crate::ops::resolve::{AromaticityResolveConfig, InconsistencyPolicy, StereoResolveConfig};
+    use crate::ops::resolve::{
+        AromaticityInconsistencyPolicy, AromaticityResolveConfig, InconsistencyPolicy,
+        StereoResolveConfig,
+    };
     use crate::ops::valence::AtomTypeRegistry;
 
     #[rstest]
@@ -771,24 +774,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::delocalized(
-        SmilesIoConfig::opensmiles(),
-        ChemistryModel::default(),
-        ResolveConfig::default(),
-        vec![ValueAst::Lit(0); 3],
-        ValueAst::Lit(1)
-    )]
     #[case::localized(
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
-        ResolveConfig {
-            aromaticity: AromaticityResolveConfig {
-                perception: Default::default(),
-                delocalize_charge: false,
-                reset_aromatic_valence: false,
-            },
-            stereo: StereoResolveConfig::default(),
-        },
+        ResolveConfig::default(),
         vec![ValueAst::Lit(1), ValueAst::Lit(0), ValueAst::Lit(0)],
         ValueAst::Lit(0)
     )]
@@ -828,7 +817,7 @@ mod tests {
         ResolveConfig {
             aromaticity: AromaticityResolveConfig {
                 perception: Default::default(),
-                delocalize_charge: true,
+                inconsistency: AromaticityInconsistencyPolicy::Error,
                 reset_aromatic_valence: true,
             },
             stereo: StereoResolveConfig::default(),
@@ -1054,14 +1043,7 @@ mod tests {
         "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
-        ResolveConfig {
-            aromaticity: AromaticityResolveConfig {
-                perception: Default::default(),
-                delocalize_charge: false,
-                reset_aromatic_valence: false,
-            },
-            stereo: StereoResolveConfig::default(),
-        },
+        ResolveConfig::default(),
         Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :type "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] :bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]]}}"##.parse().unwrap()),
     )]
     fn test_ingest_reaction_smiles_with(

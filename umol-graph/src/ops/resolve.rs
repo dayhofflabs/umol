@@ -12,7 +12,9 @@ pub mod valence;
 
 use std::any::Any;
 
-pub use aromaticity::{AromaticityResolveConfig, AromaticityResolver};
+pub use aromaticity::{
+    AromaticityInconsistencyPolicy, AromaticityResolveConfig, AromaticityResolver,
+};
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
@@ -310,6 +312,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::ops::aromaticity::AromaticityMismatch;
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
@@ -352,7 +355,7 @@ mod tests {
             ResolveConfig {
                 aromaticity: AromaticityResolveConfig {
                     perception: Default::default(),
-                    delocalize_charge: true,
+                    inconsistency: AromaticityInconsistencyPolicy::Error,
                     reset_aromatic_valence: false,
                 },
                 stereo: StereoResolveConfig {
@@ -406,18 +409,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::delocalize_charge(ResolveConfig {
-        aromaticity: AromaticityResolveConfig {
-            perception: Default::default(),
-            delocalize_charge: false,
-            reset_aromatic_valence: false,
-        },
-        stereo: StereoResolveConfig::default(),
-    })]
     #[case::reset_aromatic_valence(ResolveConfig {
         aromaticity: AromaticityResolveConfig {
             perception: Default::default(),
-            delocalize_charge: true,
+            inconsistency: AromaticityInconsistencyPolicy::Error,
             reset_aromatic_valence: true,
         },
         stereo: StereoResolveConfig::default(),
@@ -576,6 +571,16 @@ mod tests {
         }"#),
         ResolverContradiction::Aromaticity(AromaticityContradiction::ClarNonBenzenoid(
             "Clar model requires benzenoid input but non-carbon aromatic atoms are present".to_string(),
+        ))
+    )]
+    #[case::aromaticity_projection(
+        AromaticityModel::mdl(),
+        mol_dsl_ground!(r#"{
+            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        }"#),
+        ResolverContradiction::Aromaticity(AromaticityContradiction::Mismatch(
+            AromaticityMismatch::AtomProjection { atom: AtomId(0) }
         ))
     )]
     #[case::stereo(

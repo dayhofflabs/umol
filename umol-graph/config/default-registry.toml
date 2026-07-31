@@ -112,6 +112,7 @@
     "N #n #v2 #a",   # C5H5N
     "N #v3 #a2",     # C4H4NX, C4H4NH
     "N #v2 #a2 #h",  # C4H4NH
+    "N #u #v2 #a2",  # pyrrolyl radical
     "N #n #u #v2",   # NX2, NH2, NO
     "N #n #u #v #h", # NXH
     "N #n #u #h2",   # NH2

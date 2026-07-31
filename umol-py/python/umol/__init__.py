@@ -4,6 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
     AromaticityConfig,
+    AromaticityInconsistencyPolicy,
     AromaticityModel,
     AromaticityResolveConfig,
     AromaticSystemAst,
@@ -204,6 +205,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "AromaticityConfig",
+    "AromaticityInconsistencyPolicy",
     "AromaticityModel",
     "AromaticityResolveConfig",
     "AromaticSystemAst",

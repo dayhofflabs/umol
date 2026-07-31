@@ -6,6 +6,7 @@ from umol import (
     AromaticSystemAst,
     AromaticValenceAst,
     AromaticityConfig,
+    AromaticityInconsistencyPolicy,
     AromaticityModel,
     AromaticityResolveConfig,
     AtomAst,
@@ -339,7 +340,16 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
         stereo=default.stereo,
     )
 
-    molecule = MoleculeAst.from_smiles("c1ccccc1", chemistry_model=chemistry_model)
+    molecule = MoleculeAst.from_smiles(
+        "c1ccccc1",
+        chemistry_model=chemistry_model,
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(
+                inconsistency=AromaticityInconsistencyPolicy.Keep
+            ),
+            stereo=StereoResolveConfig(),
+        ),
+    )
 
     assert [atom.implicit_hydrogens for atom in molecule.atoms] == [ValueAst.Lit(1)] * 6
     assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
@@ -405,7 +415,6 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
                             MaximumIndependentSetAlgorithm.BranchAndBound()
                         ),
                     ),
-                    delocalize_charge=False,
                     reset_aromatic_valence=False,
                 ),
                 stereo=StereoResolveConfig(),
@@ -426,7 +435,6 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
             "c1ccccc1",
             ResolveConfig(
                 aromaticity=AromaticityResolveConfig(
-                    delocalize_charge=True,
                     reset_aromatic_valence=True,
                 ),
                 stereo=StereoResolveConfig(),

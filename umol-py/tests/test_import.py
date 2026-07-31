@@ -19,6 +19,7 @@ PUBLIC_EXPORTS = frozenset(
     AromaticValence
     AromaticValenceAst
     AromaticityConfig
+    AromaticityInconsistencyPolicy
     AromaticityModel
     AromaticityResolveConfig
     AtomAst
@@ -351,7 +352,7 @@ def test_public_operation_signature(operation, expected):
         ),
         (
             umol.AromaticityResolveConfig,
-            "(*, perception=Ellipsis, delocalize_charge=True, "
+            "(*, perception=Ellipsis, inconsistency=Ellipsis, "
             "reset_aromatic_valence=False)",
         ),
         (
