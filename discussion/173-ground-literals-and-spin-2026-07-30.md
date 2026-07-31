@@ -641,7 +641,7 @@ migrations.
   Preserve external-format behavior in the unit and parsing-conformance suites; sweep the
   OpenSMILES fuzz target and seeds that exercise radicals. **Breaking caller migration
   (red→green within S0).** [dep: S0b]
-- **S0d — `umol-ast`, `umol-graph`: migrate direct `SpinState` consumers.** Update current
+- **S0d — `umol-ast`, `umol-graph`: migrate direct `SpinState` consumers.** **Done.** Update current
   construction, comparison, resolution, validation, and test code that consumes the physical
   type. Remove tests for the deleted coupling methods rather than replacing them with a local
   approximation. Run the affected graph conformance tests. **Breaking caller migration

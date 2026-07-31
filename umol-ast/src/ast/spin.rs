@@ -1,7 +1,7 @@
 //! Spin-state AST.
 
 use umol_ast_macros::{Canonicalize, Lattice};
-use umol_chem::spin::{SpinMultiplicity, SpinState};
+use umol_chem::spin::{SpinState, UnpairedElectrons};
 
 use super::traits::{AsLit, Canonicalize};
 use super::value::ValueAst;
@@ -77,7 +77,7 @@ impl From<(u8, u8)> for SpinStateAst {
 
 impl From<SpinState> for SpinStateAst {
     fn from(state: SpinState) -> Self {
-        (state.unpaired(), u8::from(state.multiplicity())).into()
+        (state.unpaired_electrons(), u8::from(state.multiplicity())).into()
     }
 }
 
@@ -93,8 +93,11 @@ impl AsLit for SpinStateAst {
         let (ValueAst::Lit(u), ValueAst::Lit(m)) = (&self.unpaired, &self.multiplicity) else {
             return None;
         };
-        let mult = SpinMultiplicity::try_from(*m as u8).ok()?;
-        SpinState::try_new(*u as u8, mult).ok()
+        SpinState::try_from(UnpairedElectrons {
+            count: *u,
+            multiplicity: *m,
+        })
+        .ok()
     }
 }
 
@@ -291,6 +294,22 @@ mod tests {
     #[case::valid_triplet((2_u8, 3_u8).into(), Some(spin!("#u2#s3")))]
     #[case::valid_closed_shell((0_u8, 1_u8).into(), Some(SpinState::closed_shell()))]
     #[case::parity_invalid((1_u8, 1_u8).into(), None)]
+    #[case::negative_count(
+        SpinStateAst { unpaired: ValueAst::Lit(-1), multiplicity: ValueAst::Lit(1) },
+        None,
+    )]
+    #[case::count_out_of_range(
+        SpinStateAst { unpaired: ValueAst::Lit(256), multiplicity: ValueAst::Lit(1) },
+        None,
+    )]
+    #[case::zero_multiplicity(
+        SpinStateAst { unpaired: ValueAst::Lit(0), multiplicity: ValueAst::Lit(0) },
+        None,
+    )]
+    #[case::multiplicity_out_of_range(
+        SpinStateAst { unpaired: ValueAst::Lit(0), multiplicity: ValueAst::Lit(256) },
+        None,
+    )]
     fn test_spin_state_ast_as_lit(
         #[case] ast: SpinStateAst,
         #[case] expected: Option<SpinState>,

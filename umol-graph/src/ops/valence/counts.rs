@@ -12,7 +12,7 @@ use umol_ast::ast::{
     SpinStateAst, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
-use umol_chem::spin::{SpinMultiplicity, SpinState};
+use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_utils::solution::Solution;
 
 use super::ValenceTable;
@@ -409,15 +409,17 @@ fn derive_atom(
 }
 
 fn derive_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
-    let unpaired = unpaired as u8;
-    match spin.multiplicity {
-        ValueAst::Lit(m) => {
-            let multiplicity = SpinMultiplicity::try_from(m as u8).ok()?;
-            SpinState::are_compatible(unpaired, multiplicity).then_some(m)
-        }
-        ValueAst::Undetermined => Some(i64::from(unpaired) + 1),
-        _ => None,
-    }
+    let multiplicity = match spin.multiplicity {
+        ValueAst::Lit(multiplicity) => multiplicity,
+        ValueAst::Undetermined => unpaired.checked_add(1)?,
+        _ => return None,
+    };
+    SpinState::try_from(UnpairedElectrons {
+        count: unpaired,
+        multiplicity,
+    })
+    .ok()?;
+    Some(multiplicity)
 }
 
 #[cfg(test)]
@@ -428,6 +430,56 @@ mod tests {
 
     use super::*;
     use crate::ops::valence::ValenceTable;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::explicit_triplet(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        2,
+        Some(3),
+    )]
+    #[case::explicit_open_shell_singlet(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
+        2,
+        Some(1),
+    )]
+    #[case::incompatible(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) },
+        2,
+        None,
+    )]
+    #[case::negative_multiplicity(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(-1) },
+        2,
+        None,
+    )]
+    #[case::derived(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        2,
+        Some(3),
+    )]
+    #[case::negative_count(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        -1,
+        None,
+    )]
+    #[case::pattern(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::lit_set([1, 3]) },
+        2,
+        None,
+    )]
+    #[case::overflow(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        i64::MAX,
+        None,
+    )]
+    fn test_derive_multiplicity(
+        #[case] spin: SpinStateAst,
+        #[case] unpaired: i64,
+        #[case] expected: Option<i64>,
+    ) {
+        assert_eq!(derive_multiplicity(&spin, unpaired), expected);
+    }
 
     #[rstest]
     fn test_counts_valence_plan() {

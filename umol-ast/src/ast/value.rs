@@ -679,7 +679,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::i64(ValueAst::from(5_i64), ValueAst::Lit(5))]
-    #[case::spin_multiplicity(ValueAst::from(SpinMultiplicity::Triplet), ValueAst::Lit(3))]
+    #[case::spin_multiplicity(ValueAst::from(SpinMultiplicity::TRIPLET), ValueAst::Lit(3))]
     #[case::vec(ValueAst::from(vec![2, 1, 2]), ValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))))]
     #[case::btreeset(ValueAst::from(BTreeSet::from([3, 1])), ValueAst::LitSet(Box::new(BTreeSet::from([1, 3]))))]
     fn test_value_ast_from(#[case] actual: ValueAst, #[case] expected: ValueAst) {

@@ -3,8 +3,8 @@
 //! 0..=unpaired/2`. Runs on any entity carrying a `SpinStateAst` (atom,
 //! aromatic system, multicenter bond).
 //!
-//! Stub: always returns `Determined`. Implementation pending; the parity
-//! rule is in `umol_chem::spin::SpinState::are_compatible`.
+//! Stub: always returns `Determined`. Implementation pending; complete literal
+//! pairs are validated by conversion to `umol_chem::spin::SpinState`.
 
 use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
