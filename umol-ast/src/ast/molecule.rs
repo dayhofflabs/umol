@@ -1844,7 +1844,7 @@ impl MoleculeAst {
             Constraint::Relational(relational) => self.relational_constraint_atoms(relational),
             Constraint::Molecule(molecule) => match molecule {
                 MoleculeConstraint::ChargeSum { atoms, .. }
-                | MoleculeConstraint::SpinSum { atoms, .. }
+                | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
                 | MoleculeConstraint::Connected { atoms } => {
                     atoms.clone().unwrap_or_else(all_atoms)
                 }

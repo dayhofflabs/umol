@@ -1274,9 +1274,12 @@ impl MoleculeConstraintDsl {
                 atoms: denote_atom_subset(atoms, meta),
                 sum: ValueDsl::from_ast(sum, &()),
             },
-            MoleculeConstraint::SpinSum { atoms, spin } => Self::SpinSum {
+            MoleculeConstraint::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => Self::SpinSum {
                 atoms: denote_atom_subset(atoms, meta),
-                spin: spin.clone(),
+                spin: unpaired_electrons.clone(),
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: denote_bond_subset(bonds, meta),
@@ -1305,9 +1308,9 @@ impl MoleculeConstraintDsl {
                 atoms: resolve_atom_subset(atoms, namespace)?,
                 sum: sum.into_ast(&()),
             },
-            Self::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
+            Self::SpinSum { atoms, spin } => MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: resolve_atom_subset(atoms, namespace)?,
-                spin,
+                unpaired_electrons: spin,
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
                 bonds: resolve_bond_subset(bonds, namespace)?,
@@ -2288,9 +2291,9 @@ mod tests {
     #[rstest]
     #[case::charge_sum(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }, "{:charge-sum {:atoms [0 1] :sum 0}}")]
     #[case::charge_sum_all(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }, "{:charge-sum {:sum 0}}")]
-    #[case::spin_sum(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0)]), spin: (1_u8, 2_u8).into() },
+    #[case::spin_sum(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() },
         "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}")]
-    #[case::spin_sum_all(MoleculeConstraint::SpinSum { atoms: None, spin: (0_u8, 1_u8).into() }, "{:spin-sum {:spin {:unpaired 0 :multiplicity 1}}}")]
+    #[case::spin_sum_all(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: (0_u8, 1_u8).into() }, "{:spin-sum {:spin {:unpaired 0 :multiplicity 1}}}")]
     #[case::valence(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: ValueAst::Lit(4) },
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
     #[case::bond_order_sum_all(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(0) }, "{:bond-order-sum {:sum 0}}")]
@@ -2497,7 +2500,7 @@ mod tests {
     #[case::molecule_connected(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1)]) }), "{:connected {:atoms [0 1]}}")]
     #[case::molecule_charge_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
         "{:charge-sum {:atoms [0 1] :sum 0}}")]
-    #[case::molecule_spin_sum(Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0)]), spin: (1_u8, 2_u8).into() }),
+    #[case::molecule_spin_sum(Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() }),
         "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}")]
     #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: ValueAst::Lit(4) }),
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]

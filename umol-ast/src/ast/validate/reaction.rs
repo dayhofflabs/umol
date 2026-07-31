@@ -535,7 +535,7 @@ impl ReactionIntegrityValidator {
     ) -> Result<(), ReactionIntegrityContradiction> {
         match constraint {
             MoleculeConstraint::ChargeSum { atoms, .. }
-            | MoleculeConstraint::SpinSum { atoms, .. }
+            | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
             | MoleculeConstraint::Connected { atoms } => {
                 self.require_atoms(lhs, created, atoms.iter().flatten().copied())
             }

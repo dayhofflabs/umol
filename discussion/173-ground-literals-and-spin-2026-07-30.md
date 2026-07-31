@@ -719,7 +719,7 @@ workspace. It ends with no compatibility aliases or stale code/specification nam
 
 ### S3 — Rename and reshape the coupling constraint
 
-- **S3a — `umol-ast/src/ast/constraint/molecule.rs`: replace `SpinSum`.** Add
+- **S3a — `umol-ast/src/ast/constraint/molecule.rs`: replace `SpinSum`.** **Done.** Add
   `MoleculeConstraint::UnpairedElectronCoupling` with `atoms` and `unpaired_electrons`, and migrate
   vacuity, canonicalization, compaction, remapping, equality, reaction integrity, and constraint
   traversal. Update unit and property tests, including all-atoms and explicit-subset forms.

@@ -457,7 +457,7 @@ fn test_molecule_dsl_edn_roundtrip_connected_constraint() {
 #[rstest]
 #[case::charge_sum_vacuous(vec![MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined }], vec![])]
 #[case::bond_order_sum_vacuous(vec![MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Undetermined }], vec![])]
-#[case::spin_sum_vacuous(vec![MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::default() }], vec![])]
+#[case::spin_sum_vacuous(vec![MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }], vec![])]
 #[case::vacuous_dropped_concrete_kept(
     vec![
         MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined },

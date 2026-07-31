@@ -87,4 +87,43 @@ proptest! {
             (0..ast.atoms().count()).map(AtomId::from).collect::<Vec<_>>(),
         );
     }
+
+    #[test]
+    fn test_molecule_ast_constraint_atoms_unpaired_electron_coupling(
+        (atom_count, subset_mask) in (1usize..=8).prop_flat_map(|atom_count| (
+            Just(atom_count),
+            prop::collection::vec(any::<bool>(), atom_count),
+        )),
+    ) {
+        let ast = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); atom_count],
+            ..Default::default()
+        });
+        let all_atoms = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
+        let subset = subset_mask
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, include)| include.then_some(AtomId::from(index)))
+            .collect::<Vec<_>>();
+        let unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
+
+        prop_assert_eq!(
+            ast.constraint_atoms(&Constraint::Molecule(
+                MoleculeConstraint::UnpairedElectronCoupling {
+                    atoms: None,
+                    unpaired_electrons: unpaired_electrons.clone(),
+                },
+            )),
+            all_atoms,
+        );
+        prop_assert_eq!(
+            ast.constraint_atoms(&Constraint::Molecule(
+                MoleculeConstraint::UnpairedElectronCoupling {
+                    atoms: Some(subset.clone()),
+                    unpaired_electrons,
+                },
+            )),
+            subset,
+        );
+    }
 }

@@ -215,6 +215,20 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, App
             Just((
                 ReactionAst::new(
                     lhs.clone(),
+                    Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
+                        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                            atoms: Some(vec![AtomId(0), AtomId(missing)]),
+                            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                        }),
+                    ))]),
+                ),
+                ApplyPreconditionError::InvalidReactionReference {
+                    entity: Entity::Atom(AtomId(missing)),
+                },
+            )),
+            Just((
+                ReactionAst::new(
+                    lhs.clone(),
                     Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
                         id: StereoAtomId(0),
                         site: AtomId(missing),

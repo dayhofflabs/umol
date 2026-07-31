@@ -349,7 +349,7 @@ pub(crate) fn partial_unpaired_electrons_update_strategy(
 }
 
 /// `UnpairedElectronsAst` with at least one of `count` / `multiplicity` not
-/// `Undetermined`. Used inside `MoleculeConstraint::SpinSum` and similar
+/// `Undetermined`. Used inside `MoleculeConstraint::UnpairedElectronCoupling` and similar
 /// where a fully vacuous unpaired-electron state would elide on render.
 pub(crate) fn non_vacuous_unpaired_electrons_strategy(
 ) -> impl Strategy<Value = UnpairedElectronsAst> {
@@ -1703,14 +1703,18 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms, sum })
             })
             .boxed();
-        let molecule_spin_sum = (optional_atoms, non_vacuous_unpaired_electrons_strategy())
-            .prop_map(|(atoms, spin)| {
-                Constraint::Molecule(MoleculeConstraint::SpinSum { atoms, spin })
-            })
-            .boxed();
+        let molecule_unpaired_electron_coupling =
+            (optional_atoms, non_vacuous_unpaired_electrons_strategy())
+                .prop_map(|(atoms, unpaired_electrons)| {
+                    Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
+                        atoms,
+                        unpaired_electrons,
+                    })
+                })
+                .boxed();
         choices.push(molecule_connected);
         choices.push(molecule_charge_sum);
-        choices.push(molecule_spin_sum);
+        choices.push(molecule_unpaired_electron_coupling);
     }
 
     if counts.bond > 0 {

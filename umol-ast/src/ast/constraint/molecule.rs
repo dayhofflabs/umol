@@ -341,19 +341,19 @@ impl From<Vec<Constraint>> for Constraints {
 /// Molecule-scope predicates: non-logical, unanchored assertions whose scope
 /// is the molecule as a whole or a declared subset of entities.
 ///
-/// For `ChargeSum` / `SpinSum` / `BondOrderSum` / `Connected`, an `atoms`
-/// (or `bonds`) value of `None` denotes the entire molecule's atoms (or
-/// bonds), making the predicate stable across structural growth. `Some(vec)`
-/// denotes a fixed subset.
+/// For `ChargeSum` / `UnpairedElectronCoupling` / `BondOrderSum` / `Connected`,
+/// an `atoms` (or `bonds`) value of `None` denotes the entire molecule's atoms
+/// (or bonds), making the predicate stable across structural growth.
+/// `Some(vec)` denotes a fixed subset.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {
     ChargeSum {
         atoms: Option<Vec<AtomId>>,
         sum: ValueAst,
     },
-    SpinSum {
+    UnpairedElectronCoupling {
         atoms: Option<Vec<AtomId>>,
-        spin: UnpairedElectronsAst,
+        unpaired_electrons: UnpairedElectronsAst,
     },
     BondOrderSum {
         bonds: Option<Vec<BondId>>,
@@ -371,13 +371,16 @@ pub enum MoleculeConstraint {
 impl MoleculeConstraint {
     /// A constraint is vacuous when its value-bearing payload is
     /// `Undetermined`: `ChargeSum`/`BondOrderSum` with `Undetermined` sum,
-    /// `SpinSum` with both spin fields `Undetermined`. `Connected` and
-    /// `SubPattern` are structural — never vacuous in this sense.
+    /// `UnpairedElectronCoupling` with both unpaired-electron fields
+    /// `Undetermined`. `Connected` and `SubPattern` are structural — never
+    /// vacuous in this sense.
     pub fn is_vacuous(&self) -> bool {
         match self {
             Self::ChargeSum { sum, .. } => sum.is_undetermined(),
             Self::BondOrderSum { sum, .. } => sum.is_undetermined(),
-            Self::SpinSum { spin, .. } => spin.is_undetermined(),
+            Self::UnpairedElectronCoupling {
+                unpaired_electrons, ..
+            } => unpaired_electrons.is_undetermined(),
             Self::Connected { .. } => false,
             Self::SubPattern { .. } => false,
         }
@@ -389,9 +392,15 @@ impl MoleculeConstraint {
                 let atoms = compact_atom_subset(atoms, compaction)?;
                 Some(MoleculeConstraint::ChargeSum { atoms, sum })
             }
-            MoleculeConstraint::SpinSum { atoms, spin } => {
+            MoleculeConstraint::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => {
                 let atoms = compact_atom_subset(atoms, compaction)?;
-                Some(MoleculeConstraint::SpinSum { atoms, spin })
+                Some(MoleculeConstraint::UnpairedElectronCoupling {
+                    atoms,
+                    unpaired_electrons,
+                })
             }
             MoleculeConstraint::BondOrderSum { bonds, sum } => {
                 let bonds = compact_bond_subset(bonds, compaction)?;
@@ -413,9 +422,12 @@ impl MoleculeConstraint {
                 atoms: remap_atom_subset(atoms, map),
                 sum,
             },
-            MoleculeConstraint::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
+            MoleculeConstraint::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: remap_atom_subset(atoms, map),
-                spin,
+                unpaired_electrons,
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
                 bonds: remap_bond_subset(bonds, map),
@@ -433,10 +445,11 @@ impl MoleculeConstraint {
 }
 
 impl Canonicalize for MoleculeConstraint {
-    /// Canonicalize the value payload (`sum` / `spin`) and sort each atom/bond
-    /// subset; refs are otherwise unchanged. `SubPattern` is a **no-op** — the
-    /// inner pattern is not recursed into (a nested pattern normalizes at its
-    /// own top level via lift/inline and entity canonicalization).
+    /// Canonicalize the value payload (`sum` / `unpaired_electrons`) and sort
+    /// each atom/bond subset; refs are otherwise unchanged. `SubPattern` is a
+    /// **no-op** — the inner pattern is not recursed into (a nested pattern
+    /// normalizes at its own top level via lift/inline and entity
+    /// canonicalization).
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => Self::ChargeSum {
@@ -446,12 +459,15 @@ impl Canonicalize for MoleculeConstraint {
                 }),
                 sum: sum.canonicalize()?,
             },
-            Self::SpinSum { atoms, spin } => Self::SpinSum {
+            Self::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            } => Self::UnpairedElectronCoupling {
                 atoms: atoms.map(|mut v| {
                     v.sort_unstable();
                     v
                 }),
-                spin: spin.canonicalize()?,
+                unpaired_electrons: unpaired_electrons.canonicalize()?,
             },
             Self::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: bonds.map(|mut v| {
@@ -489,13 +505,13 @@ impl Ord for MoleculeConstraint {
                 (a1, s1).cmp(&(a2, s2))
             }
             (
-                Self::SpinSum {
+                Self::UnpairedElectronCoupling {
                     atoms: a1,
-                    spin: s1,
+                    unpaired_electrons: s1,
                 },
-                Self::SpinSum {
+                Self::UnpairedElectronCoupling {
                     atoms: a2,
-                    spin: s2,
+                    unpaired_electrons: s2,
                 },
             ) => (a1, s1).cmp(&(a2, s2)),
             (
@@ -509,7 +525,7 @@ impl Ord for MoleculeConstraint {
             _ => {
                 let rank = |c: &Self| match c {
                     Self::ChargeSum { .. } => 0u8,
-                    Self::SpinSum { .. } => 1,
+                    Self::UnpairedElectronCoupling { .. } => 1,
                     Self::BondOrderSum { .. } => 2,
                     Self::Connected { .. } => 3,
                     Self::SubPattern { .. } => 4,
@@ -1080,6 +1096,16 @@ mod tests {
         id_remapping(&[(0, 3), (2, 4)], &[], &[]),
         Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(3), AtomId(4)]), sum: ValueAst::Lit(1) }),
     )]
+    #[case::molecule_unpaired_electron_coupling_subset(
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        id_remapping(&[(0, 3), (2, 4)], &[], &[]),
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(3), AtomId(4)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+    )]
+    #[case::molecule_unpaired_electron_coupling_all_atoms(
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        id_remapping(&[(0, 3), (2, 4)], &[], &[]),
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+    )]
     #[case::relational_dative_donor(
         Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) }),
         id_remapping(&[(2, 5)], &[], &[(1, 0)]),
@@ -1122,7 +1148,7 @@ mod tests {
     #[case::empty(vec![], 0)]
     #[case::molecule_leaves(vec![
             Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
-            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+            Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
         ], 2)]
     #[case::combinator(vec![Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
@@ -1390,8 +1416,8 @@ mod tests {
     #[rstest]
     #[case::charge_sum_lit(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }, false)]
     #[case::charge_sum_undetermined(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined }, true)]
-    #[case::spin_sum_ground(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }, false)]
-    #[case::spin_sum_undetermined(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::default() }, true)]
+    #[case::unpaired_electron_coupling_ground(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }, false)]
+    #[case::unpaired_electron_coupling_undetermined(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }, true)]
     #[case::bond_order_sum_lit(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(4) }, false)]
     #[case::bond_order_sum_undetermined(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Undetermined }, true)]
     #[case::connected(MoleculeConstraint::Connected { atoms: None }, false)]
@@ -1409,10 +1435,10 @@ mod tests {
         MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0)]), sum: ValueAst::term(ValueTerm::Lit(1)) },
         Ok(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: ValueAst::Lit(1) }),
     )]
-    #[case::spin_sum_sorts_and_folds(
-        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(2), AtomId(0)]),
-            spin: UnpairedElectronsAst { count: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
-        Ok(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+    #[case::unpaired_electron_coupling_sorts_and_folds(
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(2), AtomId(0)]),
+            unpaired_electrons: UnpairedElectronsAst { count: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
+        Ok(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_sorts_and_folds(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: ValueAst::term(ValueTerm::Lit(4)) },
@@ -1490,10 +1516,20 @@ mod tests {
         id_compaction(vec![1], vec![]),
         Some(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
     )]
-    #[case::spin_sum_shifts(
-        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) },
+    #[case::unpaired_electron_coupling_shifts(
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) },
         id_compaction(vec![1], vec![]),
-        Some(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(1)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Some(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(1)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+    )]
+    #[case::unpaired_electron_coupling_drops_when_atom_removed(
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(1), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) },
+        id_compaction(vec![1], vec![]),
+        None,
+    )]
+    #[case::unpaired_electron_coupling_all_atoms_passes_through(
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) },
+        id_compaction(vec![1], vec![]),
+        Some(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_shifts(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(2)]), sum: ValueAst::Lit(4) },
