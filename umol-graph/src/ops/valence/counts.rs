@@ -7,9 +7,9 @@ use thiserror::Error;
 #[cfg(test)]
 use umol_ast::ast::MoleculeParts;
 use umol_ast::ast::{
-    aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
-    AtomHandle, AtomId, AtomView, BooleanAst, Edit, IsotopeMassAst, Lattice, MoleculeAst,
-    SpinStateAst, TransactionError, ValueAst,
+    aromatic_increment, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
+    AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edit, IsotopeMassAst, Lattice,
+    MoleculeAst, SpinStateAst, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
@@ -328,7 +328,7 @@ fn candidate_aromatic_valences(
     is_aromatic: bool,
     table: Option<&[u8]>,
 ) -> Vec<i64> {
-    match aromatic.as_lit() {
+    match aromatic.as_lit().map(AromaticValence::valence_count) {
         Some(a) => vec![a],
         None => match table {
             Some(table) if is_aromatic => table.iter().map(|&a| i64::from(a)).collect(),

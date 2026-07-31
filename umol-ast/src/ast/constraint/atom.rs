@@ -755,6 +755,16 @@ pub enum AromaticValence {
     Aromatic(i64),
 }
 
+impl AromaticValence {
+    /// Aromatic-valence count for calculations that identify absence with zero.
+    pub const fn valence_count(self) -> i64 {
+        match self {
+            Self::NotAromatic => 0,
+            Self::Aromatic(valence) => valence,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticValenceAst {
     #[default]
@@ -884,16 +894,15 @@ impl Lattice for AromaticValenceAst {
 }
 
 impl AsLit for AromaticValenceAst {
-    type Lit = i64;
+    type Lit = AromaticValence;
 
-    /// Inner literal π count when `Aromatic(Lit(n))`; `None` for
-    /// `Undetermined` or `Aromatic` wrapping a non-literal.
+    /// The exact absence or aromatic-valence value when ground.
     #[inline]
-    fn as_lit(&self) -> Option<i64> {
+    fn as_lit(&self) -> Option<AromaticValence> {
         match self {
-            Self::Aromatic(v) => v.as_lit(),
-            Self::NotAromatic => Some(0),
-            _ => None,
+            Self::NotAromatic => Some(AromaticValence::NotAromatic),
+            Self::Aromatic(value) => value.as_lit().map(AromaticValence::Aromatic),
+            Self::Undetermined => None,
         }
     }
 }
@@ -913,6 +922,16 @@ pub fn aromatic_increment(aromatic_valence: i64) -> i64 {
 pub enum MulticenterValence {
     NotMulticenter,
     Multicenter(i64),
+}
+
+impl MulticenterValence {
+    /// Multicenter-valence count for calculations that identify absence with zero.
+    pub const fn valence_count(self) -> i64 {
+        match self {
+            Self::NotMulticenter => 0,
+            Self::Multicenter(valence) => valence,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1032,16 +1051,15 @@ impl Lattice for MulticenterValenceAst {
 }
 
 impl AsLit for MulticenterValenceAst {
-    type Lit = i64;
+    type Lit = MulticenterValence;
 
-    /// Inner literal multicenter valence when `Multicenter(Lit(n))`; `None`
-    /// for `Undetermined` or non-literal inner.
+    /// The exact absence or multicenter-valence value when ground.
     #[inline]
-    fn as_lit(&self) -> Option<i64> {
+    fn as_lit(&self) -> Option<MulticenterValence> {
         match self {
-            Self::Multicenter(v) => v.as_lit(),
-            Self::NotMulticenter => Some(0),
-            _ => None,
+            Self::NotMulticenter => Some(MulticenterValence::NotMulticenter),
+            Self::Multicenter(value) => value.as_lit().map(MulticenterValence::Multicenter),
+            Self::Undetermined => None,
         }
     }
 }
@@ -1172,6 +1190,17 @@ mod tests {
         assert_eq!(a.join(&b), expected);
     }
 
+    #[rstest]
+    #[case::not_aromatic(AromaticValence::NotAromatic, 0)]
+    #[case::aromatic_zero(AromaticValence::Aromatic(0), 0)]
+    #[case::aromatic_value(AromaticValence::Aromatic(3), 3)]
+    fn test_aromatic_valence_valence_count(
+        #[case] valence: AromaticValence,
+        #[case] expected: i64,
+    ) {
+        assert_eq!(valence.valence_count(), expected);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, AromaticValenceAst::Undetermined)]
@@ -1243,16 +1272,17 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, None)]
-    #[case::not_aromatic(AromaticValenceAst::NotAromatic, Some(0))]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, Some(AromaticValence::NotAromatic))]
     #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), None)]
-    #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(3))]
+    #[case::aromatic_zero(AromaticValenceAst::aromatic(0), Some(AromaticValence::Aromatic(0)))]
+    #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(AromaticValence::Aromatic(3)))]
     #[case::aromatic_term_unresolved(
         AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))),
         None
     )]
     fn test_aromatic_valence_ast_as_lit(
         #[case] v: AromaticValenceAst,
-        #[case] expected: Option<i64>,
+        #[case] expected: Option<AromaticValence>,
     ) {
         assert_eq!(v.as_lit(), expected);
         assert_eq!(v.is_ground(), expected.is_some());
@@ -1368,6 +1398,17 @@ mod tests {
         assert_eq!(pattern.matches(&target), expected);
     }
 
+    #[rstest]
+    #[case::not_multicenter(MulticenterValence::NotMulticenter, 0)]
+    #[case::multicenter_zero(MulticenterValence::Multicenter(0), 0)]
+    #[case::multicenter_value(MulticenterValence::Multicenter(2), 2)]
+    fn test_multicenter_valence_valence_count(
+        #[case] valence: MulticenterValence,
+        #[case] expected: i64,
+    ) {
+        assert_eq!(valence.valence_count(), expected);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, MulticenterValenceAst::Undetermined)]
@@ -1423,13 +1464,14 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, None)]
-    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, Some(0))]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, Some(MulticenterValence::NotMulticenter))]
     #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), None)]
-    #[case::multicenter_lit(MulticenterValenceAst::multicenter(2), Some(2))]
+    #[case::multicenter_zero(MulticenterValenceAst::multicenter(0), Some(MulticenterValence::Multicenter(0)))]
+    #[case::multicenter_lit(MulticenterValenceAst::multicenter(2), Some(MulticenterValence::Multicenter(2)))]
     #[case::multicenter_term_unresolved(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3))), None)]
     fn test_multicenter_valence_ast_as_lit(
         #[case] v: MulticenterValenceAst,
-        #[case] expected: Option<i64>,
+        #[case] expected: Option<MulticenterValence>,
     ) {
         assert_eq!(v.as_lit(), expected);
         assert_eq!(v.is_ground(), expected.is_some());

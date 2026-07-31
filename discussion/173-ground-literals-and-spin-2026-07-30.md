@@ -72,12 +72,13 @@ structural meanings but both supply zero to the relevant electron-counting calcu
 These types therefore need both:
 
 - an exact `AsLit` projection that preserves the structural distinction;
-- a separately named method returning `Option<i64>` with the current calculation semantics:
-  explicit absence maps to zero, a literal present value maps to that value, and a non-literal state
-  maps to `None`.
+- a separately named total method on the exact carrier with the calculation semantics: explicit
+  absence maps to zero and a present value maps to that value.
 
 The calculation method is not a second general extraction trait. It belongs on each domain type
 because its meaning is specific to that value. Both methods are named `valence_count()`. The
+AST-level calculation first performs exact projection with `as_lit()` and then maps the carrier's
+total method, so a non-literal state remains `None`. The
 existing `aromatic_increment` calculation is separately renamed `aromatic_covalence`, reflecting
 the Langmuir covalence supplied by aromatic bonding rather than a generic increment.
 
@@ -123,9 +124,9 @@ pub enum CisTransStereo {
 }
 ```
 
-Their `AsLit` projections preserve the distinction between the two ground variants. The
-`valence_count()` methods on the AST types retain the useful collapsing behavior rather than forcing
-electron-counting code to reconstruct it repeatedly. The per-kind stereo carrier determines the
+Their `AsLit` projections preserve the distinction between the two ground variants. The exact
+valence carriers expose total `valence_count() -> i64` methods; AST callers obtain the optional
+calculation result with `as_lit().map(...)`. The per-kind stereo carrier determines the
 kind, so its `Stereo` variant stores the structurally literal coset index directly and retains
 out-of-range values for later validation.
 
@@ -159,8 +160,8 @@ Expose all five exact carriers in Python under the same names:
 The corresponding AST `as_lit()` methods return the exact carrier or `None`, where `None` means
 only that the AST value is not structurally ground. Python primitives cannot preserve these
 distinctions uniformly: `None` is already the non-ground result, and Python equality identifies
-`False` with integer zero. `AromaticValenceAst` and `MulticenterValenceAst` separately expose
-`valence_count() -> Optional[int]` for the calculation-specific projection.
+`False` with integer zero. `AromaticValence` and `MulticenterValence` separately expose total
+`valence_count() -> int` methods for the calculation-specific projection.
 
 ## Unpaired-electron and spin types
 
@@ -657,9 +658,10 @@ remaining.
   `TetrahedralStereo`, and `CisTransStereo`, plus `TetrahedralConfiguration` and
   `CisTransConfiguration`. Test every variant and its canonical value semantics.
   **Additive (green).** [dep: none]
-- **S1b — the same AST modules and `traits.rs`: make `AsLit` exact.** Change the five `AsLit`
-  implementations to return their exact carriers, add `valence_count()` to the two valence AST
-  types, and update Rustdoc so `AsLit` states the `is_ground` totality and faithfulness contract.
+- **S1b — the same AST modules and `traits.rs`: make `AsLit` exact.** **Done.** Change the five `AsLit`
+  implementations to return their exact carriers, add total `valence_count()` methods to the two
+  exact valence carriers, and update Rustdoc so `AsLit` states the `is_ground` totality and
+  faithfulness contract.
   Update all Rust callers and unit tests in the same subitem. Add property tests over all affected
   variants for `value.is_ground() == value.as_lit().is_some()` and preservation of distinct ground
   forms; update the relevant property strategies and inspect the constraint/entity-string fuzz
@@ -672,8 +674,9 @@ remaining.
 - **S1d — `umol-py`: expose the exact carriers.** Rename the existing `TetrahedralStereo` and
   `CisTransStereo` configuration shorthands to `TetrahedralConfiguration` and
   `CisTransConfiguration`, bind all five exact carriers, and make each Python `as_lit()` return
-  the carrier or `None`. Expose both `valence_count()` methods. Update exports, import tests, unit
-  tests, and Python fixtures without using Python primitive sentinels. **Breaking (red→green).**
+  the carrier or `None`. Expose both carrier `valence_count()` methods. Update exports, import
+  tests, unit tests, and Python fixtures without using Python primitive sentinels.
+  **Breaking (red→green).**
   [dep: S1a, S1b]
 
 S1 ends with exact literal projection having the same structural meaning in Rust and Python.

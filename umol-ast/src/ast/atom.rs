@@ -610,15 +610,14 @@ fn canon_mass_set(s: BTreeSet<u32>) -> Result<IsotopeMassAst, Contradiction> {
 }
 
 impl AsLit for IsotopeMassAst {
-    type Lit = u32;
+    type Lit = IsotopeMass;
 
-    /// The single mass number this denotes, only when it is a literal.
-    /// `Natural` yields `None` (it commits to no specific mass).
-    /// Non-canonicalizing (mirrors `ElementAst::as_lit`).
+    /// The exact natural-composition or mass-number value when ground.
     #[inline]
-    fn as_lit(&self) -> Option<u32> {
+    fn as_lit(&self) -> Option<IsotopeMass> {
         match self {
-            Self::Lit(n) => Some(*n),
+            Self::Natural => Some(IsotopeMass::Natural),
+            Self::Lit(n) => Some(IsotopeMass::MassNumber(*n)),
             _ => None,
         }
     }
@@ -1232,15 +1231,19 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(IsotopeMassAst::Lit(12), Some(12))]
-    #[case::lit_zero(IsotopeMassAst::Lit(0), Some(0))]
-    #[case::natural(IsotopeMassAst::Natural, None)]
+    #[case::lit(IsotopeMassAst::Lit(12), Some(IsotopeMass::MassNumber(12)))]
+    #[case::lit_zero(IsotopeMassAst::Lit(0), Some(IsotopeMass::MassNumber(0)))]
+    #[case::natural(IsotopeMassAst::Natural, Some(IsotopeMass::Natural))]
     #[case::undetermined(IsotopeMassAst::Undetermined, None)]
     #[case::litset(IsotopeMassAst::lit_set([12, 13]), None)]
     #[case::var(IsotopeMassAst::var("m"), None)]
     #[case::var_in(IsotopeMassAst::var_in("m", [12]), None)]
-    fn test_isotope_mass_ast_as_lit(#[case] ast: IsotopeMassAst, #[case] expected: Option<u32>) {
+    fn test_isotope_mass_ast_as_lit(
+        #[case] ast: IsotopeMassAst,
+        #[case] expected: Option<IsotopeMass>,
+    ) {
         assert_eq!(ast.as_lit(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]

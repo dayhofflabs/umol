@@ -5,7 +5,9 @@
 //! hash is [`EcfpHashScheme::Xxh3Width64V1`]; the paper leaves the hash
 //! unspecified, so this is the frozen umol ECFP identity.
 
-use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, RingConfig, RingModel, RingSet};
+use umol_ast::ast::{
+    AsLit, AtomId, BondId, IsotopeMass, MoleculeAst, RingConfig, RingModel, RingSet,
+};
 use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
@@ -70,13 +72,17 @@ impl EcfpFeaturizer {
 fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let atom = mol.atom(id);
     let element = atom.element().as_lit().expect("ground atom");
+    let isotope_mass = match atom.isotope_mass().as_lit().expect("ground atom") {
+        IsotopeMass::Natural => 0,
+        IsotopeMass::MassNumber(mass) => mass,
+    };
     vec![
         u32::from(element.atomic_number()),
         atom.heavy_atom_degree().as_lit().expect("ground atom") as u32,
         atom.heavy_atom_valence().as_lit().expect("ground atom") as u32,
         atom.total_hydrogens().as_lit().expect("ground atom") as u32,
         atom.charge().as_lit().expect("ground atom") as i32 as u32,
-        atom.isotope_mass().as_lit().unwrap_or(0),
+        isotope_mass,
         u32::from(rings.contains_atom(id)),
     ]
 }

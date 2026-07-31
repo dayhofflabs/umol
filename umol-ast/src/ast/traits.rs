@@ -47,17 +47,19 @@ pub trait TryIntoAst<A>: Sized {
     fn try_into_ast(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
 }
 
-/// Literal extraction for AST types whose value space includes an
-/// `Undetermined` / non-literal branch. `as_lit` returns `Some(lit)` only
-/// when the AST is fully resolved to a concrete literal.
+/// Exact literal projection for AST types whose value space includes an
+/// `Undetermined` or otherwise non-ground branch.
+///
+/// For a type implementing both `Lattice` and `AsLit`, projection is total
+/// exactly on structurally ground values:
+/// `value.is_ground() == value.as_lit().is_some()`. It does not canonicalize,
+/// apply defaults, validate domain invariants, or identify distinct canonical
+/// ground values that happen to have the same downstream numerical effect.
 pub trait AsLit {
-    /// Concrete literal type (e.g. `i64` for `ValueAst`, `Element` for
-    /// `ElementAst`, `SpinState` for `SpinStateAst`).
+    /// Exact non-lattice representation of a ground value.
     type Lit;
 
-    /// `Some(lit)` when the AST resolves to a concrete literal; `None` for
-    /// `Undetermined`, expression patterns, sets, sentinels, or physics-invalid
-    /// composites.
+    /// `Some(lit)` exactly when the AST value is structurally ground.
     fn as_lit(&self) -> Option<Self::Lit>;
 }
 

@@ -10,7 +10,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
     AsLit, AtomAst as AstAtomAst, AtomId as AstAtomId, ElementAst as AstElementAst,
-    IsotopeMassAst as AstIsotopeMassAst, MoleculeAst as AstMoleculeAst,
+    IsotopeMass as AstIsotopeMass, IsotopeMassAst as AstIsotopeMassAst,
+    MoleculeAst as AstMoleculeAst,
 };
 use umol_chem::element::Element as ChemElement;
 
@@ -129,7 +130,10 @@ impl IsotopeMassAst {
     /// The single mass number this resolves to, or `None` when it is not a bare
     /// literal (undetermined, the natural mixture, a set, or a variable).
     fn as_lit(&self) -> Option<u32> {
-        self.to_rust().as_lit()
+        match self.to_rust().as_lit() {
+            Some(AstIsotopeMass::MassNumber(mass)) => Some(mass),
+            Some(AstIsotopeMass::Natural) | None => None,
+        }
     }
 
     fn __eq__(&self, other: &Self) -> bool {

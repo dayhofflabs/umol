@@ -14,8 +14,8 @@ use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
     AromaticSystemConstraintsAst, AromaticSystemDelta, AromaticSystemFieldChange,
-    AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate, AromaticValenceAst, AtomAst,
-    AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomDelta, AtomFieldChange,
+    AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate, AromaticValenceAst, AsLit,
+    AtomAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomDelta, AtomFieldChange,
     AtomHandle, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintKey,
     BondConstraintsAst, BondDelta, BondFieldChange, BondHandle, BondId, BondUpdate, BooleanAst,
     Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
@@ -213,7 +213,7 @@ pub(crate) fn raw_element_ast_strategy() -> BoxedStrategy<ElementAst> {
 
 pub(crate) fn raw_isotope_strategy() -> BoxedStrategy<IsotopeMassAst> {
     prop_oneof![
-        3 => (1u32..=250).prop_map(|m| IsotopeMassAst::lit_set(vec![m])),
+        3 => (0u32..=250).prop_map(|m| IsotopeMassAst::lit_set(vec![m])),
         2 => isotope_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
@@ -292,10 +292,10 @@ pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
     prop_oneof![
         3 => Just(IsotopeMassAst::Natural),
         3 => Just(IsotopeMassAst::Undetermined),
-        3 => (1u32..=250).prop_map(IsotopeMassAst::Lit),
-        2 => prop::collection::vec(1u32..=250, 1..=3).prop_map(IsotopeMassAst::lit_set),
+        3 => (0u32..=250).prop_map(IsotopeMassAst::Lit),
+        2 => prop::collection::vec(0u32..=250, 1..=3).prop_map(IsotopeMassAst::lit_set),
         1 => id_strategy().prop_map(IsotopeMassAst::var),
-        1 => (id_strategy(), prop::collection::vec(1u32..=250, 1..=3))
+        1 => (id_strategy(), prop::collection::vec(0u32..=250, 1..=3))
             .prop_map(|(id, v)| IsotopeMassAst::var_in(id, v)),
     ]
     .prop_map(|i| i.canonicalize().unwrap_or(IsotopeMassAst::Undetermined))

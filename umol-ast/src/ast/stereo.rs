@@ -602,7 +602,7 @@ pub enum CisTransConfiguration {
 }
 
 macro_rules! stereo_site {
-    ($name:ident, $kind:expr) => {
+    ($name:ident, $lit:ident, $kind:expr) => {
         #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name {
             #[default]
@@ -655,16 +655,13 @@ macro_rules! stereo_site {
         }
 
         impl AsLit for $name {
-            type Lit = StereoConfiguration;
+            type Lit = $lit;
 
-            /// The ground configuration (kind = the type's constant) when the coset
-            /// is a literal; `NotStereo`/`Undetermined`/non-literal → `None`.
-            fn as_lit(&self) -> Option<StereoConfiguration> {
+            /// The exact absence or stereo-coset value when ground.
+            fn as_lit(&self) -> Option<$lit> {
                 match self {
-                    Self::Stereo(StereoCoset::Lit(coset)) => Some(StereoConfiguration {
-                        kind: $kind,
-                        coset: *coset,
-                    }),
+                    Self::NotStereo => Some($lit::NotStereo),
+                    Self::Stereo(StereoCoset::Lit(coset)) => Some($lit::Stereo(*coset)),
                     _ => None,
                 }
             }
@@ -712,8 +709,8 @@ macro_rules! stereo_site {
     };
 }
 
-stereo_site! { TetrahedralStereoAst, StereoKind::Tetrahedral }
-stereo_site! { CisTransStereoAst, StereoKind::CisTrans }
+stereo_site! { TetrahedralStereoAst, TetrahedralStereo, StereoKind::Tetrahedral }
+stereo_site! { CisTransStereoAst, CisTransStereo, StereoKind::CisTrans }
 
 impl From<TetrahedralStereo> for TetrahedralStereoAst {
     fn from(stereo: TetrahedralStereo) -> Self {
@@ -1296,12 +1293,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), Some(StereoConfiguration { kind: StereoKind::Tetrahedral, coset: 1 }))]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo, None)]
+    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), Some(TetrahedralStereo::Stereo(1)))]
+    #[case::stereo_zero(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereo::Stereo(0)))]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo, Some(TetrahedralStereo::NotStereo))]
     #[case::undetermined(TetrahedralStereoAst::Undetermined, None)]
     #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined), None)]
-    fn test_tetrahedral_stereo_ast_as_lit(#[case] site: TetrahedralStereoAst, #[case] expected: Option<StereoConfiguration>) {
+    fn test_tetrahedral_stereo_ast_as_lit(#[case] site: TetrahedralStereoAst, #[case] expected: Option<TetrahedralStereo>) {
         assert_eq!(site.as_lit(), expected);
+        assert_eq!(site.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -1378,10 +1377,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::stereo_lit(CisTransStereoAst::Stereo(StereoCoset::Lit(0)), Some(StereoConfiguration { kind: StereoKind::CisTrans, coset: 0 }))]
-    #[case::not_stereo(CisTransStereoAst::NotStereo, None)]
-    fn test_cis_trans_stereo_ast_as_lit(#[case] site: CisTransStereoAst, #[case] expected: Option<StereoConfiguration>) {
+    #[case::stereo_zero(CisTransStereoAst::Stereo(StereoCoset::Lit(0)), Some(CisTransStereo::Stereo(0)))]
+    #[case::stereo_lit(CisTransStereoAst::Stereo(StereoCoset::Lit(1)), Some(CisTransStereo::Stereo(1)))]
+    #[case::not_stereo(CisTransStereoAst::NotStereo, Some(CisTransStereo::NotStereo))]
+    #[case::undetermined(CisTransStereoAst::Undetermined, None)]
+    #[case::stereo_open(CisTransStereoAst::Stereo(StereoCoset::Undetermined), None)]
+    fn test_cis_trans_stereo_ast_as_lit(#[case] site: CisTransStereoAst, #[case] expected: Option<CisTransStereo>) {
         assert_eq!(site.as_lit(), expected);
+        assert_eq!(site.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
