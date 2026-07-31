@@ -90,6 +90,7 @@ fastrand = "2.3.0"
 float-cmp = "0.10.0"
 insta = { version = "1.43.2", features = ["yaml", "glob"] }
 pretty_assertions = "1.4.1"
+proptest = "1.7.0"
 rstest = "0.26.1"
 walkdir = "2.5.0"
 

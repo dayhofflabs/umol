@@ -748,8 +748,8 @@ test/fuzz inputs.
   `Determined` for a valid literal pair, and `SpinInvariantsContradiction::Atom` for a physically
   invalid literal pair. Test range, parity, and partial cases. **Additive behavior (green).**
   [dep: S0b, S2a]
-- **S4b — the same module: validate molecule entities.** Traverse atoms, bonds, aromatic systems,
-  and multicenter bonds, reporting `MoleculeAtom`, `Bond`, `AromaticSystem`, and
+- **S4b — the same module: validate molecule entities.** **Done.** Traverse atoms, bonds, aromatic
+  systems, and multicenter bonds, reporting `MoleculeAtom`, `Bond`, `AromaticSystem`, and
   `MulticenterBond` with their concrete IDs. Accumulate underdetermination without allowing it to
   mask a later contradiction. Add table tests for every entity kind and property tests over
   generated mixed entity states. **Additive behavior (green).** [dep: S4a]
