@@ -474,8 +474,8 @@ impl ReactionAst {
                             lone_pairs: Some(new.clone()),
                             ..Default::default()
                         },
-                        AtomFieldChange::Spin { old, new } => AtomUpdate {
-                            spin: old.difference_to(new),
+                        AtomFieldChange::UnpairedElectrons { old, new } => AtomUpdate {
+                            unpaired_electrons: old.difference_to(new),
                             ..Default::default()
                         },
                     };
@@ -520,8 +520,8 @@ impl ReactionAst {
                             charge: Some(new.clone()),
                             ..Default::default()
                         },
-                        BondFieldChange::Spin { old, new } => BondUpdate {
-                            spin: old.difference_to(new),
+                        BondFieldChange::UnpairedElectrons { old, new } => BondUpdate {
+                            unpaired_electrons: old.difference_to(new),
                             ..Default::default()
                         },
                     };
@@ -597,10 +597,12 @@ impl ReactionAst {
                                 charge: Some(new.clone()),
                                 ..Default::default()
                             },
-                            AromaticSystemFieldChange::Spin { old, new } => AromaticSystemUpdate {
-                                spin: old.difference_to(new),
-                                ..Default::default()
-                            },
+                            AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+                                AromaticSystemUpdate {
+                                    unpaired_electrons: old.difference_to(new),
+                                    ..Default::default()
+                                }
+                            }
                         };
                         let host_id = host_aromatic(*id)?;
                         sets.extend(Edit::for_aromatic_system_update(
@@ -645,9 +647,9 @@ impl ReactionAst {
                                     ..Default::default()
                                 }
                             }
-                            MulticenterBondFieldChange::Spin { old, new } => {
+                            MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
                                 MulticenterBondUpdate {
-                                    spin: old.difference_to(new),
+                                    unpaired_electrons: old.difference_to(new),
                                     ..Default::default()
                                 }
                             }

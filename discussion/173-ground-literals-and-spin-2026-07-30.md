@@ -691,7 +691,7 @@ S1 ends with exact literal projection having the same structural meaning in Rust
   tests for partial values, groundness, canonicalization, lattice operations,
   `difference_to`/`update`, and exact projection. **Breaking (red→green within S2).** [dep: S0a,
   S0b]
-- **S2b — `umol-ast/src/ast`: migrate entity storage and operations.** Rename the `spin` field to
+- **S2b — `umol-ast/src/ast`: migrate entity storage and operations.** **Done.** Rename the `spin` field to
   `unpaired_electrons` on atoms, bonds, aromatic systems, and multicenter bonds; migrate builders,
   views, coloring, edits, deltas, transactions, reactions, dictionaries, and all corresponding
   field-change variants and tests. Extend property coverage for update/difference and

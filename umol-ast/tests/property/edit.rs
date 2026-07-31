@@ -65,6 +65,78 @@ proptest! {
     }
 
     #[test]
+    fn test_molecule_editor_transact_rollback_unpaired_electrons(
+        atom_components in partial_unpaired_electrons_update_strategy(),
+        bond_components in partial_unpaired_electrons_update_strategy(),
+        aromatic_components in partial_unpaired_electrons_update_strategy(),
+        multicenter_components in partial_unpaired_electrons_update_strategy(),
+    ) {
+        let atom = AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8));
+        let bond = BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8));
+        let aromatic = AromaticSystemAst::from_electrons(vec![1, 1, 1])
+            .with_unpaired_electrons((2_u8, 3_u8));
+        let multicenter = MulticenterBondAst::from_electrons(vec![1, 1, 1])
+            .with_unpaired_electrons((2_u8, 3_u8));
+        let atom_update = AtomUpdate {
+            unpaired_electrons: atom_components,
+            ..Default::default()
+        };
+        let bond_update = BondUpdate {
+            unpaired_electrons: bond_components,
+            ..Default::default()
+        };
+        let aromatic_update = AromaticSystemUpdate {
+            unpaired_electrons: aromatic_components,
+            ..Default::default()
+        };
+        let multicenter_update = MulticenterBondUpdate {
+            unpaired_electrons: multicenter_components,
+            ..Default::default()
+        };
+        let base = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom.clone(), AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), bond.clone())],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.clone())],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.clone())],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom.update(&atom_update), AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), bond.update(&bond_update))],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.update(&aromatic_update))],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.update(&multicenter_update))],
+            ..Default::default()
+        });
+        let mut edits = Edit::for_atom_update(AtomHandle::Id(AtomId(0)), &atom, &atom_update);
+        edits.extend(Edit::for_bond_update(
+            BondHandle::Id(BondId(0)),
+            &bond,
+            &bond_update,
+        ));
+        edits.extend(Edit::for_aromatic_system_update(
+            AromaticSystemHandle::Id(AromaticSystemId(0)),
+            &aromatic,
+            &aromatic_update,
+        ));
+        edits.extend(Edit::for_multicenter_bond_update(
+            MulticenterBondHandle::Id(MulticenterBondId(0)),
+            &multicenter,
+            &multicenter_update,
+        ));
+
+        let mut editor = base.clone().edit();
+        let transaction = editor
+            .transact(edits)
+            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
+        prop_assert_eq!(editor.clone().build(), expected);
+
+        transaction
+            .rollback(&mut editor)
+            .map_err(|error| TestCaseError::fail(format!("rollback failed: {error}")))?;
+        prop_assert_eq!(editor.build(), base);
+    }
+
+    #[test]
     fn test_transaction_append_materialization(
         (base, edits) in overlay_transaction_strategy(),
     ) {

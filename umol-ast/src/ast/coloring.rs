@@ -27,21 +27,21 @@ bitflags! {
         const CHARGE = 1 << 2;
         const IMPLICIT_HYDROGENS = 1 << 3;
         const LONE_PAIRS = 1 << 4;
-        const SPIN = 1 << 5;
+        const UNPAIRED_ELECTRONS = 1 << 5;
         // bond
         const BOND_ORDER = 1 << 6;
         const BOND_CHARGE = 1 << 7;
-        const BOND_SPIN = 1 << 8;
+        const BOND_UNPAIRED_ELECTRONS = 1 << 8;
         // dative bond
         const DATIVE_ORDER = 1 << 9;
         // aromatic system
         const AROMATIC_ELECTRONS = 1 << 10;
         const AROMATIC_CHARGE = 1 << 11;
-        const AROMATIC_SPIN = 1 << 12;
+        const AROMATIC_UNPAIRED_ELECTRONS = 1 << 12;
         // multicenter bond
         const MULTICENTER_ELECTRONS = 1 << 13;
         const MULTICENTER_CHARGE = 1 << 14;
-        const MULTICENTER_SPIN = 1 << 15;
+        const MULTICENTER_UNPAIRED_ELECTRONS = 1 << 15;
         // noncovalent bond
         const NONCOVALENT_KIND = 1 << 16;
         // stereo atom / bond
@@ -97,8 +97,11 @@ impl MoleculeColoring for ConstitutionColoring {
                 if self.features.contains(ConstitutionFeatures::LONE_PAIRS) {
                     atom.lone_pairs().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::SPIN) {
-                    atom.spin().hash(&mut hasher);
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::UNPAIRED_ELECTRONS)
+                {
+                    atom.unpaired_electrons().hash(&mut hasher);
                 }
             }
             Entity::Bond(id) => {
@@ -109,8 +112,11 @@ impl MoleculeColoring for ConstitutionColoring {
                 if self.features.contains(ConstitutionFeatures::BOND_CHARGE) {
                     bond.charge().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::BOND_SPIN) {
-                    bond.spin().hash(&mut hasher);
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::BOND_UNPAIRED_ELECTRONS)
+                {
+                    bond.unpaired_electrons().hash(&mut hasher);
                 }
             }
             Entity::AromaticSystem(id) => {
@@ -130,8 +136,11 @@ impl MoleculeColoring for ConstitutionColoring {
                 {
                     system.charge().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::AROMATIC_SPIN) {
-                    system.spin().hash(&mut hasher);
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::AROMATIC_UNPAIRED_ELECTRONS)
+                {
+                    system.unpaired_electrons().hash(&mut hasher);
                 }
             }
             Entity::MulticenterBond(id) => {
@@ -153,9 +162,9 @@ impl MoleculeColoring for ConstitutionColoring {
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::MULTICENTER_SPIN)
+                    .contains(ConstitutionFeatures::MULTICENTER_UNPAIRED_ELECTRONS)
                 {
-                    bond.spin().hash(&mut hasher);
+                    bond.unpaired_electrons().hash(&mut hasher);
                 }
             }
             Entity::DativeBond(id) => {
@@ -312,29 +321,31 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::both_undetermined( UnpairedElectronsAst::default(), UnpairedElectronsAst::default(), ConstitutionFeatures::SPIN, true)]
-    #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), ConstitutionFeatures::SPIN, true)]
-    #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::SPIN, false)]
-    #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::SPIN, false)]
+    #[case::both_undetermined( UnpairedElectronsAst::default(), UnpairedElectronsAst::default(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
+    #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
+    #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
+    #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
     #[case::partial_vs_undetermined(
         UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
         UnpairedElectronsAst::default(),
-        ConstitutionFeatures::SPIN,
+        ConstitutionFeatures::UNPAIRED_ELECTRONS,
         false,
     )]
-    #[case::spin_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::empty(), true)]
-    fn test_constitution_coloring_color_spin(
-        #[case] spin_a: UnpairedElectronsAst,
-        #[case] spin_b: UnpairedElectronsAst,
+    #[case::unpaired_electrons_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::empty(), true)]
+    fn test_constitution_coloring_color_unpaired_electrons(
+        #[case] unpaired_electrons_a: UnpairedElectronsAst,
+        #[case] unpaired_electrons_b: UnpairedElectronsAst,
         #[case] features: ConstitutionFeatures,
         #[case] expected_equal: bool,
     ) {
-        // Two same-element atoms differing only in spin; the color matches iff
-        // the spins are indistinguishable under `features`.
+        // Two same-element atoms differing only in unpaired electrons; the color matches iff
+        // the unpaired-electron components are indistinguishable under `features`.
         let mol = MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![
-                AtomAst::from_element(Element::C).with_spin(spin_a),
-                AtomAst::from_element(Element::C).with_spin(spin_b),
+                AtomAst::from_element(Element::C)
+                    .with_unpaired_electrons(unpaired_electrons_a),
+                AtomAst::from_element(Element::C)
+                    .with_unpaired_electrons(unpaired_electrons_b),
             ],
             bonds: vec![],
             ..Default::default()

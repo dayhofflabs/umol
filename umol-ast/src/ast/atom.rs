@@ -23,14 +23,14 @@ pub struct AtomAst {
     pub charge: ValueAst,
     pub implicit_hydrogens: ValueAst,
     pub lone_pairs: ValueAst,
-    pub spin: UnpairedElectronsAst,
+    pub unpaired_electrons: UnpairedElectronsAst,
     pub constraints: AtomConstraintsAst,
 }
 
 /// Attribute update for an atom. `None` leaves an ordinary scalar field unchanged;
-/// `Some(value)` sets it exactly, including to an undetermined value. Spin is
-/// updated independently by component. Constraints are keyed updates, with
-/// undetermined entries removing their key.
+/// `Some(value)` sets it exactly, including to an undetermined value. Unpaired-electron components
+/// are updated independently. Constraints are keyed updates, with undetermined entries removing
+/// their key.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomUpdate {
     pub element: Option<ElementAst>,
@@ -38,7 +38,7 @@ pub struct AtomUpdate {
     pub charge: Option<ValueAst>,
     pub implicit_hydrogens: Option<ValueAst>,
     pub lone_pairs: Option<ValueAst>,
-    pub spin: UnpairedElectronsUpdate,
+    pub unpaired_electrons: UnpairedElectronsUpdate,
     pub constraints: AtomConstraintsAst,
 }
 
@@ -79,8 +79,11 @@ impl AtomAst {
         self
     }
 
-    pub fn with_spin(mut self, spin: impl Into<UnpairedElectronsAst>) -> Self {
-        self.spin = spin.into();
+    pub fn with_unpaired_electrons(
+        mut self,
+        unpaired_electrons: impl Into<UnpairedElectronsAst>,
+    ) -> Self {
+        self.unpaired_electrons = unpaired_electrons.into();
         self
     }
 
@@ -127,7 +130,7 @@ impl AtomAst {
                 .lone_pairs
                 .clone()
                 .unwrap_or_else(|| self.lone_pairs.clone()),
-            spin: self.spin.update(&update.spin),
+            unpaired_electrons: self.unpaired_electrons.update(&update.unpaired_electrons),
             constraints,
         }
     }
@@ -160,15 +163,17 @@ impl AtomAst {
             .then(|| other.implicit_hydrogens.clone()),
             lone_pairs: (!self.lone_pairs.canonical_eq(&other.lone_pairs))
                 .then(|| other.lone_pairs.clone()),
-            spin: self.spin.difference_to(&other.spin),
+            unpaired_electrons: self
+                .unpaired_electrons
+                .difference_to(&other.unpaired_electrons),
             constraints,
         }
     }
 
     /// Fill `Undetermined` value-bearing struct fields with defaults: isotope→
-    /// Natural; charge / implicit hydrogens / lone pairs → 0; spin → 0 unpaired
-    /// and, for the (possibly already-set) unpaired count, the maximal
-    /// multiplicity `unpaired + 1` (so a fully unset spin becomes the
+    /// Natural; charge / implicit hydrogens / lone pairs → 0; unpaired-electron count → 0
+    /// and, for the (possibly already-set) count, the maximal
+    /// multiplicity `count + 1` (so a fully unset pair becomes the
     /// closed-shell singlet). Existing literal or expression values and all
     /// constraints are preserved. The result is ground iff `element` is
     /// already ground.
@@ -185,12 +190,12 @@ impl AtomAst {
         if self.lone_pairs.is_undetermined() {
             self.lone_pairs = ValueAst::Lit(0);
         }
-        if self.spin.count.is_undetermined() {
-            self.spin.count = ValueAst::Lit(0);
+        if self.unpaired_electrons.count.is_undetermined() {
+            self.unpaired_electrons.count = ValueAst::Lit(0);
         }
-        if self.spin.multiplicity.is_undetermined() {
-            let unpaired = self.spin.count.as_lit().unwrap_or(0);
-            self.spin.multiplicity = ValueAst::Lit(unpaired + 1);
+        if self.unpaired_electrons.multiplicity.is_undetermined() {
+            let count = self.unpaired_electrons.count.as_lit().unwrap_or(0);
+            self.unpaired_electrons.multiplicity = ValueAst::Lit(count + 1);
         }
         self
     }
@@ -754,7 +759,7 @@ mod tests {
     #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: ValueAst::Lit(1), ..Default::default() })]
     #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..Default::default() })]
     #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: ValueAst::Lit(2), ..Default::default() })]
-    #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() })]
+    #[case::with_unpaired_electrons_tuple(AtomAst::default().with_unpaired_electrons((0_u8, 1_u8)), AtomAst { unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() })]
     #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)),
         AtomAst { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)),..Default::default() })]
     #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)).with_constraints([AtomConstraintAst::donated_pairs(1_i64), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
@@ -777,11 +782,11 @@ mod tests {
     #[case::implicit_hydrogens_undetermined(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
     #[case::lone_pairs(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(ValueAst::Lit(2)), ..Default::default() }, AtomAst::from_element(Element::N).with_lone_pairs(2_i64))]
     #[case::lone_pairs_undetermined(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::N))]
-    #[case::spin(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)))]
-    #[case::spin_unpaired(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin((0_u8, 3_u8)))]
-    #[case::spin_multiplicity(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin((2_u8, 1_u8)))]
-    #[case::spin_unpaired_undetermined(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }))]
-    #[case::spin_multiplicity_undetermined(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Undetermined) }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }))]
+    #[case::unpaired_electrons(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)))]
+    #[case::unpaired_electrons_count(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 3_u8)))]
+    #[case::unpaired_electrons_multiplicity(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 1_u8)))]
+    #[case::unpaired_electrons_count_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }))]
+    #[case::unpaired_electrons_multiplicity_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Undetermined) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }))]
     #[case::constraint_set(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
     #[case::constraint_replace(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
     #[case::constraint_remove(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() }, AtomAst::from_element(Element::C))]
@@ -802,7 +807,7 @@ mod tests {
             .with_charge(0_i64)
             .with_implicit_hydrogens(4_i64)
             .with_lone_pairs(0_i64)
-            .with_spin((0_u8, 1_u8))
+            .with_unpaired_electrons((0_u8, 1_u8))
             .with_constraints([
                 AtomConstraintAst::valence(4_i64),
                 AtomConstraintAst::donated_pairs(1_i64),
@@ -823,7 +828,7 @@ mod tests {
                 charge: Some(ValueAst::Undetermined),
                 implicit_hydrogens: Some(ValueAst::Lit(3)),
                 lone_pairs: Some(ValueAst::Lit(1)),
-                spin: UnpairedElectronsUpdate {
+                unpaired_electrons: UnpairedElectronsUpdate {
                     count: Some(ValueAst::Undetermined),
                     multiplicity: Some(ValueAst::Undetermined),
                 },
@@ -846,13 +851,13 @@ mod tests {
     #[rstest]
     #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
-        lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
+        lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
     #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(0),
-        lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
+        lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
     #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground(),
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
-        lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
+        lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
     fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
     }
@@ -861,25 +866,25 @@ mod tests {
     #[rstest]
     #[case::default_(AtomAst::default(), false)]
     #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, true)]
     #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
     #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Undetermined, charge: ValueAst::Lit(0),
-        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
     #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Undetermined,
-        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
     #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ValueAst::Undetermined, lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Undetermined, lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
     #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Undetermined, spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::spin_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: UnpairedElectronsAst::default(),
+    #[case::unpaired_electrons_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::default(),
         constraints: AtomConstraintsAst::new() }, false)]
     fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
@@ -913,7 +918,7 @@ mod tests {
     #[case::isotope_mismatch(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomAst::from_element(Element::C).with_isotope_mass(13_u32), false)]
     #[case::hydrogens_mismatch(AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64), AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), false)]
     #[case::lone_pairs_mismatch(AtomAst::from_element(Element::C).with_lone_pairs(1_i64), AtomAst::from_element(Element::C).with_lone_pairs(2_i64), false)]
-    #[case::spin_mismatch(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), false)]
+    #[case::unpaired_electrons_mismatch(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)), false)]
     #[case::constraint_required_present(
         AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
         AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),

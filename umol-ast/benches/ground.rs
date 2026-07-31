@@ -68,7 +68,7 @@ fn arith_expr_heavy() -> MoleculeAst {
         charge: arith(),
         implicit_hydrogens: ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(1)))),
         lone_pairs: arith(),
-        spin: UnpairedElectronsAst {
+        unpaired_electrons: UnpairedElectronsAst {
             count: arith(),
             multiplicity: arith(),
         },
@@ -89,7 +89,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             let bond = BondAst {
                 order: arith(),
                 charge: arith(),
-                spin: UnpairedElectronsAst::default(),
+                unpaired_electrons: UnpairedElectronsAst::default(),
                 constraints: Default::default(),
             };
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)

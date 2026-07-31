@@ -2049,9 +2049,10 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                             AtomFieldChange::LonePairs { new, .. } => {
                                 update.lone_pairs = Some(new.clone())
                             }
-                            AtomFieldChange::Spin { new, .. } => {
-                                update.spin.count = Some(new.count.clone());
-                                update.spin.multiplicity = Some(new.multiplicity.clone());
+                            AtomFieldChange::UnpairedElectrons { new, .. } => {
+                                update.unpaired_electrons.count = Some(new.count.clone());
+                                update.unpaired_electrons.multiplicity =
+                                    Some(new.multiplicity.clone());
                             }
                         },
                         AtomDelta::ModifyConstraint { id: j, old, new } if *j == id => match new {
@@ -2099,9 +2100,10 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                             BondFieldChange::Charge { new, .. } => {
                                 update.charge = Some(new.clone())
                             }
-                            BondFieldChange::Spin { new, .. } => {
-                                update.spin.count = Some(new.count.clone());
-                                update.spin.multiplicity = Some(new.multiplicity.clone());
+                            BondFieldChange::UnpairedElectrons { new, .. } => {
+                                update.unpaired_electrons.count = Some(new.count.clone());
+                                update.unpaired_electrons.multiplicity =
+                                    Some(new.multiplicity.clone());
                             }
                         },
                         BondDelta::ModifyConstraint { id: j, old, new } if *j == id => match new {
@@ -2248,9 +2250,10 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                                 AromaticSystemFieldChange::Charge { new, .. } => {
                                     update.charge = Some(new.clone())
                                 }
-                                AromaticSystemFieldChange::Spin { new, .. } => {
-                                    update.spin.count = Some(new.count.clone());
-                                    update.spin.multiplicity = Some(new.multiplicity.clone());
+                                AromaticSystemFieldChange::UnpairedElectrons { new, .. } => {
+                                    update.unpaired_electrons.count = Some(new.count.clone());
+                                    update.unpaired_electrons.multiplicity =
+                                        Some(new.multiplicity.clone());
                                 }
                             }
                         }
@@ -2323,9 +2326,10 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                                 MulticenterBondFieldChange::Charge { new, .. } => {
                                     update.charge = Some(new.clone())
                                 }
-                                MulticenterBondFieldChange::Spin { new, .. } => {
-                                    update.spin.count = Some(new.count.clone());
-                                    update.spin.multiplicity = Some(new.multiplicity.clone());
+                                MulticenterBondFieldChange::UnpairedElectrons { new, .. } => {
+                                    update.unpaired_electrons.count = Some(new.count.clone());
+                                    update.unpaired_electrons.multiplicity =
+                                        Some(new.multiplicity.clone());
                                 }
                             }
                         }
@@ -3094,7 +3098,7 @@ mod tests {
             BondUpdate {
                 order: Some(ValueAst::Undetermined),
                 charge: Some(ValueAst::Undetermined),
-                spin: UnpairedElectronsUpdate {
+                unpaired_electrons: UnpairedElectronsUpdate {
                     count: Some(ValueAst::Undetermined),
                     multiplicity: Some(ValueAst::Undetermined),
                 },
@@ -3144,7 +3148,7 @@ mod tests {
             BondUpdate {
                 order: Some(ValueAst::Undetermined),
                 charge: Some(ValueAst::Undetermined),
-                spin: UnpairedElectronsUpdate {
+                unpaired_electrons: UnpairedElectronsUpdate {
                     count: Some(ValueAst::Undetermined),
                     multiplicity: Some(ValueAst::Undetermined),
                 },
@@ -3191,7 +3195,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::unpaired_electrons_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
     #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_aromatic_system(
         #[case] input: &str,
@@ -3205,7 +3209,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::unpaired_electrons_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
     #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_aromatic_system(
         #[case] input: &str,
@@ -3219,7 +3223,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::unpaired_electrons_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
     #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_multicenter_bond(
         #[case] input: &str,
@@ -3233,7 +3237,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::unpaired_electrons_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
     #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_multicenter_bond(
         #[case] input: &str,
@@ -3621,7 +3625,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
-                change: AtomFieldChange::Spin {
+                change: AtomFieldChange::UnpairedElectrons {
                     old: UnpairedElectronsAst::from((2_u8, 3_u8)),
                     new,
                 },
@@ -3744,7 +3748,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Spin {
+                change: BondFieldChange::UnpairedElectrons {
                     old: UnpairedElectronsAst::from((2_u8, 3_u8)),
                     new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                 },
@@ -3831,9 +3835,9 @@ mod tests {
         r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#c*"]}}]}"##,
         vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })],
     )]
-    #[case::spin_component(
+    #[case::unpaired_electrons_component(
         r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#s1"]}}]}"##,
-        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })],
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })],
     )]
     #[case::constraint_removal(
         r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#e*"]}}]}"##,
@@ -3860,9 +3864,9 @@ mod tests {
         r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#c*"]}}]}"##,
         vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })],
     )]
-    #[case::spin_component(
+    #[case::unpaired_electrons_component(
         r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#s1"]}}]}"##,
-        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })],
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })],
     )]
     #[case::constraint_removal(
         r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#e*"]}}]}"##,
@@ -4160,7 +4164,7 @@ mod tests {
     #[case::remove(vec![Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomAst::from_element(Element::C) })], "{:atom {:remove :c}}")]
     #[case::modify_field(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } })], r##"{:atom {:modify [:br "#c-"]}}"##)]
     #[case::modify_field_undetermined(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:atom {:modify [:br "#c*"]}}"##)]
-    #[case::modify_spin(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:atom {:modify [:br "#u2#s"]}}"##)]
+    #[case::modify_unpaired_electrons(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:atom {:modify [:br "#u2#s"]}}"##)]
     #[case::modify_set_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: Some(AtomConstraintAst::valence(4_i64)) })], r##"{:atom {:modify [:br "#v4"]}}"##)]
     #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
     #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
@@ -4175,7 +4179,7 @@ mod tests {
     #[case::modify_field(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })], r##"{:bond {:modify [:b1 "2"]}}"##)]
     #[case::modify_field_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Undetermined } })], r##"{:bond {:modify [:b1 "*"]}}"##)]
     #[case::modify_charge_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:bond {:modify [:b1 "#c*"]}}"##)]
-    #[case::modify_spin(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:bond {:modify [:b1 "#u2#s"]}}"##)]
+    #[case::modify_unpaired_electrons(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:bond {:modify [:b1 "#u2#s"]}}"##)]
     #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
     #[case::modify_remove_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: Some(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Lit(1))), new: None })], r##"{:bond {:modify [:b1 "#R(6)*"]}}"##)]
     fn test_render_deltas_bond(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
@@ -4205,7 +4209,7 @@ mod tests {
     #[case::add(vec![Delta::AromaticSystem(AromaticSystemDelta::Add { id: AromaticSystemId(1), atoms: vec![AtomId(0), AtomId(2)], ast: AromaticSystemAst::from_electrons(vec![1, 1]) })], r##"{:aromatic-system {:add {:id :a2 :atoms [:br :n] :type "[1,1]"}}}"##)]
     #[case::electrons_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Undetermined } })], r##"{:aromatic-system {:modify [:a1 "*"]}}"##)]
     #[case::charge_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:aromatic-system {:modify [:a1 "#c*"]}}"##)]
-    #[case::spin(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:aromatic-system {:modify [:a1 "#u2#s"]}}"##)]
+    #[case::unpaired_electrons(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:aromatic-system {:modify [:a1 "#u2#s"]}}"##)]
     #[case::constraint_removal(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintAst::electron_count(6_i64)), new: None })], r##"{:aromatic-system {:modify [:a1 "#e*"]}}"##)]
     fn test_render_deltas_aromatic_system(
         meta: ReactionMetadata,
@@ -4223,7 +4227,7 @@ mod tests {
     #[case::add(vec![Delta::MulticenterBond(MulticenterBondDelta::Add { id: MulticenterBondId(1), atoms: vec![AtomId(0), AtomId(2)], ast: MulticenterBondAst::from_electrons(vec![1, 1]) })], r##"{:multicenter-bond {:add {:id :m2 :atoms [:br :n] :type "[1,1]"}}}"##)]
     #[case::electrons_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Undetermined } })], r##"{:multicenter-bond {:modify [:m1 "*"]}}"##)]
     #[case::charge_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:multicenter-bond {:modify [:m1 "#c*"]}}"##)]
-    #[case::spin(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:multicenter-bond {:modify [:m1 "#u2#s"]}}"##)]
+    #[case::unpaired_electrons(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) } })], r##"{:multicenter-bond {:modify [:m1 "#u2#s"]}}"##)]
     #[case::constraint_removal(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintAst::electron_count(6_i64)), new: None })], r##"{:multicenter-bond {:modify [:m1 "#e*"]}}"##)]
     fn test_render_deltas_multicenter_bond(
         meta: ReactionMetadata,

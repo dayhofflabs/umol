@@ -43,7 +43,7 @@ fn ground_atom() -> AtomAst {
     a.charge = ValueAst::Lit(0);
     a.implicit_hydrogens = ValueAst::Lit(4);
     a.lone_pairs = ValueAst::Lit(0);
-    a.spin = UnpairedElectronsAst::from((0_u8, 1_u8));
+    a.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
     a
 }
 
@@ -2125,7 +2125,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
     let bond = BondAst {
         order: ValueAst::Lit(1),
         charge: ValueAst::Lit(0),
-        spin: UnpairedElectronsAst::closed_shell(),
+        unpaired_electrons: UnpairedElectronsAst::closed_shell(),
         constraints: BondConstraintsAst::new(),
     };
     let forward = MoleculeAst::from_parts(MoleculeParts {

@@ -13,18 +13,17 @@ use super::value::ValueAst;
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: ValueAst,
-    pub spin: UnpairedElectronsAst,
+    pub unpaired_electrons: UnpairedElectronsAst,
     pub constraints: BondConstraintsAst,
 }
 
-/// Attribute update for a localized bond. Scalar fields are optional, spin is
-/// updated independently by component, and undetermined constraints remove
-/// their key.
+/// Attribute update for a localized bond. Scalar fields are optional, unpaired-electron components
+/// are updated independently, and undetermined constraints remove their key.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BondUpdate {
     pub order: Option<ValueAst>,
     pub charge: Option<ValueAst>,
-    pub spin: UnpairedElectronsUpdate,
+    pub unpaired_electrons: UnpairedElectronsUpdate,
     pub constraints: BondConstraintsAst,
 }
 
@@ -33,7 +32,7 @@ impl BondAst {
         Self {
             order,
             charge: ValueAst::default(),
-            spin: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::new(),
         }
     }
@@ -52,8 +51,11 @@ impl BondAst {
         self
     }
 
-    pub fn with_spin(mut self, spin: impl Into<UnpairedElectronsAst>) -> Self {
-        self.spin = spin.into();
+    pub fn with_unpaired_electrons(
+        mut self,
+        unpaired_electrons: impl Into<UnpairedElectronsAst>,
+    ) -> Self {
+        self.unpaired_electrons = unpaired_electrons.into();
         self
     }
 
@@ -85,7 +87,7 @@ impl BondAst {
         BondAst {
             order: update.order.clone().unwrap_or_else(|| self.order.clone()),
             charge: update.charge.clone().unwrap_or_else(|| self.charge.clone()),
-            spin: self.spin.update(&update.spin),
+            unpaired_electrons: self.unpaired_electrons.update(&update.unpaired_electrons),
             constraints,
         }
     }
@@ -110,21 +112,23 @@ impl BondAst {
         BondUpdate {
             order: (!self.order.canonical_eq(&other.order)).then(|| other.order.clone()),
             charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
-            spin: self.spin.difference_to(&other.spin),
+            unpaired_electrons: self
+                .unpaired_electrons
+                .difference_to(&other.unpaired_electrons),
             constraints,
         }
     }
 
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
-    /// charge → `Lit(0)`, spin → closed-shell singlet `(0, 1)`. Existing
+    /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. Existing
     /// values and `constraints` are preserved. The result is ground iff
     /// `order` is already ground.
     pub fn into_ground(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = ValueAst::Lit(0);
         }
-        if self.spin.is_undetermined() {
-            self.spin = UnpairedElectronsAst::from((0_u8, 1_u8));
+        if self.unpaired_electrons.is_undetermined() {
+            self.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
         }
         self
     }
@@ -150,9 +154,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::new(BondAst::new(ValueAst::Lit(2)),
-        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
     #[case::from_order(BondAst::from_order(3),
-        BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
+        BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
     fn test_bond_ast_new(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
     }
@@ -160,19 +164,19 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::with_order(BondAst::default().with_order(2_i64),
-        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
     #[case::with_charge(BondAst::from_order(1).with_charge(-1_i64),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
-    #[case::with_spin(BondAst::from_order(1).with_spin((0_u8, 1_u8)),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() })]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() })]
+    #[case::with_unpaired_electrons(BondAst::from_order(1).with_unpaired_electrons((0_u8, 1_u8)),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() })]
     #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) })]
     #[case::with_constraints_extends(
         BondAst::from_order(1)
             .with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true)))
             .with_constraints([BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
                 BondConstraintAst::ring_membership(RingScope::All, 1),
@@ -182,7 +186,7 @@ mod tests {
         BondAst::from_order(1)
             .with_constraint(BondConstraintAst::ring_membership(RingScope::All, 1))
             .with_constraint(BondConstraintAst::ring_membership(RingScope::All, 2)),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::ring_membership(RingScope::All, 1),
                 BondConstraintAst::ring_membership(RingScope::All, 2),
@@ -191,7 +195,7 @@ mod tests {
         BondAst::from_order(1)
             .with_constraint(BondConstraintAst::ring_membership(RingScope::Size(5), 1))
             .with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1)),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::ring_membership(RingScope::Size(5), 1),
                 BondConstraintAst::ring_membership(RingScope::Size(6), 1),
@@ -206,10 +210,10 @@ mod tests {
     #[case::order_undetermined(BondAst::from_order(1), BondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }, BondAst::default())]
     #[case::charge(BondAst::from_order(1).with_charge(0_i64), BondUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }, BondAst::from_order(1).with_charge(-1_i64))]
     #[case::charge_undetermined(BondAst::from_order(1).with_charge(-1_i64), BondUpdate { charge: Some(ValueAst::Undetermined), ..Default::default() }, BondAst::from_order(1))]
-    #[case::spin_unpaired(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_spin((0_u8, 3_u8)))]
-    #[case::spin_multiplicity(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, BondAst::from_order(1).with_spin((2_u8, 1_u8)))]
-    #[case::spin_unpaired_undetermined(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_spin(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }))]
-    #[case::spin_multiplicity_undetermined(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Undetermined) }, ..Default::default() }, BondAst::from_order(1).with_spin(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }))]
+    #[case::unpaired_electrons_count(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons((0_u8, 3_u8)))]
+    #[case::unpaired_electrons_multiplicity(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons((2_u8, 1_u8)))]
+    #[case::unpaired_electrons_count_undetermined(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }))]
+    #[case::unpaired_electrons_multiplicity_undetermined(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Undetermined) }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }))]
     #[case::constraint_set(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() }, BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     #[case::constraint_replace(BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
     #[case::constraint_remove(BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }, BondAst::from_order(1))]
@@ -218,7 +222,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(BondAst::from_order(1).with_charge(-1_i64).with_spin((2_u8, 3_u8)).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::empty(BondAst::from_order(1).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_bond_ast_update_identity(#[case] bond: BondAst) {
         assert_eq!(bond.update(&BondUpdate::default()), bond);
     }
@@ -227,13 +231,13 @@ mod tests {
     fn test_bond_ast_difference_to() {
         let bond = BondAst::from_order(1)
             .with_charge(0_i64)
-            .with_spin((2_u8, 3_u8))
+            .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraints([
                 BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
                 BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64),
             ]);
         let other = BondAst::from_order(2)
-            .with_spin((2_u8, 1_u8))
+            .with_unpaired_electrons((2_u8, 1_u8))
             .with_constraints([
                 BondConstraintAst::Aromatic(BooleanAst::Lit(false)),
                 BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo),
@@ -243,7 +247,7 @@ mod tests {
             BondUpdate {
                 order: Some(ValueAst::Lit(2)),
                 charge: Some(ValueAst::Undetermined),
-                spin: UnpairedElectronsUpdate {
+                unpaired_electrons: UnpairedElectronsUpdate {
                     count: None,
                     multiplicity: Some(ValueAst::Lit(1)),
                 },
@@ -269,7 +273,7 @@ mod tests {
         BondAst {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
-            spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: BondConstraintsAst::new(),
         },
     )]
@@ -278,7 +282,7 @@ mod tests {
         BondAst {
             order: ValueAst::Lit(2),
             charge: ValueAst::Lit(1),
-            spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: BondConstraintsAst::new(),
         },
     )]
@@ -287,7 +291,7 @@ mod tests {
         BondAst {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
-            spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         },
     )]
@@ -299,11 +303,11 @@ mod tests {
     #[rstest]
     #[case::default_(BondAst::default(), false)]
     #[case::order_only(BondAst::from_order(1), false)]
-    #[case::all_ground(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: UnpairedElectronsAst::closed_shell(),
+    #[case::all_ground(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::closed_shell(),
         constraints: BondConstraintsAst::new() }, true)]
-    #[case::charge_undetermined(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::closed_shell(),
+    #[case::charge_undetermined(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::closed_shell(),
         constraints: BondConstraintsAst::new() }, false)]
-    #[case::ground_with_constraint(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: UnpairedElectronsAst::closed_shell(),
+    #[case::ground_with_constraint(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::closed_shell(),
         constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) }, true)]
     fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
@@ -312,11 +316,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_order(
-        BondAst { order: ValueAst::lit_set([2]), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
-        Ok(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }),
+        BondAst { order: ValueAst::lit_set([2]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
+        Ok(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }),
     )]
     #[case::order_empty_litset_contradiction(
-        BondAst { order: ValueAst::lit_set(Vec::<i64>::new()), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
+        BondAst { order: ValueAst::lit_set(Vec::<i64>::new()), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
         Err(Contradiction),
     )]
     fn test_bond_ast_canonicalize(
@@ -329,25 +333,25 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::default_matches_ground(BondAst::default(),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
     #[case::same_order(BondAst::from_order(2), BondAst::from_order(2), true)]
     #[case::order_mismatch(BondAst::from_order(2), BondAst::from_order(1), false)]
     #[case::pattern_more_specific_than_target(BondAst::from_order(2), BondAst::default(), false)]
-    #[case::charge_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }, false)]
+    #[case::charge_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }, false)]
     #[case::charge_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }, true)]
-    #[case::spin_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() },
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: (2_u8, 3_u8).into(), constraints: BondConstraintsAst::new() }, false)]
-    #[case::spin_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }, true)]
+    #[case::unpaired_electrons_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: (2_u8, 3_u8).into(), constraints: BondConstraintsAst::new() }, false)]
+    #[case::unpaired_electrons_wildcard_pattern(BondAst::from_order(1),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
     #[case::constraint_required_present(
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) },
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) }, true)]
     #[case::constraint_required_absent(
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) },
         BondAst::from_order(1), false)]
     fn test_bond_ast_matches(
@@ -362,8 +366,8 @@ mod tests {
     #[case::both_default(BondAst::default(), BondAst::default(), Some(BondAst::default()))]
     #[case::narrows_field(
         BondAst::from_order(2),
-        BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(1), spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
-        Some(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }),
+        BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() },
+        Some(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), unpaired_electrons: UnpairedElectronsAst::default(), constraints: BondConstraintsAst::new() }),
     )]
     #[case::incompatible_order(BondAst::from_order(2), BondAst::from_order(3), None)]
     fn test_bond_ast_meet(
@@ -376,7 +380,7 @@ mod tests {
 
     #[rstest]
     #[case::widens_to_set(BondAst::from_order(2), BondAst::from_order(3),
-        BondAst { order: ValueAst::lit_set([2, 3]), charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+        BondAst { order: ValueAst::lit_set([2, 3]), charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
         constraints: BondConstraintsAst::new() },
     )]
     fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {

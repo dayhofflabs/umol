@@ -13,18 +13,18 @@ use super::value::ValueAst;
 pub struct MulticenterBondAst {
     pub electrons: ElectronCountsAst,
     pub charge: ValueAst,
-    pub spin: UnpairedElectronsAst,
+    pub unpaired_electrons: UnpairedElectronsAst,
     pub constraints: MulticenterBondConstraintsAst,
 }
 
 /// Attribute update for a multicenter bond. Ordinary fields are optional,
-/// spin is updated independently by component, and undetermined constraints
-/// remove their key.
+/// unpaired-electron components are updated independently, and undetermined constraints remove
+/// their key.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MulticenterBondUpdate {
     pub electrons: Option<ElectronCountsAst>,
     pub charge: Option<ValueAst>,
-    pub spin: UnpairedElectronsUpdate,
+    pub unpaired_electrons: UnpairedElectronsUpdate,
     pub constraints: MulticenterBondConstraintsAst,
 }
 
@@ -62,8 +62,11 @@ impl MulticenterBondAst {
         self
     }
 
-    pub fn with_spin(mut self, spin: impl Into<UnpairedElectronsAst>) -> Self {
-        self.spin = spin.into();
+    pub fn with_unpaired_electrons(
+        mut self,
+        unpaired_electrons: impl Into<UnpairedElectronsAst>,
+    ) -> Self {
+        self.unpaired_electrons = unpaired_electrons.into();
         self
     }
 
@@ -90,15 +93,15 @@ impl MulticenterBondAst {
     }
 
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
-    /// charge → `Lit(0)`, spin → closed-shell singlet `(0, 1)`. `electrons`
+    /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. `electrons`
     /// and `constraints` are preserved. The result is ground iff `electrons`
     /// is already `Lit`.
     pub fn into_ground(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = ValueAst::Lit(0);
         }
-        if self.spin.is_undetermined() {
-            self.spin = UnpairedElectronsAst::from((0_u8, 1_u8));
+        if self.unpaired_electrons.is_undetermined() {
+            self.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
         }
         self
     }
@@ -113,7 +116,7 @@ impl MulticenterBondAst {
                 .clone()
                 .unwrap_or_else(|| self.electrons.clone()),
             charge: update.charge.clone().unwrap_or_else(|| self.charge.clone()),
-            spin: self.spin.update(&update.spin),
+            unpaired_electrons: self.unpaired_electrons.update(&update.unpaired_electrons),
             constraints,
         }
     }
@@ -139,13 +142,15 @@ impl MulticenterBondAst {
             electrons: (!self.electrons.canonical_eq(&other.electrons))
                 .then(|| other.electrons.clone()),
             charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
-            spin: self.spin.difference_to(&other.spin),
+            unpaired_electrons: self
+                .unpaired_electrons
+                .difference_to(&other.unpaired_electrons),
             constraints,
         }
     }
 
     /// Reorder the positional `electrons` by `order`, tracking a participant
-    /// reordering; charge / spin / constraints are positionless and unchanged.
+    /// reordering; charge / unpaired electrons / constraints are positionless and unchanged.
     pub fn permute(&mut self, order: &[ParticipantPosition]) {
         self.electrons.permute(order);
     }
@@ -164,7 +169,7 @@ mod tests {
     #[rstest]
     #[case::literal(MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1; 3]),
-            charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+            charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: MulticenterBondConstraintsAst::new() })]
     fn test_multicenter_bond_ast_new(
         #[case] actual: MulticenterBondAst,
@@ -177,7 +182,7 @@ mod tests {
     #[rstest]
     #[case::literal(MulticenterBondAst::from_electrons(vec![1, 1, 1]),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1; 3]),
-            charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+            charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: MulticenterBondConstraintsAst::new() })]
     fn test_multicenter_bond_ast_from_electrons(
         #[case] actual: MulticenterBondAst,
@@ -190,29 +195,29 @@ mod tests {
     #[rstest]
     #[case::with_charge(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(-1),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
-            charge: ValueAst::Lit(-1), spin: UnpairedElectronsAst::default(),
+            charge: ValueAst::Lit(-1), unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: MulticenterBondConstraintsAst::new() })]
-    #[case::with_spin(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_spin((0_u8, 1_u8)),
+    #[case::with_unpaired_electrons(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 1_u8)),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
-            charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::closed_shell(),
+            charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::closed_shell(),
             constraints: MulticenterBondConstraintsAst::new() })]
     #[case::with_constraint(
         MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(2)),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
-            charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+            charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)) })]
     #[case::with_constraints_extends(
         MulticenterBondAst::from_electrons(vec![1, 1, 1])
             .with_constraints([MulticenterBondConstraintAst::electron_count(2)]),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
-            charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+            charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)) })]
     #[case::with_constraint_replaces_same_kind(
         MulticenterBondAst::from_electrons(vec![1, 1, 1])
             .with_constraint(MulticenterBondConstraintAst::electron_count(2))
             .with_constraint(MulticenterBondConstraintAst::electron_count(4)),
         MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
-            charge: ValueAst::Undetermined, spin: UnpairedElectronsAst::default(),
+            charge: ValueAst::Undetermined, unpaired_electrons: UnpairedElectronsAst::default(),
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(4)) })]
     fn test_multicenter_bond_ast_with_methods(
         #[case] actual: MulticenterBondAst,
@@ -228,7 +233,7 @@ mod tests {
         MulticenterBondAst {
             electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Lit(0),
-            spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: MulticenterBondConstraintsAst::new(),
         },
     )]
@@ -237,7 +242,7 @@ mod tests {
         MulticenterBondAst {
             electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Lit(1),
-            spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: MulticenterBondConstraintsAst::new(),
         },
     )]
@@ -248,7 +253,7 @@ mod tests {
         MulticenterBondAst {
             electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Lit(0),
-            spin: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: MulticenterBondConstraintsAst::from(
                 MulticenterBondConstraintAst::electron_count(3),
             ),
@@ -267,8 +272,8 @@ mod tests {
     #[case::electrons_undetermined(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), ..Default::default() }, MulticenterBondAst::default())]
     #[case::charge(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64), MulticenterBondUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64))]
     #[case::charge_undetermined(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64), MulticenterBondUpdate { charge: Some(ValueAst::Undetermined), ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]))]
-    #[case::spin_unpaired(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_spin((2_u8, 3_u8)), MulticenterBondUpdate { spin: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_spin((0_u8, 3_u8)))]
-    #[case::spin_multiplicity(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_spin((2_u8, 3_u8)), MulticenterBondUpdate { spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_spin((2_u8, 1_u8)))]
+    #[case::unpaired_electrons_count(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 3_u8)))]
+    #[case::unpaired_electrons_multiplicity(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 1_u8)))]
     #[case::constraint_set(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6_i64)), ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)))]
     #[case::constraint_replace(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(4_i64)), ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(4_i64)))]
     #[case::constraint_remove(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }, MulticenterBondAst::from_electrons(vec![1, 1, 1]))]
@@ -281,7 +286,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_spin((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)))]
+    #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)))]
     fn test_multicenter_bond_ast_update_identity(#[case] bond: MulticenterBondAst) {
         assert_eq!(bond.update(&MulticenterBondUpdate::default()), bond);
     }
@@ -289,12 +294,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
-        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
-        MulticenterBondAst::from_electrons(vec![2, 2, 2]).with_spin((2_u8, 1_u8)),
+        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondAst::from_electrons(vec![2, 2, 2]).with_unpaired_electrons((2_u8, 1_u8)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
+            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
         },
     )]
@@ -341,14 +346,14 @@ mod tests {
     #[rstest]
     #[case::default_(MulticenterBondAst::default(), false)]
     #[case::charge_only(MulticenterBondAst::new(ElectronCountsAst::Undetermined).with_charge(0), false)]
-    #[case::ground_no_atoms(MulticenterBondAst::new(ElectronCountsAst::Lit(Vec::new())).with_charge(0).with_spin((0, 1)), true)]
+    #[case::ground_no_atoms(MulticenterBondAst::new(ElectronCountsAst::Lit(Vec::new())).with_charge(0).with_unpaired_electrons((0, 1)), true)]
     #[case::all_ground_three(
-        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_spin((0, 1)),
+        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_unpaired_electrons((0, 1)),
         true,
     )]
     #[case::ground_with_constraint(
         MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3]))
-            .with_charge(0).with_spin((0, 1))
+            .with_charge(0).with_unpaired_electrons((0, 1))
             .with_constraint(MulticenterBondConstraintAst::electron_count(3)),
         true,
     )]
@@ -381,22 +386,22 @@ mod tests {
     #[case::default_matches_default(MulticenterBondAst::default(), MulticenterBondAst::default(), true)]
     #[case::default_matches_ground(
         MulticenterBondAst::default(),
-        MulticenterBondAst::new(ElectronCountsAst::Lit(Vec::new())).with_charge(0).with_spin((0, 1)),
+        MulticenterBondAst::new(ElectronCountsAst::Lit(Vec::new())).with_charge(0).with_unpaired_electrons((0, 1)),
         true,
     )]
     #[case::exact(
-        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_spin((0, 1)),
-        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_spin((0, 1)),
+        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_unpaired_electrons((0, 1)),
+        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_unpaired_electrons((0, 1)),
         true,
     )]
     #[case::electrons_length_mismatch(
         MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 2])),
-        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_spin((0, 1)),
+        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_unpaired_electrons((0, 1)),
         false,
     )]
     #[case::electrons_value_mismatch(
         MulticenterBondAst::new(ElectronCountsAst::Lit(vec![2; 3])),
-        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_spin((0, 1)),
+        MulticenterBondAst::new(ElectronCountsAst::Lit(vec![1; 3])).with_charge(0).with_unpaired_electrons((0, 1)),
         false,
     )]
     #[case::charge_mismatch(
@@ -404,9 +409,9 @@ mod tests {
         MulticenterBondAst::new(ElectronCountsAst::Undetermined).with_charge(0),
         false,
     )]
-    #[case::spin_mismatch(
-        MulticenterBondAst::new(ElectronCountsAst::Undetermined).with_spin((2_u8, 3_u8)),
-        MulticenterBondAst::new(ElectronCountsAst::Undetermined).with_spin((0_u8, 1_u8)),
+    #[case::unpaired_electrons_mismatch(
+        MulticenterBondAst::new(ElectronCountsAst::Undetermined).with_unpaired_electrons((2_u8, 3_u8)),
+        MulticenterBondAst::new(ElectronCountsAst::Undetermined).with_unpaired_electrons((0_u8, 1_u8)),
         false,
     )]
     #[case::constraint_required_present(

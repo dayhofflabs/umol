@@ -334,6 +334,20 @@ pub(crate) fn unpaired_electrons_update_strategy() -> impl Strategy<Value = Unpa
         })
 }
 
+pub(crate) fn partial_unpaired_electrons_update_strategy(
+) -> impl Strategy<Value = UnpairedElectronsUpdate> {
+    prop_oneof![
+        value_basic(0..=6).prop_map(|count| UnpairedElectronsUpdate {
+            count: Some(count),
+            multiplicity: None,
+        }),
+        value_basic(1..=7).prop_map(|multiplicity| UnpairedElectronsUpdate {
+            count: None,
+            multiplicity: Some(multiplicity),
+        }),
+    ]
+}
+
 /// `UnpairedElectronsAst` with at least one of `count` / `multiplicity` not
 /// `Undetermined`. Used inside `MoleculeConstraint::SpinSum` and similar
 /// where a fully-vacuous spin state would elide on render.
@@ -529,7 +543,7 @@ prop_compose! {
         charge in value_basic(-2..=2),
         implicit_hydrogens in value_basic(0..=4),
         lone_pairs in value_basic(0..=4),
-        spin in unpaired_electrons_strategy(),
+        unpaired_electrons in unpaired_electrons_strategy(),
         constraints in atom_constraints_strategy(),
     ) -> AtomAst {
         AtomAst {
@@ -538,7 +552,7 @@ prop_compose! {
             charge,
             implicit_hydrogens,
             lone_pairs,
-            spin,
+            unpaired_electrons,
             constraints,
         }
     }
@@ -552,7 +566,7 @@ prop_compose! {
         charge in prop::option::of(value_basic(-2..=2)),
         implicit_hydrogens in prop::option::of(value_basic(0..=4)),
         lone_pairs in prop::option::of(value_basic(0..=4)),
-        spin in unpaired_electrons_update_strategy(),
+        unpaired_electrons in unpaired_electrons_update_strategy(),
         constraints in atom_update_constraints_strategy(),
     ) -> AtomUpdate {
         AtomUpdate {
@@ -561,7 +575,7 @@ prop_compose! {
             charge,
             implicit_hydrogens,
             lone_pairs,
-            spin,
+            unpaired_electrons,
             constraints,
         }
     }
@@ -572,13 +586,13 @@ prop_compose! {
     (
         order in value_basic(1..=4),
         charge in value_basic(-1..=1),
-        spin in unpaired_electrons_strategy(),
+        unpaired_electrons in unpaired_electrons_strategy(),
         constraints in bond_constraints_strategy(),
     ) -> BondAst {
         BondAst {
             order,
             charge,
-            spin,
+            unpaired_electrons,
             constraints,
         }
     }
@@ -589,13 +603,13 @@ prop_compose! {
     (
         order in prop::option::of(value_basic(1..=4)),
         charge in prop::option::of(value_basic(-1..=1)),
-        spin in unpaired_electrons_update_strategy(),
+        unpaired_electrons in unpaired_electrons_update_strategy(),
         constraints in bond_update_constraints_strategy(),
     ) -> BondUpdate {
         BondUpdate {
             order,
             charge,
-            spin,
+            unpaired_electrons,
             constraints,
         }
     }
@@ -757,7 +771,7 @@ pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSy
         AromaticSystemAst {
             electrons: ElectronCountsAst::Undetermined,
             charge,
-            spin: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsAst::default(),
             constraints,
         }
     })
@@ -770,12 +784,14 @@ pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = Arom
         unpaired_electrons_strategy(),
         optional_aromatic_electron_count(),
     )
-        .prop_map(|(electrons, charge, spin, constraints)| AromaticSystemAst {
-            electrons,
-            charge,
-            spin,
-            constraints,
-        })
+        .prop_map(
+            |(electrons, charge, unpaired_electrons, constraints)| AromaticSystemAst {
+                electrons,
+                charge,
+                unpaired_electrons,
+                constraints,
+            },
+        )
 }
 
 prop_compose! {
@@ -783,10 +799,10 @@ prop_compose! {
     (
         electrons in prop::option::of(electron_counts_ast_strategy()),
         charge in prop::option::of(value_basic(-2..=2)),
-        spin in unpaired_electrons_update_strategy(),
+        unpaired_electrons in unpaired_electrons_update_strategy(),
         constraints in aromatic_system_update_constraints_strategy(),
     ) -> AromaticSystemUpdate {
-        AromaticSystemUpdate { electrons, charge, spin, constraints }
+        AromaticSystemUpdate { electrons, charge, unpaired_electrons, constraints }
     }
 }
 
@@ -805,7 +821,7 @@ pub(crate) fn aromatic_system_ast_for(
         .prop_map(|(charge, electrons, constraints)| AromaticSystemAst {
             electrons: ElectronCountsAst::Lit(electrons),
             charge,
-            spin: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsAst::default(),
             constraints,
         })
 }
@@ -815,7 +831,7 @@ pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = Multicent
         |(charge, constraints)| MulticenterBondAst {
             electrons: ElectronCountsAst::Undetermined,
             charge,
-            spin: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsAst::default(),
             constraints,
         },
     )
@@ -829,10 +845,10 @@ pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = Mul
         optional_multicenter_electron_count(),
     )
         .prop_map(
-            |(electrons, charge, spin, constraints)| MulticenterBondAst {
+            |(electrons, charge, unpaired_electrons, constraints)| MulticenterBondAst {
                 electrons,
                 charge,
-                spin,
+                unpaired_electrons,
                 constraints,
             },
         )
@@ -843,10 +859,10 @@ prop_compose! {
     (
         electrons in prop::option::of(electron_counts_ast_strategy()),
         charge in prop::option::of(value_basic(-2..=2)),
-        spin in unpaired_electrons_update_strategy(),
+        unpaired_electrons in unpaired_electrons_update_strategy(),
         constraints in multicenter_bond_update_constraints_strategy(),
     ) -> MulticenterBondUpdate {
-        MulticenterBondUpdate { electrons, charge, spin, constraints }
+        MulticenterBondUpdate { electrons, charge, unpaired_electrons, constraints }
     }
 }
 
@@ -861,7 +877,7 @@ pub(crate) fn multicenter_bond_ast_for(
         .prop_map(|(charge, electrons, constraints)| MulticenterBondAst {
             electrons: ElectronCountsAst::Lit(electrons),
             charge,
-            spin: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsAst::default(),
             constraints,
         })
 }
@@ -3160,14 +3176,14 @@ pub(crate) fn aromatic_system_update_for(
         unpaired_electrons_update_strategy(),
         aromatic_system_update_constraints_strategy(),
     )
-        .prop_map(
-            |(electrons, charge, spin, constraints)| AromaticSystemUpdate {
+        .prop_map(|(electrons, charge, unpaired_electrons, constraints)| {
+            AromaticSystemUpdate {
                 electrons,
                 charge,
-                spin,
+                unpaired_electrons,
                 constraints,
-            },
-        )
+            }
+        })
 }
 
 pub(crate) fn multicenter_bond_update_for(
@@ -3182,14 +3198,14 @@ pub(crate) fn multicenter_bond_update_for(
         unpaired_electrons_update_strategy(),
         multicenter_bond_update_constraints_strategy(),
     )
-        .prop_map(
-            |(electrons, charge, spin, constraints)| MulticenterBondUpdate {
+        .prop_map(|(electrons, charge, unpaired_electrons, constraints)| {
+            MulticenterBondUpdate {
                 electrons,
                 charge,
-                spin,
+                unpaired_electrons,
                 constraints,
-            },
-        )
+            }
+        })
 }
 
 pub(crate) fn stereo_atom_application_update_strategy() -> impl Strategy<Value = StereoAtomUpdate> {

@@ -1526,11 +1526,11 @@ impl MoleculeEditor {
                 }
                 atom.ast.lone_pairs = new;
             }
-            AtomFieldChange::Spin { old, new } => {
-                if !atom.ast.spin.canonical_eq(&old) {
+            AtomFieldChange::UnpairedElectrons { old, new } => {
+                if !atom.ast.unpaired_electrons.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
-                atom.ast.spin = new;
+                atom.ast.unpaired_electrons = new;
             }
         }
         Ok(())
@@ -1555,11 +1555,11 @@ impl MoleculeEditor {
                 }
                 bond.ast.charge = new;
             }
-            BondFieldChange::Spin { old, new } => {
-                if !bond.ast.spin.canonical_eq(&old) {
+            BondFieldChange::UnpairedElectrons { old, new } => {
+                if !bond.ast.unpaired_electrons.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
-                bond.ast.spin = new;
+                bond.ast.unpaired_electrons = new;
             }
         }
         Ok(())
@@ -1601,11 +1601,11 @@ impl MoleculeEditor {
                 }
                 ar.ast.charge = new;
             }
-            AromaticSystemFieldChange::Spin { old, new } => {
-                if !ar.ast.spin.canonical_eq(&old) {
+            AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+                if !ar.ast.unpaired_electrons.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
-                ar.ast.spin = new;
+                ar.ast.unpaired_electrons = new;
             }
         }
         Ok(())
@@ -1630,11 +1630,11 @@ impl MoleculeEditor {
                 }
                 mc.ast.charge = new;
             }
-            MulticenterBondFieldChange::Spin { old, new } => {
-                if !mc.ast.spin.canonical_eq(&old) {
+            MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
+                if !mc.ast.unpaired_electrons.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
-                mc.ast.spin = new;
+                mc.ast.unpaired_electrons = new;
             }
         }
         Ok(())

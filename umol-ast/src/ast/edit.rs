@@ -88,7 +88,7 @@ pub enum AtomFieldChange {
         old: ValueAst,
         new: ValueAst,
     },
-    Spin {
+    UnpairedElectrons {
         old: UnpairedElectronsAst,
         new: UnpairedElectronsAst,
     },
@@ -103,7 +103,7 @@ impl AtomFieldChange {
             Self::Charge { old, new } => Self::Charge { old: new, new: old },
             Self::ImplicitHydrogens { old, new } => Self::ImplicitHydrogens { old: new, new: old },
             Self::LonePairs { old, new } => Self::LonePairs { old: new, new: old },
-            Self::Spin { old, new } => Self::Spin { old: new, new: old },
+            Self::UnpairedElectrons { old, new } => Self::UnpairedElectrons { old: new, new: old },
         }
     }
 }
@@ -118,7 +118,7 @@ pub enum BondFieldChange {
         old: ValueAst,
         new: ValueAst,
     },
-    Spin {
+    UnpairedElectrons {
         old: UnpairedElectronsAst,
         new: UnpairedElectronsAst,
     },
@@ -129,7 +129,7 @@ impl BondFieldChange {
         match self {
             Self::Order { old, new } => Self::Order { old: new, new: old },
             Self::Charge { old, new } => Self::Charge { old: new, new: old },
-            Self::Spin { old, new } => Self::Spin { old: new, new: old },
+            Self::UnpairedElectrons { old, new } => Self::UnpairedElectrons { old: new, new: old },
         }
     }
 }
@@ -157,7 +157,7 @@ pub enum AromaticSystemFieldChange {
         old: ValueAst,
         new: ValueAst,
     },
-    Spin {
+    UnpairedElectrons {
         old: UnpairedElectronsAst,
         new: UnpairedElectronsAst,
     },
@@ -168,7 +168,7 @@ impl AromaticSystemFieldChange {
         match self {
             Self::Electrons { old, new } => Self::Electrons { old: new, new: old },
             Self::Charge { old, new } => Self::Charge { old: new, new: old },
-            Self::Spin { old, new } => Self::Spin { old: new, new: old },
+            Self::UnpairedElectrons { old, new } => Self::UnpairedElectrons { old: new, new: old },
         }
     }
 }
@@ -183,7 +183,7 @@ pub enum MulticenterBondFieldChange {
         old: ValueAst,
         new: ValueAst,
     },
-    Spin {
+    UnpairedElectrons {
         old: UnpairedElectronsAst,
         new: UnpairedElectronsAst,
     },
@@ -194,7 +194,7 @@ impl MulticenterBondFieldChange {
         match self {
             Self::Electrons { old, new } => Self::Electrons { old: new, new: old },
             Self::Charge { old, new } => Self::Charge { old: new, new: old },
-            Self::Spin { old, new } => Self::Spin { old: new, new: old },
+            Self::UnpairedElectrons { old, new } => Self::UnpairedElectrons { old: new, new: old },
         }
     }
 }
@@ -501,13 +501,18 @@ impl Edit {
                 });
             }
         }
-        let new_spin = current.spin.update(&update.spin);
-        if !current.spin.canonical_eq(&new_spin) {
+        let new_unpaired_electrons = current
+            .unpaired_electrons
+            .update(&update.unpaired_electrons);
+        if !current
+            .unpaired_electrons
+            .canonical_eq(&new_unpaired_electrons)
+        {
             edits.push(Self::ModifyAtomField {
                 id: id.clone(),
-                change: AtomFieldChange::Spin {
-                    old: current.spin.clone(),
-                    new: new_spin,
+                change: AtomFieldChange::UnpairedElectrons {
+                    old: current.unpaired_electrons.clone(),
+                    new: new_unpaired_electrons,
                 },
             });
         }
@@ -555,13 +560,18 @@ impl Edit {
                 });
             }
         }
-        let new_spin = current.spin.update(&update.spin);
-        if !current.spin.canonical_eq(&new_spin) {
+        let new_unpaired_electrons = current
+            .unpaired_electrons
+            .update(&update.unpaired_electrons);
+        if !current
+            .unpaired_electrons
+            .canonical_eq(&new_unpaired_electrons)
+        {
             edits.push(Self::ModifyBondField {
                 id: id.clone(),
-                change: BondFieldChange::Spin {
-                    old: current.spin.clone(),
-                    new: new_spin,
+                change: BondFieldChange::UnpairedElectrons {
+                    old: current.unpaired_electrons.clone(),
+                    new: new_unpaired_electrons,
                 },
             });
         }
@@ -650,13 +660,18 @@ impl Edit {
                 });
             }
         }
-        let new_spin = current.spin.update(&update.spin);
-        if !current.spin.canonical_eq(&new_spin) {
+        let new_unpaired_electrons = current
+            .unpaired_electrons
+            .update(&update.unpaired_electrons);
+        if !current
+            .unpaired_electrons
+            .canonical_eq(&new_unpaired_electrons)
+        {
             edits.push(Self::ModifyAromaticSystemField {
                 id: id.clone(),
-                change: AromaticSystemFieldChange::Spin {
-                    old: current.spin.clone(),
-                    new: new_spin,
+                change: AromaticSystemFieldChange::UnpairedElectrons {
+                    old: current.unpaired_electrons.clone(),
+                    new: new_unpaired_electrons,
                 },
             });
         }
@@ -708,13 +723,18 @@ impl Edit {
                 });
             }
         }
-        let new_spin = current.spin.update(&update.spin);
-        if !current.spin.canonical_eq(&new_spin) {
+        let new_unpaired_electrons = current
+            .unpaired_electrons
+            .update(&update.unpaired_electrons);
+        if !current
+            .unpaired_electrons
+            .canonical_eq(&new_unpaired_electrons)
+        {
             edits.push(Self::ModifyMulticenterBondField {
                 id: id.clone(),
-                change: MulticenterBondFieldChange::Spin {
-                    old: current.spin.clone(),
-                    new: new_spin,
+                change: MulticenterBondFieldChange::UnpairedElectrons {
+                    old: current.unpaired_electrons.clone(),
+                    new: new_unpaired_electrons,
                 },
             });
         }
@@ -1315,7 +1335,7 @@ mod tests {
             .with_charge(0_i64)
             .with_implicit_hydrogens(4_i64)
             .with_lone_pairs(0_i64)
-            .with_spin((2_u8, 3_u8))
+            .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraint(AtomConstraintAst::valence(4_i64));
         let update = AtomUpdate {
             element: Some(ElementAst::Lit(Element::N)),
@@ -1323,7 +1343,7 @@ mod tests {
             charge: Some(ValueAst::Lit(1)),
             implicit_hydrogens: Some(ValueAst::Lit(3)),
             lone_pairs: Some(ValueAst::Lit(1)),
-            spin: UnpairedElectronsUpdate {
+            unpaired_electrons: UnpairedElectronsUpdate {
                 count: None,
                 multiplicity: Some(ValueAst::Lit(1)),
             },
@@ -1372,7 +1392,7 @@ mod tests {
                 },
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(7)),
-                    change: AtomFieldChange::Spin {
+                    change: AtomFieldChange::UnpairedElectrons {
                         old: UnpairedElectronsAst::from((2_u8, 3_u8)),
                         new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                     },
@@ -1407,7 +1427,7 @@ mod tests {
     fn test_edit_for_bond_update() {
         let current = BondAst::from_order(1)
             .with_charge(0_i64)
-            .with_spin((2_u8, 3_u8))
+            .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraint(BondConstraintAst::ring_membership(
                 RingScope::Size(6),
                 1_i64,
@@ -1415,7 +1435,7 @@ mod tests {
         let update = BondUpdate {
             order: Some(ValueAst::Lit(2)),
             charge: Some(ValueAst::Undetermined),
-            spin: UnpairedElectronsUpdate {
+            unpaired_electrons: UnpairedElectronsUpdate {
                 count: None,
                 multiplicity: Some(ValueAst::Lit(1)),
             },
@@ -1443,7 +1463,7 @@ mod tests {
                 },
                 Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(7)),
-                    change: BondFieldChange::Spin {
+                    change: BondFieldChange::UnpairedElectrons {
                         old: UnpairedElectronsAst::from((2_u8, 3_u8)),
                         new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                     },
@@ -1534,11 +1554,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
+            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
         },
         vec![
@@ -1552,7 +1572,7 @@ mod tests {
             },
             Edit::ModifyAromaticSystemField {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
-                change: AromaticSystemFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
+                change: AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
             },
             Edit::ModifyAromaticSystemConstraint {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
@@ -1598,11 +1618,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
+            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
         },
         vec![
@@ -1616,7 +1636,7 @@ mod tests {
             },
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),
-                change: MulticenterBondFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
+                change: MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
             },
             Edit::ModifyMulticenterBondConstraint {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),

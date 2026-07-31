@@ -190,8 +190,8 @@ impl<'a> MulticenterBondView<'a> {
     }
 
     #[inline]
-    pub fn spin(&self) -> &'a UnpairedElectronsAst {
-        &self.ast.spin
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsAst {
+        &self.ast.unpaired_electrons
     }
 
     #[inline]
