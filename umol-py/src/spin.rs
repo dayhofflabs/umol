@@ -3,7 +3,7 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use umol_ast::ast::UnpairedElectronsAst as AstUnpairedElectronsAst;
+use umol_ast::ast::{AsLit, UnpairedElectronsAst as AstUnpairedElectronsAst};
 use umol_chem::spin::{SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons};
 
 use crate::convert::{hash_rust, into_py_variant};
@@ -120,6 +120,11 @@ impl UnpairedElectronsAst {
         })
     }
 
+    /// Return the exact pair when both component expressions are literal.
+    fn as_lit(&self, py: Python<'_>) -> Option<UnpairedElectrons> {
+        Some(UnpairedElectrons::from_rust(self.to_rust(py).as_lit()?))
+    }
+
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -188,6 +193,45 @@ mod tests {
     #[case::triplet(ChemSpinState::new(2, SpinMultiplicity::TRIPLET).unwrap())]
     fn test_spin_state_roundtrip(#[case] spin_state: ChemSpinState) {
         assert_eq!(SpinState::from_rust(spin_state).to_rust(), spin_state);
+    }
+
+    #[rstest]
+    #[case::complete(
+        AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(2),
+            multiplicity: AstValueAst::Lit(3),
+        },
+        Some(ChemUnpairedElectrons { count: 2, multiplicity: 3 }),
+    )]
+    #[case::physics_invalid(
+        AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(2),
+            multiplicity: AstValueAst::Lit(2),
+        },
+        Some(ChemUnpairedElectrons { count: 2, multiplicity: 2 }),
+    )]
+    #[case::count_partial(
+        AstUnpairedElectronsAst {
+            count: AstValueAst::Undetermined,
+            multiplicity: AstValueAst::Lit(3),
+        },
+        None,
+    )]
+    #[case::multiplicity_partial(
+        AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(2),
+            multiplicity: AstValueAst::Undetermined,
+        },
+        None,
+    )]
+    fn test_unpaired_electrons_ast_as_lit(
+        #[case] ast: AstUnpairedElectronsAst,
+        #[case] expected: Option<ChemUnpairedElectrons>,
+    ) {
+        Python::attach(|py| {
+            let ast = UnpairedElectronsAst::from_rust(py, &ast).unwrap();
+            assert_eq!(ast.as_lit(py).map(UnpairedElectrons::to_rust), expected);
+        });
     }
 
     #[rstest]

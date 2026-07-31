@@ -776,7 +776,7 @@ test/fuzz inputs.
   and `ValueError` conversion for range or compatibility failures. Do not expose
   `SpinMultiplicity`. Test valid construction, each physical error class, equality/hash/repr, and
   Rust roundtrips. **Additive (green).** [dep: S0b]
-- **S5c — `umol-py`: connect exact projection.** Expose
+- **S5c — `umol-py`: connect exact projection.** **Done.** Expose
   `UnpairedElectronsAst.as_lit() -> Optional[UnpairedElectrons]`, update annotations, exports,
   fixtures, and tests so partial and physics-invalid ground pairs remain distinguishable.
   **Additive (green).** [dep: S2a, S2e, S5a]

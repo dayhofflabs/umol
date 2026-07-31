@@ -1,6 +1,6 @@
 import pytest
 
-from umol import SpinState, UnpairedElectrons
+from umol import SpinState, UnpairedElectrons, UnpairedElectronsAst, ValueAst
 
 
 @pytest.mark.parametrize(
@@ -101,3 +101,32 @@ def test_spin_state_assignment_error(attribute):
 
     with pytest.raises(AttributeError):
         setattr(spin_state, attribute, 1)
+
+
+@pytest.mark.parametrize(
+    ("ast", "expected"),
+    [
+        pytest.param(
+            UnpairedElectronsAst(2, 3),
+            UnpairedElectrons(2, 3),
+            id="complete",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(2, 2),
+            UnpairedElectrons(2, 2),
+            id="physics_invalid",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(ValueAst.Undetermined(), 3),
+            None,
+            id="count_partial",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(2, ValueAst.Undetermined()),
+            None,
+            id="multiplicity_partial",
+        ),
+    ],
+)
+def test_unpaired_electrons_ast_as_lit(ast, expected):
+    assert ast.as_lit() == expected
