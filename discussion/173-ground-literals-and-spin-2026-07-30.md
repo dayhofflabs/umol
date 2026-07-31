@@ -743,7 +743,7 @@ test/fuzz inputs.
 
 ### S4 — Implement spin-invariant validation
 
-- **S4a — `umol-graph/src/ops/validate/spin.rs`: validate an `AtomAst`.** Add the shared exact
+- **S4a — `umol-graph/src/ops/validate/spin.rs`: validate an `AtomAst`.** **Done.** Add the shared exact
   pair check and implement `validate_atom`, returning `Underdetermined` for a partial pair,
   `Determined` for a valid literal pair, and `SpinInvariantsContradiction::Atom` for a physically
   invalid literal pair. Test range, parity, and partial cases. **Additive behavior (green).**
