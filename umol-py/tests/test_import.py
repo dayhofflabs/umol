@@ -188,6 +188,7 @@ PUBLIC_EXPORTS = frozenset(
     Topicity
     TopicityAst
     TopicityRelationAst
+    UnpairedElectrons
     UnpairedElectronsAst
     UnderdeterminedError
     ValenceEntry

@@ -767,9 +767,9 @@ test/fuzz inputs.
 
 ### S5 — Complete the Python spin value surface
 
-- **S5a — `umol-py/src/spin.rs`: bind `UnpairedElectrons`.** Add the immutable exact value type
-  with read-only integer `count` and `multiplicity`, equality/hash/repr consistent with other
-  Python value wrappers, Rust conversion, exports, and import/unit tests. **Additive (green).**
+- **S5a — `umol-py/src/spin.rs`: bind `UnpairedElectrons`.** **Done.** Add the immutable exact
+  value type with read-only integer `count` and `multiplicity`, equality/hash/repr consistent with
+  other Python value wrappers, Rust conversion, exports, and import/unit tests. **Additive (green).**
   [dep: S0a]
 - **S5b — `umol-py/src/spin.rs`: bind `SpinState`.** Add the immutable validated value type with
   keyword-only integer `unpaired_electrons` and `multiplicity`, read-only properties, and

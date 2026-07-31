@@ -98,7 +98,7 @@ use crate::{
     resolve::{AromaticityResolveConfig, InconsistencyPolicy, ResolveConfig, StereoResolveConfig},
     ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
-    spin::UnpairedElectronsAst,
+    spin::{UnpairedElectrons, UnpairedElectronsAst},
     stereo::{
         CisTransConfiguration, CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomAst, StereoAtomView, StereoAtomViews,
@@ -281,6 +281,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ElementAst>()?;
         module.add_class::<IsotopeMass>()?;
         module.add_class::<IsotopeMassAst>()?;
+        module.add_class::<UnpairedElectrons>()?;
         module.add_class::<UnpairedElectronsAst>()?;
         module.add_class::<AtomAst>()?;
         module.add_class::<AtomView>()?;
