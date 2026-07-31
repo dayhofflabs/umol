@@ -209,6 +209,76 @@ No ZDD dependency, public type, or algorithm variant is part of S0 or S1. It
 should be reconsidered only together with a restricted or lazy composition API
 whose filters can be applied before materialization.
 
+## Maximum and maximal common subgraphs
+
+Raised 2026-07-31. Most callers who reach for common-subgraph enumeration want the **maximum** common
+subgraph (largest node count) or a **maximal** one (cannot be extended), rather than the complete
+family filtered by a criterion they have to supply. Both are reasonable operations to offer. Neither
+may be plumbed into composition.
+
+### Why composition cannot use them
+
+`ReactionAst::compose` requires the complete result **including the empty correspondence**, and the
+empty correspondence is never maximal. It is the case where the two reactions act on disjoint parts
+of the host — two independent transformations — which is the dominant case in reaction-network
+generation, not an edge case. Restricting to maximal or maximum overlaps therefore discards the most
+common situation first, because a zero-size overlap is minimal by construction.
+
+The composition law degrades in a specific way that is worth stating precisely rather than as "not
+necessarily equivalent". With a single maximum overlap the composite explores one identification
+where sequential application explores all of them, so
+
+```text
+composed ⊆ sequential      (containment, not equality)
+```
+
+Equality holds only for the complete enumeration. Any restricted variant must document the
+containment direction rather than claim the law.
+
+### Maximal is a different enumerator, not a filter
+
+Maximal common subgraphs are exactly the **maximal cliques** of the modular product, which
+Bron–Kerbosch produces natively. So this is a change of clique walk, not a post-filter over the
+existing output: extension stops instead of every smaller correspondence being materialised and then
+discarded. That is the efficiency the request is really after, and it needs no compressed
+representation to obtain.
+
+### Maximum is branch-and-bound
+
+Enumerate-all-then-take-largest is the naive route and is precisely what should be avoided. The
+established approach is branch and bound with bounds on the achievable remainder — the McSplit family
+and its predecessors. This belongs as its own algorithm variant, not as a criterion applied to
+enumeration output.
+
+### Consequence for the deferred ZDD
+
+Neither operation supplies the "restricted or lazy composition API" that the ZDD section above is
+waiting for. Maximum wants pruning, not a compact family; maximal wants a different walk. The case
+that would justify a ZDD is a **cardinality-threshold** query — overlaps of at least `k` mapped
+nodes — or repeated queries against one retained family. That is a third consumer, distinct from both
+composition and maximum common subgraph, and should not be conflated with this request.
+
+### Connectedness is the axis callers ask for first
+
+Cheminformatics maximum common subgraph almost always means a single **connected** fragment, while
+the current enumeration yields disconnected correspondences as well. Raymond and Willett's MCIS and
+MCES distinction maps approximately onto the existing `EmbeddingKind::Induced` and
+`EmbeddingKind::Monomorphism`, so that axis is already covered; connected versus disconnected is not,
+and it is the parameter users reach for before they reach for maximum versus maximal.
+
+### Proposed shape
+
+Three named operations with visibly different contracts, rather than one call with a mode parameter:
+
+| operation | contract |
+| --- | --- |
+| `enumerate_common_subgraphs` | complete, including the empty correspondence; the only one composition may use |
+| `maximal_common_subgraphs` | maximal cliques; no completeness guarantee |
+| `maximum_common_subgraph` | one largest; branch and bound |
+
+The completeness guarantee is what composition depends on, so it should be legible at the call site
+rather than hidden in an argument.
+
 ## References
 
 - Minato, [*Zero-Suppressed BDDs for Set Manipulation in Combinatorial
@@ -216,3 +286,9 @@ whose filters can be applied before materialization.
 - Kawahara et al., [*Frontier-Based Search for Enumerating All Constrained
   Subgraphs with Compressed Representation*](https://doi.org/10.4230/LIPIcs.SEA.2020.9),
   2020.
+- Raymond and Willett, [*Maximum common subgraph isomorphism algorithms for the
+  matching of chemical structures*](https://doi.org/10.1023/A:1021271615909), 2002.
+- Bron and Kerbosch, [*Algorithm 457: finding all cliques of an undirected
+  graph*](https://doi.org/10.1145/362342.362367), 1973.
+- McCreesh, Prosser and Trimble, [*A Partitioning Algorithm for Maximum Common Subgraph
+  Problems*](https://doi.org/10.24963/ijcai.2017/99), 2017.
