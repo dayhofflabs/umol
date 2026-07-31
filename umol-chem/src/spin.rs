@@ -160,11 +160,6 @@ impl SpinState {
         Self::max_multiplicity(unpaired as u8)
     }
 
-    /// Check if molecular spin state is compatible with electron count.
-    pub fn is_compatible_with(&self, electrons: u8) -> bool {
-        self.unpaired <= electrons && (electrons - self.unpaired).is_multiple_of(2)
-    }
-
     /// Check whether this molecular spin state is achievable by coupling
     /// the given atomic spin states.
     ///
@@ -534,19 +529,6 @@ mod tests {
     fn test_high_spin(#[case] states: Vec<SpinState>, #[case] expected: SpinState) {
         let hs = SpinState::high_spin_combine(&states).unwrap();
         assert_eq!(hs, expected);
-    }
-
-    #[rstest]
-    #[case(spin!("#s"), 0, true)]
-    #[case(spin!("#u"), 1, true)]
-    #[case(spin!("#s"), 1, false)]
-    #[case(spin!("#u2"), 0, false)]
-    fn test_is_compatible_with(
-        #[case] state: SpinState,
-        #[case] electrons: u8,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(state.is_compatible_with(electrons), expected);
     }
 
     #[rustfmt::skip]
