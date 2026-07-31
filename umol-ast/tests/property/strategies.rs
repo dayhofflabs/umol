@@ -617,7 +617,7 @@ prop_compose! {
     }
 }
 
-/// `BondAst` shapes that render to bond keyword shorthands per spec §7.7:
+/// `BondAst` shapes that render to bond keyword shorthands per spec §7.6:
 /// `:single`, `:double`, `:triple`, `:quadruple`, plus `:aromatic` (an
 /// order-1 bond with the inline `Aromatic` flag).
 pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst> {
@@ -960,7 +960,7 @@ pub(crate) fn noncovalent_bond_update_strategy() -> impl Strategy<Value = Noncov
 /// Coset forms that round-trip through both the entity `:type` string and the
 /// EDN coset-form: `Undetermined` (`*`), `Lit`, and a literal set
 /// (`{a,b,…}` ↔ EDN vector). The `~`/`^`/`?var` operator-exprs are reserved
-/// (§7.14) and excluded.
+/// (§5.8) and excluded.
 pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoCoset> {
     prop_oneof![
         Just(StereoCoset::Undetermined),

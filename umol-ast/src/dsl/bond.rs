@@ -92,7 +92,7 @@ impl<'de> FromEdn<'de> for BondDsl {
 }
 
 /// Expand a bond-entry keyword shorthand to its equivalent bond-string
-/// payload. The five recognized keywords mirror the spec §7.7 table:
+/// payload. The five recognized keywords mirror the spec §7.6 table:
 ///
 /// - `:single` → `"1"`
 /// - `:double` → `"2"`
