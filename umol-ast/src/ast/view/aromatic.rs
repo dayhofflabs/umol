@@ -10,7 +10,7 @@ use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
-use super::super::spin::SpinStateAst;
+use super::super::spin::UnpairedElectronsAst;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::atom::AtomView;
@@ -188,7 +188,7 @@ impl<'a> AromaticSystemView<'a> {
     }
 
     #[inline]
-    pub fn spin(&self) -> &'a SpinStateAst {
+    pub fn spin(&self) -> &'a UnpairedElectronsAst {
         &self.ast.spin
     }
 

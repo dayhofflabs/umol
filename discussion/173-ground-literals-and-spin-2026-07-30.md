@@ -684,7 +684,7 @@ S1 ends with exact literal projection having the same structural meaning in Rust
 
 ### S2 — Migrate the AST unpaired-electron vocabulary
 
-- **S2a — `umol-ast/src/ast/spin.rs`, `ast.rs`: rename the AST and update types.** Replace
+- **S2a — `umol-ast/src/ast/spin.rs`, `ast.rs`: rename the AST and update types.** **Done.** Replace
   `SpinStateAst`/`SpinStateUpdate` with `UnpairedElectronsAst`/`UnpairedElectronsUpdate`, rename
   the component field to `count`, keep componentwise update and lattice behavior, and change
   `AsLit` to exact projection into `umol_chem::spin::UnpairedElectrons`. Add unit and property

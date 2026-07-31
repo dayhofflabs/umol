@@ -14,7 +14,7 @@ use super::super::id::{
 };
 use super::super::molecule::MoleculeAst;
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::spin::SpinStateAst;
+use super::super::spin::UnpairedElectronsAst;
 use super::super::stereo::StereoKind;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
@@ -353,7 +353,7 @@ pub enum MoleculeConstraint {
     },
     SpinSum {
         atoms: Option<Vec<AtomId>>,
-        spin: SpinStateAst,
+        spin: UnpairedElectronsAst,
     },
     BondOrderSum {
         bonds: Option<Vec<BondId>>,
@@ -777,7 +777,7 @@ mod tests {
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
-    use crate::ast::spin::SpinStateAst;
+    use crate::ast::spin::UnpairedElectronsAst;
     use crate::ast::value::{ValueAst, ValueTerm};
     use crate::ast::BooleanAst;
 
@@ -1122,7 +1122,7 @@ mod tests {
     #[case::empty(vec![], 0)]
     #[case::molecule_leaves(vec![
             Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
-            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0)]), spin: SpinStateAst::from((0_u8, 1_u8)) }),
+            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
         ], 2)]
     #[case::combinator(vec![Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
@@ -1390,8 +1390,8 @@ mod tests {
     #[rstest]
     #[case::charge_sum_lit(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }, false)]
     #[case::charge_sum_undetermined(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined }, true)]
-    #[case::spin_sum_ground(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((0_u8, 1_u8)) }, false)]
-    #[case::spin_sum_undetermined(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::default() }, true)]
+    #[case::spin_sum_ground(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }, false)]
+    #[case::spin_sum_undetermined(MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::default() }, true)]
     #[case::bond_order_sum_lit(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(4) }, false)]
     #[case::bond_order_sum_undetermined(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Undetermined }, true)]
     #[case::connected(MoleculeConstraint::Connected { atoms: None }, false)]
@@ -1411,8 +1411,8 @@ mod tests {
     )]
     #[case::spin_sum_sorts_and_folds(
         MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(2), AtomId(0)]),
-            spin: SpinStateAst { unpaired: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
-        Ok(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: SpinStateAst::from((0_u8, 1_u8)) }),
+            spin: UnpairedElectronsAst { count: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
+        Ok(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_sorts_and_folds(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: ValueAst::term(ValueTerm::Lit(4)) },
@@ -1491,9 +1491,9 @@ mod tests {
         Some(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
     )]
     #[case::spin_sum_shifts(
-        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: SpinStateAst::from((0_u8, 1_u8)) },
+        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) },
         id_compaction(vec![1], vec![]),
-        Some(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(1)]), spin: SpinStateAst::from((0_u8, 1_u8)) }),
+        Some(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(1)]), spin: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_shifts(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(2)]), sum: ValueAst::Lit(4) },

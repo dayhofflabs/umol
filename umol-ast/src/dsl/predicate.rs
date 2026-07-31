@@ -11,7 +11,7 @@ use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
 use crate::ast::constraint::{RingMembershipAst, RingScope};
-use crate::ast::spin::SpinStateAst;
+use crate::ast::spin::UnpairedElectronsAst;
 use crate::ast::value::ValueAst;
 
 pub(crate) fn charge(i: &mut &str) -> PResult<ValueAst> {
@@ -67,16 +67,16 @@ pub enum SpinPredicate {
 }
 
 pub(crate) fn apply_spin_pair(
-    spin: &mut SpinStateAst,
+    spin: &mut UnpairedElectronsAst,
     pred: SpinPredicate,
     dup: fn(String) -> ParseError,
 ) -> Result<(), ParseError> {
     match pred {
         SpinPredicate::Unpaired(v) => {
-            if !matches!(&spin.unpaired, ValueAst::Undetermined) {
+            if !matches!(&spin.count, ValueAst::Undetermined) {
                 return Err(dup("#u".to_string()));
             }
-            spin.unpaired = v;
+            spin.count = v;
         }
         SpinPredicate::Multiplicity(v) => {
             if !matches!(&spin.multiplicity, ValueAst::Undetermined) {
@@ -103,8 +103,11 @@ pub(crate) fn fmt_charge(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Resul
     }
 }
 
-pub(crate) fn fmt_spin_pair(f: &mut fmt::Formatter<'_>, spin: &SpinStateAst) -> fmt::Result {
-    match &spin.unpaired {
+pub(crate) fn fmt_spin_pair(
+    f: &mut fmt::Formatter<'_>,
+    spin: &UnpairedElectronsAst,
+) -> fmt::Result {
+    match &spin.count {
         ValueAst::Undetermined => {}
         ValueAst::Lit(1) => write!(f, "#u")?,
         ValueAst::Lit(n) => write!(f, "#u{}", n)?,
@@ -164,15 +167,15 @@ pub(crate) fn fmt_ring_membership(
     }
 }
 
-/// Fill defaults on a `SpinStateAst` per the given modes. Shared across
+/// Fill defaults on a `UnpairedElectronsAst` per the given modes. Shared across
 /// atom/bond/aromatic-system/multicenter-bond DSL lowering (all entities that
 /// carry a spin state except `NoncovalentBond`).
 pub(crate) fn raise_spin(
-    spin: &mut SpinStateAst,
+    spin: &mut UnpairedElectronsAst,
     u_mode: UnpairedElectronsDefault,
     m_mode: MultiplicityDefault,
 ) {
-    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
+    let u = mem::replace(&mut spin.count, ValueAst::Undetermined);
     let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
     let resolved_u = if matches!(u, ValueAst::Undetermined) {
         match u_mode {
@@ -197,20 +200,20 @@ pub(crate) fn raise_spin(
     } else {
         m
     };
-    spin.unpaired = resolved_u;
+    spin.count = resolved_u;
     spin.multiplicity = resolved_m;
 }
 
-/// Strip defaults from a `SpinStateAst` per the given modes. Compute `strip_m`
+/// Strip defaults from a `UnpairedElectronsAst` per the given modes. Compute `strip_m`
 /// first so that under (Derived, Derived) the tie-break keeps `u` explicit:
 /// `strip_u` under `Derived` backs off when `strip_m` has already fired, so at
 /// most one of the two is stripped and re-raising recovers the original AST.
 pub(crate) fn lower_spin(
-    spin: &mut SpinStateAst,
+    spin: &mut UnpairedElectronsAst,
     u_mode: UnpairedElectronsDefault,
     m_mode: MultiplicityDefault,
 ) {
-    let uu = if let ValueAst::Lit(n) = spin.unpaired {
+    let uu = if let ValueAst::Lit(n) = spin.count {
         Some(n)
     } else {
         None
@@ -229,7 +232,7 @@ pub(crate) fn lower_spin(
         UnpairedElectronsDefault::Required => false,
     };
     if strip_u {
-        spin.unpaired = ValueAst::Undetermined;
+        spin.count = ValueAst::Undetermined;
     }
     if strip_m {
         spin.multiplicity = ValueAst::Undetermined;
@@ -245,11 +248,11 @@ mod tests {
 
     #[fixture]
     fn spin(
-        #[default(ValueAst::Undetermined)] unpaired: ValueAst,
+        #[default(ValueAst::Undetermined)] count: ValueAst,
         #[default(ValueAst::Undetermined)] multiplicity: ValueAst,
-    ) -> SpinStateAst {
-        SpinStateAst {
-            unpaired,
+    ) -> UnpairedElectronsAst {
+        UnpairedElectronsAst {
+            count,
             multiplicity,
         }
     }
@@ -336,9 +339,9 @@ mod tests {
     #[case::sets_multiplicity_over_existing_unpaired(spin(ValueAst::Lit(0), ValueAst::Undetermined), SpinPredicate::Multiplicity(ValueAst::Lit(1)),
         spin(ValueAst::Lit(0), ValueAst::Lit(1)))]
     fn test_apply_spin_pair(
-        #[case] mut initial: SpinStateAst,
+        #[case] mut initial: UnpairedElectronsAst,
         #[case] pred: SpinPredicate,
-        #[case] expected: SpinStateAst,
+        #[case] expected: UnpairedElectronsAst,
     ) {
         apply_spin_pair(&mut initial, pred, ParseError::DuplicateAtomPredicate).unwrap();
         assert_eq!(initial, expected);
@@ -351,7 +354,7 @@ mod tests {
     #[case::duplicate_multiplicity(spin(ValueAst::Undetermined, ValueAst::Lit(2)), SpinPredicate::Multiplicity(ValueAst::Lit(3)),
         ParseError::DuplicateAtomPredicate("#s".to_string()))]
     fn test_apply_spin_pair_error(
-        #[case] mut initial: SpinStateAst,
+        #[case] mut initial: UnpairedElectronsAst,
         #[case] pred: SpinPredicate,
         #[case] expected: ParseError,
     ) {
@@ -420,9 +423,9 @@ mod tests {
         #[case] expected_u: ValueAst,
         #[case] expected_m: ValueAst,
     ) {
-        let mut spin = SpinStateAst { unpaired: init_u, multiplicity: init_m };
+        let mut spin = UnpairedElectronsAst { count: init_u, multiplicity: init_m };
         raise_spin(&mut spin, u_mode, m_mode);
-        assert_eq!(spin.unpaired, expected_u);
+        assert_eq!(spin.count, expected_u);
         assert_eq!(spin.multiplicity, expected_m);
     }
 
@@ -471,9 +474,9 @@ mod tests {
         #[case] expected_u: ValueAst,
         #[case] expected_m: ValueAst,
     ) {
-        let mut spin = SpinStateAst { unpaired: init_u, multiplicity: init_m };
+        let mut spin = UnpairedElectronsAst { count: init_u, multiplicity: init_m };
         lower_spin(&mut spin, u_mode, m_mode);
-        assert_eq!(spin.unpaired, expected_u);
+        assert_eq!(spin.count, expected_u);
         assert_eq!(spin.multiplicity, expected_m);
     }
 
@@ -528,7 +531,7 @@ mod tests {
         #[case] u_mode: UnpairedElectronsDefault,
         #[case] m_mode: MultiplicityDefault,
     ) {
-        let mut raised = SpinStateAst { unpaired: init_u, multiplicity: init_m };
+        let mut raised = UnpairedElectronsAst { count: init_u, multiplicity: init_m };
         raise_spin(&mut raised, u_mode, m_mode);
 
         let mut lowered_then_raised = raised.clone();

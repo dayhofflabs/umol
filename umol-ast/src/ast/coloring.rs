@@ -211,7 +211,7 @@ mod tests {
     use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
-    use crate::ast::spin::SpinStateAst;
+    use crate::ast::spin::UnpairedElectronsAst;
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use crate::ast::value::ValueAst;
 
@@ -312,20 +312,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::both_undetermined( SpinStateAst::default(), SpinStateAst::default(), ConstitutionFeatures::SPIN, true)]
+    #[case::both_undetermined( UnpairedElectronsAst::default(), UnpairedElectronsAst::default(), ConstitutionFeatures::SPIN, true)]
     #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), ConstitutionFeatures::SPIN, true)]
     #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::SPIN, false)]
     #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::SPIN, false)]
     #[case::partial_vs_undetermined(
-        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
-        SpinStateAst::default(),
+        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst::default(),
         ConstitutionFeatures::SPIN,
         false,
     )]
     #[case::spin_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::empty(), true)]
     fn test_constitution_coloring_color_spin(
-        #[case] spin_a: SpinStateAst,
-        #[case] spin_b: SpinStateAst,
+        #[case] spin_a: UnpairedElectronsAst,
+        #[case] spin_b: UnpairedElectronsAst,
         #[case] features: ConstitutionFeatures,
         #[case] expected_equal: bool,
     ) {

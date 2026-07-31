@@ -13,7 +13,7 @@ use super::super::id::{
     StereoAtomId,
 };
 use super::super::molecule::MoleculeAst;
-use super::super::spin::SpinStateAst;
+use super::super::spin::UnpairedElectronsAst;
 use super::super::stereo::{StereoKind, TetrahedralStereoAst};
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
@@ -113,7 +113,7 @@ impl<'a> AtomView<'a> {
     }
 
     #[inline]
-    pub fn spin(&self) -> &'a SpinStateAst {
+    pub fn spin(&self) -> &'a UnpairedElectronsAst {
         &self.ast.spin
     }
 

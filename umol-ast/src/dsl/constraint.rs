@@ -46,7 +46,7 @@ use crate::ast::constraint::{
 };
 use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::spin::SpinStateAst;
+use crate::ast::spin::UnpairedElectronsAst;
 use crate::ast::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
@@ -80,7 +80,7 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
 
 pub(super) fn read_spin_state(
     de: &mut EdnStreamDeserializer<'_>,
-) -> Result<SpinStateAst, EdnError> {
+) -> Result<UnpairedElectronsAst, EdnError> {
     let mut unpaired = None;
     let mut multiplicity = None;
     read_map(de, |d, key| {
@@ -91,8 +91,8 @@ pub(super) fn read_spin_state(
         }
         Ok(())
     })?;
-    Ok(SpinStateAst {
-        unpaired: unpaired.ok_or_else(|| missing("unpaired", "spin"))?,
+    Ok(UnpairedElectronsAst {
+        count: unpaired.ok_or_else(|| missing("unpaired", "spin"))?,
         multiplicity: multiplicity.ok_or_else(|| missing("multiplicity", "spin"))?,
     })
 }
@@ -1211,7 +1211,7 @@ pub enum MoleculeConstraintDsl {
     },
     SpinSum {
         atoms: Option<Vec<AtomRef>>,
-        spin: SpinStateAst,
+        spin: UnpairedElectronsAst,
     },
     BondOrderSum {
         bonds: Option<Vec<BondRef>>,
@@ -1805,7 +1805,7 @@ fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &ValueDs
     Edn::Map(m)
 }
 
-fn parse_spin(edn: &Edn<'_>) -> Result<SpinStateAst, DeError> {
+fn parse_spin(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeError> {
     let m = expect_map(edn, "spin")?;
     let unpaired = m
         .get_keyword("unpaired")
@@ -1819,17 +1819,17 @@ fn parse_spin(edn: &Edn<'_>) -> Result<SpinStateAst, DeError> {
             key: "multiplicity".into(),
             path: vec!["spin".into()],
         })?;
-    Ok(SpinStateAst {
-        unpaired: ValueDsl::from_edn(unpaired)?.into_ast(&()),
+    Ok(UnpairedElectronsAst {
+        count: ValueDsl::from_edn(unpaired)?.into_ast(&()),
         multiplicity: ValueDsl::from_edn(multiplicity)?.into_ast(&()),
     })
 }
 
-fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
+fn render_spin(spin: &UnpairedElectronsAst) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("unpaired"),
-        ValueDsl::from_ast(&spin.unpaired, &()).to_edn(),
+        ValueDsl::from_ast(&spin.count, &()).to_edn(),
     );
     m.insert(
         Edn::keyword("multiplicity"),

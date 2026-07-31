@@ -100,7 +100,7 @@ pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };
-pub use spin::{SpinStateAst, SpinStateUpdate};
+pub use spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
 pub use stereo::{
     CisTransConfiguration, CisTransStereo, CisTransStereoAst, StereoAtomAst, StereoAtomUpdate,
     StereoBondAst, StereoBondUpdate, StereoConfiguration, StereoConfigurationAst,

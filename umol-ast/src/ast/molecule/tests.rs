@@ -31,7 +31,7 @@ use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
-use super::super::spin::SpinStateAst;
+use super::super::spin::UnpairedElectronsAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
 use super::super::value::ValueAst;
 use super::{MoleculeAst, MoleculeParts};
@@ -43,7 +43,7 @@ fn ground_atom() -> AtomAst {
     a.charge = ValueAst::Lit(0);
     a.implicit_hydrogens = ValueAst::Lit(4);
     a.lone_pairs = ValueAst::Lit(0);
-    a.spin = SpinStateAst::from((0_u8, 1_u8));
+    a.spin = UnpairedElectronsAst::from((0_u8, 1_u8));
     a
 }
 
@@ -2125,7 +2125,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
     let bond = BondAst {
         order: ValueAst::Lit(1),
         charge: ValueAst::Lit(0),
-        spin: SpinStateAst::closed_shell(),
+        spin: UnpairedElectronsAst::closed_shell(),
         constraints: BondConstraintsAst::new(),
     };
     let forward = MoleculeAst::from_parts(MoleculeParts {

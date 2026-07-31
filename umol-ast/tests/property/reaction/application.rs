@@ -148,7 +148,7 @@ proptest! {
         mut host_system in aromatic_system_ast_for(3),
         update in aromatic_system_update_for(3),
     ) {
-        host_system.spin = SpinStateAst::from((2_u8, 3_u8));
+        host_system.spin = UnpairedElectronsAst::from((2_u8, 3_u8));
         let pattern_system = AromaticSystemAst::default();
         let effective_update = pattern_system.difference_to(&pattern_system.update(&update));
         let expected_system = host_system.update(&effective_update).canonicalize().unwrap();
@@ -204,7 +204,7 @@ proptest! {
         mut host_bond in multicenter_bond_ast_for(3),
         update in multicenter_bond_update_for(3),
     ) {
-        host_bond.spin = SpinStateAst::from((2_u8, 3_u8));
+        host_bond.spin = UnpairedElectronsAst::from((2_u8, 3_u8));
         let pattern_bond = MulticenterBondAst::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();

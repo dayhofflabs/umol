@@ -266,9 +266,9 @@ proptest! {
     }
 
     #[test]
-    fn test_spin_state_ast_difference_to(
-        lhs in spin_state_strategy(),
-        rhs in spin_state_strategy(),
+    fn test_unpaired_electrons_ast_difference_to(
+        lhs in unpaired_electrons_strategy(),
+        rhs in unpaired_electrons_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert_eq!(lhs.update(&update), rhs);

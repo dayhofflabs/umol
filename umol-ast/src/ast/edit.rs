@@ -26,7 +26,7 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst, NoncovalentBondUpdate};
 use super::remap::{IdCompaction, UndoCompaction};
-use super::spin::SpinStateAst;
+use super::spin::UnpairedElectronsAst;
 use super::stereo::{
     StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate, StereoConfigurationAst,
 };
@@ -89,8 +89,8 @@ pub enum AtomFieldChange {
         new: ValueAst,
     },
     Spin {
-        old: SpinStateAst,
-        new: SpinStateAst,
+        old: UnpairedElectronsAst,
+        new: UnpairedElectronsAst,
     },
 }
 
@@ -119,8 +119,8 @@ pub enum BondFieldChange {
         new: ValueAst,
     },
     Spin {
-        old: SpinStateAst,
-        new: SpinStateAst,
+        old: UnpairedElectronsAst,
+        new: UnpairedElectronsAst,
     },
 }
 
@@ -158,8 +158,8 @@ pub enum AromaticSystemFieldChange {
         new: ValueAst,
     },
     Spin {
-        old: SpinStateAst,
-        new: SpinStateAst,
+        old: UnpairedElectronsAst,
+        new: UnpairedElectronsAst,
     },
 }
 
@@ -184,8 +184,8 @@ pub enum MulticenterBondFieldChange {
         new: ValueAst,
     },
     Spin {
-        old: SpinStateAst,
-        new: SpinStateAst,
+        old: UnpairedElectronsAst,
+        new: UnpairedElectronsAst,
     },
 }
 
@@ -1159,7 +1159,7 @@ mod tests {
         RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereogenicityAst,
     };
     use super::super::noncovalent::NoncovalentBondKind;
-    use super::super::spin::SpinStateUpdate;
+    use super::super::spin::UnpairedElectronsUpdate;
     use super::super::stereo::{
         StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, Stereogenicity,
     };
@@ -1323,8 +1323,8 @@ mod tests {
             charge: Some(ValueAst::Lit(1)),
             implicit_hydrogens: Some(ValueAst::Lit(3)),
             lone_pairs: Some(ValueAst::Lit(1)),
-            spin: SpinStateUpdate {
-                unpaired: None,
+            spin: UnpairedElectronsUpdate {
+                count: None,
                 multiplicity: Some(ValueAst::Lit(1)),
             },
             constraints: AtomConstraintsAst::from_iter([
@@ -1373,8 +1373,8 @@ mod tests {
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(7)),
                     change: AtomFieldChange::Spin {
-                        old: SpinStateAst::from((2_u8, 3_u8)),
-                        new: SpinStateAst::from((2_u8, 1_u8)),
+                        old: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                        new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                     },
                 },
                 Edit::ModifyAtomConstraint {
@@ -1415,8 +1415,8 @@ mod tests {
         let update = BondUpdate {
             order: Some(ValueAst::Lit(2)),
             charge: Some(ValueAst::Undetermined),
-            spin: SpinStateUpdate {
-                unpaired: None,
+            spin: UnpairedElectronsUpdate {
+                count: None,
                 multiplicity: Some(ValueAst::Lit(1)),
             },
             constraints: BondConstraintsAst::from_iter([
@@ -1444,8 +1444,8 @@ mod tests {
                 Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(7)),
                     change: BondFieldChange::Spin {
-                        old: SpinStateAst::from((2_u8, 3_u8)),
-                        new: SpinStateAst::from((2_u8, 1_u8)),
+                        old: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                        new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                     },
                 },
                 Edit::ModifyBondConstraint {
@@ -1538,7 +1538,7 @@ mod tests {
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
         },
         vec![
@@ -1552,7 +1552,7 @@ mod tests {
             },
             Edit::ModifyAromaticSystemField {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
-                change: AromaticSystemFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+                change: AromaticSystemFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
             },
             Edit::ModifyAromaticSystemConstraint {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
@@ -1602,7 +1602,7 @@ mod tests {
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
         },
         vec![
@@ -1616,7 +1616,7 @@ mod tests {
             },
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),
-                change: MulticenterBondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+                change: MulticenterBondFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
             },
             Edit::ModifyMulticenterBondConstraint {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),

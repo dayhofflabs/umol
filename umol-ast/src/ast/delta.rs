@@ -3067,9 +3067,9 @@ mod tests {
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanAst,
         DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst,
         MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindAst,
-        RingScope, SpinStateAst, SpinStateUpdate, StereoAtomConstraintsAst,
-        StereoBondConstraintsAst, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
-        StereoKind, StereoLigandKind, Stereogenicity, StereogenicityAst,
+        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationAst,
+        StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
+        StereogenicityAst, UnpairedElectronsAst, UnpairedElectronsUpdate,
     };
 
     #[rstest]
@@ -3119,8 +3119,8 @@ mod tests {
             charge: Some(ValueAst::Lit(1)),
             implicit_hydrogens: Some(ValueAst::Lit(3)),
             lone_pairs: Some(ValueAst::Lit(1)),
-            spin: SpinStateUpdate {
-                unpaired: None,
+            spin: UnpairedElectronsUpdate {
+                count: None,
                 multiplicity: Some(ValueAst::Lit(1)),
             },
             constraints: AtomConstraintsAst::from_iter([
@@ -3169,8 +3169,8 @@ mod tests {
                 AtomDelta::ModifyField {
                     id: AtomId(7),
                     change: AtomFieldChange::Spin {
-                        old: SpinStateAst::from((2_u8, 3_u8)),
-                        new: SpinStateAst::from((2_u8, 1_u8)),
+                        old: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                        new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                     },
                 },
                 AtomDelta::ModifyConstraint {
@@ -3257,8 +3257,8 @@ mod tests {
         let update = BondUpdate {
             order: Some(ValueAst::Lit(2)),
             charge: Some(ValueAst::Undetermined),
-            spin: SpinStateUpdate {
-                unpaired: None,
+            spin: UnpairedElectronsUpdate {
+                count: None,
                 multiplicity: Some(ValueAst::Lit(1)),
             },
             constraints: BondConstraintsAst::from_iter([
@@ -3286,8 +3286,8 @@ mod tests {
                 BondDelta::ModifyField {
                     id: BondId(7),
                     change: BondFieldChange::Spin {
-                        old: SpinStateAst::from((2_u8, 3_u8)),
-                        new: SpinStateAst::from((2_u8, 1_u8)),
+                        old: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                        new: UnpairedElectronsAst::from((2_u8, 1_u8)),
                     },
                 },
                 BondDelta::ModifyConstraint {
@@ -3374,7 +3374,7 @@ mod tests {
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
         },
         vec![
@@ -3388,7 +3388,7 @@ mod tests {
             },
             AromaticSystemDelta::ModifyField {
                 id: AromaticSystemId(7),
-                change: AromaticSystemFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+                change: AromaticSystemFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
             },
             AromaticSystemDelta::ModifyConstraint {
                 id: AromaticSystemId(7),
@@ -3427,7 +3427,7 @@ mod tests {
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
             charge: Some(ValueAst::Undetermined),
-            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            spin: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
         },
         vec![
@@ -3441,7 +3441,7 @@ mod tests {
             },
             MulticenterBondDelta::ModifyField {
                 id: MulticenterBondId(7),
-                change: MulticenterBondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+                change: MulticenterBondFieldChange::Spin { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
             },
             MulticenterBondDelta::ModifyConstraint {
                 id: MulticenterBondId(7),

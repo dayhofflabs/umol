@@ -10,7 +10,7 @@ use crate::ast::atom::AtomAst;
 use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
 use crate::ast::electrons::ElectronCountsAst;
-use crate::ast::spin::SpinStateAst;
+use crate::ast::spin::UnpairedElectronsAst;
 use crate::ast::value::ValueAst;
 use crate::mol_dsl;
 
@@ -457,7 +457,7 @@ fn test_molecule_dsl_edn_roundtrip_connected_constraint() {
 #[rstest]
 #[case::charge_sum_vacuous(vec![MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined }], vec![])]
 #[case::bond_order_sum_vacuous(vec![MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Undetermined }], vec![])]
-#[case::spin_sum_vacuous(vec![MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::default() }], vec![])]
+#[case::spin_sum_vacuous(vec![MoleculeConstraint::SpinSum { atoms: None, spin: UnpairedElectronsAst::default() }], vec![])]
 #[case::vacuous_dropped_concrete_kept(
     vec![
         MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined },

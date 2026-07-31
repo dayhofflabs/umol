@@ -16,7 +16,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
     AtomAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp, MoleculeAst,
-    MoleculeParts, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
+    MoleculeParts, RelOp, UnpairedElectronsAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
@@ -68,8 +68,8 @@ fn arith_expr_heavy() -> MoleculeAst {
         charge: arith(),
         implicit_hydrogens: ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(1)))),
         lone_pairs: arith(),
-        spin: SpinStateAst {
-            unpaired: arith(),
+        spin: UnpairedElectronsAst {
+            count: arith(),
             multiplicity: arith(),
         },
         constraints: Default::default(),
@@ -89,7 +89,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             let bond = BondAst {
                 order: arith(),
                 charge: arith(),
-                spin: SpinStateAst::default(),
+                spin: UnpairedElectronsAst::default(),
                 constraints: Default::default(),
             };
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)

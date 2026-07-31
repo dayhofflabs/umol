@@ -42,6 +42,15 @@ proptest! {
     }
 
     #[test]
+    fn test_unpaired_electrons_ast_lattice_laws_raw(
+        a in raw_unpaired_electrons_strategy(),
+        b in raw_unpaired_electrons_strategy(),
+        c in raw_unpaired_electrons_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_element_ast_lattice_laws_raw(
         a in raw_element_ast_strategy(),
         b in raw_element_ast_strategy(),
@@ -108,6 +117,20 @@ proptest! {
     fn test_isotope_mass_ast_as_lit_laws(
         a in raw_isotope_strategy(),
         b in raw_isotope_strategy(),
+    ) {
+        prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
+        prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
+        let a = a.canonicalize().unwrap();
+        let b = b.canonicalize().unwrap();
+        if a.is_ground() && b.is_ground() && a != b {
+            prop_assert_ne!(a.as_lit(), b.as_lit());
+        }
+    }
+
+    #[test]
+    fn test_unpaired_electrons_ast_as_lit_laws(
+        a in raw_unpaired_electrons_strategy(),
+        b in raw_unpaired_electrons_strategy(),
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
@@ -217,6 +240,16 @@ proptest! {
         a in isotope_strategy(),
         b in isotope_strategy(),
         c in isotope_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_unpaired_electrons_ast_lattice_laws(
+        a in unpaired_electrons_strategy(),
+        b in unpaired_electrons_strategy(),
+        c in unpaired_electrons_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
