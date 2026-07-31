@@ -771,9 +771,9 @@ test/fuzz inputs.
   value type with read-only integer `count` and `multiplicity`, equality/hash/repr consistent with
   other Python value wrappers, Rust conversion, exports, and import/unit tests. **Additive (green).**
   [dep: S0a]
-- **S5b — `umol-py/src/spin.rs`: bind `SpinState`.** Add the immutable validated value type with
-  keyword-only integer `unpaired_electrons` and `multiplicity`, read-only properties, and
-  `ValueError` conversion for range or compatibility failures. Do not expose
+- **S5b — `umol-py/src/spin.rs`: bind `SpinState`.** **Done.** Add the immutable validated value
+  type with keyword-only integer `unpaired_electrons` and `multiplicity`, read-only properties,
+  and `ValueError` conversion for range or compatibility failures. Do not expose
   `SpinMultiplicity`. Test valid construction, each physical error class, equality/hash/repr, and
   Rust roundtrips. **Additive (green).** [dep: S0b]
 - **S5c — `umol-py`: connect exact projection.** Expose

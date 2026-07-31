@@ -1,9 +1,10 @@
 //! Exact and AST unpaired-electron values.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::UnpairedElectronsAst as AstUnpairedElectronsAst;
-use umol_chem::spin::UnpairedElectrons as ChemUnpairedElectrons;
+use umol_chem::spin::{SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons};
 
 use crate::convert::{hash_rust, into_py_variant};
 use crate::value::{ValueArg, ValueAst};
@@ -48,6 +49,54 @@ impl UnpairedElectrons {
     }
 
     pub(crate) fn to_rust(self) -> ChemUnpairedElectrons {
+        self.0
+    }
+}
+
+/// A physically valid unpaired-electron count and spin multiplicity.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SpinState(ChemSpinState);
+
+#[pymethods]
+impl SpinState {
+    #[new]
+    #[pyo3(signature = (*, unpaired_electrons, multiplicity))]
+    fn new(unpaired_electrons: i64, multiplicity: i64) -> PyResult<Self> {
+        ChemSpinState::try_from(ChemUnpairedElectrons {
+            count: unpaired_electrons,
+            multiplicity,
+        })
+        .map(Self::from_rust)
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    #[getter]
+    fn unpaired_electrons(&self) -> u8 {
+        self.0.unpaired_electrons()
+    }
+
+    #[getter]
+    fn multiplicity(&self) -> u8 {
+        self.0.multiplicity().into()
+    }
+
+    fn __repr__(&self) -> String {
+        let spin_state = self.to_rust();
+        format!(
+            "SpinState(unpaired_electrons={}, multiplicity={})",
+            spin_state.unpaired_electrons(),
+            u8::from(spin_state.multiplicity()),
+        )
+    }
+}
+
+impl SpinState {
+    pub(crate) fn from_rust(spin_state: ChemSpinState) -> Self {
+        Self(spin_state)
+    }
+
+    pub(crate) fn to_rust(self) -> ChemSpinState {
         self.0
     }
 }
@@ -115,7 +164,9 @@ impl UnpairedElectronsAst {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst};
-    use umol_chem::spin::UnpairedElectrons as ChemUnpairedElectrons;
+    use umol_chem::spin::{
+        SpinMultiplicity, SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons,
+    };
 
     use super::*;
 
@@ -128,6 +179,15 @@ mod tests {
             UnpairedElectrons::from_rust(unpaired_electrons).to_rust(),
             unpaired_electrons,
         );
+    }
+
+    #[rstest]
+    #[case::closed_shell(ChemSpinState::closed_shell())]
+    #[case::doublet(ChemSpinState::new(1, SpinMultiplicity::DOUBLET).unwrap())]
+    #[case::open_shell_singlet(ChemSpinState::new(2, SpinMultiplicity::SINGLET).unwrap())]
+    #[case::triplet(ChemSpinState::new(2, SpinMultiplicity::TRIPLET).unwrap())]
+    fn test_spin_state_roundtrip(#[case] spin_state: ChemSpinState) {
+        assert_eq!(SpinState::from_rust(spin_state).to_rust(), spin_state);
     }
 
     #[rstest]
