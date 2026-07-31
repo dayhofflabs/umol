@@ -40,7 +40,6 @@ from umol import (
     NoncovalentBondKind,
     NoncovalentBondKindAst,
     Permutation,
-    SpinStateAst,
     StereoAtomAst,
     StereoAtomConstraintAst,
     StereoAtomDelta,
@@ -56,6 +55,7 @@ from umol import (
     StereoLigandKind,
     StereogenicityAst,
     SubPatternAnchor,
+    UnpairedElectronsAst,
     ValueAst,
 )
 
@@ -103,13 +103,15 @@ def test_atomfieldchange_match_structured():
 
 
 def test_atomfieldchange_inverse():
-    change = AtomFieldChange.Spin(old=SpinStateAst(0, 1), new=SpinStateAst(1, 2))
+    change = AtomFieldChange.UnpairedElectrons(
+        old=UnpairedElectronsAst(0, 1), new=UnpairedElectronsAst(1, 2)
+    )
 
     inverse = change.inverse()
 
-    assert isinstance(inverse, AtomFieldChange.Spin)
-    assert inverse.old == SpinStateAst(1, 2)
-    assert inverse.new == SpinStateAst(0, 1)
+    assert isinstance(inverse, AtomFieldChange.UnpairedElectrons)
+    assert inverse.old == UnpairedElectronsAst(1, 2)
+    assert inverse.new == UnpairedElectronsAst(0, 1)
     assert inverse.inverse() == change
 
 
@@ -124,11 +126,16 @@ def test_bondfieldchange_fields():
 
 
 def test_bondfieldchange_match():
-    change = BondFieldChange.Spin(old=SpinStateAst(0, 1), new=SpinStateAst(1, 2))
+    change = BondFieldChange.UnpairedElectrons(
+        old=UnpairedElectronsAst(0, 1), new=UnpairedElectronsAst(1, 2)
+    )
 
     match change:
-        case BondFieldChange.Spin(old, new):
-            assert (old, new) == (SpinStateAst(0, 1), SpinStateAst(1, 2))
+        case BondFieldChange.UnpairedElectrons(old, new):
+            assert (old, new) == (
+                UnpairedElectronsAst(0, 1),
+                UnpairedElectronsAst(1, 2),
+            )
         case _:
             raise AssertionError("bond field change did not match its variant")
 
@@ -537,12 +544,13 @@ def test_stereofieldchange_closure(change, expected_repr):
             "AtomFieldChange.LonePairs(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
         ),
         (
-            AtomFieldChange.Spin(
-                old=SpinStateAst(0, 1),
-                new=SpinStateAst(1, 2),
+            AtomFieldChange.UnpairedElectrons(
+                old=UnpairedElectronsAst(0, 1),
+                new=UnpairedElectronsAst(1, 2),
             ),
-            "AtomFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
-            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))",
+            "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), "
+            "ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), "
+            "ValueAst.Lit(2)))",
         ),
         (
             BondFieldChange.Order(
@@ -559,12 +567,13 @@ def test_stereofieldchange_closure(change, expected_repr):
             "BondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(1))",
         ),
         (
-            BondFieldChange.Spin(
-                old=SpinStateAst(0, 1),
-                new=SpinStateAst(1, 2),
+            BondFieldChange.UnpairedElectrons(
+                old=UnpairedElectronsAst(0, 1),
+                new=UnpairedElectronsAst(1, 2),
             ),
-            "BondFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
-            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))",
+            "BondFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), "
+            "ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), "
+            "ValueAst.Lit(2)))",
         ),
         (
             DativeBondFieldChange.Order(
@@ -591,12 +600,13 @@ def test_stereofieldchange_closure(change, expected_repr):
             "new=ValueAst.Lit(-1))",
         ),
         (
-            AromaticSystemFieldChange.Spin(
-                old=SpinStateAst(0, 1),
-                new=SpinStateAst(1, 2),
+            AromaticSystemFieldChange.UnpairedElectrons(
+                old=UnpairedElectronsAst(0, 1),
+                new=UnpairedElectronsAst(1, 2),
             ),
-            "AromaticSystemFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
-            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))",
+            "AromaticSystemFieldChange.UnpairedElectrons(old=UnpairedElectronsAst("
+            "ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst("
+            "ValueAst.Lit(1), ValueAst.Lit(2)))",
         ),
         (
             MulticenterBondFieldChange.Electrons(
@@ -616,12 +626,13 @@ def test_stereofieldchange_closure(change, expected_repr):
             "new=ValueAst.Lit(1))",
         ),
         (
-            MulticenterBondFieldChange.Spin(
-                old=SpinStateAst(0, 1),
-                new=SpinStateAst(2, 3),
+            MulticenterBondFieldChange.UnpairedElectrons(
+                old=UnpairedElectronsAst(0, 1),
+                new=UnpairedElectronsAst(2, 3),
             ),
-            "MulticenterBondFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
-            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(2), ValueAst.Lit(3)))",
+            "MulticenterBondFieldChange.UnpairedElectrons(old=UnpairedElectronsAst("
+            "ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst("
+            "ValueAst.Lit(2), ValueAst.Lit(3)))",
         ),
         (
             NoncovalentBondFieldChange.Kind(
@@ -641,17 +652,17 @@ def test_stereofieldchange_closure(change, expected_repr):
         "atom-charge",
         "atom-implicit-hydrogens",
         "atom-lone-pairs",
-        "atom-spin",
+        "atom-unpaired-electrons",
         "bond-order",
         "bond-charge",
-        "bond-spin",
+        "bond-unpaired-electrons",
         "dative-order",
         "aromatic-electrons",
         "aromatic-charge",
-        "aromatic-spin",
+        "aromatic-unpaired-electrons",
         "multicenter-electrons",
         "multicenter-charge",
-        "multicenter-spin",
+        "multicenter-unpaired-electrons",
         "noncovalent-kind",
     ],
 )

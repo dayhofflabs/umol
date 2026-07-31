@@ -134,7 +134,8 @@ impl NoncovalentBondKindArg {
 }
 
 /// A noncovalent bond: an interaction `kind` plus noncovalent-bond-scope constraints.
-/// No bond order, charge, or spin — these do not apply to noncovalent interactions.
+/// No bond order, charge, or unpaired-electron field — these do not apply to
+/// noncovalent interactions.
 /// The endpoint atom pair is the owning molecule's relation topology (the view half),
 /// not part of the value.
 #[pyclass(eq)]

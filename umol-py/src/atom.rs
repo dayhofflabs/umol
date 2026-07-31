@@ -23,7 +23,7 @@ use crate::convert::{hash_rust, variant_repr};
 use crate::element::Element;
 use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
-use crate::spin::SpinStateAst;
+use crate::spin::UnpairedElectronsAst;
 use crate::value::{MemOp, ValueArg, ValueAst};
 
 /// Element expression: undetermined, a single element, a finite element set, a
@@ -222,8 +222,8 @@ impl IsotopeMassAst {
     }
 }
 
-/// An atom: element, isotope, charge, implicit hydrogens, lone pairs, spin, and
-/// atom-scope constraints.
+/// An atom: element, isotope, charge, implicit hydrogens, lone pairs, unpaired
+/// electrons, and atom-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct AtomAst(AstAtomAst);
@@ -234,7 +234,7 @@ impl AtomAst {
     /// optionally setting fields.
     #[new]
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (element, *, isotope_mass=None, charge=None, implicit_hydrogens=None, lone_pairs=None, spin=None, constraints=None))]
+    #[pyo3(signature = (element, *, isotope_mass=None, charge=None, implicit_hydrogens=None, lone_pairs=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
         element: ElementArg,
@@ -242,7 +242,7 @@ impl AtomAst {
         charge: Option<ValueArg>,
         implicit_hydrogens: Option<ValueArg>,
         lone_pairs: Option<ValueArg>,
-        spin: Option<PyRef<'_, SpinStateAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
         let atom = AstAtomAst::new(element.to_rust(py));
@@ -253,7 +253,7 @@ impl AtomAst {
             charge,
             implicit_hydrogens,
             lone_pairs,
-            spin,
+            unpaired_electrons,
             constraints,
         ))
     }
@@ -323,13 +323,13 @@ impl AtomAst {
     }
 
     #[getter]
-    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
-        SpinStateAst::from_rust(py, &self.0.spin)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
-        self.0.spin = value.to_rust(py);
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+        self.0.unpaired_electrons = value.to_rust(py);
     }
 
     /// The atom's constraints as a live handle onto this atom: reads borrow the
@@ -360,7 +360,7 @@ impl AtomAst {
         dict.set_item("charge", self.charge(py)?)?;
         dict.set_item("implicit_hydrogens", self.implicit_hydrogens(py)?)?;
         dict.set_item("lone_pairs", self.lone_pairs(py)?)?;
-        dict.set_item("spin", self.spin(py)?)?;
+        dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
             atom_constraints_asdict(py, &self.0.constraints)?,
@@ -414,7 +414,7 @@ fn apply_fields(
     charge: Option<ValueArg>,
     implicit_hydrogens: Option<ValueArg>,
     lone_pairs: Option<ValueArg>,
-    spin: Option<PyRef<'_, SpinStateAst>>,
+    unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
     constraints: Option<Py<AtomConstraintsAst>>,
 ) -> AstAtomAst {
     if let Some(isotope_mass) = isotope_mass {
@@ -429,8 +429,8 @@ fn apply_fields(
     if let Some(lone_pairs) = lone_pairs {
         atom = atom.with_lone_pairs(lone_pairs.to_rust(py));
     }
-    if let Some(spin) = spin {
-        atom = atom.with_spin(spin.to_rust(py));
+    if let Some(unpaired_electrons) = unpaired_electrons {
+        atom = atom.with_unpaired_electrons(unpaired_electrons.to_rust(py));
     }
     if let Some(constraints) = constraints {
         atom.constraints = constraints.bind(py).borrow().inner().clone();
@@ -569,19 +569,19 @@ impl AtomView {
     }
 
     #[getter]
-    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
         let molecule = self.owner.bind(py).borrow();
-        SpinStateAst::from_rust(py, &self.atom(molecule.inner())?.spin)
+        UnpairedElectronsAst::from_rust(py, &self.atom(molecule.inner())?.unpaired_electrons)
     }
 
     #[setter]
-    fn set_spin(&self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .spin = value.to_rust(py);
+            .unpaired_electrons = value.to_rust(py);
     }
 
     /// The atom's constraints as a live handle onto the molecule: reads borrow the
@@ -626,7 +626,10 @@ impl AtomView {
             ValueAst::from_rust(py, &atom.implicit_hydrogens)?,
         )?;
         dict.set_item("lone_pairs", ValueAst::from_rust(py, &atom.lone_pairs)?)?;
-        dict.set_item("spin", SpinStateAst::from_rust(py, &atom.spin)?)?;
+        dict.set_item(
+            "unpaired_electrons",
+            UnpairedElectronsAst::from_rust(py, &atom.unpaired_electrons)?,
+        )?;
         dict.set_item(
             "constraints",
             atom_constraints_asdict(py, &atom.constraints)?,
@@ -741,8 +744,8 @@ mod tests {
         AromaticValenceAst as AstAromaticValenceAst, AtomConstraintAst as AstAtomConstraintAst,
         AtomConstraintKey as AstAtomConstraintKey, AtomConstraintsAst as AstAtomConstraintsAst,
         MemOp as AstMemOp, MoleculeParts as AstMoleculeParts, RingScope as AstRingScope,
-        SpinStateAst as AstSpinStateAst, StereoCoset as AstStereoCoset,
-        TetrahedralStereoAst as AstTetrahedralStereoAst, ValueAst as AstValueAst,
+        StereoCoset as AstStereoCoset, TetrahedralStereoAst as AstTetrahedralStereoAst,
+        UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
     };
 
     use super::*;
@@ -895,34 +898,34 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_set_spin() {
+    fn test_atom_view_set_unpaired_electrons() {
         Python::attach(|py| {
             let owner = carbon_oxygen(py);
             let view = AtomView {
                 owner: owner.clone_ref(py),
                 id: AstAtomId(0),
             };
-            let spin = Py::new(
+            let unpaired_electrons = Py::new(
                 py,
-                SpinStateAst::from_rust(
+                UnpairedElectronsAst::from_rust(
                     py,
-                    &AstSpinStateAst {
-                        unpaired: AstValueAst::Lit(1),
+                    &AstUnpairedElectronsAst {
+                        count: AstValueAst::Lit(1),
                         multiplicity: AstValueAst::Lit(2),
                     },
                 )
                 .unwrap(),
             )
             .unwrap();
-            view.set_spin(py, spin.bind(py).borrow());
+            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
             let fresh = AtomView {
                 owner,
                 id: AstAtomId(0),
             };
             assert_eq!(
-                fresh.spin(py).unwrap().to_rust(py),
-                AstSpinStateAst {
-                    unpaired: AstValueAst::Lit(1),
+                fresh.unpaired_electrons(py).unwrap().to_rust(py),
+                AstUnpairedElectronsAst {
+                    count: AstValueAst::Lit(1),
                     multiplicity: AstValueAst::Lit(2),
                 }
             );

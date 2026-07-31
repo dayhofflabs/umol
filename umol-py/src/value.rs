@@ -335,7 +335,8 @@ impl ValueAst {
 
 /// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), matching `impl Into<ValueAst>`
 /// on the Rust builders. The `*Arg` convention for binding coercion inputs (`*Input`
-/// is the DSL side); shared by the atom fields, spin, and ring-membership count.
+/// is the DSL side); shared by the atom fields, unpaired-electron components, and
+/// ring-membership count.
 #[derive(FromPyObject)]
 pub enum ValueArg {
     Ast(Py<ValueAst>),

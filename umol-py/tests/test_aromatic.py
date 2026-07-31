@@ -10,7 +10,7 @@ from umol import (
     Element,
     MoleculeAst,
     ParseError,
-    SpinStateAst,
+    UnpairedElectronsAst,
     ValueAst,
 )
 
@@ -31,9 +31,13 @@ def test_aromaticsystemast_new():
 
 
 def test_aromaticsystemast_new_kwargs():
-    system = AromaticSystemAst([1, 1, 1], charge=-1, spin=SpinStateAst(0, 1))
+    system = AromaticSystemAst(
+        [1, 1, 1],
+        charge=-1,
+        unpaired_electrons=UnpairedElectronsAst(0, 1),
+    )
     assert system.charge == ValueAst.Lit(-1)
-    assert system.spin == SpinStateAst(0, 1)
+    assert system.unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_aromaticsystemast_constraints_kwarg():
@@ -59,10 +63,10 @@ def test_aromaticsystemast_charge_setter():
     assert system.charge == ValueAst.Lit(-1)
 
 
-def test_aromaticsystemast_spin_setter():
+def test_aromaticsystemast_unpaired_electrons_setter():
     system = AromaticSystemAst([1, 1, 1])
-    system.spin = SpinStateAst(0, 1)
-    assert system.spin == SpinStateAst(0, 1)
+    system.unpaired_electrons = UnpairedElectronsAst(0, 1)
+    assert system.unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
@@ -85,7 +89,12 @@ def test_aromaticsystemast_asdict():
         ),
     )
     d = system.asdict()
-    assert set(d.keys()) == {"electrons", "charge", "spin", "constraints"}
+    assert set(d.keys()) == {
+        "electrons",
+        "charge",
+        "unpaired_electrons",
+        "constraints",
+    }
     assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1])
     assert d["constraints"]["electron_count"] == ValueAst.Lit(6)
 
@@ -166,16 +175,21 @@ def test_aromaticsystemview_set_charge():
     assert mol.aromatic_systems[0].charge == ValueAst.Lit(-1)
 
 
-def test_aromaticsystemview_set_spin():
+def test_aromaticsystemview_set_unpaired_electrons():
     mol = benzene()
-    mol.aromatic_systems[0].spin = SpinStateAst(0, 1)
-    assert mol.aromatic_systems[0].spin == SpinStateAst(0, 1)
+    mol.aromatic_systems[0].unpaired_electrons = UnpairedElectronsAst(0, 1)
+    assert mol.aromatic_systems[0].unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_aromaticsystemview_asdict():
     view = benzene().aromatic_systems[0]
     d = view.asdict()
-    assert set(d.keys()) == {"electrons", "charge", "spin", "constraints"}
+    assert set(d.keys()) == {
+        "electrons",
+        "charge",
+        "unpaired_electrons",
+        "constraints",
+    }
     assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1, 1, 1, 1])
 
 

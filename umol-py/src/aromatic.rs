@@ -15,12 +15,12 @@ use umol_ast::ast::{
 use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
 use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
-use crate::spin::SpinStateAst;
+use crate::spin::UnpairedElectronsAst;
 use crate::value::{ValueArg, ValueAst};
 
 /// An aromatic system: a positional per-member-atom `electrons` vector, charge,
-/// spin, and aromatic-system-scope constraints. The member atoms are the
-/// participants of the owning molecule's aromatic relation (the view half); the
+/// unpaired electrons, and aromatic-system-scope constraints. The member atoms are
+/// the participants of the owning molecule's aromatic relation (the view half); the
 /// `electrons` vector is positional, aligned to that atom order.
 #[pyclass(eq)]
 #[derive(PartialEq)]
@@ -31,20 +31,20 @@ impl AromaticSystemAst {
     /// Construct from an electron-count vector — a `list[int]` or an
     /// `ElectronCountsAst` — optionally setting fields.
     #[new]
-    #[pyo3(signature = (electrons, *, charge=None, spin=None, constraints=None))]
+    #[pyo3(signature = (electrons, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
         electrons: ElectronCountsArg,
         charge: Option<ValueArg>,
-        spin: Option<PyRef<'_, SpinStateAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
         let mut system = AstAromaticSystemAst::new(electrons.to_rust(py));
         if let Some(charge) = charge {
             system = system.with_charge(charge.to_rust(py));
         }
-        if let Some(spin) = spin {
-            system = system.with_spin(spin.to_rust(py));
+        if let Some(unpaired_electrons) = unpaired_electrons {
+            system = system.with_unpaired_electrons(unpaired_electrons.to_rust(py));
         }
         if let Some(constraints) = constraints {
             system.constraints = constraints.bind(py).borrow().inner().clone();
@@ -90,13 +90,13 @@ impl AromaticSystemAst {
     }
 
     #[getter]
-    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
-        SpinStateAst::from_rust(py, &self.0.spin)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
-        self.0.spin = value.to_rust(py);
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+        self.0.unpaired_electrons = value.to_rust(py);
     }
 
     /// The system's constraints as a live handle onto this system: reads borrow the
@@ -126,7 +126,7 @@ impl AromaticSystemAst {
         let dict = PyDict::new(py);
         dict.set_item("electrons", self.electrons())?;
         dict.set_item("charge", self.charge(py)?)?;
-        dict.set_item("spin", self.spin(py)?)?;
+        dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
             aromatic_system_constraints_asdict(py, &self.0.constraints)?,
@@ -156,7 +156,7 @@ impl AromaticSystemAst {
 /// A view of one aromatic system within a molecule: a handle to the molecule plus
 /// the system's index. Field reads rebuild the transient Rust view; the molecule is
 /// never copied. The member atom indices are read-only topology; the electrons,
-/// charge, spin, and constraints are the mutable system value.
+/// charge, unpaired electrons, and constraints are the mutable system value.
 #[pyclass]
 pub struct AromaticSystemView {
     owner: Py<MoleculeAst>,
@@ -235,19 +235,25 @@ impl AromaticSystemView {
     }
 
     #[getter]
-    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
         let molecule = self.owner.bind(py).borrow();
-        SpinStateAst::from_rust(py, &self.aromatic_system(molecule.inner())?.ast.spin)
+        UnpairedElectronsAst::from_rust(
+            py,
+            &self
+                .aromatic_system(molecule.inner())?
+                .ast
+                .unpaired_electrons,
+        )
     }
 
     #[setter]
-    fn set_spin(&self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
             .aromatic_system_mut(self.id)
             .ast
-            .spin = value.to_rust(py);
+            .unpaired_electrons = value.to_rust(py);
     }
 
     /// The system's constraints as a live handle onto the molecule: reads borrow the
@@ -283,7 +289,10 @@ impl AromaticSystemView {
         let dict = PyDict::new(py);
         dict.set_item("electrons", ElectronCountsAst::from_rust(&system.electrons))?;
         dict.set_item("charge", ValueAst::from_rust(py, &system.charge)?)?;
-        dict.set_item("spin", SpinStateAst::from_rust(py, &system.spin)?)?;
+        dict.set_item(
+            "unpaired_electrons",
+            UnpairedElectronsAst::from_rust(py, &system.unpaired_electrons)?,
+        )?;
         dict.set_item(
             "constraints",
             aromatic_system_constraints_asdict(py, &system.constraints)?,
@@ -454,7 +463,7 @@ mod tests {
         AromaticSystemConstraintKey as AstAromaticSystemConstraintKey,
         AromaticSystemConstraintsAst as AstAromaticSystemConstraintsAst, AtomAst as AstAtomAst,
         AtomId as AstAtomId, ElectronCountsAst as AstElectronCountsAst, MoleculeParts,
-        SpinStateAst as AstSpinStateAst, ValueAst as AstValueAst,
+        UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
 
@@ -478,13 +487,17 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_new() {
         Python::attach(|py| {
-            let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
-            let spin = Py::new(py, SpinStateAst::from_rust(py, &spin_ast).unwrap()).unwrap();
+            let unpaired_electrons_ast = AstUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons = Py::new(
+                py,
+                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+            )
+            .unwrap();
             let system = AromaticSystemAst::new(
                 py,
                 ElectronCountsArg::Lit(vec![1, 1, 1]),
                 Some(ValueArg::Lit(-2)),
-                Some(spin.bind(py).borrow()),
+                Some(unpaired_electrons.bind(py).borrow()),
                 None,
             );
             assert_eq!(
@@ -492,7 +505,7 @@ mod tests {
                 AstElectronCountsAst::Lit(vec![1, 1, 1])
             );
             assert_eq!(system.inner().charge, AstValueAst::Lit(-2));
-            assert_eq!(system.inner().spin, spin_ast);
+            assert_eq!(system.inner().unpaired_electrons, unpaired_electrons_ast);
         });
     }
 
@@ -569,14 +582,21 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_ast_spin() {
+    fn test_aromatic_system_ast_unpaired_electrons() {
         Python::attach(|py| {
-            let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
-            let spin = Py::new(py, SpinStateAst::from_rust(py, &spin_ast).unwrap()).unwrap();
+            let unpaired_electrons_ast = AstUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons = Py::new(
+                py,
+                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+            )
+            .unwrap();
             let mut system =
                 AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1]));
-            system.set_spin(py, spin.bind(py).borrow());
-            assert_eq!(system.spin(py).unwrap().to_rust(py), spin_ast);
+            system.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
+            assert_eq!(
+                system.unpaired_electrons(py).unwrap().to_rust(py),
+                unpaired_electrons_ast
+            );
         });
     }
 
@@ -629,7 +649,7 @@ mod tests {
             let expected = into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
-            assert!(dict.contains("spin").unwrap());
+            assert!(dict.contains("unpaired_electrons").unwrap());
             assert!(dict.contains("constraints").unwrap());
         });
     }
@@ -690,21 +710,28 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_spin() {
+    fn test_aromatic_system_view_unpaired_electrons() {
         Python::attach(|py| {
-            let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
-            let spin = Py::new(py, SpinStateAst::from_rust(py, &spin_ast).unwrap()).unwrap();
+            let unpaired_electrons_ast = AstUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons = Py::new(
+                py,
+                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+            )
+            .unwrap();
             let owner = benzene(py);
             let view = AromaticSystemView {
                 owner: owner.clone_ref(py),
                 id: AstAromaticSystemId(0),
             };
-            view.set_spin(py, spin.bind(py).borrow());
+            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
             let fresh = AromaticSystemView {
                 owner,
                 id: AstAromaticSystemId(0),
             };
-            assert_eq!(fresh.spin(py).unwrap().to_rust(py), spin_ast);
+            assert_eq!(
+                fresh.unpaired_electrons(py).unwrap().to_rust(py),
+                unpaired_electrons_ast
+            );
         });
     }
 
@@ -779,7 +806,7 @@ mod tests {
                 into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
-            assert!(dict.contains("spin").unwrap());
+            assert!(dict.contains("unpaired_electrons").unwrap());
             assert!(dict.contains("constraints").unwrap());
         });
     }

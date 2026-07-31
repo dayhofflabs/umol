@@ -145,7 +145,6 @@ PUBLIC_EXPORTS = frozenset(
     SimpleCycleEnumerationAlgorithm
     SmilesIoConfig
     SmilesSyntaxFlags
-    SpinStateAst
     StereoAtomAst
     StereoAtomConstraintAst
     StereoAtomConstraintKey
@@ -189,6 +188,7 @@ PUBLIC_EXPORTS = frozenset(
     Topicity
     TopicityAst
     TopicityRelationAst
+    UnpairedElectronsAst
     UnderdeterminedError
     ValenceEntry
     ValenceModel

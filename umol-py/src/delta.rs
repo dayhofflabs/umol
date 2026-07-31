@@ -43,7 +43,7 @@ use crate::electrons::ElectronCountsAst;
 use crate::error::contradiction_error;
 use crate::multicenter::MulticenterBondAst;
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
-use crate::spin::SpinStateAst;
+use crate::spin::UnpairedElectronsAst;
 use crate::stereo::{
     Permutation, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind, StereoLigand,
 };
@@ -125,7 +125,7 @@ field_change! {
         Charge(ValueAst),
         ImplicitHydrogens(ValueAst),
         LonePairs(ValueAst),
-        Spin(SpinStateAst),
+        UnpairedElectrons(UnpairedElectronsAst),
     }
 }
 
@@ -134,7 +134,7 @@ field_change! {
     BondFieldChange {
         Order(ValueAst),
         Charge(ValueAst),
-        Spin(SpinStateAst),
+        UnpairedElectrons(UnpairedElectronsAst),
     }
 }
 
@@ -150,7 +150,7 @@ field_change! {
     AromaticSystemFieldChange {
         Electrons(ElectronCountsAst),
         Charge(ValueAst),
-        Spin(SpinStateAst),
+        UnpairedElectrons(UnpairedElectronsAst),
     }
 }
 
@@ -159,7 +159,7 @@ field_change! {
     MulticenterBondFieldChange {
         Electrons(ElectronCountsAst),
         Charge(ValueAst),
-        Spin(SpinStateAst),
+        UnpairedElectrons(UnpairedElectronsAst),
     }
 }
 
@@ -207,9 +207,9 @@ impl AtomFieldChange {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstAtomFieldChange::Spin { old, new } => Self::Spin {
-                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
-                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
+            AstAtomFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
+                old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
+                new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
             },
         })
     }
@@ -236,7 +236,7 @@ impl AtomFieldChange {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::Spin { old, new } => AstAtomFieldChange::Spin {
+            Self::UnpairedElectrons { old, new } => AstAtomFieldChange::UnpairedElectrons {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -255,9 +255,9 @@ impl BondFieldChange {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstBondFieldChange::Spin { old, new } => Self::Spin {
-                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
-                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
+            AstBondFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
+                old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
+                new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
             },
         })
     }
@@ -272,7 +272,7 @@ impl BondFieldChange {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::Spin { old, new } => AstBondFieldChange::Spin {
+            Self::UnpairedElectrons { old, new } => AstBondFieldChange::UnpairedElectrons {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -314,10 +314,12 @@ impl AromaticSystemFieldChange {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstAromaticSystemFieldChange::Spin { old, new } => Self::Spin {
-                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
-                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
-            },
+            AstAromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+                Self::UnpairedElectrons {
+                    old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
+                    new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
+                }
+            }
         })
     }
 
@@ -331,10 +333,12 @@ impl AromaticSystemFieldChange {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::Spin { old, new } => AstAromaticSystemFieldChange::Spin {
-                old: old.bind(py).borrow().to_rust(py),
-                new: new.bind(py).borrow().to_rust(py),
-            },
+            Self::UnpairedElectrons { old, new } => {
+                AstAromaticSystemFieldChange::UnpairedElectrons {
+                    old: old.bind(py).borrow().to_rust(py),
+                    new: new.bind(py).borrow().to_rust(py),
+                }
+            }
         }
     }
 }
@@ -353,10 +357,12 @@ impl MulticenterBondFieldChange {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstMulticenterBondFieldChange::Spin { old, new } => Self::Spin {
-                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
-                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
-            },
+            AstMulticenterBondFieldChange::UnpairedElectrons { old, new } => {
+                Self::UnpairedElectrons {
+                    old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
+                    new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
+                }
+            }
         })
     }
 
@@ -370,10 +376,12 @@ impl MulticenterBondFieldChange {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::Spin { old, new } => AstMulticenterBondFieldChange::Spin {
-                old: old.bind(py).borrow().to_rust(py),
-                new: new.bind(py).borrow().to_rust(py),
-            },
+            Self::UnpairedElectrons { old, new } => {
+                AstMulticenterBondFieldChange::UnpairedElectrons {
+                    old: old.bind(py).borrow().to_rust(py),
+                    new: new.bind(py).borrow().to_rust(py),
+                }
+            }
         }
     }
 }
@@ -2157,13 +2165,14 @@ mod tests {
         MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
         NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
         NoncovalentBondKind as AstNoncovalentBondKind,
-        NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
+        NoncovalentBondKindAst as AstNoncovalentBondKindAst,
         StereoAtomConstraintAst as AstStereoAtomConstraintAst,
         StereoBondConstraintAst as AstStereoBondConstraintAst,
         StereoConfigurationAst as AstStereoConfigurationAst, StereoCoset as AstStereoCoset,
         StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
         StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
-        StereogenicityAst as AstStereogenicityAst, ValueAst as AstValueAst,
+        StereogenicityAst as AstStereogenicityAst, UnpairedElectronsAst as AstUnpairedElectronsAst,
+        ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
     use umol_perm::Permutation as PermPermutation;
@@ -2192,13 +2201,13 @@ mod tests {
         old: AstValueAst::Lit(1),
         new: AstValueAst::Lit(2),
     })]
-    #[case::spin(AstAtomFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstAtomFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(1),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(1),
             multiplicity: AstValueAst::Lit(2),
         },
     })]
@@ -2292,20 +2301,20 @@ mod tests {
         "ValueAst.Lit(2)",
         "AtomFieldChange.LonePairs(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
     )]
-    #[case::spin(
-        AstAtomFieldChange::Spin {
-            old: AstSpinStateAst {
-                unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(
+        AstAtomFieldChange::UnpairedElectrons {
+            old: AstUnpairedElectronsAst {
+                count: AstValueAst::Lit(0),
                 multiplicity: AstValueAst::Lit(1),
             },
-            new: AstSpinStateAst {
-                unpaired: AstValueAst::Lit(1),
+            new: AstUnpairedElectronsAst {
+                count: AstValueAst::Lit(1),
                 multiplicity: AstValueAst::Lit(2),
             },
         },
-        "SpinStateAst(ValueAst.Lit(0), ValueAst.Lit(1))",
-        "SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2))",
-        "AtomFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))"
+        "UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1))",
+        "UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2))",
+        "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2)))"
     )]
     fn test_atom_field_change_repr(
         #[case] change: AstAtomFieldChange,
@@ -2362,13 +2371,13 @@ mod tests {
         old: AstValueAst::Lit(1),
         new: AstValueAst::Lit(2),
     })]
-    #[case::spin(AstAtomFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstAtomFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(1),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(1),
             multiplicity: AstValueAst::Lit(2),
         },
     })]
@@ -2394,13 +2403,13 @@ mod tests {
         old: AstValueAst::Lit(0),
         new: AstValueAst::Lit(1),
     })]
-    #[case::spin(AstBondFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstBondFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(1),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(1),
             multiplicity: AstValueAst::Lit(2),
         },
     })]
@@ -2422,13 +2431,13 @@ mod tests {
         old: AstValueAst::Lit(0),
         new: AstValueAst::Lit(1),
     })]
-    #[case::spin(AstBondFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstBondFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(1),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(1),
             multiplicity: AstValueAst::Lit(2),
         },
     })]
@@ -2488,13 +2497,13 @@ mod tests {
         old: AstValueAst::Lit(0),
         new: AstValueAst::Lit(-1),
     })]
-    #[case::spin(AstAromaticSystemFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstAromaticSystemFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(1),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(1),
             multiplicity: AstValueAst::Lit(2),
         },
     })]
@@ -2518,13 +2527,13 @@ mod tests {
         old: AstValueAst::Lit(0),
         new: AstValueAst::Lit(-1),
     })]
-    #[case::spin(AstAromaticSystemFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstAromaticSystemFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(1),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(1),
             multiplicity: AstValueAst::Lit(2),
         },
     })]
@@ -2550,13 +2559,13 @@ mod tests {
         old: AstValueAst::Lit(0),
         new: AstValueAst::Lit(1),
     })]
-    #[case::spin(AstMulticenterBondFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstMulticenterBondFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(2),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(2),
             multiplicity: AstValueAst::Lit(3),
         },
     })]
@@ -2580,13 +2589,13 @@ mod tests {
         old: AstValueAst::Lit(0),
         new: AstValueAst::Lit(1),
     })]
-    #[case::spin(AstMulticenterBondFieldChange::Spin {
-        old: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(0),
+    #[case::unpaired_electrons(AstMulticenterBondFieldChange::UnpairedElectrons {
+        old: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(0),
             multiplicity: AstValueAst::Lit(1),
         },
-        new: AstSpinStateAst {
-            unpaired: AstValueAst::Lit(2),
+        new: AstUnpairedElectronsAst {
+            count: AstValueAst::Lit(2),
             multiplicity: AstValueAst::Lit(3),
         },
     })]

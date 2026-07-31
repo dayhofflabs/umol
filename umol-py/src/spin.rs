@@ -1,26 +1,26 @@
-//! Spin-state constraint values.
+//! Unpaired-electron AST values.
 
 use pyo3::prelude::*;
-use umol_ast::ast::SpinStateAst as AstSpinStateAst;
+use umol_ast::ast::UnpairedElectronsAst as AstUnpairedElectronsAst;
 
 use crate::convert::{hash_rust, into_py_variant};
 use crate::value::{ValueArg, ValueAst};
 
-/// Spin state: unpaired-electron count and multiplicity as independent value fields.
+/// Unpaired-electron count and multiplicity as independent value fields.
 #[pyclass]
-pub struct SpinStateAst {
+pub struct UnpairedElectronsAst {
     #[pyo3(get)]
-    unpaired: Py<ValueAst>,
+    count: Py<ValueAst>,
     #[pyo3(get)]
     multiplicity: Py<ValueAst>,
 }
 
 #[pymethods]
-impl SpinStateAst {
+impl UnpairedElectronsAst {
     #[new]
-    fn new(py: Python<'_>, unpaired: ValueArg, multiplicity: ValueArg) -> PyResult<Self> {
-        Ok(SpinStateAst {
-            unpaired: unpaired.to_py(py)?,
+    fn new(py: Python<'_>, count: ValueArg, multiplicity: ValueArg) -> PyResult<Self> {
+        Ok(UnpairedElectronsAst {
+            count: count.to_py(py)?,
             multiplicity: multiplicity.to_py(py)?,
         })
     }
@@ -35,12 +35,8 @@ impl SpinStateAst {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "SpinStateAst({}, {})",
-            self.unpaired
-                .bind(py)
-                .as_any()
-                .repr()?
-                .extract::<String>()?,
+            "UnpairedElectronsAst({}, {})",
+            self.count.bind(py).as_any().repr()?.extract::<String>()?,
             self.multiplicity
                 .bind(py)
                 .as_any()
@@ -50,17 +46,20 @@ impl SpinStateAst {
     }
 }
 
-impl SpinStateAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstSpinStateAst) -> PyResult<SpinStateAst> {
-        Ok(SpinStateAst {
-            unpaired: into_py_variant(py, ValueAst::from_rust(py, &ast.unpaired)?)?,
+impl UnpairedElectronsAst {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        ast: &AstUnpairedElectronsAst,
+    ) -> PyResult<UnpairedElectronsAst> {
+        Ok(UnpairedElectronsAst {
+            count: into_py_variant(py, ValueAst::from_rust(py, &ast.count)?)?,
             multiplicity: into_py_variant(py, ValueAst::from_rust(py, &ast.multiplicity)?)?,
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstSpinStateAst {
-        AstSpinStateAst {
-            unpaired: self.unpaired.bind(py).borrow().to_rust(py),
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstUnpairedElectronsAst {
+        AstUnpairedElectronsAst {
+            count: self.count.bind(py).borrow().to_rust(py),
             multiplicity: self.multiplicity.bind(py).borrow().to_rust(py),
         }
     }
@@ -69,19 +68,31 @@ impl SpinStateAst {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{SpinStateAst as AstSpinStateAst, ValueAst as AstValueAst};
+    use umol_ast::ast::{UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst};
 
     use super::*;
 
     #[rstest]
-    #[case(AstSpinStateAst { unpaired: AstValueAst::Lit(1), multiplicity: AstValueAst::Lit(2) })]
-    #[case(AstSpinStateAst {
-        unpaired: AstValueAst::Undetermined,
+    #[case::complete(AstUnpairedElectronsAst {
+        count: AstValueAst::Lit(1),
+        multiplicity: AstValueAst::Lit(2),
+    })]
+    #[case::physics_invalid(AstUnpairedElectronsAst {
+        count: AstValueAst::Lit(2),
+        multiplicity: AstValueAst::Lit(2),
+    })]
+    #[case::partial(AstUnpairedElectronsAst {
+        count: AstValueAst::Undetermined,
         multiplicity: AstValueAst::Undetermined,
     })]
-    fn test_spin_state_ast_roundtrip(#[case] ast: AstSpinStateAst) {
+    fn test_unpaired_electrons_ast_roundtrip(#[case] ast: AstUnpairedElectronsAst) {
         Python::attach(|py| {
-            assert_eq!(SpinStateAst::from_rust(py, &ast).unwrap().to_rust(py), ast);
+            assert_eq!(
+                UnpairedElectronsAst::from_rust(py, &ast)
+                    .unwrap()
+                    .to_rust(py),
+                ast
+            );
         });
     }
 }

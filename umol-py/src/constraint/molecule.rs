@@ -22,7 +22,7 @@ use super::noncovalent::NoncovalentBondConstraintAst;
 use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
-use crate::spin::SpinStateAst;
+use crate::spin::UnpairedElectronsAst;
 use crate::stereo::StereoKind;
 use crate::value::ValueAst;
 
@@ -82,7 +82,7 @@ pub enum RelationalConstraint {
 #[pyclass]
 pub enum MoleculeConstraint {
     ChargeSum(Option<Vec<u32>>, Py<ValueAst>),
-    SpinSum(Option<Vec<u32>>, Py<SpinStateAst>),
+    SpinSum(Option<Vec<u32>>, Py<UnpairedElectronsAst>),
     BondOrderSum(Option<Vec<u32>>, Py<ValueAst>),
     Connected(Option<Vec<u32>>),
     SubPattern(Py<SubPatternAnchor>, Py<MoleculeAst>),
@@ -543,7 +543,7 @@ impl MoleculeConstraint {
                 atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-                Py::new(py, SpinStateAst::from_rust(py, spin)?)?,
+                Py::new(py, UnpairedElectronsAst::from_rust(py, spin)?)?,
             ),
             AstMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
                 bonds
@@ -1129,10 +1129,10 @@ mod tests {
         DativeBondConstraintAst as AstDativeBondConstraintAst, MoleculeAst as AstMoleculeAst,
         MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
         NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
-        SpinStateAst as AstSpinStateAst, StereoAtomConstraintAst as AstStereoAtomConstraintAst,
+        StereoAtomConstraintAst as AstStereoAtomConstraintAst,
         StereoBondConstraintAst as AstStereoBondConstraintAst, StereoKind as AstStereoKind,
         Stereogenicity as AstStereogenicity, StereogenicityAst as AstStereogenicityAst,
-        ValueAst as AstValueAst,
+        UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
     };
 
     use super::*;
@@ -1321,7 +1321,7 @@ mod tests {
     })]
     #[case::spin_sum(AstMoleculeConstraint::SpinSum {
         atoms: Some(vec![AstAtomId(3), AstAtomId(4)]),
-        spin: AstSpinStateAst::from((1, 2)),
+        spin: AstUnpairedElectronsAst::from((1, 2)),
     })]
     #[case::bond_order_sum(AstMoleculeConstraint::BondOrderSum {
         bonds: Some(vec![AstBondId(5), AstBondId(6)]),

@@ -16,10 +16,10 @@ use crate::constraint::bond::{
 };
 use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
-use crate::spin::SpinStateAst;
+use crate::spin::UnpairedElectronsAst;
 use crate::value::{ValueArg, ValueAst};
 
-/// A bond: order, charge, spin, and bond-scope constraints.
+/// A bond: order, charge, unpaired electrons, and bond-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct BondAst(AstBondAst);
@@ -29,20 +29,20 @@ impl BondAst {
     /// Construct from an order — an `int` or a `ValueAst` expression — optionally
     /// setting fields.
     #[new]
-    #[pyo3(signature = (order, *, charge=None, spin=None, constraints=None))]
+    #[pyo3(signature = (order, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
         order: ValueArg,
         charge: Option<ValueArg>,
-        spin: Option<PyRef<'_, SpinStateAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
         let mut bond = AstBondAst::new(order.to_rust(py));
         if let Some(charge) = charge {
             bond = bond.with_charge(charge.to_rust(py));
         }
-        if let Some(spin) = spin {
-            bond = bond.with_spin(spin.to_rust(py));
+        if let Some(unpaired_electrons) = unpaired_electrons {
+            bond = bond.with_unpaired_electrons(unpaired_electrons.to_rust(py));
         }
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
@@ -85,13 +85,13 @@ impl BondAst {
     }
 
     #[getter]
-    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
-        SpinStateAst::from_rust(py, &self.0.spin)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
-        self.0.spin = value.to_rust(py);
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+        self.0.unpaired_electrons = value.to_rust(py);
     }
 
     /// The bond's constraints as a live handle onto this bond: reads borrow the
@@ -119,7 +119,7 @@ impl BondAst {
         let dict = PyDict::new(py);
         dict.set_item("order", self.order(py)?)?;
         dict.set_item("charge", self.charge(py)?)?;
-        dict.set_item("spin", self.spin(py)?)?;
+        dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
             bond_constraints_asdict(py, &self.0.constraints)?,
@@ -223,19 +223,19 @@ impl BondView {
     }
 
     #[getter]
-    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
         let molecule = self.owner.bind(py).borrow();
-        SpinStateAst::from_rust(py, &self.bond(molecule.inner())?.spin)
+        UnpairedElectronsAst::from_rust(py, &self.bond(molecule.inner())?.unpaired_electrons)
     }
 
     #[setter]
-    fn set_spin(&self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
             .bond_mut(self.id)
             .ast
-            .spin = value.to_rust(py);
+            .unpaired_electrons = value.to_rust(py);
     }
 
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
@@ -271,7 +271,10 @@ impl BondView {
         let dict = PyDict::new(py);
         dict.set_item("order", ValueAst::from_rust(py, &bond.order)?)?;
         dict.set_item("charge", ValueAst::from_rust(py, &bond.charge)?)?;
-        dict.set_item("spin", SpinStateAst::from_rust(py, &bond.spin)?)?;
+        dict.set_item(
+            "unpaired_electrons",
+            UnpairedElectronsAst::from_rust(py, &bond.unpaired_electrons)?,
+        )?;
         dict.set_item(
             "constraints",
             bond_constraints_asdict(py, &bond.constraints)?,

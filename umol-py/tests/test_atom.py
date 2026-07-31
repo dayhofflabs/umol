@@ -12,7 +12,7 @@ from umol import (
     MemOp,
     MoleculeAst,
     ParseError,
-    SpinStateAst,
+    UnpairedElectronsAst,
     ValueAst,
     ValueTerm,
 )
@@ -76,21 +76,23 @@ def test_isotopemassast_var_restricted():
     assert IsotopeMassAst.Var("y", {12, 13})._1 == {12, 13}
 
 
-def test_spinstateast_fields():
-    spin = SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2))
-    assert spin.unpaired._0 == 1
-    assert spin.multiplicity._0 == 2
+def test_unpairedelectronsast_fields():
+    unpaired_electrons = UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2))
+    assert unpaired_electrons.count._0 == 1
+    assert unpaired_electrons.multiplicity._0 == 2
 
 
-def test_spinstateast_int_literals():
-    spin = SpinStateAst(1, 2)
-    assert spin.unpaired._0 == 1
-    assert spin.multiplicity._0 == 2
+def test_unpairedelectronsast_int_literals():
+    unpaired_electrons = UnpairedElectronsAst(count=2, multiplicity=2)
+    assert unpaired_electrons.count._0 == 2
+    assert unpaired_electrons.multiplicity._0 == 2
 
 
-def test_spinstateast_undetermined():
-    spin = SpinStateAst(ValueAst.Undetermined(), ValueAst.Undetermined())
-    assert spin.unpaired == ValueAst.Undetermined()
+def test_unpairedelectronsast_undetermined():
+    unpaired_electrons = UnpairedElectronsAst(
+        ValueAst.Undetermined(), ValueAst.Undetermined()
+    )
+    assert unpaired_electrons.count == ValueAst.Undetermined()
 
 
 def test_atomast_new_from_element():
@@ -111,12 +113,12 @@ def test_atomast_set_charge():
     assert atom.charge == ValueAst.Lit(1)
 
 
-def test_atomast_set_spin():
-    spin = SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2))
+def test_atomast_set_unpaired_electrons():
+    unpaired_electrons = UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2))
     atom = AtomAst(Element("C"))
-    atom.spin = spin
-    assert atom.spin.unpaired._0 == 1
-    assert atom.spin.multiplicity._0 == 2
+    atom.unpaired_electrons = unpaired_electrons
+    assert atom.unpaired_electrons.count._0 == 1
+    assert atom.unpaired_electrons.multiplicity._0 == 2
 
 
 def test_atomast_new_from_element_kwargs():
@@ -130,9 +132,14 @@ def test_atomast_new_bad_element_type():
 
 
 def test_atomast_new_kwargs():
-    atom = AtomAst(ElementAst.Lit(Element("N")), charge=ValueAst.Lit(1))
+    atom = AtomAst(
+        ElementAst.Lit(Element("N")),
+        charge=ValueAst.Lit(1),
+        unpaired_electrons=UnpairedElectronsAst(1, 2),
+    )
     assert atom.element == ElementAst.Lit(Element("N"))
     assert atom.charge == ValueAst.Lit(1)
+    assert atom.unpaired_electrons == UnpairedElectronsAst(1, 2)
 
 
 def test_atomast_charge_int_literal():
@@ -181,7 +188,7 @@ def test_atomast_asdict():
         "charge",
         "implicit_hydrogens",
         "lone_pairs",
-        "spin",
+        "unpaired_electrons",
         "constraints",
     }
     assert d["element"] == ElementAst.Lit(Element("C"))
@@ -322,12 +329,12 @@ def test_atomview_set_lone_pairs():
     assert mol.atoms[0].lone_pairs == ValueAst.Lit(2)
 
 
-def test_atomview_set_spin():
+def test_atomview_set_unpaired_electrons():
     mol = MoleculeAst.from_parts([AtomAst(Element("C"))])
-    mol.atoms[0].spin = SpinStateAst(1, 2)
-    spin = mol.atoms[0].spin
-    assert spin.unpaired._0 == 1
-    assert spin.multiplicity._0 == 2
+    mol.atoms[0].unpaired_electrons = UnpairedElectronsAst(1, 2)
+    unpaired_electrons = mol.atoms[0].unpaired_electrons
+    assert unpaired_electrons.count._0 == 1
+    assert unpaired_electrons.multiplicity._0 == 2
 
 
 def test_elementast_as_lit():
@@ -359,10 +366,12 @@ def test_isotopemassast_eq_repr():
     assert repr(IsotopeMassAst.Lit(13)) == "IsotopeMassAst.Lit(13)"
 
 
-def test_spinstateast_eq_repr():
-    assert SpinStateAst(1, 2) == SpinStateAst(1, 2)
-    assert SpinStateAst(1, 2) != SpinStateAst(1, 3)
-    assert repr(SpinStateAst(1, 2)) == "SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2))"
+def test_unpairedelectronsast_eq_repr():
+    assert UnpairedElectronsAst(1, 2) == UnpairedElectronsAst(1, 2)
+    assert UnpairedElectronsAst(1, 2) != UnpairedElectronsAst(1, 3)
+    assert repr(UnpairedElectronsAst(1, 2)) == (
+        "UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2))"
+    )
 
 
 def test_atomview_repr():
@@ -380,7 +389,7 @@ def test_atomview_asdict():
         "charge",
         "implicit_hydrogens",
         "lone_pairs",
-        "spin",
+        "unpaired_electrons",
         "constraints",
     }
     assert d["element"] == ElementAst.Lit(Element("C"))

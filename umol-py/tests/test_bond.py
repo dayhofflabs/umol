@@ -14,8 +14,8 @@ from umol import (
     ParseError,
     RingMembershipAst,
     RingScope,
-    SpinStateAst,
     StereoCoset,
+    UnpairedElectronsAst,
     ValueAst,
 )
 
@@ -35,9 +35,14 @@ def test_bondast_new():
 
 
 def test_bondast_new_kwargs():
-    bond = BondAst(1, charge=ValueAst.Lit(-1))
+    bond = BondAst(
+        1,
+        charge=ValueAst.Lit(-1),
+        unpaired_electrons=UnpairedElectronsAst(0, 1),
+    )
     assert bond.order == ValueAst.Lit(1)
     assert bond.charge == ValueAst.Lit(-1)
+    assert bond.unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_bondast_constraints_kwarg():
@@ -63,15 +68,20 @@ def test_bondast_charge_setter():
     assert bond.charge == ValueAst.Lit(-1)
 
 
-def test_bondast_spin_setter():
+def test_bondast_unpaired_electrons_setter():
     bond = BondAst(1)
-    bond.spin = SpinStateAst(0, 1)
-    assert bond.spin == SpinStateAst(0, 1)
+    bond.unpaired_electrons = UnpairedElectronsAst(0, 1)
+    assert bond.unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_bondast_asdict():
     d = BondAst(2, charge=ValueAst.Lit(-1)).asdict()
-    assert set(d.keys()) == {"order", "charge", "spin", "constraints"}
+    assert set(d.keys()) == {
+        "order",
+        "charge",
+        "unpaired_electrons",
+        "constraints",
+    }
     assert d["order"] == ValueAst.Lit(2)
     assert d["charge"] == ValueAst.Lit(-1)
 
@@ -495,16 +505,21 @@ def test_bondview_set_charge():
     assert mol.bonds[0].charge == ValueAst.Lit(-1)
 
 
-def test_bondview_set_spin():
+def test_bondview_set_unpaired_electrons():
     mol = ethene()
-    mol.bonds[0].spin = SpinStateAst(0, 1)
-    assert mol.bonds[0].spin == SpinStateAst(0, 1)
+    mol.bonds[0].unpaired_electrons = UnpairedElectronsAst(0, 1)
+    assert mol.bonds[0].unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_bondview_asdict():
     view = ethene().bonds[0]
     d = view.asdict()
-    assert set(d.keys()) == {"order", "charge", "spin", "constraints"}
+    assert set(d.keys()) == {
+        "order",
+        "charge",
+        "unpaired_electrons",
+        "constraints",
+    }
     assert d["order"] == ValueAst.Lit(2)
 
 

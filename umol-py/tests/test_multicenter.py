@@ -10,7 +10,7 @@ from umol import (
     MulticenterBondConstraintKey,
     MulticenterBondConstraintsAst,
     ParseError,
-    SpinStateAst,
+    UnpairedElectronsAst,
     ValueAst,
 )
 
@@ -31,9 +31,13 @@ def test_multicenterbondast_new():
 
 
 def test_multicenterbondast_new_kwargs():
-    bond = MulticenterBondAst([1, 1, 1], charge=-1, spin=SpinStateAst(0, 1))
+    bond = MulticenterBondAst(
+        [1, 1, 1],
+        charge=-1,
+        unpaired_electrons=UnpairedElectronsAst(0, 1),
+    )
     assert bond.charge == ValueAst.Lit(-1)
-    assert bond.spin == SpinStateAst(0, 1)
+    assert bond.unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_multicenterbondast_constraints_kwarg():
@@ -59,10 +63,10 @@ def test_multicenterbondast_charge_setter():
     assert bond.charge == ValueAst.Lit(-1)
 
 
-def test_multicenterbondast_spin_setter():
+def test_multicenterbondast_unpaired_electrons_setter():
     bond = MulticenterBondAst([1, 1, 1])
-    bond.spin = SpinStateAst(0, 1)
-    assert bond.spin == SpinStateAst(0, 1)
+    bond.unpaired_electrons = UnpairedElectronsAst(0, 1)
+    assert bond.unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
@@ -85,7 +89,12 @@ def test_multicenterbondast_asdict():
         ),
     )
     d = bond.asdict()
-    assert set(d.keys()) == {"electrons", "charge", "spin", "constraints"}
+    assert set(d.keys()) == {
+        "electrons",
+        "charge",
+        "unpaired_electrons",
+        "constraints",
+    }
     assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1])
     assert d["constraints"]["electron_count"] == ValueAst.Lit(6)
 
@@ -166,16 +175,21 @@ def test_multicenterbondview_set_charge():
     assert mol.multicenter_bonds[0].charge == ValueAst.Lit(-1)
 
 
-def test_multicenterbondview_set_spin():
+def test_multicenterbondview_set_unpaired_electrons():
     mol = three_center_bond()
-    mol.multicenter_bonds[0].spin = SpinStateAst(0, 1)
-    assert mol.multicenter_bonds[0].spin == SpinStateAst(0, 1)
+    mol.multicenter_bonds[0].unpaired_electrons = UnpairedElectronsAst(0, 1)
+    assert mol.multicenter_bonds[0].unpaired_electrons == UnpairedElectronsAst(0, 1)
 
 
 def test_multicenterbondview_asdict():
     view = three_center_bond().multicenter_bonds[0]
     d = view.asdict()
-    assert set(d.keys()) == {"electrons", "charge", "spin", "constraints"}
+    assert set(d.keys()) == {
+        "electrons",
+        "charge",
+        "unpaired_electrons",
+        "constraints",
+    }
     assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1])
 
 

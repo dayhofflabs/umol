@@ -708,7 +708,7 @@ S1 ends with exact literal projection having the same structural meaning in Rust
   conversion to the renamed AST and entity fields. Bring unit and conformance suites, examples,
   fixtures, snapshots, and benchmarks into conformance. **Breaking caller migration
   (red→green within S2).** [dep: S2b, S2c]
-- **S2e — `umol-py`: migrate the AST bindings.** Replace `SpinStateAst` with
+- **S2e — `umol-py`: migrate the AST bindings.** **Done.** Replace `SpinStateAst` with
   `UnpairedElectronsAst`, rename entity constructor keywords, properties, update/delta variants,
   dictionary keys, reprs, and exports to `unpaired_electrons`, `count`, and `multiplicity`.
   Update the complete affected Python fixture and test surface. **Breaking caller migration
