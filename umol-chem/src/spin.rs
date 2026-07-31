@@ -1,12 +1,12 @@
 //! Spin multiplicity and spin state data
 
 use std::fmt;
+use std::num::NonZeroU8;
 use std::str::FromStr;
 
 use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString, FromRepr};
 
 use crate::error::SpinStateError;
 
@@ -20,71 +20,104 @@ pub struct UnpairedElectrons {
     pub multiplicity: i64,
 }
 
-/// Spin multiplicity descriptor. Discriminant equals the canonical 2S+1 value.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Display,
-    EnumString,
-    FromRepr,
-    Serialize,
-    Deserialize,
-)]
-#[strum(serialize_all = "snake_case", ascii_case_insensitive)]
-pub enum SpinMultiplicity {
-    Singlet = 1,
-    Doublet = 2,
-    Triplet = 3,
-    Quartet = 4,
-    Quintet = 5,
-    Sextet = 6,
-    Septet = 7,
-    Octet = 8,
-    Nonet = 9,
-    Decet = 10,
-}
+/// Positive spin multiplicity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct SpinMultiplicity(NonZeroU8);
 
-/// Highest spin multiplicity
-pub const HIGHEST_SPIN_MULTIPLICITY: SpinMultiplicity = SpinMultiplicity::Decet;
+impl SpinMultiplicity {
+    pub const SINGLET: Self = Self(NonZeroU8::new(1).unwrap());
+    pub const DOUBLET: Self = Self(NonZeroU8::new(2).unwrap());
+    pub const TRIPLET: Self = Self(NonZeroU8::new(3).unwrap());
+    pub const QUARTET: Self = Self(NonZeroU8::new(4).unwrap());
+    pub const QUINTET: Self = Self(NonZeroU8::new(5).unwrap());
+    pub const SEXTET: Self = Self(NonZeroU8::new(6).unwrap());
+    pub const SEPTET: Self = Self(NonZeroU8::new(7).unwrap());
+    pub const OCTET: Self = Self(NonZeroU8::new(8).unwrap());
+    pub const NONET: Self = Self(NonZeroU8::new(9).unwrap());
+    pub const DECET: Self = Self(NonZeroU8::new(10).unwrap());
 
-/// Maximum number of unpaired electrons representable by a `SpinState`.
-pub const MAX_UNPAIRED_ELECTRONS: u8 = 9;
+    /// Construct a positive spin multiplicity.
+    pub const fn new(value: u8) -> Option<Self> {
+        match NonZeroU8::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
 
-impl From<SpinMultiplicity> for u8 {
-    fn from(m: SpinMultiplicity) -> Self {
-        m as u8
+    /// Return the conventional name for multiplicities one through ten.
+    pub const fn name(self) -> Option<&'static str> {
+        match self.0.get() {
+            1 => Some("singlet"),
+            2 => Some("doublet"),
+            3 => Some("triplet"),
+            4 => Some("quartet"),
+            5 => Some("quintet"),
+            6 => Some("sextet"),
+            7 => Some("septet"),
+            8 => Some("octet"),
+            9 => Some("nonet"),
+            10 => Some("decet"),
+            _ => None,
+        }
+    }
+
+    /// Construct from a conventional multiplicity name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        if name.eq_ignore_ascii_case("singlet") {
+            Some(Self::SINGLET)
+        } else if name.eq_ignore_ascii_case("doublet") {
+            Some(Self::DOUBLET)
+        } else if name.eq_ignore_ascii_case("triplet") {
+            Some(Self::TRIPLET)
+        } else if name.eq_ignore_ascii_case("quartet") {
+            Some(Self::QUARTET)
+        } else if name.eq_ignore_ascii_case("quintet") {
+            Some(Self::QUINTET)
+        } else if name.eq_ignore_ascii_case("sextet") {
+            Some(Self::SEXTET)
+        } else if name.eq_ignore_ascii_case("septet") {
+            Some(Self::SEPTET)
+        } else if name.eq_ignore_ascii_case("octet") {
+            Some(Self::OCTET)
+        } else if name.eq_ignore_ascii_case("nonet") {
+            Some(Self::NONET)
+        } else if name.eq_ignore_ascii_case("decet") {
+            Some(Self::DECET)
+        } else {
+            None
+        }
     }
 }
 
-impl TryFrom<u8> for SpinMultiplicity {
-    type Error = SpinStateError;
+impl From<SpinMultiplicity> for u8 {
+    fn from(multiplicity: SpinMultiplicity) -> Self {
+        multiplicity.0.get()
+    }
+}
 
-    fn try_from(m: u8) -> Result<Self, Self::Error> {
-        match m {
-            1 => Ok(SpinMultiplicity::Singlet),
-            2 => Ok(SpinMultiplicity::Doublet),
-            3 => Ok(SpinMultiplicity::Triplet),
-            4 => Ok(SpinMultiplicity::Quartet),
-            5 => Ok(SpinMultiplicity::Quintet),
-            6 => Ok(SpinMultiplicity::Sextet),
-            7 => Ok(SpinMultiplicity::Septet),
-            8 => Ok(SpinMultiplicity::Octet),
-            9 => Ok(SpinMultiplicity::Nonet),
-            10 => Ok(SpinMultiplicity::Decet),
-            _ => Err(SpinStateError::MultiplicityOutOfRange { multiplicity: m }),
-        }
+impl fmt::Display for SpinMultiplicity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Serialize for SpinMultiplicity {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u8(self.0.get())
+    }
+}
+
+impl<'de> Deserialize<'de> for SpinMultiplicity {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = u8::deserialize(deserializer)?;
+        Self::new(value).ok_or_else(|| SerdeError::custom("spin multiplicity must be nonzero"))
     }
 }
 
 /// Shorthand macro for spin-state literals parsed via `SpinState::from_str`.
 ///
-/// Syntax: `#u<u> #m<m>` (e.g. `#u2 #m3`).
+/// Syntax: `#u<u>#s<s>` (e.g. `#u2#s3`).
 #[macro_export]
 macro_rules! spin {
     ($s:expr) => {{
@@ -97,123 +130,92 @@ macro_rules! spin {
 /// Invariant: `m <= u + 1` and `m` has the same parity as `u+1`, where
 /// `m = u8::from(multiplicity)` and `u = unpaired_electrons`.
 ///
-/// String format (canonical): `"#u<u> #m<m>"`, e.g. `"#u2 #m3"`.
+/// String format (canonical): `"#u<u>#s<s>"`, e.g. `"#u2#s3"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpinState {
-    unpaired: u8,
+    unpaired_electrons: u8,
     multiplicity: SpinMultiplicity,
 }
 
 impl SpinState {
-    /// Check whether `(unpaired_electrons, multiplicity)` is physically valid.
-    ///
-    /// Valid multiplicities for `u` unpaired electrons are `u%2+1, u%2+3, ..., u+1`.
-    pub fn are_compatible(unpaired: u8, multiplicity: SpinMultiplicity) -> bool {
-        let u = unpaired;
-        let m = u8::from(multiplicity);
-        m <= u + 1 && m % 2 == (u + 1) % 2
-    }
-
-    /// Create a spin state, panicking on invalid input.
-    pub fn new(unpaired: u8, multiplicity: SpinMultiplicity) -> Self {
-        Self::try_new(unpaired, multiplicity)
-            .unwrap_or_else(|e| panic!("invalid spin state: {}", e))
-    }
-
-    /// Create a spin state, returning a domain error if the combination is invalid.
-    pub fn try_new(unpaired: u8, multiplicity: SpinMultiplicity) -> Result<Self, SpinStateError> {
-        if Self::are_compatible(unpaired, multiplicity) {
+    /// Create a physically valid spin state.
+    pub fn new(
+        unpaired_electrons: u8,
+        multiplicity: SpinMultiplicity,
+    ) -> Result<Self, SpinStateError> {
+        let max_multiplicity = u16::from(unpaired_electrons) + 1;
+        let multiplicity_value = u16::from(u8::from(multiplicity));
+        if multiplicity_value <= max_multiplicity && multiplicity_value % 2 == max_multiplicity % 2
+        {
             Ok(Self {
-                unpaired,
+                unpaired_electrons,
                 multiplicity,
             })
         } else {
             Err(SpinStateError::Incompatible {
-                unpaired,
+                unpaired_electrons,
                 multiplicity,
             })
         }
-    }
-
-    /// Create a spin state assuming maximum multiplicity (Hund's rule: m = n+1).
-    pub fn max_multiplicity(unpaired_electrons: u8) -> Option<Self> {
-        let m = SpinMultiplicity::try_from(unpaired_electrons + 1).ok()?;
-        Some(Self {
-            unpaired: unpaired_electrons,
-            multiplicity: m,
-        })
     }
 
     /// Closed-shell singlet: 0 unpaired electrons, singlet multiplicity.
     pub fn closed_shell() -> Self {
         Self {
-            unpaired: 0,
-            multiplicity: SpinMultiplicity::Singlet,
+            unpaired_electrons: 0,
+            multiplicity: SpinMultiplicity::SINGLET,
         }
     }
 
-    pub fn unpaired(&self) -> u8 {
-        self.unpaired
+    pub fn unpaired_electrons(&self) -> u8 {
+        self.unpaired_electrons
     }
 
     pub fn multiplicity(&self) -> SpinMultiplicity {
         self.multiplicity
     }
+}
 
-    /// High-spin molecular state from a collection of atomic spin states.
-    ///
-    /// Unpaired electrons = sum of atomic unpaired electrons.
-    /// Multiplicity = max coupled multiplicity (all spins parallel).
-    /// Returns `None` if the result exceeds `MAX_UNPAIRED_ELECTRONS`.
-    pub fn high_spin_combine(states: &[SpinState]) -> Option<Self> {
-        let unpaired: u32 = states.iter().map(|s| s.unpaired as u32).sum();
-        Self::max_multiplicity(unpaired as u8)
-    }
+impl TryFrom<UnpairedElectrons> for SpinState {
+    type Error = SpinStateError;
 
-    /// Check whether this molecular spin state is achievable by coupling
-    /// the given atomic spin states.
-    ///
-    /// Uses sequential angular momentum coupling: for spins S1, S2, the
-    /// total S ranges from |S1-S2| to S1+S2 in integer steps. The set of
-    /// allowed S values is order-independent.
-    pub fn is_constructible_from(&self, states: &[SpinState]) -> bool {
-        let unpaired: u32 = states.iter().map(|s| s.unpaired as u32).sum();
-        if self.unpaired as u32 != unpaired {
-            return false;
-        }
-
-        let target_two_s = (u8::from(self.multiplicity) - 1) as u32;
-
-        if states.is_empty() {
-            return target_two_s == 0;
-        }
-
-        let mut possible: Vec<u32> = vec![(u8::from(states[0].multiplicity) - 1) as u32];
-
-        for state in &states[1..] {
-            let two_s = (u8::from(state.multiplicity) - 1) as u32;
-            let mut next = Vec::new();
-            for &prev in &possible {
-                let lo = prev.abs_diff(two_s);
-                let hi = prev + two_s;
-                let mut s = lo;
-                while s <= hi {
-                    next.push(s);
-                    s += 2;
-                }
+    fn try_from(unpaired_electrons: UnpairedElectrons) -> Result<Self, Self::Error> {
+        let count = u8::try_from(unpaired_electrons.count).map_err(|_| {
+            SpinStateError::UnpairedElectronsOutOfRange {
+                count: unpaired_electrons.count,
             }
-            next.sort_unstable();
-            next.dedup();
-            possible = next;
-        }
+        })?;
+        let multiplicity_value = u8::try_from(unpaired_electrons.multiplicity).map_err(|_| {
+            SpinStateError::MultiplicityOutOfRange {
+                multiplicity: unpaired_electrons.multiplicity,
+            }
+        })?;
+        let multiplicity = SpinMultiplicity::new(multiplicity_value).ok_or(
+            SpinStateError::MultiplicityOutOfRange {
+                multiplicity: unpaired_electrons.multiplicity,
+            },
+        )?;
+        Self::new(count, multiplicity)
+    }
+}
 
-        possible.contains(&target_two_s)
+impl From<SpinState> for UnpairedElectrons {
+    fn from(spin_state: SpinState) -> Self {
+        Self {
+            count: i64::from(spin_state.unpaired_electrons),
+            multiplicity: i64::from(u8::from(spin_state.multiplicity)),
+        }
     }
 }
 
 impl fmt::Display for SpinState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#u{}#s{}", self.unpaired, u8::from(self.multiplicity))
+        write!(
+            f,
+            "#u{}#s{}",
+            self.unpaired_electrons,
+            u8::from(self.multiplicity)
+        )
     }
 }
 
@@ -230,31 +232,25 @@ impl FromStr for SpinState {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut rest = s.trim();
-        let mut unpaired: Option<u8> = None;
-        let mut multiplicity: Option<SpinMultiplicity> = None;
+        let mut unpaired_electrons: Option<i64> = None;
+        let mut multiplicity: Option<i64> = None;
 
         while !rest.is_empty() {
             if let Some(digits_str) = rest.strip_prefix("#u") {
-                if unpaired.is_some() {
+                if unpaired_electrons.is_some() {
                     return Err(SpinStateError::DuplicateTag {
                         tag: "#u".to_string(),
                     });
                 }
-                let mut value = 0u8;
-                let mut empty = true;
-                let mut digits_len = 0;
-                for digit in digits_str.chars() {
-                    if !digit.is_ascii_digit() {
-                        break;
-                    }
-                    value = value * 10 + (digit.to_digit(10).unwrap() as u8);
-                    digits_len += 1;
-                    empty = false;
-                }
-                if empty {
-                    value = 1;
-                }
-                unpaired = Some(value);
+                let digits_len = digits_str.bytes().take_while(u8::is_ascii_digit).count();
+                let value = if digits_len == 0 {
+                    1
+                } else {
+                    digits_str[..digits_len].parse::<i64>().map_err(|_| {
+                        SpinStateError::UnpairedElectronsOutOfRange { count: i64::MAX }
+                    })?
+                };
+                unpaired_electrons = Some(value);
                 rest = digits_str[digits_len..].trim_start();
             } else if let Some(digits_str) = rest.strip_prefix("#s") {
                 if multiplicity.is_some() {
@@ -262,22 +258,17 @@ impl FromStr for SpinState {
                         tag: "#s".to_string(),
                     });
                 }
-                let mut value = 0u8;
-                let mut empty = true;
-                let mut digits_len = 0;
-                for digit in digits_str.chars() {
-                    if !digit.is_ascii_digit() {
-                        break;
-                    }
-                    value = value * 10 + (digit.to_digit(10).unwrap() as u8);
-                    digits_len += 1;
-                    empty = false;
-                }
-                if empty {
-                    value = 1;
-                }
-                let mult = SpinMultiplicity::try_from(value)?;
-                multiplicity = Some(mult);
+                let digits_len = digits_str.bytes().take_while(u8::is_ascii_digit).count();
+                let value = if digits_len == 0 {
+                    1
+                } else {
+                    digits_str[..digits_len].parse::<i64>().map_err(|_| {
+                        SpinStateError::MultiplicityOutOfRange {
+                            multiplicity: i64::MAX,
+                        }
+                    })?
+                };
+                multiplicity = Some(value);
                 rest = digits_str[digits_len..].trim_start();
             } else if rest.starts_with("#") {
                 return Err(SpinStateError::InvalidTag {
@@ -290,11 +281,27 @@ impl FromStr for SpinState {
             }
         }
 
-        match (unpaired, multiplicity) {
-            (Some(u), Some(m)) => SpinState::try_new(u, m),
-            (Some(u), None) => SpinState::max_multiplicity(u)
-                .ok_or(SpinStateError::UnpairedElectronsOutOfRange { unpaired: u }),
-            (None, Some(m)) => SpinState::try_new(u8::from(m) - 1, m),
+        match (unpaired_electrons, multiplicity) {
+            (Some(count), Some(multiplicity)) => Self::try_from(UnpairedElectrons {
+                count,
+                multiplicity,
+            }),
+            (Some(count), None) => {
+                let count_value = u8::try_from(count)
+                    .map_err(|_| SpinStateError::UnpairedElectronsOutOfRange { count })?;
+                let multiplicity = i64::from(u16::from(count_value) + 1);
+                Self::try_from(UnpairedElectrons {
+                    count,
+                    multiplicity,
+                })
+            }
+            (None, Some(multiplicity)) => {
+                let multiplicity_value = u8::try_from(multiplicity)
+                    .ok()
+                    .and_then(SpinMultiplicity::new)
+                    .ok_or(SpinStateError::MultiplicityOutOfRange { multiplicity })?;
+                Self::new(u8::from(multiplicity_value) - 1, multiplicity_value)
+            }
             (None, None) => Err(SpinStateError::Underdetermined),
         }
     }
@@ -393,244 +400,268 @@ mod tests {
     }
 
     #[rstest]
-    #[case(1, SpinMultiplicity::Singlet)]
-    #[case(2, SpinMultiplicity::Doublet)]
-    #[case(3, SpinMultiplicity::Triplet)]
-    #[case(10, SpinMultiplicity::Decet)]
-    fn test_spin_multiplicity_try_from_u8(
-        #[case] multiplicity: u8,
+    fn test_spin_multiplicity_new() {
+        assert_eq!(SpinMultiplicity::new(0), None);
+        for value in 1..=u8::MAX {
+            assert_eq!(u8::from(SpinMultiplicity::new(value).unwrap()), value);
+        }
+    }
+
+    #[rstest]
+    #[case::singlet("singlet", "singlet", SpinMultiplicity::SINGLET)]
+    #[case::doublet("doublet", "doublet", SpinMultiplicity::DOUBLET)]
+    #[case::triplet("triplet", "triplet", SpinMultiplicity::TRIPLET)]
+    #[case::quartet("quartet", "quartet", SpinMultiplicity::QUARTET)]
+    #[case::quintet("quintet", "quintet", SpinMultiplicity::QUINTET)]
+    #[case::sextet("sextet", "sextet", SpinMultiplicity::SEXTET)]
+    #[case::septet("septet", "septet", SpinMultiplicity::SEPTET)]
+    #[case::octet("octet", "octet", SpinMultiplicity::OCTET)]
+    #[case::nonet("nonet", "nonet", SpinMultiplicity::NONET)]
+    #[case::decet("decet", "decet", SpinMultiplicity::DECET)]
+    #[case::case_insensitive("TrIpLeT", "triplet", SpinMultiplicity::TRIPLET)]
+    fn test_spin_multiplicity_name(
+        #[case] input: &str,
+        #[case] expected_name: &str,
         #[case] expected: SpinMultiplicity,
     ) {
-        assert_eq!(SpinMultiplicity::try_from(multiplicity).unwrap(), expected);
+        assert_eq!(SpinMultiplicity::from_name(input), Some(expected));
+        assert_eq!(expected.name(), Some(expected_name));
     }
 
     #[rstest]
-    #[case(0)]
-    #[case(11)]
-    fn test_spin_multiplicity_try_from_u8_invalid(#[case] multiplicity: u8) {
-        assert!(SpinMultiplicity::try_from(multiplicity).is_err());
+    fn test_spin_multiplicity_name_nonconventional() {
+        let multiplicity = SpinMultiplicity::new(11).unwrap();
+
+        assert_eq!(multiplicity.name(), None);
+        assert_eq!(SpinMultiplicity::from_name("undecet"), None);
     }
 
     #[rstest]
-    #[case(SpinMultiplicity::Singlet, 1)]
-    #[case(SpinMultiplicity::Doublet, 2)]
-    #[case(SpinMultiplicity::Triplet, 3)]
-    #[case(SpinMultiplicity::Decet, 10)]
-    fn test_spin_multiplicity_into_u8(#[case] spin: SpinMultiplicity, #[case] expected: u8) {
-        assert_eq!(u8::from(spin), expected);
+    #[case::singlet(SpinMultiplicity::SINGLET, "1")]
+    #[case::triplet(SpinMultiplicity::TRIPLET, "3")]
+    #[case::maximum(SpinMultiplicity::new(255).unwrap(), "255")]
+    fn test_spin_multiplicity_fmt(#[case] multiplicity: SpinMultiplicity, #[case] expected: &str) {
+        assert_eq!(multiplicity.to_string(), expected);
     }
 
     #[rstest]
-    #[case(SpinMultiplicity::Singlet, "singlet")]
-    #[case(SpinMultiplicity::Doublet, "doublet")]
-    #[case(SpinMultiplicity::Triplet, "triplet")]
-    fn test_spin_multiplicity_to_string(#[case] spin: SpinMultiplicity, #[case] expected: &str) {
-        assert_eq!(spin.to_string(), expected);
-    }
-
-    #[rstest]
-    #[case("singlet", SpinMultiplicity::Singlet)]
-    #[case("doublet", SpinMultiplicity::Doublet)]
-    #[case("triplet", SpinMultiplicity::Triplet)]
-    #[case("Singlet", SpinMultiplicity::Singlet)]
-    #[case("DOUBLET", SpinMultiplicity::Doublet)]
-    fn test_spin_multiplicity_parse(#[case] input: &str, #[case] expected: SpinMultiplicity) {
-        assert_eq!(input.parse::<SpinMultiplicity>().unwrap(), expected);
-    }
-
-    #[test]
-    fn test_spin_multiplicity_parse_error() {
-        assert!("nosuchplet".parse::<SpinMultiplicity>().is_err());
-    }
-
-    #[test]
-    fn test_spin_macro() {
-        assert_eq!(spin!("#u2"), SpinState::new(2, SpinMultiplicity::Triplet));
-    }
-
-    #[rstest]
-    #[case(0, SpinMultiplicity::Singlet, true)]
-    #[case(1, SpinMultiplicity::Doublet, true)]
-    #[case(2, SpinMultiplicity::Singlet, true)]
-    #[case(2, SpinMultiplicity::Triplet, true)]
-    #[case(3, SpinMultiplicity::Doublet, true)]
-    #[case(3, SpinMultiplicity::Quartet, true)]
-    #[case(4, SpinMultiplicity::Singlet, true)]
-    #[case(4, SpinMultiplicity::Triplet, true)]
-    #[case(4, SpinMultiplicity::Quintet, true)]
-    #[case(0, SpinMultiplicity::Doublet, false)]
-    #[case(0, SpinMultiplicity::Triplet, false)]
-    #[case(1, SpinMultiplicity::Singlet, false)]
-    #[case(1, SpinMultiplicity::Triplet, false)]
-    #[case(2, SpinMultiplicity::Doublet, false)]
-    #[case(2, SpinMultiplicity::Quartet, false)]
-    #[case(3, SpinMultiplicity::Singlet, false)]
-    #[case(3, SpinMultiplicity::Triplet, false)]
-    fn test_are_compatible(#[case] n: u8, #[case] m: SpinMultiplicity, #[case] expected: bool) {
-        assert_eq!(SpinState::are_compatible(n, m), expected);
-    }
-
-    #[rstest]
-    #[case(0, SpinMultiplicity::Singlet)]
-    #[case(1, SpinMultiplicity::Doublet)]
-    #[case(2, SpinMultiplicity::Singlet)]
-    #[case(2, SpinMultiplicity::Triplet)]
-    #[case(3, SpinMultiplicity::Doublet)]
-    #[case(3, SpinMultiplicity::Quartet)]
-    fn test_spin_state_new(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        let state = SpinState::new(n, m);
-        assert_eq!(state.unpaired(), n);
-        assert_eq!(state.multiplicity(), m);
-    }
-
-    #[rstest]
-    #[case(0, SpinMultiplicity::Singlet)]
-    #[case(1, SpinMultiplicity::Doublet)]
-    #[case(2, SpinMultiplicity::Singlet)]
-    fn test_spin_state_try_new(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        assert!(SpinState::try_new(n, m).is_ok());
-    }
-
-    #[rstest]
-    #[case(0, SpinMultiplicity::Triplet)]
-    #[case(1, SpinMultiplicity::Singlet)]
-    #[case(2, SpinMultiplicity::Doublet)]
-    fn test_spin_state_try_new_invalid(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        assert!(SpinState::try_new(n, m).is_err());
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_spin_state_new_panics() {
-        SpinState::new(0, SpinMultiplicity::Triplet);
-    }
-
-    #[rstest]
-    #[case(0, SpinMultiplicity::Singlet)]
-    #[case(1, SpinMultiplicity::Doublet)]
-    #[case(2, SpinMultiplicity::Triplet)]
-    #[case(9, SpinMultiplicity::Decet)]
-    fn test_spin_state_max_multiplicity(#[case] n: u8, #[case] expected_m: SpinMultiplicity) {
-        let state = SpinState::max_multiplicity(n).unwrap();
-        assert_eq!(state.unpaired(), n);
-        assert_eq!(state.multiplicity(), expected_m);
-    }
-
-    #[test]
-    fn test_spin_state_max_multiplicity_out_of_range() {
-        assert!(SpinState::max_multiplicity(10).is_none());
-    }
-
-    #[test]
-    fn test_spin_state_closed_shell() {
-        let state = SpinState::closed_shell();
-        assert_eq!(state.unpaired(), 0);
-        assert_eq!(state.multiplicity(), SpinMultiplicity::Singlet);
-    }
-
-    #[rstest]
-    #[case(0, SpinMultiplicity::Singlet, "#u0#s1")]
-    #[case(1, SpinMultiplicity::Doublet, "#u1#s2")]
-    #[case(2, SpinMultiplicity::Singlet, "#u2#s1")]
-    #[case(2, SpinMultiplicity::Triplet, "#u2#s3")]
-    #[case(3, SpinMultiplicity::Quartet, "#u3#s4")]
-    fn test_spin_state_to_string(
-        #[case] n: u8,
-        #[case] m: SpinMultiplicity,
+    #[case::singlet(SpinMultiplicity::SINGLET, "1")]
+    #[case::triplet(SpinMultiplicity::TRIPLET, "3")]
+    #[case::maximum(SpinMultiplicity::new(255).unwrap(), "255")]
+    fn test_spin_multiplicity_serde(
+        #[case] multiplicity: SpinMultiplicity,
         #[case] expected: &str,
     ) {
-        assert_eq!(SpinState::new(n, m).to_string(), expected);
+        let serialized = serde_json::to_string(&multiplicity).unwrap();
+        assert_eq!(serialized, expected);
+        assert_eq!(
+            serde_json::from_str::<SpinMultiplicity>(&serialized).unwrap(),
+            multiplicity,
+        );
     }
 
     #[rstest]
-    #[case("#u0 #s1", 0, SpinMultiplicity::Singlet)]
-    #[case("#u1 #s2", 1, SpinMultiplicity::Doublet)]
-    #[case("#u2 #s1", 2, SpinMultiplicity::Singlet)]
-    #[case("#u2 #s3", 2, SpinMultiplicity::Triplet)]
-    #[case("#u3 #s4", 3, SpinMultiplicity::Quartet)]
-    #[case("#u2 #s3 ", 2, SpinMultiplicity::Triplet)]
-    #[case("#u0", 0, SpinMultiplicity::Singlet)]
-    #[case("#s1", 0, SpinMultiplicity::Singlet)]
-    #[case("#s", 0, SpinMultiplicity::Singlet)]
-    #[case("#u1", 1, SpinMultiplicity::Doublet)]
-    #[case("#u", 1, SpinMultiplicity::Doublet)]
-    fn test_spin_state_parse(
+    fn test_spin_multiplicity_deserialize_zero() {
+        assert!(serde_json::from_str::<SpinMultiplicity>("0").is_err());
+    }
+
+    #[rstest]
+    #[case::closed_shell(0, SpinMultiplicity::SINGLET)]
+    #[case::doublet(1, SpinMultiplicity::DOUBLET)]
+    #[case::open_shell_singlet(2, SpinMultiplicity::SINGLET)]
+    #[case::triplet(2, SpinMultiplicity::TRIPLET)]
+    #[case::lower_spin(3, SpinMultiplicity::DOUBLET)]
+    #[case::maximum_count(255, SpinMultiplicity::new(254).unwrap())]
+    #[case::maximum_multiplicity(254, SpinMultiplicity::new(255).unwrap())]
+    fn test_spin_state_new(#[case] unpaired_electrons: u8, #[case] multiplicity: SpinMultiplicity) {
+        let spin_state = SpinState::new(unpaired_electrons, multiplicity).unwrap();
+
+        assert_eq!(spin_state.unpaired_electrons(), unpaired_electrons);
+        assert_eq!(spin_state.multiplicity(), multiplicity);
+    }
+
+    #[rstest]
+    #[case::multiplicity_too_large(0, SpinMultiplicity::TRIPLET)]
+    #[case::wrong_parity(1, SpinMultiplicity::SINGLET)]
+    #[case::interior_wrong_parity(2, SpinMultiplicity::DOUBLET)]
+    #[case::upper_boundary(253, SpinMultiplicity::new(255).unwrap())]
+    fn test_spin_state_new_error(
+        #[case] unpaired_electrons: u8,
+        #[case] multiplicity: SpinMultiplicity,
+    ) {
+        assert_eq!(
+            SpinState::new(unpaired_electrons, multiplicity),
+            Err(SpinStateError::Incompatible {
+                unpaired_electrons,
+                multiplicity,
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_spin_state_closed_shell() {
+        assert_eq!(
+            SpinState::closed_shell(),
+            SpinState::new(0, SpinMultiplicity::SINGLET).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::closed_shell(
+        UnpairedElectrons { count: 0, multiplicity: 1 },
+        SpinState::closed_shell(),
+    )]
+    #[case::triplet(
+        UnpairedElectrons { count: 2, multiplicity: 3 },
+        SpinState::new(2, SpinMultiplicity::TRIPLET).unwrap(),
+    )]
+    #[case::upper_boundary(
+        UnpairedElectrons { count: 254, multiplicity: 255 },
+        SpinState::new(254, SpinMultiplicity::new(255).unwrap()).unwrap(),
+    )]
+    fn test_spin_state_try_from_unpaired_electrons(
+        #[case] unpaired_electrons: UnpairedElectrons,
+        #[case] expected: SpinState,
+    ) {
+        assert_eq!(SpinState::try_from(unpaired_electrons).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::negative_count(
+        UnpairedElectrons { count: -1, multiplicity: 1 },
+        SpinStateError::UnpairedElectronsOutOfRange { count: -1 },
+    )]
+    #[case::large_count(
+        UnpairedElectrons { count: 256, multiplicity: 1 },
+        SpinStateError::UnpairedElectronsOutOfRange { count: 256 },
+    )]
+    #[case::zero_multiplicity(
+        UnpairedElectrons { count: 0, multiplicity: 0 },
+        SpinStateError::MultiplicityOutOfRange { multiplicity: 0 },
+    )]
+    #[case::negative_multiplicity(
+        UnpairedElectrons { count: 0, multiplicity: -1 },
+        SpinStateError::MultiplicityOutOfRange { multiplicity: -1 },
+    )]
+    #[case::large_multiplicity(
+        UnpairedElectrons { count: 0, multiplicity: 256 },
+        SpinStateError::MultiplicityOutOfRange { multiplicity: 256 },
+    )]
+    #[case::incompatible(
+        UnpairedElectrons { count: 2, multiplicity: 2 },
+        SpinStateError::Incompatible {
+            unpaired_electrons: 2,
+            multiplicity: SpinMultiplicity::DOUBLET,
+        },
+    )]
+    fn test_spin_state_try_from_unpaired_electrons_error(
+        #[case] unpaired_electrons: UnpairedElectrons,
+        #[case] expected: SpinStateError,
+    ) {
+        assert_eq!(SpinState::try_from(unpaired_electrons), Err(expected));
+    }
+
+    #[rstest]
+    #[case::closed_shell(SpinState::closed_shell())]
+    #[case::triplet(SpinState::new(2, SpinMultiplicity::TRIPLET).unwrap())]
+    #[case::upper_boundary(
+        SpinState::new(254, SpinMultiplicity::new(255).unwrap()).unwrap(),
+    )]
+    fn test_unpaired_electrons_from_spin_state(#[case] spin_state: SpinState) {
+        let unpaired_electrons = UnpairedElectrons::from(spin_state);
+
+        assert_eq!(SpinState::try_from(unpaired_electrons).unwrap(), spin_state);
+    }
+
+    #[rstest]
+    #[case::closed_shell(SpinState::closed_shell(), "#u0#s1")]
+    #[case::open_shell_singlet(
+        SpinState::new(2, SpinMultiplicity::SINGLET).unwrap(),
+        "#u2#s1",
+    )]
+    #[case::maximum_multiplicity(
+        SpinState::new(254, SpinMultiplicity::new(255).unwrap()).unwrap(),
+        "#u254#s255",
+    )]
+    fn test_spin_state_fmt(#[case] spin_state: SpinState, #[case] expected: &str) {
+        assert_eq!(spin_state.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::both("#u0#s1", 0, SpinMultiplicity::SINGLET)]
+    #[case::reverse_order("#s3#u2", 2, SpinMultiplicity::TRIPLET)]
+    #[case::whitespace(" #u2 #s1 ", 2, SpinMultiplicity::SINGLET)]
+    #[case::count_only("#u2", 2, SpinMultiplicity::TRIPLET)]
+    #[case::count_tag_only("#u", 1, SpinMultiplicity::DOUBLET)]
+    #[case::multiplicity_only("#s4", 3, SpinMultiplicity::QUARTET)]
+    #[case::multiplicity_tag_only("#s", 0, SpinMultiplicity::SINGLET)]
+    #[case::above_conventional_range("#u10#s11", 10, SpinMultiplicity::new(11).unwrap())]
+    #[case::maximum_multiplicity("#s255", 254, SpinMultiplicity::new(255).unwrap())]
+    fn test_spin_state_from_str(
         #[case] input: &str,
-        #[case] expected_n: u8,
-        #[case] expected_m: SpinMultiplicity,
+        #[case] expected_count: u8,
+        #[case] expected_multiplicity: SpinMultiplicity,
     ) {
-        let state: SpinState = input.parse().unwrap();
-        assert_eq!(state.unpaired(), expected_n);
-        assert_eq!(state.multiplicity(), expected_m);
+        let spin_state = input.parse::<SpinState>().unwrap();
+
+        assert_eq!(spin_state.unpaired_electrons(), expected_count);
+        assert_eq!(spin_state.multiplicity(), expected_multiplicity);
     }
 
     #[rstest]
-    #[case("", SpinStateError::Underdetermined)]
-    #[case("singlet", SpinStateError::UnexpectedToken { token: 's' })]
-    #[case("0", SpinStateError::UnexpectedToken { token: '0' })]
-    #[case("x3", SpinStateError::UnexpectedToken { token: 'x' })]
-    #[case("#", SpinStateError::InvalidTag { tag: "#".to_string() })]
-    #[case("#x3", SpinStateError::InvalidTag { tag: "#x3".to_string() })]
-    #[case("#u20", SpinStateError::UnpairedElectronsOutOfRange { unpaired: 20 })]
-    #[case("#s20", SpinStateError::MultiplicityOutOfRange { multiplicity: 20 })]
-    #[case("#s2#u2", SpinStateError::Incompatible { unpaired: 2, multiplicity: SpinMultiplicity::Doublet })]
-    fn test_spin_state_parse_error(#[case] input: &str, #[case] expected: SpinStateError) {
-        let result = input.parse::<SpinState>();
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), expected);
+    #[case::empty("", SpinStateError::Underdetermined)]
+    #[case::word("singlet", SpinStateError::UnexpectedToken { token: 's' })]
+    #[case::number("0", SpinStateError::UnexpectedToken { token: '0' })]
+    #[case::unknown_tag("#x3", SpinStateError::InvalidTag { tag: "#x3".to_string() })]
+    #[case::duplicate_count("#u1#u2", SpinStateError::DuplicateTag { tag: "#u".to_string() })]
+    #[case::duplicate_multiplicity("#s1#s2", SpinStateError::DuplicateTag { tag: "#s".to_string() })]
+    #[case::count_out_of_range(
+        "#u256#s1",
+        SpinStateError::UnpairedElectronsOutOfRange { count: 256 },
+    )]
+    #[case::multiplicity_zero(
+        "#u0#s0",
+        SpinStateError::MultiplicityOutOfRange { multiplicity: 0 },
+    )]
+    #[case::multiplicity_out_of_range(
+        "#u0#s256",
+        SpinStateError::MultiplicityOutOfRange { multiplicity: 256 },
+    )]
+    #[case::derived_multiplicity_out_of_range(
+        "#u255",
+        SpinStateError::MultiplicityOutOfRange { multiplicity: 256 },
+    )]
+    #[case::incompatible(
+        "#s2#u2",
+        SpinStateError::Incompatible {
+            unpaired_electrons: 2,
+            multiplicity: SpinMultiplicity::DOUBLET,
+        },
+    )]
+    fn test_spin_state_from_str_error(#[case] input: &str, #[case] expected: SpinStateError) {
+        assert_eq!(input.parse::<SpinState>(), Err(expected));
     }
 
     #[rstest]
-    #[case(0, SpinMultiplicity::Singlet)]
-    #[case(2, SpinMultiplicity::Triplet)]
-    #[case(3, SpinMultiplicity::Quartet)]
-    fn test_spin_state_roundtrip(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        let state = SpinState::new(n, m);
-        let s = state.to_string();
-        let parsed: SpinState = s.parse().unwrap();
-        assert_eq!(state, parsed);
+    #[case::closed_shell(SpinState::closed_shell(), r##""#u0#s1""##)]
+    #[case::triplet(
+        SpinState::new(2, SpinMultiplicity::TRIPLET).unwrap(),
+        r##""#u2#s3""##,
+    )]
+    fn test_spin_state_serde(#[case] spin_state: SpinState, #[case] expected: &str) {
+        let serialized = serde_json::to_string(&spin_state).unwrap();
+        assert_eq!(serialized, expected);
+        assert_eq!(
+            serde_json::from_str::<SpinState>(&serialized).unwrap(),
+            spin_state,
+        );
     }
 
     #[rstest]
-    #[case(0, SpinMultiplicity::Singlet)]
-    #[case(2, SpinMultiplicity::Triplet)]
-    fn test_spin_state_serde_roundtrip(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        let state = SpinState::new(n, m);
-        let json = serde_json::to_string(&state).unwrap();
-        let parsed: SpinState = serde_json::from_str(&json).unwrap();
-        assert_eq!(state, parsed);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case(vec![], spin!("#s"))]
-    #[case(vec![spin!("#u")], spin!("#u"))]
-    #[case(vec![spin!("#u"), spin!("#u")], spin!("#u2"))]
-    #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#u6"))]
-    #[case(vec![spin!("#u2#s1"), spin!("#u")], spin!("#u3"))]
-    fn test_high_spin(#[case] states: Vec<SpinState>, #[case] expected: SpinState) {
-        let hs = SpinState::high_spin_combine(&states).unwrap();
-        assert_eq!(hs, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case(vec![], spin!("#u0"), true)]
-    #[case(vec![], spin!("#s2"), false)]
-    #[case(vec![spin!("#s2"), spin!("#s2")], spin!("#u0"), false)]
-    #[case(vec![spin!("#s2"), spin!("#s2")], spin!("#u2"), true)]
-    #[case(vec![spin!("#s2"), spin!("#s2")], spin!("#u2 #s3"), true)]
-    #[case(vec![spin!("#s2"), spin!("#s2")], spin!("#u4 #s5"), false)]
-    #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#u6"), true)]
-    #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#u6 #s3"), true)]
-    #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#u6 #s5"), true)]
-    #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#u6 #s7"), true)]
-    #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#s2"), false)]
-    fn test_is_constructible_from(
-        #[case] states: Vec<SpinState>,
-        #[case] target: SpinState,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(target.is_constructible_from(&states), expected);
+    fn test_spin_macro() {
+        assert_eq!(
+            spin!("#u2#s3"),
+            SpinState::new(2, SpinMultiplicity::TRIPLET).unwrap(),
+        );
     }
 }

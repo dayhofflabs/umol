@@ -194,8 +194,8 @@ pub const OCTET: Self;
 pub const NONET: Self;
 pub const DECET: Self;
 
-pub const fn conventional_name(self) -> Option<&'static str>;
-pub fn from_conventional_name(name: &str) -> Option<Self>;
+pub const fn name(self) -> Option<&'static str>;
+pub fn from_name(name: &str) -> Option<Self>;
 ```
 
 The forward lookup is ASCII-case-insensitive, and multiplicities above ten have no conventional
@@ -626,15 +626,15 @@ migrations.
 - **S0a — `umol-chem/src/spin.rs`: add `UnpairedElectrons`.** **Done.** Add the exact `i64` pair
   carrier with the approved field names and ordinary value-type trait implementations. Add unit
   tests for construction, equality, ordering, and serialization. **Additive (green).** [dep: none]
-- **S0b — `umol-chem/src/spin.rs`, `error.rs`: replace `SpinMultiplicity` and clean
-  `SpinState`.** Replace the ten-variant enum with the `NonZeroU8` newtype, associated conventional
-  constants and lookups, numeric display/serialization, and checked `new`. Replace the
-  `SpinState` construction and conversion surface, widen parse arithmetic and error payloads,
-  rename `unpaired` throughout, and remove `are_compatible`, `max_multiplicity`,
-  `is_compatible_with`, `high_spin_combine`, and `is_constructible_from`. Test the full numeric
-  range, conventional-name roundtrips, parsing, checked conversions, compatibility boundaries,
-  serialization, and the `UnpairedElectrons` conversion roundtrip. **Breaking (red→green within
-  S0).** [dep: S0a]
+- **S0b — `umol-chem`: replace `SpinMultiplicity` and clean `SpinState`.** **Done.** Replace the
+  ten-variant enum with the `NonZeroU8` newtype, associated conventional constants and lookups,
+  numeric display/serialization, and checked `new`. Replace the `SpinState` construction and
+  conversion surface, widen parse arithmetic and error payloads, rename `unpaired` throughout,
+  and remove `are_compatible`, `max_multiplicity`, `is_compatible_with`, `high_spin_combine`, and
+  `is_constructible_from`. Remove the decet-derived maximum-unpaired-electron assertion and the
+  unused `strum` dependency. Test the full numeric range, conventional-name roundtrips, parsing,
+  checked conversions, compatibility boundaries, serialization, and the `UnpairedElectrons`
+  conversion roundtrip. **Breaking (red→green within S0).** [dep: S0a]
 - **S0c — `umol-io`, `umol-geometric`, `umol-geometric-graph`: migrate physical-spin
   consumers.** Update TableIR, CXSMILES and CTfile radical handling, geometric molecule
   conversion, and their fixtures to use the numeric multiplicity API and approved field names.

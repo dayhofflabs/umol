@@ -9,7 +9,6 @@ use map_macro::hash_map;
 
 use crate::element::Element;
 use crate::occupation::Occupation;
-use crate::spin::MAX_UNPAIRED_ELECTRONS;
 use crate::{e, occ};
 
 /// Electronic configuration of atom or atomic ion
@@ -58,12 +57,6 @@ impl Configuration {
             }
         }
 
-        // Add unpaired electrons from last partially filled subshell
-        let mut unpaired = 0;
-        if let Some(&(_, _, capacity, occupation)) = subshell_occupations.last() {
-            unpaired = hund_rule_unpaired(occupation, capacity);
-        }
-
         debug_assert!(
             subshell_occupations
                 .iter()
@@ -71,11 +64,6 @@ impl Configuration {
                 .sum::<u8>()
                 == element.atomic_number(),
             "Total occupation must be equal to atomic number"
-        );
-        debug_assert!(
-            unpaired <= MAX_UNPAIRED_ELECTRONS,
-            "Unpaired electrons must be less than or equal to {}",
-            MAX_UNPAIRED_ELECTRONS
         );
         debug_assert!(
             closing_subshell.0 <= MAX_N_QUANTUM_NUMBER,

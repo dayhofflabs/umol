@@ -71,15 +71,15 @@ pub enum SpinStateError {
     InvalidTag { tag: String },
     #[error("duplicate tag '{tag}'")]
     DuplicateTag { tag: String },
-    #[error("unpaired electrons {unpaired} out of range")]
-    UnpairedElectronsOutOfRange { unpaired: u8 },
+    #[error("unpaired electrons {count} out of range")]
+    UnpairedElectronsOutOfRange { count: i64 },
     #[error("multiplicity {multiplicity} out of range")]
-    MultiplicityOutOfRange { multiplicity: u8 },
+    MultiplicityOutOfRange { multiplicity: i64 },
     #[error("spin state is underdetermined")]
     Underdetermined,
-    #[error("{unpaired} unpaired electrons, {multiplicity} multiplicity incompatible")]
+    #[error("{unpaired_electrons} unpaired electrons, {multiplicity} multiplicity incompatible")]
     Incompatible {
-        unpaired: u8,
+        unpaired_electrons: u8,
         multiplicity: SpinMultiplicity,
     },
 }
