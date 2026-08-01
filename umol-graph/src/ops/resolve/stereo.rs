@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use umol_ast::ast::{
     AtomConstraintAst, AtomHandle, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
-    CisTransStereoAst, Edit, MoleculeAst, StereoAtomHandle, StereoBondHandle, TetrahedralStereoAst,
-    TransactionError,
+    CisTransStereoAst, Edit, Lattice, MoleculeAst, StereoAtomHandle, StereoBondHandle,
+    TetrahedralStereoAst, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -93,6 +93,20 @@ impl StereoResolver {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<Vec<Edit>, StereoContradiction>, StereoError> {
+        let partial_atom_constraint = ast.atoms().iter().any(|atom| {
+            atom.constraints()
+                .tetrahedral_stereo()
+                .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
+        });
+        let partial_bond_constraint = ast.bonds().iter().any(|bond| {
+            bond.constraints()
+                .cis_trans_stereo()
+                .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
+        });
+        if partial_atom_constraint || partial_bond_constraint {
+            return Ok(Solution::Underdetermined(Vec::new()));
+        }
+
         let derivation = self.perception.derive(ast);
         for &inconsistency in &derivation.inconsistencies {
             let error = match inconsistency {
@@ -470,7 +484,24 @@ mod tests {
     }
 
     #[rstest]
+    #[case::tetrahedral(mol_dsl_ground!(r#"{
+        :atoms ["C #h3" "C #h1 #T+" "N #h2" "O #h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+    }"#))]
+    #[case::cis_trans(mol_dsl_ground!(r#"{
+        :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+        :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]
+    }"#))]
+    fn test_stereo_resolver_plan_partial(stereo_model: StereoModel, #[case] molecule: MoleculeAst) {
+        assert_eq!(
+            StereoResolver::new(&stereo_model).plan(&molecule),
+            Ok(Solution::Underdetermined(Vec::new()))
+        );
+    }
+
+    #[rstest]
     #[case::no_assertion(mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#))]
+    #[case::vacuous(mol_dsl_ground!(r#"{:atoms ["C #h4 #T*"]}"#))]
     #[case::existing_atom(mol_dsl_ground!(r#"{
         :atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]

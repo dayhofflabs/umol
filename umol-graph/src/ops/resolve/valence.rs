@@ -2,7 +2,10 @@
 //! defined in [`crate::ops::valence`].
 
 use thiserror::Error;
-use umol_ast::ast::{Edit, MoleculeAst, TransactionError};
+use umol_ast::ast::{
+    AtomConstraintKey, Edit, IncidenceConstraintContradiction, IncidenceConstraintValidator,
+    MoleculeAst, TransactionError,
+};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
@@ -16,6 +19,8 @@ pub enum ValenceResolver<'a> {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceContradiction {
+    #[error(transparent)]
+    Constraint(#[from] IncidenceConstraintContradiction),
     #[error(transparent)]
     AtomTyping(#[from] AtomTypingError),
     #[error(transparent)]
@@ -43,6 +48,26 @@ impl<'a> ValenceResolver<'a> {
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
     pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, ValenceContradiction> {
+        for atom in ast.atoms().ids() {
+            for key in [
+                AtomConstraintKey::Valence,
+                AtomConstraintKey::DonatedPairs,
+                AtomConstraintKey::AcceptedPairs,
+            ] {
+                match IncidenceConstraintValidator
+                    .validate_molecule_atom_constraint(ast, atom, key)
+                    .expect("atom id came from the molecule atom store")
+                {
+                    Solution::Determined(()) => {}
+                    Solution::Underdetermined(()) => {
+                        return Solution::Underdetermined(Vec::new());
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        return Solution::Contradictory(contradiction.into());
+                    }
+                }
+            }
+        }
         match self {
             Self::AtomTyping(resolver) => resolver
                 .plan(ast)
@@ -77,7 +102,9 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_ast::ast::{AtomFieldChange, AtomHandle, AtomId, IsotopeMassAst};
+    use umol_ast::ast::{
+        AtomConstraintAst, AtomFieldChange, AtomHandle, AtomId, IsotopeMassAst, ValueAst,
+    };
     use umol_ast::{atom_dsl, mol_dsl};
     use umol_chem::element::Element;
 
@@ -124,6 +151,95 @@ mod tests {
                 },
             }])
         );
+    }
+
+    #[rstest]
+    #[case::counts_contradictory(
+        ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        mol_dsl!(r#"{:atoms ["C#v1"]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintContradiction::Atom {
+                atom: AtomId(0),
+                constraint: AtomConstraintAst::valence(1),
+            },
+        )),
+    )]
+    #[case::atom_typing_contradictory(
+        ValenceModel::AtomTyping {
+            registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+        },
+        mol_dsl!(r#"{:atoms ["C#v1"]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintContradiction::Atom {
+                atom: AtomId(0),
+                constraint: AtomConstraintAst::valence(1),
+            },
+        )),
+    )]
+    #[case::counts_underdetermined(
+        ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        mol_dsl!(r#"{:atoms ["C#v1" "C"] :bonds [[0 1 "*"]]}"#),
+        Solution::Underdetermined(Vec::new()),
+    )]
+    #[case::atom_typing_underdetermined(
+        ValenceModel::AtomTyping {
+            registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+        },
+        mol_dsl!(r#"{:atoms ["C#v1" "C"] :bonds [[0 1 "*"]]}"#),
+        Solution::Underdetermined(Vec::new()),
+    )]
+    #[case::dative_pairs_contradictory(
+        ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        mol_dsl!(r#"{:atoms ["N#d0" "B"] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintContradiction::Atom {
+                atom: AtomId(0),
+                constraint: AtomConstraintAst::donated_pairs(0),
+            },
+        )),
+    )]
+    #[case::accepted_pairs_contradictory(
+        ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        mol_dsl!(r#"{:atoms ["N" "B#t0"] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintContradiction::Atom {
+                atom: AtomId(1),
+                constraint: AtomConstraintAst::accepted_pairs(0),
+            },
+        )),
+    )]
+    #[case::multidonor_underdetermined(
+        ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        mol_dsl!(r#"{:atoms ["N#d1" "N" "B"] :dative-bonds [{:donors [0 1] :acceptor 2 :type "1"}]}"#),
+        Solution::Underdetermined(Vec::new()),
+    )]
+    #[case::vacuous(
+        ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v*#a!"]}"#),
+        Solution::Determined(vec![Edit::ModifyAtomConstraint {
+            id: AtomHandle::Id(AtomId(0)),
+            old: Some(AtomConstraintAst::valence(ValueAst::Undetermined)),
+            new: Some(AtomConstraintAst::valence(0)),
+        }]),
+    )]
+    fn test_valence_resolver_plan_constraints(
+        #[case] model: ValenceModel,
+        #[case] molecule: MoleculeAst,
+        #[case] expected: Solution<Vec<Edit>, ValenceContradiction>,
+    ) {
+        assert_eq!(ValenceResolver::new(&model).plan(&molecule), expected);
     }
 
     #[rstest]

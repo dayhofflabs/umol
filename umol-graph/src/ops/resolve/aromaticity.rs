@@ -459,6 +459,22 @@ mod tests {
     }
 
     #[rstest]
+    fn test_aromaticity_resolver_plan_partial(aromaticity_model: AromaticityModel) {
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+        }"#
+        );
+
+        assert_eq!(
+            AromaticityResolver::new(&aromaticity_model).plan(&molecule),
+            Ok(Solution::Underdetermined(Vec::new()))
+        );
+    }
+
+    #[rstest]
     #[case::error(
         AromaticityMismatchPolicy::Error,
         Solution::Contradictory(AromaticityContradiction::Inconsistency(

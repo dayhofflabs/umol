@@ -3,7 +3,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    Edit, Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, TransactionError,
+    AtomConstraintKey, Edit, IncidenceConstraintContradiction, IncidenceConstraintValidator,
+    Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, TransactionError,
     UnpairedElectronsAst, ValueAst,
 };
 use umol_utils::solution::Solution;
@@ -12,7 +13,10 @@ use umol_utils::solution::Solution;
 pub struct MulticenterBondsResolver;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum MulticenterBondsContradiction {}
+pub enum MulticenterBondsContradiction {
+    #[error(transparent)]
+    Constraint(#[from] IncidenceConstraintContradiction),
+}
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum MulticenterBondsError {
@@ -26,7 +30,22 @@ impl MulticenterBondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `ast`.
-    pub fn plan(&self, ast: &MoleculeAst) -> Vec<Edit> {
+    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, MulticenterBondsContradiction> {
+        for atom in ast.atoms().ids() {
+            match IncidenceConstraintValidator
+                .validate_molecule_atom_constraint(ast, atom, AtomConstraintKey::MulticenterValence)
+                .expect("atom id came from the molecule atom store")
+            {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => {
+                    return Solution::Underdetermined(Vec::new());
+                }
+                Solution::Contradictory(contradiction) => {
+                    return Solution::Contradictory(contradiction.into());
+                }
+            }
+        }
+
         let mut edits = Vec::new();
         for bond_id in ast.multicenter_bonds().ids() {
             let bond = ast.multicenter_bond(bond_id).ast;
@@ -49,7 +68,7 @@ impl MulticenterBondsResolver {
                 &update,
             ));
         }
-        edits
+        Solution::Determined(edits)
     }
 
     /// Plan and atomically apply multicenter-bond defaults.
@@ -57,7 +76,13 @@ impl MulticenterBondsResolver {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), MulticenterBondsContradiction>, MulticenterBondsError> {
-        let edits = self.plan(ast);
+        let edits = match self.plan(ast) {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
         let mut editor = ast.edit();
         editor.transact(edits)?;
         *ast = editor.build();
@@ -68,7 +93,10 @@ impl MulticenterBondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{MulticenterBondFieldChange, MulticenterBondId};
+    use umol_ast::ast::{
+        AtomConstraintAst, AtomId, MulticenterBondFieldChange, MulticenterBondId,
+        MulticenterValenceAst,
+    };
     use umol_ast::mol_dsl;
 
     use super::*;
@@ -112,14 +140,48 @@ mod tests {
         #[case] molecule: MoleculeAst,
         #[case] expected: Vec<Edit>,
     ) {
-        assert_eq!(MulticenterBondsResolver::new().plan(&molecule), expected);
+        assert_eq!(
+            MulticenterBondsResolver::new().plan(&molecule),
+            Solution::Determined(expected)
+        );
     }
 
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["B" "H" "B"]
         :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c-#u2#s1"}]}"#))]
     fn test_multicenter_bonds_resolver_plan_identity(#[case] molecule: MoleculeAst) {
-        assert_eq!(MulticenterBondsResolver::new().plan(&molecule), Vec::new());
+        assert_eq!(
+            MulticenterBondsResolver::new().plan(&molecule),
+            Solution::Determined(Vec::new())
+        );
+    }
+
+    #[rstest]
+    #[case::contradictory(
+        mol_dsl!(r#"{:atoms ["C#m1"]}"#),
+        Solution::Contradictory(MulticenterBondsContradiction::Constraint(
+            IncidenceConstraintContradiction::Atom {
+                atom: AtomId(0),
+                constraint: AtomConstraintAst::multicenter_valence(
+                    MulticenterValenceAst::multicenter(1),
+                ),
+            },
+        )),
+    )]
+    #[case::underdetermined(
+        mol_dsl!(r#"{:atoms ["C#m1" "C" "C"]
+                       :multicenter-bonds [{:atoms [0 1 2] :type "*"}]}"#),
+        Solution::Underdetermined(Vec::new()),
+    )]
+    #[case::vacuous(
+        mol_dsl!(r#"{:atoms ["C#m*"]}"#),
+        Solution::Determined(Vec::new()),
+    )]
+    fn test_multicenter_bonds_resolver_plan_constraints(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: Solution<Vec<Edit>, MulticenterBondsContradiction>,
+    ) {
+        assert_eq!(MulticenterBondsResolver::new().plan(&molecule), expected);
     }
 
     #[rstest]
@@ -151,7 +213,9 @@ mod tests {
             ]
         }"#
         );
-        let edits = MulticenterBondsResolver::new().plan(&molecule);
+        let Solution::Determined(edits) = MulticenterBondsResolver::new().plan(&molecule) else {
+            panic!("fixture must produce a determined edit plan");
+        };
         molecule
             .multicenter_bond_mut(MulticenterBondId(1))
             .ast

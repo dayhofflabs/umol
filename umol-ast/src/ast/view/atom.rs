@@ -23,7 +23,7 @@ use super::multicenter::MulticenterBondView;
 use super::neighbor::NeighborView;
 use super::noncovalent::NoncovalentBondView;
 use super::stereo::StereoAtomView;
-use crate::ast::{AromaticValenceAst, AsLit, AtomConstraintAst, MulticenterValenceAst};
+use crate::ast::{AromaticValenceAst, AtomConstraintAst, MulticenterValenceAst};
 
 /// Namespace accessor for atom views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
@@ -391,11 +391,7 @@ impl<'a> AtomView<'a> {
 
         if self.is_in_aromatic_system() {
             constraints.set(AtomConstraintAst::aromatic_valence(
-                AromaticValenceAst::aromatic(
-                    self.aromatic_valence()
-                        .as_lit()
-                        .expect("aromatic valence should be Lit"),
-                ),
+                AromaticValenceAst::aromatic(self.aromatic_valence()),
             ));
         } else if self
             .neighbors()
@@ -412,11 +408,7 @@ impl<'a> AtomView<'a> {
 
         if self.is_in_multicenter_bond() {
             constraints.set(AtomConstraintAst::multicenter_valence(
-                MulticenterValenceAst::multicenter(
-                    self.multicenter_valence()
-                        .as_lit()
-                        .expect("multicenter valence should be Lit"),
-                ),
+                MulticenterValenceAst::multicenter(self.multicenter_valence()),
             ));
         } else if include_missing {
             constraints.set(AtomConstraintAst::multicenter_valence(
@@ -987,6 +979,47 @@ mod tests {
         #[case] expected: AtomConstraintsAst,
     ) {
         assert_eq!(stereo_molecule.atom(atom).derive_constraints(true), expected);
+    }
+
+    #[rstest]
+    #[case::aromatic(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemAst::default())],
+            ..Default::default()
+        }),
+        AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(0),
+            AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(
+                ValueAst::Undetermined,
+            )),
+        ]),
+    )]
+    #[case::multicenter(
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            )],
+            ..Default::default()
+        }),
+        AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(0),
+            AtomConstraintAst::multicenter_valence(MulticenterValenceAst::multicenter(
+                ValueAst::Undetermined,
+            )),
+        ]),
+    )]
+    fn test_atom_view_derive_constraints_partial(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: AtomConstraintsAst,
+    ) {
+        assert_eq!(molecule.atom(AtomId(0)).derive_constraints(false), expected);
     }
 
     #[rstest]

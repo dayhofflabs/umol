@@ -85,6 +85,8 @@ pub enum ResolverError {
 pub enum ResolverRollbackCause {
     #[error("resolver contradiction: {0}")]
     Contradiction(ResolverContradiction),
+    #[error("resolver underdetermined")]
+    Underdetermined,
     #[error("resolver error: {0}")]
     Error(Box<ResolverError>),
 }
@@ -182,7 +184,17 @@ impl<'a> Resolver<'a> {
             }
         };
         let edits = match outcome {
-            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => {
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Underdetermined,
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Underdetermined(()));
+            }
             Solution::Contradictory(contradiction) => {
                 let contradiction = ResolverContradiction::Aromaticity(contradiction);
                 if let Err(rollback) = journal.rollback(&mut editor) {
@@ -227,7 +239,17 @@ impl<'a> Resolver<'a> {
             }
         };
         let edits = match outcome {
-            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => {
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Underdetermined,
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Underdetermined(()));
+            }
             Solution::Contradictory(contradiction) => {
                 let contradiction = ResolverContradiction::Stereo(contradiction);
                 if let Err(rollback) = journal.rollback(&mut editor) {
@@ -275,7 +297,30 @@ impl<'a> Resolver<'a> {
         state = editor.build();
         editor = state.edit();
 
-        let edits = self.multicenter_bonds.plan(&state);
+        let edits = match self.multicenter_bonds.plan(&state) {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => {
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Underdetermined,
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Underdetermined(()));
+            }
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolverContradiction::MulticenterBonds(contradiction);
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Contradiction(contradiction),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
         match editor.transact(edits) {
             Ok(transaction) => journal.append(transaction),
             Err(transaction) => {
@@ -309,7 +354,9 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
-    use umol_ast::ast::AtomId;
+    use umol_ast::ast::{
+        AtomConstraintAst, AtomId, IncidenceConstraintContradiction, MulticenterValenceAst,
+    };
     use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
 
@@ -388,6 +435,13 @@ mod tests {
             rollback: TransactionError::OldStateMismatch,
         },
         "rollback failed after resolver error: id out of range: bond: precondition failed: old state does not match current"
+    )]
+    #[case::underdetermined(
+        ResolverError::RollbackFailed {
+            cause: ResolverRollbackCause::Underdetermined,
+            rollback: TransactionError::OldStateMismatch,
+        },
+        "rollback failed after resolver underdetermined: precondition failed: old state does not match current"
     )]
     fn test_resolver_error(#[case] error: ResolverError, #[case] expected: &str) {
         assert_eq!(error.to_string(), expected);
@@ -571,6 +625,67 @@ mod tests {
             Resolver::new(&model).resolve(&mut molecule),
             Ok(Solution::Underdetermined(()))
         );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_resolver_resolve_later_underdetermined_rollback(chemistry_model: ChemistryModel) {
+        let mut molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#i*#c0#h*#n0#u0#s#T+" "F#i=#c0#h0#n0#u0#s"
+                    "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
+        }"#
+        );
+        let original = molecule.clone();
+
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::underdetermined(
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h0#n0#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"]
+            :multicenter-bonds [{:atoms [0 1 2] :type "*"}]
+        }"#),
+        Solution::Underdetermined(())
+    )]
+    #[case::contradiction(
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h0#n0#u0#s#v0#a!#m1"]
+        }"#),
+        Solution::Contradictory(ResolverContradiction::MulticenterBonds(
+            MulticenterBondsContradiction::Constraint(
+                IncidenceConstraintContradiction::Atom {
+                    atom: AtomId(0),
+                    constraint: AtomConstraintAst::multicenter_valence(
+                        MulticenterValenceAst::multicenter(1),
+                    ),
+                },
+            ),
+        ))
+    )]
+    fn test_resolver_resolve_multicenter_constraint_precondition(
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: Solution<(), ResolverContradiction>,
+    ) {
+        let model = ChemistryModel {
+            valence: ValenceModel::AtomTyping {
+                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
+                )])),
+            },
+            ..ChemistryModel::default()
+        };
+        let original = molecule.clone();
+
+        assert_eq!(Resolver::new(&model).resolve(&mut molecule), Ok(expected));
         assert_eq!(molecule, original);
     }
 

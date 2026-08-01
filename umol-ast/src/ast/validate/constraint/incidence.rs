@@ -5,9 +5,9 @@ use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_utils::solution::Solution;
 
 use super::super::super::constraint::{
-    AromaticSystemConstraintAst, AromaticValenceAst, AtomConstraintAst, BondConstraintAst,
-    DativeBondConstraintAst, MulticenterBondConstraintAst, MulticenterValenceAst,
-    NoncovalentBondConstraintAst,
+    AromaticSystemConstraintAst, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
+    BondConstraintAst, BondConstraintKey, DativeBondConstraintAst, MulticenterBondConstraintAst,
+    MulticenterValenceAst, NoncovalentBondConstraintAst,
 };
 use super::super::super::entity::Entity;
 use super::super::super::id::{
@@ -120,6 +120,27 @@ impl IncidenceConstraintValidator {
         })))
     }
 
+    /// Validate one inline atom constraint selected by its container key.
+    pub fn validate_molecule_atom_constraint(
+        &self,
+        ast: &MoleculeAst,
+        atom_id: AtomId,
+        key: AtomConstraintKey,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let atom = ast
+            .atoms()
+            .get(atom_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::Atom(atom_id),
+            })?;
+        Ok(atom
+            .constraints()
+            .get(key)
+            .map_or(Solution::Determined(()), |constraint| {
+                validate_atom_constraint(ast, atom_id, constraint)
+            }))
+    }
+
     /// Validate all inline incidence constraints on one molecule bond.
     pub fn validate_molecule_bond(
         &self,
@@ -135,6 +156,26 @@ impl IncidenceConstraintValidator {
         Ok(conjunction(bond.constraints().iter().filter_map(
             |constraint| validate_bond_constraint(ast, bond_id, constraint),
         )))
+    }
+
+    /// Validate one inline localized-bond constraint selected by its container key.
+    pub fn validate_molecule_bond_constraint(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: BondId,
+        key: BondConstraintKey,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let bond = ast
+            .bonds()
+            .get(bond_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::Bond(bond_id),
+            })?;
+        Ok(bond
+            .constraints()
+            .get(key)
+            .and_then(|constraint| validate_bond_constraint(ast, bond_id, constraint))
+            .unwrap_or(Solution::Determined(())))
     }
 
     /// Validate all inline incidence constraints on one molecule dative bond.
@@ -601,6 +642,92 @@ mod tests {
 
     use super::*;
     use crate::mol_dsl;
+
+    #[rstest]
+    #[case::determined(
+        mol_dsl!(r#"{:atoms ["C#v0"]}"#),
+        AtomId(0),
+        AtomConstraintKey::Valence,
+        Ok(Solution::Determined(())),
+    )]
+    #[case::absent(
+        mol_dsl!(r#"{:atoms ["C"]}"#),
+        AtomId(0),
+        AtomConstraintKey::Valence,
+        Ok(Solution::Determined(())),
+    )]
+    #[case::contradictory(
+        mol_dsl!(r#"{:atoms ["C#v1"]}"#),
+        AtomId(0),
+        AtomConstraintKey::Valence,
+        Ok(Solution::Contradictory(IncidenceConstraintContradiction::Atom {
+            atom: AtomId(0),
+            constraint: AtomConstraintAst::valence(1),
+        })),
+    )]
+    #[case::underdetermined(
+        mol_dsl!(r#"{:atoms ["C#v1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0),
+        AtomConstraintKey::Valence,
+        Ok(Solution::Underdetermined(())),
+    )]
+    #[case::invalid_reference(
+        mol_dsl!(r#"{:atoms ["C"]}"#),
+        AtomId(1),
+        AtomConstraintKey::Valence,
+        Err(ConstraintError::InvalidReference { entity: Entity::Atom(AtomId(1)) }),
+    )]
+    fn test_incidence_constraint_validator_validate_molecule_atom_constraint(
+        #[case] molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] key: AtomConstraintKey,
+        #[case] expected: Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError>,
+    ) {
+        assert_eq!(
+            IncidenceConstraintValidator.validate_molecule_atom_constraint(&molecule, atom, key),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::determined(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a!"]]}"#),
+        BondId(0),
+        BondConstraintKey::Aromatic,
+        Ok(Solution::Determined(())),
+    )]
+    #[case::absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondId(0),
+        BondConstraintKey::Aromatic,
+        Ok(Solution::Determined(())),
+    )]
+    #[case::contradictory(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        BondId(0),
+        BondConstraintKey::Aromatic,
+        Ok(Solution::Contradictory(IncidenceConstraintContradiction::Bond {
+            bond: BondId(0),
+            constraint: BondConstraintAst::aromatic(true),
+        })),
+    )]
+    #[case::invalid_reference(
+        mol_dsl!(r#"{:atoms ["C"]}"#),
+        BondId(0),
+        BondConstraintKey::Aromatic,
+        Err(ConstraintError::InvalidReference { entity: Entity::Bond(BondId(0)) }),
+    )]
+    fn test_incidence_constraint_validator_validate_molecule_bond_constraint(
+        #[case] molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] key: BondConstraintKey,
+        #[case] expected: Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError>,
+    ) {
+        assert_eq!(
+            IncidenceConstraintValidator.validate_molecule_bond_constraint(&molecule, bond, key),
+            expected
+        );
+    }
 
     #[rstest]
     #[case::valence(r#"{:atoms ["C#v1" "C"] :bonds [[0 1 "1"]]}"#)]

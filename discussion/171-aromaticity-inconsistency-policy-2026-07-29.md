@@ -915,7 +915,7 @@ Focused tables assert the complete default config, explicit selector propagation
 each constraint contradiction/error category, and unchanged outcomes for molecules without
 constraints.
 
-#### S4b — Resolver constraint preconditions
+#### S4b — Resolver constraint preconditions **Done**
 
 **Module:** `umol-graph/src/ops/resolve/valence.rs`,
 `umol-graph/src/ops/resolve/aromaticity.rs`,
@@ -931,7 +931,8 @@ preconditions: localized valence and dative pair counts, aromatic valence and ar
 incidence, multicenter valence, and tetrahedral/cis-trans stereo incidence. A determined mismatch is
 an exact contradiction; a vacuous constraint does nothing; an underdetermined prerequisite stops the
 resolution chain without emitting a partial plan. Keep the multidonor dative case as the documented
-stub.
+stub. Constraint derivation preserves non-literal aromatic and multicenter contributions as AST
+values rather than assuming that relation fields are literal.
 
 The composite resolver continues to materialize each successful stage before deriving the next and
 applies the complete sequence transactionally. Focused tables assert no emitted edits on an
