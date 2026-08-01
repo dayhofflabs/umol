@@ -390,6 +390,13 @@ impl AtomAst {
     }
 }
 
+impl_py_lattice!(
+    AtomAst,
+    AstAtomAst,
+    |value: &AtomAst, _py: Python<'_>| -> PyResult<AstAtomAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>, value: AstAtomAst| -> PyResult<AtomAst> { Ok(AtomAst::from_inner(value)) }
+);
+
 /// A binding argument that converts a literal or Python value to its Rust value — the `*Arg`
 /// convention for these inputs (`*Input` is reserved for the DSL side). Extracted as
 /// a PyO3 `FromPyObject` union tried in order; variants are `Ast` = the `*Ast`

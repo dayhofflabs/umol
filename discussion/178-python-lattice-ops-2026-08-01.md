@@ -113,7 +113,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
 
 ### S2 — Entity and entity-constraint AST values
 
-- **S2a — Atom and bond entities.** Apply the lattice and canonicalization surfaces to `AtomAst` and
+- **S2a — Atom and bond entities.** **Done.** Apply the lattice and canonicalization surfaces to `AtomAst` and
   `BondAst`. Test full-value results rather than reaching into individual fields, including one
   compatible refinement and one incompatible pair for each entity. **Additive (green).** [dep: S1a]
 - **S2b — Overlay entities.** Apply the surfaces to `DativeBondAst`, `AromaticSystemAst`,

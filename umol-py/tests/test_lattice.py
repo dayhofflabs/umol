@@ -2,7 +2,9 @@ import pytest
 
 from umol import (
     AromaticValenceAst,
+    AtomAst,
     BooleanAst,
+    BondAst,
     CisTransStereoAst,
     ContradictionError,
     ElectronCountsAst,
@@ -1300,5 +1302,171 @@ def test_remaining_leaf_canonicalize(value, expected):
     ],
 )
 def test_remaining_leaf_canonicalize_error(value):
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        value.canonicalize()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(
+            AtomAst(ElementAst.Undetermined()), True, False, id="atom-undetermined"
+        ),
+        pytest.param(
+            AtomAst(
+                Element("C"),
+                isotope_mass=IsotopeMassAst.Natural(),
+                charge=0,
+                implicit_hydrogens=4,
+                lone_pairs=0,
+                unpaired_electrons=UnpairedElectronsAst(0, 1),
+            ),
+            False,
+            True,
+            id="atom-ground",
+        ),
+        pytest.param(
+            BondAst(ValueAst.Undetermined()), True, False, id="bond-undetermined"
+        ),
+        pytest.param(
+            BondAst(
+                1,
+                charge=0,
+                unpaired_electrons=UnpairedElectronsAst(0, 1),
+            ),
+            False,
+            True,
+            id="bond-ground",
+        ),
+    ],
+)
+def test_entity_classification(value, expected_undetermined, expected_ground):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            AtomAst(
+                ElementAst.LitSet({Element("C"), Element("N")}),
+                charge=ValueAst.LitSet({0, 1}),
+            ),
+            AtomAst(Element("C"), charge=0),
+            AtomAst(Element("C"), charge=0),
+            id="atom-compatible",
+        ),
+        pytest.param(
+            AtomAst(Element("C")),
+            AtomAst(Element("N")),
+            None,
+            id="atom-incompatible",
+        ),
+        pytest.param(
+            BondAst(ValueAst.LitSet({1, 2}), charge=ValueAst.LitSet({0, 1})),
+            BondAst(1, charge=0),
+            BondAst(1, charge=0),
+            id="bond-compatible",
+        ),
+        pytest.param(
+            BondAst(1),
+            BondAst(2),
+            None,
+            id="bond-incompatible",
+        ),
+    ],
+)
+def test_entity_meet(lhs, rhs, expected):
+    assert lhs.meet(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            AtomAst(Element("C"), charge=0),
+            AtomAst(Element("N"), charge=1),
+            AtomAst(
+                ElementAst.LitSet({Element("C"), Element("N")}),
+                charge=ValueAst.LitSet({0, 1}),
+            ),
+            id="atom",
+        ),
+        pytest.param(
+            BondAst(1, charge=0),
+            BondAst(2, charge=1),
+            BondAst(ValueAst.LitSet({1, 2}), charge=ValueAst.LitSet({0, 1})),
+            id="bond",
+        ),
+    ],
+)
+def test_entity_join(lhs, rhs, expected):
+    assert lhs.join(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            AtomAst(
+                ElementAst.LitSet({Element("C"), Element("N")}),
+                charge=ValueAst.LitSet({0, 1}),
+            ),
+            AtomAst(Element("C"), charge=0),
+            id="atom",
+        ),
+        pytest.param(
+            BondAst(ValueAst.LitSet({1, 2}), charge=ValueAst.LitSet({0, 1})),
+            BondAst(1, charge=0),
+            id="bond",
+        ),
+    ],
+)
+def test_entity_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(AtomAst(Element("C")), AtomAst(Element("N")), id="atom"),
+        pytest.param(BondAst(1), BondAst(2), id="bond"),
+    ],
+)
+def test_entity_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            AtomAst(ElementAst.LitSet({Element("C")}), charge=ValueAst.LitSet({0})),
+            AtomAst(Element("C"), charge=0),
+            id="atom",
+        ),
+        pytest.param(
+            BondAst(ValueAst.LitSet({1}), charge=ValueAst.LitSet({0})),
+            BondAst(1, charge=0),
+            id="bond",
+        ),
+    ],
+)
+def test_entity_canonicalize(value, expected):
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(AtomAst(Element("C"), charge=ValueAst.LitSet(set())), id="atom"),
+        pytest.param(BondAst(ValueAst.LitSet(set())), id="bond"),
+    ],
+)
+def test_entity_canonicalize_error(value):
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         value.canonicalize()

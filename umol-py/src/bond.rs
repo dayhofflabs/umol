@@ -15,6 +15,7 @@ use crate::constraint::bond::{
     BondConstraintsView,
 };
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::UnpairedElectronsAst;
 use crate::value::{ValueArg, ValueAst};
@@ -146,6 +147,13 @@ impl BondAst {
         BondAst(bond)
     }
 }
+
+impl_py_lattice!(
+    BondAst,
+    AstBondAst,
+    |value: &BondAst, _py: Python<'_>| -> PyResult<AstBondAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>, value: AstBondAst| -> PyResult<BondAst> { Ok(BondAst::from_inner(value)) }
+);
 
 /// A view of one bond within a molecule: a handle to the molecule plus the bond's
 /// index. Field reads rebuild the transient Rust view; the molecule is never copied.
