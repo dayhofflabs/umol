@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 use umol_ast::ast::BooleanAst as AstBooleanAst;
 
 use crate::convert::{hash_rust, variant_repr};
+use crate::lattice::impl_py_lattice;
 
 /// A boolean expression: undetermined, or a literal `True` / `False`.
 #[pyclass]
@@ -47,6 +48,15 @@ impl BooleanAst {
         }
     }
 }
+
+impl_py_lattice!(
+    BooleanAst,
+    AstBooleanAst,
+    |value: &BooleanAst, _py: Python<'_>| -> PyResult<AstBooleanAst> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: AstBooleanAst| -> PyResult<BooleanAst> {
+        Ok(BooleanAst::from_rust(&value))
+    }
+);
 
 /// Setter coercion for a boolean field: a Python `bool` → `Lit`, or a `BooleanAst`
 /// passthrough (matching `impl Into<BooleanAst>`).

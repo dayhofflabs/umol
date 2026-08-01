@@ -419,6 +419,34 @@ acts, but the stored descriptor is a coset of the rotation subgroup.
 `CosetSpace` doc comment on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so `R\P` is
 correct and the struct comment is wrong.
 
+### Covalence
+
+**Covalence** is the number of electrons an atom gains by sharing:
+
+```text
+covalence = valence + implicit_hydrogens + aromatic_covalence
+aromatic_covalence = 1 if aromatic_valence == 1 else 0
+```
+
+The aromatic case is where the word earns its separate existence. **Aromatic valence** is what the
+atom *contributes* to the π system; **aromatic covalence** is what it *gains back*. An atom
+contributing one electron pairs with a neighbour's and gains one; an atom contributing a whole lone
+pair — pyrrole-type nitrogen, furan oxygen — shares electrons it already owned and gains nothing.
+Hence `{0, 2} → 0` and `1 → 1`.
+
+Close to Irving Langmuir's sense, who introduced the term in 1919 as "the number of pairs of
+electrons that a given atom shares with its neighbors". The two readings agree for localized bonds,
+since each shared pair supplies exactly one electron from the partner, and diverge exactly where a
+lone pair is donated into a delocalized system: Langmuir would still count the pair as shared, umol
+counts nothing gained.
+
+**Not:** *valence*, which counts localized bond orders and says nothing about what the atom receives.
+Not *total valence* (`#V`), which sums contributions rather than gains. See *Valence* for the three
+side by side.
+**In code:** `AtomView::covalence`, `AtomView::aromatic_covalence`, `aromatic_covalence`;
+`target_covalences` in the valence table.
+**Settled by:** —
+
 ### Deltas
 
 **`Deltas`** is the resolved-delta collection carried by a reaction — the ordered transformation
@@ -843,6 +871,28 @@ carrying no aromatic, stereo, or coordination information.
 **In code:** —
 **Settled by:** whitepaper glossary; no settled repository term.
 
+### Narrow and widen
+
+**Narrowing** moves a value down the attribute lattice and **widening** moves it up: the in-place
+meet and the in-place join. Narrowing is what resolution does, and it returns whether the value
+actually changed; widening returns `Err(NoJoin)` where no join exists.
+
+These are the plain English words for descending and ascending an order of admitted-value sets, and
+they are the right ones. `meet_with` and `join_with` would name the operation rather than its effect;
+`refine_with` would collide with refinement, which is the order relation itself; `restrict` and
+`relax` are vaguer; `intersect` and `union` are wrong for lattices that are not sets.
+
+**Note for readers arriving from abstract interpretation.** That field uses both words for specific
+operators that are *not* the lattice operations: widening (∇) deliberately over-approximates the join
+so that iteration over an infinite-height lattice terminates, and narrowing (Δ) is the bounded descent
+that recovers precision afterwards. Neither applies here — there is no fixpoint iteration and no
+termination problem — so `widen_with` really is the join and `narrow_from` really is the meet.
+
+**Not:** the abstract-interpretation operators of the same names. Not *refinement*, which is the order
+relation rather than an operation.
+**In code:** `Lattice::narrow_from`, `Lattice::widen_with`, `meet`, `join`.
+**Settled by:** 113.
+
 ### Noncovalent kind
 
 The **kind** of a noncovalent bond is its interaction type, and it is the entity's only inherent
@@ -1149,6 +1199,26 @@ absent or undetermined constraint is vacuous and does not assert that an entity 
 **Not:** *underdetermined*, which is an operation outcome. Do not use the two interchangeably.
 **In code:** `ValueAst::Undetermined` and the per-type equivalents.
 **Settled by:** 171.
+
+### Valence
+
+Three related counts, distinguished by what they measure.
+
+- **Valence** — the sum of the orders of an atom's localized bonds to non-hydrogen neighbours.
+  Excludes implicit hydrogens, dative, aromatic, multicenter and noncovalent contributions, each of
+  which is a separate field. Tag `#v`.
+- **Total valence** — valence plus implicit hydrogens plus aromatic valence plus multicenter
+  valence. What the atom *contributes* in total. Tag `#V`, derived.
+- **Covalence** — valence plus implicit hydrogens plus aromatic *covalence*. What the atom *gains*
+  by sharing. No tag; it is a computed quantity rather than a constraint.
+
+Total valence and covalence differ only in the aromatic term, and only for an atom contributing a
+lone pair: pyrrole-type nitrogen has aromatic valence 2 and aromatic covalence 0.
+
+**Not:** each other. The lowercase and uppercase tags are distinct predicates, and *covalence* is
+neither. See *Covalence*.
+**In code:** `#v`, `#V`, `AtomView::valence`, `AtomView::total_valence`, `AtomView::covalence`.
+**Settled by:** —
 
 ### Validation
 

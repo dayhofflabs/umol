@@ -145,6 +145,8 @@ mod error;
 #[cfg(feature = "graph")]
 mod fingerprint;
 #[cfg(feature = "graph")]
+mod lattice;
+#[cfg(feature = "graph")]
 mod metadata;
 #[cfg(feature = "graph")]
 mod model;
