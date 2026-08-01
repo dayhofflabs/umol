@@ -11,8 +11,10 @@ use super::super::super::entity::Entity;
 use super::super::super::id::AtomId;
 use super::super::super::molecule::MoleculeAst;
 use super::super::super::ring::{RingConfig, RingModel};
-use super::super::super::view::{AtomView, RingViews};
-use super::{ConstraintError, IncidenceConstraintValidator, RingConstraintValidator};
+use super::super::super::traits::Lattice;
+use super::super::super::view::RingViews;
+use super::incidence::validate_atom_constraint;
+use super::ConstraintError;
 
 /// Evaluates one molecule-scope relational constraint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,14 +76,14 @@ impl RelationalConstraintValidator {
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                all_atoms(view.donors(), predicate, rings)
+                all_atoms(ast, view.donor_ids(), predicate, rings)
             }
             RelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
                 let view = ast
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                any_atom(view.donors(), predicate, rings)
+                any_atom(ast, view.donor_ids(), predicate, rings)
             }
             RelationalConstraint::DativeBondAcceptor { bond, atom } => {
                 let view = ast
@@ -96,7 +98,7 @@ impl RelationalConstraintValidator {
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                evaluate_atom(view.acceptor(), predicate, rings)
+                evaluate_atom(ast, view.acceptor_id(), predicate, rings)
             }
             RelationalConstraint::DativeBondParallels { dative, parallel } => {
                 let dative_view = ast
@@ -143,14 +145,14 @@ impl RelationalConstraintValidator {
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                all_atoms(view.atoms(), predicate, rings)
+                all_atoms(ast, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
                 let view = ast
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                any_atom(view.atoms(), predicate, rings)
+                any_atom(ast, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
                 let view = ast
@@ -183,14 +185,14 @@ impl RelationalConstraintValidator {
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                all_atoms(view.atoms(), predicate, rings)
+                all_atoms(ast, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
                 let view = ast
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                any_atom(view.atoms(), predicate, rings)
+                any_atom(ast, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
                 let view = ast
@@ -213,10 +215,10 @@ impl RelationalConstraintValidator {
                     .noncovalent_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::NoncovalentBond(*bond)))?;
-                let [first, second] = view.atoms();
+                let [first, second] = view.atom_ids();
                 all_truth([
-                    evaluate_atom(first, &predicates[0], rings),
-                    evaluate_atom(second, &predicates[1], rings),
+                    evaluate_atom(ast, first, &predicates[0], rings),
+                    evaluate_atom(ast, second, &predicates[1], rings),
                 ])
             }
             RelationalConstraint::StereoAtomSite { stereo_atom, atom } => {
@@ -253,11 +255,7 @@ impl RelationalConstraintValidator {
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                all_atoms(
-                    view.atom_ligands().map(|ligand| ligand.atom()),
-                    predicate,
-                    rings,
-                )
+                all_atoms(ast, view.atom_ligand_ids(), predicate, rings)
             }
             RelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom,
@@ -267,11 +265,7 @@ impl RelationalConstraintValidator {
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                any_atom(
-                    view.atom_ligands().map(|ligand| ligand.atom()),
-                    predicate,
-                    rings,
-                )
+                any_atom(ast, view.atom_ligand_ids(), predicate, rings)
             }
             RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
                 let view = ast
@@ -307,11 +301,7 @@ impl RelationalConstraintValidator {
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                all_atoms(
-                    view.atom_ligands().map(|ligand| ligand.atom()),
-                    predicate,
-                    rings,
-                )
+                all_atoms(ast, view.atom_ligand_ids(), predicate, rings)
             }
             RelationalConstraint::StereoBondAnyLigand {
                 stereo_bond,
@@ -321,11 +311,7 @@ impl RelationalConstraintValidator {
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                any_atom(
-                    view.atom_ligands().map(|ligand| ligand.atom()),
-                    predicate,
-                    rings,
-                )
+                any_atom(ast, view.atom_ligand_ids(), predicate, rings)
             }
         };
 
@@ -357,7 +343,8 @@ impl Truth {
 }
 
 fn evaluate_atom(
-    atom: AtomView<'_>,
+    ast: &MoleculeAst,
+    atom_id: AtomId,
     predicate: &AtomConstraintAst,
     rings: Option<&RingViews<'_>>,
 ) -> Truth {
@@ -365,9 +352,27 @@ fn evaluate_atom(
         let Some(rings) = rings else {
             return Truth::Underdetermined;
         };
-        truth_from_solution(RingConstraintValidator.validate_atom(atom, rings, predicate))
+        let ring_atom = rings.atom(atom_id);
+        let (asserted, derived) = match predicate {
+            AtomConstraintAst::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
+            AtomConstraintAst::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
+            AtomConstraintAst::RingMembership(membership) => (
+                &membership.count,
+                ring_atom.ring_membership(membership.scope),
+            ),
+            _ => unreachable!("ring predicate classified above"),
+        };
+        if asserted.is_undetermined() {
+            Truth::True
+        } else if !derived.is_ground() {
+            Truth::Underdetermined
+        } else if asserted.matches(&derived) {
+            Truth::True
+        } else {
+            Truth::False
+        }
     } else {
-        truth_from_solution(IncidenceConstraintValidator.validate_atom(atom, predicate))
+        truth_from_solution(validate_atom_constraint(ast, atom_id, predicate))
     }
 }
 
@@ -380,26 +385,28 @@ fn truth_from_solution<C>(outcome: Solution<(), C>) -> Truth {
 }
 
 fn all_atoms<'a>(
-    atoms: impl IntoIterator<Item = AtomView<'a>>,
+    ast: &'a MoleculeAst,
+    atoms: impl IntoIterator<Item = AtomId>,
     predicate: &AtomConstraintAst,
     rings: Option<&RingViews<'a>>,
 ) -> Truth {
     all_truth(
         atoms
             .into_iter()
-            .map(|atom| evaluate_atom(atom, predicate, rings)),
+            .map(|atom| evaluate_atom(ast, atom, predicate, rings)),
     )
 }
 
 fn any_atom<'a>(
-    atoms: impl IntoIterator<Item = AtomView<'a>>,
+    ast: &'a MoleculeAst,
+    atoms: impl IntoIterator<Item = AtomId>,
     predicate: &AtomConstraintAst,
     rings: Option<&RingViews<'a>>,
 ) -> Truth {
     let mut any_underdetermined = false;
     for truth in atoms
         .into_iter()
-        .map(|atom| evaluate_atom(atom, predicate, rings))
+        .map(|atom| evaluate_atom(ast, atom, predicate, rings))
     {
         match truth {
             Truth::True => return Truth::True,

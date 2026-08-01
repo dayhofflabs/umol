@@ -76,7 +76,7 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
 | `*Kind` | unit-variant enum discriminating a family | 11 | ast, geometric, graph-core, msym, py |
 | `*Constraint` | one assertable predicate over an entity | 6 | ast, py |
-| `*Constraints` | the container holding an entity's constraints | — | currently spelled `*ConstraintsAst` |
+| `*Constraints` | the container holding an entity's constraints | 9 | ast, py — as `*ConstraintsAst`, which is correct: the container is itself lattice-shaped |
 | `*Key` | identifies a constraint slot within a container | 13 | ast, perm, py |
 | `*View` / `*Views` / `*ViewMut` | borrowed accessor into a molecule; plural is the collection; `Mut` is the editing form | 37 / 15 / 16 | ast, io, py |
 | `*Delta` | an encoded change belonging to a reaction side | 18 | ast, py |
@@ -94,6 +94,42 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 Families with no member yet, named in settled vocabulary and expected to gain one:
 `*Failure` (doc 171), transformers (doc 166 — see *Transformer naming* below).
 
+### Stacking order
+
+Suffixes compose, and 93 type names carry more than one. The order is fixed and each position answers
+a different question:
+
+```
+<entity kind> <role> <plurality> <representation> <mutability>
+    Atom      Constraint    s          Ast
+    Atom      Constraint               Key
+    Atom      Editor                   View            Mut
+    AromaticSystem          s          View
+```
+
+- **entity kind** — which of the eight, omitted when the type is not per-kind;
+- **role** — `Constraint`, `Update`, `Delta`, `Editor`, `Defaults`, `Overrides`;
+- **plurality** — a trailing `s` on the role marks the container, not "several of these";
+- **representation** — `Ast` (lattice-shaped internal), `Dsl` (boundary surface), `View` (borrowed
+  accessor), `Key` (identifies a slot);
+- **mutability** — `Mut`, last, only on views.
+
+`AtomConstraintsAst` is therefore correct in every position: one atom's constraint *container*, which
+is itself lattice-shaped and so carries `Ast` by the same rule every other lattice type does. A new
+type should be assembled in this order rather than by analogy with the nearest neighbour.
+
+**Two known tensions, neither to be "fixed".** The plural is the least visible marker in the stack —
+a single trailing `s` against three CamelCase words. It is not to be replaced with `Store`, `Set` or
+another suffix: the names are already long, and a fourth CamelCase position costs more legibility
+than the `s` costs. What makes it learnable instead is that the `s` is positional and invariant — it
+attaches to the role, never elsewhere, and always means the container, never "several of these".
+
+The length itself comes from the entity kind appearing in both the module path and the type name
+(`ast::constraint::atom::AtomConstraintAst`). Dropping it from the name is the idiomatic Rust fix and
+would shorten roughly ninety types, but it makes bare imports collide across kinds — `use
+atom::ConstraintsAst` and `use bond::ConstraintsAst` in one scope — which is why most Rust codebases
+keep the prefix and silence the lint. Recorded as a considered trade, not an oversight.
+
 ### Constraint singular and plural
 
 `*Constraint` is one assertable predicate. `*Constraints` is the container holding an entity's
@@ -104,14 +140,24 @@ store.
 **In code:** `AtomConstraintAst` against `AtomConstraintsAst`; likewise for every entity kind.
 **Settled by:** 138.
 
-### View, Views, ViewMut
+### View and Views
 
-A `*View` is a borrowed accessor into a molecule, not an owned value. `*Views` is the collection over
-one entity kind. `*ViewMut` is the editing form. Sub-families exist: `*ConstraintsView`,
-`*EditorView`, `*EditorViewMut`.
+A **`*View`** is a record bundling an index with the underlying data, so a consumer never assembles
+an `(id, data, participants)` tuple by hand. A **`*Views`** is a *namespace*, not a collection: it
+groups the per-relation accessors — `count`, `ids`, `iter`, `get`, `Index` — so they do not have to
+be buried on `MoleculeAst` itself. Adding an entity kind therefore adds a `*Views` namespace rather
+than five more methods on the molecule.
 
-**Not:** the owned representation, which is the `*Ast` type; a view does not survive its molecule.
-**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorViewMut`.
+`*ViewMut` is the mutable form; `*EditorView` and `*EditorViewMut` are the editor-scope bundles used
+inside an edit session. Views also exist over derived things, not only entities: `GraphView`,
+`RingView`, `RingViews`, `NeighborView`, `StereoLigandView`.
+
+**Views are receivers, never arguments.** A function takes ids and the molecule, or takes the owned
+`*Ast`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
+one propagates a borrow through a signature that did not need it.
+
+**Not:** the owned representation, which is the `*Ast` type. A view does not survive its molecule.
+**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.
 **Settled by:** 086.
 
 ### Delta and Update
@@ -176,11 +222,10 @@ text changes at the same time.
 | 2 | `IncidenceNodeSelection::OVERLAYS` covers four of the six overlay kinds, with `STEREO` separate. The same word means four kinds there and six everywhere else. Either the flag or the term should change. | *Overlay* | scope conflict |
 | 3 | One patch law, two spellings: `apply`/`diff` on `EntityPatch`, `update`/`difference_to` on the entity update surface. | *Patch algebra* | naming split |
 | 4 | `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`; the `CosetSpace` doc on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so line 25 is wrong. | *Coset* | doc error |
-| 5 | The `*Constraints` container convention is currently spelled `*ConstraintsAst`, so the singular/plural rule is hidden inside the `Ast` family. | *Suffixes* table | blocked on doc 176 |
-| 6 | `*Ast` and `*Dsl` are under review in doc 176; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on doc 176 |
-| 7 | `*Failure` and the transformer family are named in settled vocabulary but have no members yet, so the conventions are untested. | *Suffixes* | latent |
-| 8 | Six of eleven `Solution` accessors have no call sites outside `umol-utils`: `into_determined`, `into_data`, `into_contradiction`, `is_determined`, `is_underdetermined`, `contradiction`. API surface rather than nomenclature, but cheap to trim now. | *Solution* | unused surface |
-| 9 | `Derivation`, `Failure` and `Projection` have no `In code` names. | those entries | incomplete |
+| 5 | `*Ast` and `*Dsl` are under review in doc 176; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on doc 176 |
+| 6 | `*Failure` and the transformer family are named in settled vocabulary but have no members yet, so the conventions are untested. | *Suffixes* | latent |
+| 7 | Six of eleven `Solution` accessors have no call sites outside `umol-utils`: `into_determined`, `into_data`, `into_contradiction`, `is_determined`, `is_underdetermined`, `contradiction`. API surface rather than nomenclature, but cheap to trim now. | *Solution* | unused surface |
+| 8 | `Derivation`, `Failure` and `Projection` have no `In code` names. | those entries | incomplete |
 
 ## Glossary
 
@@ -248,6 +293,34 @@ to gain analogues, so it is recorded rather than generative.
 **In code:** `combine`, `combine_all`, `combine_from`.
 **Settled by:** 151.
 
+### Compaction and remapping
+
+Two id mappings that look alike in a signature and are not interchangeable. The entry exists to
+explain why both sets of operations exist, not to license new ones.
+
+- **Compaction** — the *partial* mapping produced by removal. `MoleculeEditor::remove` closes up the
+  id space, so `IdCompaction` translates a pre-removal id to its post-removal id **or signals that
+  the entity is gone**. It wraps `umol_graph_core::Compaction` for atoms and bonds and carries sorted
+  removed-id lists for the six relation kinds. Its purpose is rewriting stale references against the
+  new layout.
+- **Remapping** — the *total* relabeling. `IdRemapping` moves values between id spaces with no
+  removals involved, so every id has an image. It composes and reverses, which is what lets a `Delta`
+  written in one id space be applied in another.
+
+The tell is removal: a compaction can say "gone", a remapping cannot. That is why compaction has
+`compact_*` and `uncompact_*` per entity kind while remapping has `forward`, `reverse` and `compose`.
+
+**`UndoCompaction`** is the inverse view of an `IdCompaction` for rollback: it carries surviving
+post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
+the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
+them.
+
+**Not:** each other, and neither is a `Correspondence`, which relates entities of two *different*
+structures rather than two id spaces of one.
+**In code:** `IdCompaction`, `IdRemapping`, `UndoCompaction`, `umol_graph_core::Compaction`;
+`compact_*`, `uncompact_*`, `forward`, `reverse`, `compose`.
+**Settled by:** 148.
+
 ### Config
 
 A **config** contains operational choices controlling how an operation is performed, including
@@ -301,6 +374,25 @@ classifications that a resolver may still act on).
 **In code:** `Solution::Contradictory`, `*Contradiction`.
 **Settled by:** 083; validator obligations in 171.
 
+### Correspondence
+
+A **correspondence** is a partial bijection between two structures' id spaces, held per entity
+family. The atom part is a node-level `Correspondence<NodeId>` aligned with the molecular graph, so
+the bond correspondence is its *induced* edge correspondence; the seven other families each carry
+their own over their entity id.
+
+A correspondence is **valueless** — it records pairing and nothing else. Adding values and a
+direction is what lifts it to a reaction span.
+
+Correspondences compose and reverse, which is what lets a chain of operations be followed end to end,
+and `to_remapping` converts one into the total relabeling when no removals are involved.
+
+**Not:** a compaction or a remapping, which relate two id spaces of *one* structure across an edit.
+A correspondence relates two different structures.
+**In code:** `MoleculeCorrespondence`, `Correspondence<T>`, `GraphCorrespondence`, `induce`,
+`compose`, `reverse`, `left_of`, `right_of`, `is_total`, `to_remapping`.
+**Settled by:** 134.
+
 ### Coset
 
 A **coset** is the observable stereo descriptor: the equivalence class of ligand-to-position maps
@@ -327,14 +419,34 @@ acts, but the stored descriptor is a coset of the rotation subgroup.
 `CosetSpace` doc comment on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so `R\P` is
 correct and the struct comment is wrong.
 
+### Deltas
+
+**`Deltas`** is the resolved-delta collection carried by a reaction — the ordered transformation
+applied to the left-hand side. The plural names the container, following the same convention as
+`*Constraints`.
+
+**Not:** a `Vec<Delta>` parameter. The plural type is the reaction's transformation, not any
+sequence of deltas.
+**In code:** `Deltas`, `Delta`.
+**Settled by:** 134.
+
 ### Derivation
 
-A **derivation** is the policy-free result of perception, including candidates and exact
-inconsistencies.
+**Derivation** carries two senses, and unlike *matching* this one is worth watching, because the
+coined sense collides with the established one.
 
-**Not:** resolution (which applies policy), validation.
-**In code:** —
-**Settled by:** 171.
+- **Reaction derivation** — one firing of a reaction: the two concrete molecule sides plus the
+  correspondence between them. This is the standard sense in algebraic graph transformation, where a
+  derivation is the result of applying a production, and it is the sense the whitepaper glossary
+  uses. `ReactionDerivation` is `apply`'s codomain; a rule is to a derivation as a function is to one
+  evaluation.
+- **Perception derivation** — the policy-free result of perception, including candidates and exact
+  inconsistencies. Coined in doc 171.
+
+**Not:** resolution (which applies policy), validation. The two senses are not related; the second
+would be the one to rename if either were.
+**In code:** `ReactionDerivation`, `apply`, `to_reaction`.
+**Settled by:** 131 for the reaction sense; 171 for the perception sense.
 
 ### Determined
 
@@ -344,6 +456,50 @@ inconsistencies.
 return `Determined` with a payload that is not ground if the operation's own contract is satisfied.
 **In code:** `Solution::Determined`, `is_determined`, `into_determined`.
 **Settled by:** 083.
+
+### Donor and acceptor
+
+The two roles of a dative bond: one or more **donors** contribute the electron pair, one
+**acceptor** receives it. The asymmetry is the reason a dative bond is an overlay rather than an
+edge — an undirected edge cannot carry a direction.
+
+The order attribute counts donated pairs, not per-atom contributions, which is what distinguishes a
+dative bond from a multicenter bond over the same atoms.
+
+**Not:** interchangeable, and not *participants* used flatly; a diagnostic should name the role.
+**In code:** `:donors`, `:acceptor`; `DativeBondAst`.
+**Settled by:** 117.
+
+### Edit and undo
+
+An **`Edit`** is caller-facing mutation data: the symbolic vocabulary handed to
+`MoleculeEditor::transact`. An **`Undo`** is realized rollback data produced by the checked
+transaction path. The two are not two views of one thing — an edit says what was asked for, an undo
+says what actually has to be reversed.
+
+The symbolic references (`AtomHandle`, `BondHandle`, …) appear only inside `Edit`. `Id(_)` names an
+existing entity, `New(n)` names the entity created by the nth edit earlier in the same batch, which
+is why a handle is meaningless outside its batch.
+
+**Not:** *delta*, which is the reaction-side change encoding, nor `*Update`, which is a field-level
+change to one entity. Edits are molecule-level and transactional.
+**In code:** `Edit`, `Undo`, `UndoCompaction`, `MoleculeEditor::transact`.
+**Settled by:** 148.
+
+### Electron counts
+
+**Electron counts** are the per-participant vector recording what each atom contributes to a
+delocalized entity: π electrons for an aromatic system, shared electrons for a multicenter bond. The
+vector is positional — entry *i* belongs to participant *i* — so reordering the participants must
+permute it.
+
+One leaf type serves both entity kinds rather than being duplicated per kind.
+
+**Not:** the entity's total, which is a separate asserted constraint (`#e`) cross-checked against the
+vector's sum. Not the entity's charge, which is carried on the entity and is why the five carbons of
+a cyclopentadienyl ring can hold equal contributions.
+**In code:** `ElectronCountsAst`, the leading `electron-counts` of an aromatic or multicenter string.
+**Settled by:** 134.
 
 ### Embedding kind
 
@@ -458,6 +614,26 @@ Three ways to refer to an entity, at three stages.
 **In code:** `AtomId`, `AtomHandle`, `AtomArg`; likewise per entity kind.
 **Settled by:** 141 for handles. `*Arg` has no owning document.
 
+### Incidence
+
+**Incidence** is the structural relationship between an entity and a relation it participates in: an
+atom is incident with the bonds and overlays that name it. The word names the relationship, never the
+value derived from it, and never the value's type — an incidence-derived value may be a Boolean, a
+count, or a weighted sum.
+
+The notion appears at three levels and they are the same idea:
+
+- the `incident*` accessors on an entity view;
+- the **incidence index** carried by a relation set, routed from every participant's `refs()`, which
+  is what makes a relation reachable from any of its participants; in a birelation set the index
+  spans both factors, so reachability does not depend on which id-space a participant belongs to;
+- the **incidence graph**, where the relationship is made explicit as edges.
+
+**Not:** *projection*, which is the operation that reads a value across an incidence. Incidence is
+the relationship; projection is what you do with it.
+**In code:** `incident*` methods, `ParticipantAnchor`, `IncidenceGraph`.
+**Settled by:** 171 for the constraint category; 134 for the relation-set index.
+
 ### Incidence constraint
 
 An **incidence constraint** is an entity-local constraint whose value is derived from the entity's
@@ -478,6 +654,37 @@ the whole entity-constraint category.
 **In code:** `IncidenceConstraintValidator`, `IncidenceConstraintContradiction`; the established
 `incident*` methods expose the same relationship.
 **Settled by:** 171.
+
+### Incidence graph
+
+The **incidence graph**, also called the Levi graph, makes relations explicit as nodes: atoms occupy
+the node space, every selected relation becomes a **pseudonode**, and each pseudonode is wired to its
+participants. Everything defined over graphs then applies to the whole entity model unchanged —
+canonical labeling, automorphisms, subgraph isomorphism — with no bespoke hypergraph algorithm.
+
+Stereo elements attach to their site only, because the ligand topology is already present through the
+bonds; the only new information a stereo node carries is its site and, at colouring time, its label.
+Bond direction is not encoded structurally either: the colouring separates the endpoints of a
+directed bond, so a dative donor and acceptor are never automorphism-equivalent.
+
+`IncidenceNodeSelection` names three levels, which land on the chemist's own hierarchy:
+`topological()` is atoms and localized bonds, `constitution()` adds the overlays, `full()` adds the
+stereo elements. That makes "the same molecule" a parameter rather than three code paths.
+
+**Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
+bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
+`SubstructureMatchAlgorithm::GraphAndOverlays` — match the skeleton, then verify overlays against the
+correspondence — is the default, and `Incidence` is chosen when the connectivity a pattern turns on is
+carried by an overlay rather than by bonds. Both return the same matches; the difference is pruning,
+not semantics.
+
+See *Overlay* for the open scope conflict in `IncidenceNodeSelection::OVERLAYS`.
+
+**Not:** the molecular topology, which is the atom-and-bond graph itself. The incidence graph is a
+construction over a structure, not a representation of one.
+**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceNodeSelection`,
+`SubstructureMatchAlgorithm::Incidence`.
+**Settled by:** 134.
 
 ### Inconsistency
 
@@ -546,6 +753,61 @@ A new leaf type should follow the same shape, and should implement `AsLit` so th
 `IsotopeMassAst`.
 **Settled by:** 172, 173.
 
+### Ligand and site
+
+A stereo entity has two role-distinguished participant groups.
+
+- The **site** is the atom or bond bearing the configuration. A stereo atom's site is an atom; a
+  stereo bond's site is a bond.
+- The **ligands** are the ordered frame against which the configuration index is read. Order is
+  significant: the coset is meaningless without it.
+
+A ligand need not be an atom of the graph. A **virtual ligand** occupies a coordination position
+without a corresponding node — an implicit hydrogen or a lone pair, each borne by a named atom. This
+is how a sulfoxide or a pyramidal amine is expressed without materializing the hydrogen or inventing
+an atom for the lone pair.
+
+**Not:** *participant* used flatly. Site and ligands are both participants, but they are not
+interchangeable, and diagnostics should say which.
+**In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair}`; `:site` and
+`:ligands` in the notation.
+**Settled by:** 104.
+
+### Localized bond
+
+A **localized bond** is a σ bond between exactly two atoms, carried as an edge of the molecular
+topology. Unqualified, *bond* means localized bond.
+
+Dative, multicenter and noncovalent bonds are overlay entities and are never called *bond* without
+their qualifier.
+
+**Not:** any overlay entity. The distinction is the topology/overlay split: a localized bond is an
+edge, the others are relations.
+**In code:** `BondAst`, `BondId`, `:bonds`.
+**Settled by:** 117.
+
+### Matching
+
+**Matching** carries two senses, both standard in their own literature and neither available to be
+renamed. Qualify it where context does not.
+
+- **Graph matching** — a set of edges with no shared endpoints. This is the combinatorial object:
+  maximum, perfect and bipartite matchings, used by the kekulizer to assign double bonds.
+- **Pattern matching** — finding embeddings of a pattern in a host, and separately the lattice
+  relation `matches` where a pattern admits a value.
+
+`BondMatching` is the first sense — a typed wrapper over `umol_graph_core::Matching` exposing matched
+bonds and matched-atom membership — while `substructure_matches` and `SubstructureMatchAlgorithm` are
+the second. The two sit close together in the module tree, so a reader arriving from substructure
+search will read `BondMatching` as a match result unless told otherwise.
+
+**Not:** interchangeable, and neither is *correspondence*, which is the *result* of pattern matching
+rather than the operation.
+**In code:** first sense — `Matching`, `BondMatching`, `PerfectMatchingAlgorithm`,
+`MatchingEnumerationAlgorithm`; second sense — `substructure_matches`, `SubstructureMatchAlgorithm`,
+`Lattice::matches`.
+**Settled by:** 162 for the graph sense; 113 for the lattice relation.
+
 ### Mismatch
 
 A **mismatch** means that a constraint and entity, or a constraint and its derived value, are each
@@ -580,6 +842,18 @@ carrying no aromatic, stereo, or coordination information.
 **Not:** molecular structure, which includes the overlay entities.
 **In code:** —
 **Settled by:** whitepaper glossary; no settled repository term.
+
+### Noncovalent kind
+
+The **kind** of a noncovalent bond is its interaction type, and it is the entity's only inherent
+attribute beyond charge and spin: `HydrogenBond`, `HalogenBond`, `ChalcogenBond`, `Ionic`,
+`VanDerWaals`.
+
+**Not:** an order or a strength. Noncovalent bonds carry no order, which is one reason they are
+overlays despite their binary shape.
+**In code:** `NoncovalentBondKind`, `NoncovalentBondKindAst`; the notation literals `Hbd`, `Xbd`,
+`Ybd`, `Ion`, `Vdw`.
+**Settled by:** 117.
 
 ### Overlay
 
@@ -625,6 +899,9 @@ API as `x.update(x.difference_to(y)) == y`.
 **Naming split to resolve.** One law, two spellings — `apply`/`diff` on `EntityPatch`,
 `update`/`difference_to` on the entity update surface. Pick one pair before either grows further; a
 reader who learns the law under one name will not find it under the other.
+
+**Not:** transaction application, which executes a whole edit plan and publishes only on success. A
+patch is an entity-level morphism; a transaction is a molecule-level lifecycle.
 **In code:** `EntityPatch::apply`, `EntityPatch::diff`, `update`, `difference_to`.
 **Settled by:** 134, 161.
 
@@ -669,6 +946,37 @@ may be used descriptively when explaining that an entity relation induces partic
 **Not:** the public name of stored constraints, or of the incidence-constraint category.
 **In code:** —
 **Settled by:** 125.
+
+### Reaction
+
+A **reaction** is a left-hand-side molecule together with a resolved transformation. Everything else
+— the atom map, the right-hand side, the condensed form, the reverse reaction — is *derived* from
+`(lhs, deltas)` rather than stored.
+
+The type is homoiconic in the sense the whitepaper claims: a molecule is the empty-deltas case, a
+rule is a pattern left-hand side plus deltas, and applying a rule yields a concrete reaction of the
+same type.
+
+**Not:** a derivation, which is one firing of a reaction against a concrete host. A reaction is the
+rule; a derivation is an evaluation of it.
+**In code:** `ReactionAst`, `lhs`, `Deltas`.
+**Settled by:** 131.
+
+### Reaction span
+
+A **reaction span** is the superimposed `L ∪_K R` graph encoding a reaction's double-pushout rule
+span. It carries, per atom and bond, both the before and after state plus a membership tag, and the
+span `L ←K→ R` is read off those tags: `K = Unchanged ∪ Modified`, `L = K ∪ Removed`,
+`R = K ∪ Added`.
+
+`Modified` — a preserved entity relabeled across the reaction — is the relabeling-DPO reading: the
+entity persists in `K` and its label is resolved per side.
+
+A correspondence with values and a direction added is what lifts it to a span.
+
+**Not:** a correspondence, which is valueless pairing; not a reaction, which is the rule itself.
+**In code:** `ReactionSpanAst`, `lhs()`, `rhs()`.
+**Settled by:** 131, 133.
 
 ### Recovery action
 
@@ -798,6 +1106,21 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 **Not:** a partition by any other criterion.
 **In code:** `split`.
 **Settled by:** 086.
+
+### Transaction
+
+A **transaction** is the journal of realized undos for one batch of edits. `transact` applies a batch
+and returns it; `rollback` consumes it to restore the prior state; `append` concatenates two so a
+multi-stage operation can be reversed as a unit.
+
+`transact` is the checked path. `transact_unchecked` applies without producing a journal and cannot
+be rolled back.
+
+**Not:** *application*, which executes a plan and publishes only on success; a transaction is the
+mechanism application uses. Not *patch algebra*, which is the entity-level `apply`/`diff` pair.
+**In code:** `Transaction`, `transact`, `transact_unchecked`, `rollback`, `append`,
+`TransactionError`.
+**Settled by:** 148.
 
 ### Transformation
 

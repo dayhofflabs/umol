@@ -9,16 +9,13 @@ use super::super::super::constraint::{
     DativeBondConstraintAst, MulticenterBondConstraintAst, MulticenterValenceAst,
     NoncovalentBondConstraintAst,
 };
+use super::super::super::entity::Entity;
 use super::super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::super::molecule::MoleculeAst;
 use super::super::super::stereo::{CisTransStereoAst, StereoKind, TetrahedralStereoAst};
 use super::super::super::traits::Lattice;
-use super::super::super::view::{
-    AromaticSystemView, AtomView, BondView, DativeBondView, MulticenterBondView,
-    NoncovalentBondView,
-};
 use super::ConstraintError;
 
 /// Evaluates model-independent incidence constraints; only noncovalent `#I` requires a graph
@@ -36,41 +33,48 @@ impl IncidenceConstraintValidator {
         let mut bond_components = None;
         let mut any_underdetermined = false;
 
-        for atom in ast.atoms().iter() {
+        for id in ast.atoms().ids() {
             if let Some(contradiction) = observe(
-                validate_atom_constraints(self, atom),
+                self.validate_molecule_atom(ast, id)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for bond in ast.bonds().iter() {
-            if let Some(contradiction) = observe(validate_bond(bond), &mut any_underdetermined) {
+        for id in ast.bonds().ids() {
+            if let Some(contradiction) = observe(
+                self.validate_molecule_bond(ast, id)?,
+                &mut any_underdetermined,
+            ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for bond in ast.dative_bonds().iter() {
-            if let Some(contradiction) =
-                observe(validate_dative_bond(bond), &mut any_underdetermined)
-            {
+        for id in ast.dative_bonds().ids() {
+            if let Some(contradiction) = observe(
+                self.validate_molecule_dative_bond(ast, id)?,
+                &mut any_underdetermined,
+            ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for system in ast.aromatic_systems().iter() {
-            if let Some(contradiction) =
-                observe(validate_aromatic_system(system), &mut any_underdetermined)
-            {
+        for id in ast.aromatic_systems().ids() {
+            if let Some(contradiction) = observe(
+                self.validate_molecule_aromatic_system(ast, id)?,
+                &mut any_underdetermined,
+            ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for bond in ast.multicenter_bonds().iter() {
-            if let Some(contradiction) =
-                observe(validate_multicenter_bond(bond), &mut any_underdetermined)
-            {
+        for id in ast.multicenter_bonds().ids() {
+            if let Some(contradiction) = observe(
+                self.validate_molecule_multicenter_bond(ast, id)?,
+                &mut any_underdetermined,
+            ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for bond in ast.noncovalent_bonds().iter() {
+        for id in ast.noncovalent_bonds().ids() {
+            let bond = ast.noncovalent_bond(id);
             let [a, b] = bond.atom_ids();
             let intramolecular = if bond
                 .constraints()
@@ -85,7 +89,7 @@ impl IncidenceConstraintValidator {
                 false
             };
             if let Some(contradiction) = observe(
-                validate_noncovalent_bond(bond, intramolecular),
+                validate_noncovalent_bond(ast, id, intramolecular),
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -99,119 +103,232 @@ impl IncidenceConstraintValidator {
         })
     }
 
-    /// Validate one non-ring atom constraint against its incidence-derived value.
-    /// Ring constraints are outside this validator and are determined identities here.
-    pub fn validate_atom(
+    /// Validate all inline incidence constraints on one molecule atom.
+    pub fn validate_molecule_atom(
         &self,
-        atom: AtomView<'_>,
-        constraint: &AtomConstraintAst,
-    ) -> Solution<(), IncidenceConstraintContradiction> {
-        match constraint {
-            AtomConstraintAst::Valence(_) => evaluate(
-                constraint,
-                &AtomConstraintAst::valence(atom.valence()),
-                atom_contradiction(atom, constraint),
-            ),
-            AtomConstraintAst::DonatedPairs(_) => {
-                // Multi-donor dative incidence has no defined per-atom projection pending the
-                // coordination/haptic entity split in discussion doc 117.
-                let unsupported = atom.dative_bonds().any(|bond| {
-                    bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id)
-                });
-                if !constraint.is_undetermined() && unsupported {
-                    Solution::Underdetermined(())
-                } else {
-                    evaluate(
-                        constraint,
-                        &AtomConstraintAst::donated_pairs(atom.donated_pairs()),
-                        atom_contradiction(atom, constraint),
-                    )
-                }
-            }
-            AtomConstraintAst::AcceptedPairs(_) => {
-                // Multi-donor dative incidence has no defined per-atom projection pending the
-                // coordination/haptic entity split in discussion doc 117.
-                let unsupported = atom
-                    .dative_bonds()
-                    .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id);
-                if !constraint.is_undetermined() && unsupported {
-                    Solution::Underdetermined(())
-                } else {
-                    evaluate(
-                        constraint,
-                        &AtomConstraintAst::accepted_pairs(atom.accepted_pairs()),
-                        atom_contradiction(atom, constraint),
-                    )
-                }
-            }
-            AtomConstraintAst::AromaticValence(_) => {
-                let derived = if atom.is_in_aromatic_system() {
-                    AromaticValenceAst::aromatic(atom.aromatic_valence())
-                } else {
-                    AromaticValenceAst::NotAromatic
-                };
+        ast: &MoleculeAst,
+        atom_id: AtomId,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let atom = ast
+            .atoms()
+            .get(atom_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::Atom(atom_id),
+            })?;
+        Ok(conjunction(atom.constraints().iter().map(|constraint| {
+            validate_atom_constraint(ast, atom_id, constraint)
+        })))
+    }
+
+    /// Validate all inline incidence constraints on one molecule bond.
+    pub fn validate_molecule_bond(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: BondId,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let bond = ast
+            .bonds()
+            .get(bond_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::Bond(bond_id),
+            })?;
+        Ok(conjunction(bond.constraints().iter().filter_map(
+            |constraint| validate_bond_constraint(ast, bond_id, constraint),
+        )))
+    }
+
+    /// Validate all inline incidence constraints on one molecule dative bond.
+    pub fn validate_molecule_dative_bond(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: DativeBondId,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let bond = ast
+            .dative_bonds()
+            .get(bond_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::DativeBond(bond_id),
+            })?;
+        Ok(conjunction(bond.constraints().iter().filter_map(
+            |constraint| validate_dative_bond_constraint(ast, bond_id, constraint),
+        )))
+    }
+
+    /// Validate all inline incidence constraints on one molecule aromatic system.
+    pub fn validate_molecule_aromatic_system(
+        &self,
+        ast: &MoleculeAst,
+        system_id: AromaticSystemId,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let system =
+            ast.aromatic_systems()
+                .get(system_id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::AromaticSystem(system_id),
+                })?;
+        Ok(conjunction(system.constraints().iter().map(|constraint| {
+            validate_aromatic_system_constraint(ast, system_id, constraint)
+        })))
+    }
+
+    /// Validate all inline incidence constraints on one molecule multicenter bond.
+    pub fn validate_molecule_multicenter_bond(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: MulticenterBondId,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let bond =
+            ast.multicenter_bonds()
+                .get(bond_id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::MulticenterBond(bond_id),
+                })?;
+        Ok(conjunction(bond.constraints().iter().map(|constraint| {
+            validate_multicenter_bond_constraint(ast, bond_id, constraint)
+        })))
+    }
+
+    /// Validate all inline incidence constraints on one molecule noncovalent bond.
+    pub fn validate_molecule_noncovalent_bond(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: NoncovalentBondId,
+        connected_components_algorithm: ConnectedComponentsAlgorithm,
+    ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
+        let bond =
+            ast.noncovalent_bonds()
+                .get(bond_id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::NoncovalentBond(bond_id),
+                })?;
+        let intramolecular = if bond
+            .constraints()
+            .iter()
+            .any(|constraint| !constraint.is_undetermined())
+        {
+            let components = bond_components_by_atom(ast, connected_components_algorithm);
+            let [a, b] = bond.atom_ids();
+            components[a.index()] == components[b.index()]
+        } else {
+            false
+        };
+        Ok(validate_noncovalent_bond(ast, bond_id, intramolecular))
+    }
+}
+
+/// Validate one non-ring atom constraint against its incidence-derived value.
+/// Ring constraints are determined identities here.
+pub fn validate_atom_constraint(
+    ast: &MoleculeAst,
+    atom_id: AtomId,
+    constraint: &AtomConstraintAst,
+) -> Solution<(), IncidenceConstraintContradiction> {
+    let atom = ast.atom(atom_id);
+    match constraint {
+        AtomConstraintAst::Valence(_) => evaluate(
+            constraint,
+            &AtomConstraintAst::valence(atom.valence()),
+            atom_contradiction(atom_id, constraint),
+        ),
+        AtomConstraintAst::DonatedPairs(_) => {
+            // Multi-donor dative incidence has no defined per-atom projection pending the
+            // coordination/haptic entity split in discussion doc 117.
+            let unsupported = atom.dative_bonds().any(|bond| {
+                bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id)
+            });
+            if !constraint.is_undetermined() && unsupported {
+                Solution::Underdetermined(())
+            } else {
                 evaluate(
                     constraint,
-                    &AtomConstraintAst::aromatic_valence(derived),
-                    atom_contradiction(atom, constraint),
+                    &AtomConstraintAst::donated_pairs(atom.donated_pairs()),
+                    atom_contradiction(atom_id, constraint),
                 )
             }
-            AtomConstraintAst::MulticenterValence(_) => {
-                let derived = if atom.is_in_multicenter_bond() {
-                    MulticenterValenceAst::multicenter(atom.multicenter_valence())
-                } else {
-                    MulticenterValenceAst::NotMulticenter
-                };
-                evaluate(
-                    constraint,
-                    &AtomConstraintAst::multicenter_valence(derived),
-                    atom_contradiction(atom, constraint),
-                )
-            }
-            AtomConstraintAst::TetrahedralStereo(_) => {
-                let derived = match atom.stereo_atom() {
-                    Some(stereo) => match (
-                        stereo.ast.configuration.kind(),
-                        stereo.ast.configuration.coset(),
-                    ) {
-                        (Some(StereoKind::Tetrahedral), Some(coset)) => {
-                            TetrahedralStereoAst::stereo(coset.clone())
-                        }
-                        (Some(_), _) => TetrahedralStereoAst::NotStereo,
-                        (None, _) => TetrahedralStereoAst::Undetermined,
-                    },
-                    None => TetrahedralStereoAst::NotStereo,
-                };
-                evaluate(
-                    constraint,
-                    &AtomConstraintAst::tetrahedral_stereo(derived),
-                    atom_contradiction(atom, constraint),
-                )
-            }
-            AtomConstraintAst::Degree(_) => evaluate(
-                constraint,
-                &AtomConstraintAst::degree(atom.degree()),
-                atom_contradiction(atom, constraint),
-            ),
-            AtomConstraintAst::TotalDegree(_) => evaluate(
-                constraint,
-                &AtomConstraintAst::total_degree(atom.total_degree()),
-                atom_contradiction(atom, constraint),
-            ),
-            AtomConstraintAst::TotalValence(_) => evaluate(
-                constraint,
-                &AtomConstraintAst::total_valence(atom.total_valence()),
-                atom_contradiction(atom, constraint),
-            ),
-            AtomConstraintAst::TotalHydrogens(_) => evaluate(
-                constraint,
-                &AtomConstraintAst::total_hydrogens(atom.total_hydrogens()),
-                atom_contradiction(atom, constraint),
-            ),
-            AtomConstraintAst::RingDegree(_)
-            | AtomConstraintAst::RingValence(_)
-            | AtomConstraintAst::RingMembership(_) => Solution::Determined(()),
         }
+        AtomConstraintAst::AcceptedPairs(_) => {
+            // Multi-donor dative incidence has no defined per-atom projection pending the
+            // coordination/haptic entity split in discussion doc 117.
+            let unsupported = atom
+                .dative_bonds()
+                .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id);
+            if !constraint.is_undetermined() && unsupported {
+                Solution::Underdetermined(())
+            } else {
+                evaluate(
+                    constraint,
+                    &AtomConstraintAst::accepted_pairs(atom.accepted_pairs()),
+                    atom_contradiction(atom_id, constraint),
+                )
+            }
+        }
+        AtomConstraintAst::AromaticValence(_) => {
+            let derived = if atom.is_in_aromatic_system() {
+                AromaticValenceAst::aromatic(atom.aromatic_valence())
+            } else {
+                AromaticValenceAst::NotAromatic
+            };
+            evaluate(
+                constraint,
+                &AtomConstraintAst::aromatic_valence(derived),
+                atom_contradiction(atom_id, constraint),
+            )
+        }
+        AtomConstraintAst::MulticenterValence(_) => {
+            let derived = if atom.is_in_multicenter_bond() {
+                MulticenterValenceAst::multicenter(atom.multicenter_valence())
+            } else {
+                MulticenterValenceAst::NotMulticenter
+            };
+            evaluate(
+                constraint,
+                &AtomConstraintAst::multicenter_valence(derived),
+                atom_contradiction(atom_id, constraint),
+            )
+        }
+        AtomConstraintAst::TetrahedralStereo(_) => {
+            let derived = match atom.stereo_atom() {
+                Some(stereo) => match (
+                    stereo.ast.configuration.kind(),
+                    stereo.ast.configuration.coset(),
+                ) {
+                    (Some(StereoKind::Tetrahedral), Some(coset)) => {
+                        TetrahedralStereoAst::stereo(coset.clone())
+                    }
+                    (Some(_), _) => TetrahedralStereoAst::NotStereo,
+                    (None, _) => TetrahedralStereoAst::Undetermined,
+                },
+                None => TetrahedralStereoAst::NotStereo,
+            };
+            evaluate(
+                constraint,
+                &AtomConstraintAst::tetrahedral_stereo(derived),
+                atom_contradiction(atom_id, constraint),
+            )
+        }
+        AtomConstraintAst::Degree(_) => evaluate(
+            constraint,
+            &AtomConstraintAst::degree(atom.degree()),
+            atom_contradiction(atom_id, constraint),
+        ),
+        AtomConstraintAst::TotalDegree(_) => evaluate(
+            constraint,
+            &AtomConstraintAst::total_degree(atom.total_degree()),
+            atom_contradiction(atom_id, constraint),
+        ),
+        AtomConstraintAst::TotalValence(_) => evaluate(
+            constraint,
+            &AtomConstraintAst::total_valence(atom.total_valence()),
+            atom_contradiction(atom_id, constraint),
+        ),
+        AtomConstraintAst::TotalHydrogens(_) => evaluate(
+            constraint,
+            &AtomConstraintAst::total_hydrogens(atom.total_hydrogens()),
+            atom_contradiction(atom_id, constraint),
+        ),
+        AtomConstraintAst::RingDegree(_)
+        | AtomConstraintAst::RingValence(_)
+        | AtomConstraintAst::RingMembership(_) => Solution::Determined(()),
     }
 }
 
@@ -249,151 +366,140 @@ pub enum IncidenceConstraintContradiction {
     },
 }
 
-fn validate_atom_constraints(
-    validator: &IncidenceConstraintValidator,
-    atom: AtomView<'_>,
-) -> Solution<(), IncidenceConstraintContradiction> {
-    let mut any_underdetermined = false;
-    for constraint in atom.constraints().iter() {
-        let outcome = validator.validate_atom(atom, constraint);
-        if let Some(contradiction) = observe(outcome, &mut any_underdetermined) {
-            return Solution::Contradictory(contradiction);
-        }
-    }
-    finish(any_underdetermined)
-}
-
-fn validate_bond(bond: BondView<'_>) -> Solution<(), IncidenceConstraintContradiction> {
-    let mut any_underdetermined = false;
-    for constraint in bond.constraints().iter() {
-        let outcome = match constraint {
-            BondConstraintAst::Aromatic(_) => evaluate(
+pub fn validate_bond_constraint(
+    ast: &MoleculeAst,
+    bond_id: BondId,
+    constraint: &BondConstraintAst,
+) -> Option<Solution<(), IncidenceConstraintContradiction>> {
+    let bond = ast.bond(bond_id);
+    Some(match constraint {
+        BondConstraintAst::Aromatic(_) => evaluate(
+            constraint,
+            &BondConstraintAst::aromatic(bond.is_in_aromatic_system()),
+            bond_contradiction(bond_id, constraint),
+        ),
+        BondConstraintAst::CisTransStereo(_) => {
+            let derived = match bond.stereo_bond() {
+                Some(stereo) => match (
+                    stereo.ast.configuration.kind(),
+                    stereo.ast.configuration.coset(),
+                ) {
+                    (Some(StereoKind::CisTrans), Some(coset)) => {
+                        CisTransStereoAst::stereo(coset.clone())
+                    }
+                    (Some(_), _) => CisTransStereoAst::NotStereo,
+                    (None, _) => CisTransStereoAst::Undetermined,
+                },
+                None => CisTransStereoAst::NotStereo,
+            };
+            evaluate(
                 constraint,
-                &BondConstraintAst::aromatic(bond.is_in_aromatic_system()),
-                bond_contradiction(bond, constraint),
-            ),
-            BondConstraintAst::CisTransStereo(_) => {
-                let derived = match bond.stereo_bond() {
-                    Some(stereo) => match (
-                        stereo.ast.configuration.kind(),
-                        stereo.ast.configuration.coset(),
-                    ) {
-                        (Some(StereoKind::CisTrans), Some(coset)) => {
-                            CisTransStereoAst::stereo(coset.clone())
-                        }
-                        (Some(_), _) => CisTransStereoAst::NotStereo,
-                        (None, _) => CisTransStereoAst::Undetermined,
-                    },
-                    None => CisTransStereoAst::NotStereo,
-                };
-                evaluate(
-                    constraint,
-                    &BondConstraintAst::cis_trans_stereo(derived),
-                    bond_contradiction(bond, constraint),
-                )
-            }
-            BondConstraintAst::RingMembership(_) => continue,
-        };
-        if let Some(contradiction) = observe(outcome, &mut any_underdetermined) {
-            return Solution::Contradictory(contradiction);
+                &BondConstraintAst::cis_trans_stereo(derived),
+                bond_contradiction(bond_id, constraint),
+            )
         }
-    }
-    finish(any_underdetermined)
+        BondConstraintAst::RingMembership(_) => return None,
+    })
 }
 
-fn validate_dative_bond(
-    bond: DativeBondView<'_>,
-) -> Solution<(), IncidenceConstraintContradiction> {
-    let mut any_underdetermined = false;
-    for constraint in bond.constraints().iter() {
-        let outcome = match constraint {
-            DativeBondConstraintAst::Aromatic(_) if bond.donor_count() != 1 => {
-                // Aromatic incidence is defined only for a binary dative bond pending the
-                // coordination/haptic entity split in discussion doc 117.
-                if constraint.is_undetermined() {
-                    Solution::Determined(())
-                } else {
-                    Solution::Underdetermined(())
-                }
+pub fn validate_dative_bond_constraint(
+    ast: &MoleculeAst,
+    bond_id: DativeBondId,
+    constraint: &DativeBondConstraintAst,
+) -> Option<Solution<(), IncidenceConstraintContradiction>> {
+    let bond = ast.dative_bond(bond_id);
+    Some(match constraint {
+        DativeBondConstraintAst::Aromatic(_) if bond.donor_count() != 1 => {
+            // Aromatic incidence is defined only for a binary dative bond pending the
+            // coordination/haptic entity split in discussion doc 117.
+            if constraint.is_undetermined() {
+                Solution::Determined(())
+            } else {
+                Solution::Underdetermined(())
             }
-            DativeBondConstraintAst::Aromatic(_) => {
-                let donor_system = bond
-                    .donors()
-                    .next()
-                    .and_then(|donor| donor.aromatic_system_id());
-                let derived =
-                    donor_system.is_some() && donor_system == bond.acceptor().aromatic_system_id();
-                evaluate(
-                    constraint,
-                    &DativeBondConstraintAst::aromatic(derived),
-                    IncidenceConstraintContradiction::DativeBond {
-                        bond: bond.id,
-                        constraint: constraint.clone(),
-                    },
-                )
-            }
-            DativeBondConstraintAst::RingMembership(_) => continue,
-        };
-        if let Some(contradiction) = observe(outcome, &mut any_underdetermined) {
-            return Solution::Contradictory(contradiction);
         }
-    }
-    finish(any_underdetermined)
+        DativeBondConstraintAst::Aromatic(_) => {
+            let donor_system = bond
+                .donors()
+                .next()
+                .and_then(|donor| donor.aromatic_system_id());
+            let derived =
+                donor_system.is_some() && donor_system == bond.acceptor().aromatic_system_id();
+            evaluate(
+                constraint,
+                &DativeBondConstraintAst::aromatic(derived),
+                IncidenceConstraintContradiction::DativeBond {
+                    bond: bond.id,
+                    constraint: constraint.clone(),
+                },
+            )
+        }
+        DativeBondConstraintAst::RingMembership(_) => return None,
+    })
 }
 
-fn validate_aromatic_system(
-    system: AromaticSystemView<'_>,
+pub fn validate_aromatic_system_constraint(
+    ast: &MoleculeAst,
+    system_id: AromaticSystemId,
+    constraint: &AromaticSystemConstraintAst,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let mut any_underdetermined = false;
-    for constraint in system.constraints().iter() {
-        let derived = AromaticSystemConstraintAst::electron_count(system.electron_count());
-        let contradiction = IncidenceConstraintContradiction::AromaticSystem {
-            system: system.id,
+    let derived = AromaticSystemConstraintAst::electron_count(
+        ast.aromatic_system(system_id).electron_count(),
+    );
+    evaluate(
+        constraint,
+        &derived,
+        IncidenceConstraintContradiction::AromaticSystem {
+            system: system_id,
             constraint: constraint.clone(),
-        };
-        if let Some(contradiction) = observe(
-            evaluate(constraint, &derived, contradiction),
-            &mut any_underdetermined,
-        ) {
-            return Solution::Contradictory(contradiction);
-        }
-    }
-    finish(any_underdetermined)
+        },
+    )
 }
 
-fn validate_multicenter_bond(
-    bond: MulticenterBondView<'_>,
+pub fn validate_multicenter_bond_constraint(
+    ast: &MoleculeAst,
+    bond_id: MulticenterBondId,
+    constraint: &MulticenterBondConstraintAst,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let mut any_underdetermined = false;
-    for constraint in bond.constraints().iter() {
-        let derived = MulticenterBondConstraintAst::electron_count(bond.electron_count());
-        let contradiction = IncidenceConstraintContradiction::MulticenterBond {
-            bond: bond.id,
+    let derived = MulticenterBondConstraintAst::electron_count(
+        ast.multicenter_bond(bond_id).electron_count(),
+    );
+    evaluate(
+        constraint,
+        &derived,
+        IncidenceConstraintContradiction::MulticenterBond {
+            bond: bond_id,
             constraint: constraint.clone(),
-        };
-        if let Some(contradiction) = observe(
-            evaluate(constraint, &derived, contradiction),
-            &mut any_underdetermined,
-        ) {
-            return Solution::Contradictory(contradiction);
-        }
-    }
-    finish(any_underdetermined)
+        },
+    )
+}
+
+pub fn validate_noncovalent_bond_constraint(
+    bond_id: NoncovalentBondId,
+    constraint: &NoncovalentBondConstraintAst,
+    intramolecular: bool,
+) -> Solution<(), IncidenceConstraintContradiction> {
+    let derived = NoncovalentBondConstraintAst::intramolecular(intramolecular);
+    evaluate(
+        constraint,
+        &derived,
+        IncidenceConstraintContradiction::NoncovalentBond {
+            bond: bond_id,
+            constraint: constraint.clone(),
+        },
+    )
 }
 
 fn validate_noncovalent_bond(
-    bond: NoncovalentBondView<'_>,
+    ast: &MoleculeAst,
+    bond_id: NoncovalentBondId,
     intramolecular: bool,
 ) -> Solution<(), IncidenceConstraintContradiction> {
+    let bond = ast.noncovalent_bond(bond_id);
     let mut any_underdetermined = false;
     for constraint in bond.constraints().iter() {
-        let derived = NoncovalentBondConstraintAst::intramolecular(intramolecular);
-        let contradiction = IncidenceConstraintContradiction::NoncovalentBond {
-            bond: bond.id,
-            constraint: constraint.clone(),
-        };
         if let Some(contradiction) = observe(
-            evaluate(constraint, &derived, contradiction),
+            validate_noncovalent_bond_constraint(bond_id, constraint, intramolecular),
             &mut any_underdetermined,
         ) {
             return Solution::Contradictory(contradiction);
@@ -422,21 +528,21 @@ where
 }
 
 fn atom_contradiction(
-    atom: AtomView<'_>,
+    atom: AtomId,
     constraint: &AtomConstraintAst,
 ) -> IncidenceConstraintContradiction {
     IncidenceConstraintContradiction::Atom {
-        atom: atom.id,
+        atom,
         constraint: constraint.clone(),
     }
 }
 
 fn bond_contradiction(
-    bond: BondView<'_>,
+    bond: BondId,
     constraint: &BondConstraintAst,
 ) -> IncidenceConstraintContradiction {
     IncidenceConstraintContradiction::Bond {
-        bond: bond.id,
+        bond,
         constraint: constraint.clone(),
     }
 }
@@ -460,7 +566,17 @@ fn finish<C>(any_underdetermined: bool) -> Solution<(), C> {
     }
 }
 
-fn bond_components_by_atom(
+fn conjunction<C>(outcomes: impl IntoIterator<Item = Solution<(), C>>) -> Solution<(), C> {
+    let mut any_underdetermined = false;
+    for outcome in outcomes {
+        if let Some(contradiction) = observe(outcome, &mut any_underdetermined) {
+            return Solution::Contradictory(contradiction);
+        }
+    }
+    finish(any_underdetermined)
+}
+
+pub fn bond_components_by_atom(
     ast: &MoleculeAst,
     algorithm: ConnectedComponentsAlgorithm,
 ) -> Vec<usize> {

@@ -7,12 +7,13 @@ use umol_utils::solution::Solution;
 use super::super::super::constraint::{
     AtomConstraintAst, BondConstraintAst, DativeBondConstraintAst,
 };
-use super::super::super::id::{AtomId, BondId};
+use super::super::super::entity::Entity;
+use super::super::super::id::{AtomId, BondId, DativeBondId};
 use super::super::super::molecule::MoleculeAst;
 use super::super::super::ring::{RingConfig, RingModel};
 use super::super::super::traits::Lattice;
 use super::super::super::value::ValueAst;
-use super::super::super::view::{AtomView, RingViews};
+use super::super::super::view::{RingAtomView, RingBondView};
 use super::ConstraintError;
 
 /// Evaluates ring constraints with an explicit relevant-cycle algorithm selector.
@@ -26,6 +27,9 @@ impl RingConstraintValidator {
         ast: &MoleculeAst,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
+        if !uses_ring_constraints(ast) {
+            return Ok(Solution::Determined(()));
+        }
         let rings = ast.rings(
             RingModel::default(),
             RingConfig {
@@ -35,36 +39,25 @@ impl RingConstraintValidator {
         );
         let mut any_underdetermined = false;
 
-        for atom in ast.atoms().iter() {
-            for constraint in atom.constraints().iter() {
-                if let Some(contradiction) = observe(
-                    self.validate_atom(atom, &rings, constraint),
-                    &mut any_underdetermined,
-                ) {
-                    return Ok(Solution::Contradictory(contradiction));
-                }
+        for id in ast.atoms().ids() {
+            if let Some(contradiction) = observe(
+                rings
+                    .atom(id)
+                    .validate_constraints(id, ast.atom(id).constraints()),
+                &mut any_underdetermined,
+            ) {
+                return Ok(Solution::Contradictory(contradiction));
             }
         }
 
-        for bond in ast.bonds().iter() {
-            let ring_bond = rings.bond(bond.id);
-            for constraint in bond.constraints().iter() {
-                let BondConstraintAst::RingMembership(membership) = constraint else {
-                    continue;
-                };
-                if let Some(contradiction) = observe(
-                    evaluate(
-                        &membership.count,
-                        &ring_bond.ring_membership(membership.scope),
-                        RingConstraintContradiction::Bond {
-                            bond: bond.id,
-                            constraint: constraint.clone(),
-                        },
-                    ),
-                    &mut any_underdetermined,
-                ) {
-                    return Ok(Solution::Contradictory(contradiction));
-                }
+        for id in ast.bonds().ids() {
+            if let Some(contradiction) = observe(
+                rings
+                    .bond(id)
+                    .validate_constraints(id, ast.bond(id).constraints()),
+                &mut any_underdetermined,
+            ) {
+                return Ok(Solution::Contradictory(contradiction));
             }
         }
 
@@ -87,32 +80,134 @@ impl RingConstraintValidator {
         })
     }
 
-    /// Validate one atom ring constraint against a precomputed ring projection.
-    /// Non-ring constraints are determined identities here.
-    pub fn validate_atom(
+    /// Validate all inline ring constraints on one molecule atom.
+    pub fn validate_molecule_atom(
         &self,
-        atom: AtomView<'_>,
-        rings: &RingViews<'_>,
-        constraint: &AtomConstraintAst,
-    ) -> Solution<(), RingConstraintContradiction> {
-        let ring_atom = rings.atom(atom.id);
-        let (asserted, derived) = match constraint {
-            AtomConstraintAst::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
-            AtomConstraintAst::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
-            AtomConstraintAst::RingMembership(membership) => (
-                &membership.count,
-                ring_atom.ring_membership(membership.scope),
-            ),
-            _ => return Solution::Determined(()),
-        };
-        evaluate(
-            asserted,
-            &derived,
-            RingConstraintContradiction::Atom {
-                atom: atom.id,
-                constraint: constraint.clone(),
+        ast: &MoleculeAst,
+        atom_id: AtomId,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+    ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
+        let atom = ast
+            .atoms()
+            .get(atom_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::Atom(atom_id),
+            })?;
+        if !atom.constraints().iter().any(is_atom_ring_constraint) {
+            return Ok(Solution::Determined(()));
+        }
+        let rings = ast.rings(
+            RingModel::default(),
+            RingConfig {
+                relevant_cycle_algorithm,
+                ..RingConfig::default()
             },
-        )
+        );
+        Ok(rings
+            .atom(atom_id)
+            .validate_constraints(atom_id, atom.constraints()))
+    }
+
+    /// Validate all inline ring constraints on one molecule bond.
+    pub fn validate_molecule_bond(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: BondId,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+    ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
+        let bond = ast
+            .bonds()
+            .get(bond_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::Bond(bond_id),
+            })?;
+        if !bond.constraints().iter().any(is_bond_ring_constraint) {
+            return Ok(Solution::Determined(()));
+        }
+        let rings = ast.rings(
+            RingModel::default(),
+            RingConfig {
+                relevant_cycle_algorithm,
+                ..RingConfig::default()
+            },
+        );
+        Ok(rings
+            .bond(bond_id)
+            .validate_constraints(bond_id, bond.constraints()))
+    }
+
+    /// Validate inline ring constraints on one molecule dative bond.
+    pub fn validate_molecule_dative_bond(
+        &self,
+        ast: &MoleculeAst,
+        bond_id: DativeBondId,
+    ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
+        let bond = ast
+            .dative_bonds()
+            .get(bond_id)
+            .ok_or(ConstraintError::InvalidReference {
+                entity: Entity::DativeBond(bond_id),
+            })?;
+        if bond.constraints().iter().any(|constraint| {
+            matches!(
+                constraint,
+                DativeBondConstraintAst::RingMembership(membership)
+                    if !membership.is_undetermined()
+            )
+        }) {
+            Err(ConstraintError::DativeBondRingMembershipUnsupported { bond: bond_id })
+        } else {
+            Ok(Solution::Determined(()))
+        }
+    }
+}
+
+impl RingAtomView<'_> {
+    fn validate_constraints(
+        &self,
+        atom_id: AtomId,
+        constraints: &super::super::super::constraint::AtomConstraintsAst,
+    ) -> Solution<(), RingConstraintContradiction> {
+        conjunction(constraints.iter().filter_map(|constraint| {
+            let (asserted, derived) = match constraint {
+                AtomConstraintAst::RingDegree(asserted) => (asserted, self.ring_degree()),
+                AtomConstraintAst::RingValence(asserted) => (asserted, self.ring_valence()),
+                AtomConstraintAst::RingMembership(membership) => {
+                    (&membership.count, self.ring_membership(membership.scope))
+                }
+                _ => return None,
+            };
+            Some(evaluate(
+                asserted,
+                &derived,
+                RingConstraintContradiction::Atom {
+                    atom: atom_id,
+                    constraint: constraint.clone(),
+                },
+            ))
+        }))
+    }
+}
+
+impl RingBondView<'_> {
+    fn validate_constraints(
+        &self,
+        bond_id: BondId,
+        constraints: &super::super::super::constraint::BondConstraintsAst,
+    ) -> Solution<(), RingConstraintContradiction> {
+        conjunction(constraints.iter().filter_map(|constraint| {
+            let BondConstraintAst::RingMembership(membership) = constraint else {
+                return None;
+            };
+            Some(evaluate(
+                &membership.count,
+                &self.ring_membership(membership.scope),
+                RingConstraintContradiction::Bond {
+                    bond: bond_id,
+                    constraint: constraint.clone(),
+                },
+            ))
+        }))
     }
 }
 
@@ -158,6 +253,59 @@ fn observe(
         }
         Solution::Contradictory(contradiction) => Some(contradiction),
     }
+}
+
+fn conjunction(
+    outcomes: impl IntoIterator<Item = Solution<(), RingConstraintContradiction>>,
+) -> Solution<(), RingConstraintContradiction> {
+    let mut any_underdetermined = false;
+    for outcome in outcomes {
+        if let Some(contradiction) = observe(outcome, &mut any_underdetermined) {
+            return Solution::Contradictory(contradiction);
+        }
+    }
+    if any_underdetermined {
+        Solution::Underdetermined(())
+    } else {
+        Solution::Determined(())
+    }
+}
+
+fn uses_ring_constraints(ast: &MoleculeAst) -> bool {
+    ast.atoms()
+        .iter()
+        .any(|atom| atom.constraints().iter().any(is_atom_ring_constraint))
+        || ast
+            .bonds()
+            .iter()
+            .any(|bond| bond.constraints().iter().any(is_bond_ring_constraint))
+        || ast.dative_bonds().iter().any(|bond| {
+            bond.constraints().iter().any(|constraint| {
+                matches!(
+                    constraint,
+                    DativeBondConstraintAst::RingMembership(membership)
+                        if !membership.is_undetermined()
+                )
+            })
+        })
+}
+
+fn is_atom_ring_constraint(constraint: &AtomConstraintAst) -> bool {
+    matches!(
+        constraint,
+        AtomConstraintAst::RingDegree(value) | AtomConstraintAst::RingValence(value)
+            if !value.is_undetermined()
+    ) || matches!(
+        constraint,
+        AtomConstraintAst::RingMembership(membership) if !membership.is_undetermined()
+    )
+}
+
+fn is_bond_ring_constraint(constraint: &BondConstraintAst) -> bool {
+    matches!(
+        constraint,
+        BondConstraintAst::RingMembership(membership) if !membership.is_undetermined()
+    )
 }
 
 #[cfg(test)]

@@ -25,8 +25,12 @@ pub use stereo::{
 };
 use thiserror::Error;
 use umol_ast::ast::{
-    AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidator,
-    EntityStructureContradiction, EntityStructureError, EntityStructureValidator, MoleculeAst,
+    AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidateConfig,
+    ConstraintValidator, EntityStructureContradiction, EntityStructureError,
+    EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
+};
+use umol_graph_core::{
+    ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_utils::solution::Solution;
 pub use valence::{
@@ -38,12 +42,29 @@ use crate::ops::invariant::ValenceMismatch;
 use crate::ops::model::ChemistryModel;
 
 /// Operational configuration for composite molecule validation.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValidateConfig {
+    /// Algorithms used by model-independent constraint validation.
+    pub constraint: ConstraintValidateConfig,
     /// Algorithms used by aromaticity conformance validation.
     pub aromaticity: AromaticityConfig,
     /// Algorithms and iteration limits used by stereo conformance validation.
     pub stereo: StereoValidateConfig,
+}
+
+impl Default for ValidateConfig {
+    fn default() -> Self {
+        Self {
+            constraint: ConstraintValidateConfig {
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+            },
+            aromaticity: AromaticityConfig::default(),
+            stereo: StereoValidateConfig::default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -104,7 +125,7 @@ impl<'a> Validator<'a> {
     pub fn with_config(model: &'a ChemistryModel, config: ValidateConfig) -> Self {
         Self {
             entity_structure: EntityStructureValidator,
-            constraint: ConstraintValidator,
+            constraint: ConstraintValidator::new(config.constraint),
             valence_invariants: ValenceInvariantsValidator,
             spin_invariants: SpinInvariantsValidator,
             valence_conformance: ValenceConformanceValidator::new(&model.valence),
@@ -250,6 +271,12 @@ mod tests {
         assert_eq!(
             ValidateConfig::default(),
             ValidateConfig {
+                constraint: ConstraintValidateConfig {
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                    substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+                },
                 aromaticity: AromaticityConfig {
                     ring_config: RingConfig::default(),
                     connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
@@ -280,6 +307,12 @@ mod tests {
         let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = ChemistryModel::default();
         let config = ValidateConfig {
+            constraint: ConstraintValidateConfig {
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+            },
             aromaticity: AromaticityConfig {
                 ring_config: RingConfig::default(),
                 connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,

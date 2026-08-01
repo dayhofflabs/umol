@@ -869,7 +869,7 @@ result to decide the Boolean constraint; an early-exit search API is not part of
 Focused tables cover unanchored and anchored success, absence, overlays, ring-constrained patterns,
 invalid anchors, and exact equivalence across every supported matching-selector combination.
 
-#### S3g — Recursive constraint coordinator
+#### S3g — Recursive constraint coordinator **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint.rs`, `umol-ast/src/ast.rs`, and all AST-layer callers
 
