@@ -896,7 +896,7 @@ outcome and doc-117 reference. `ConstraintValidator` is no longer a stub, and
 
 ### S4 — Higher-level validation and resolver preconditions
 
-#### S4a — Composite validation configuration
+#### S4a — Composite validation configuration **Done**
 
 **Module:** `umol-graph/src/ops/validate.rs` and affected Rust callers
 
