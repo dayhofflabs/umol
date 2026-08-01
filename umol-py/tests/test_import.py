@@ -337,7 +337,8 @@ def test_public_operation_signature(operation, expected):
         (
             umol.PatternFingerprintConfig,
             "(*, width=2048, match_algorithm=Ellipsis, "
-            "subgraph_isomorphism_algorithm=Ellipsis)",
+            "subgraph_isomorphism_algorithm=Ellipsis, "
+            "relevant_cycle_algorithm=Ellipsis)",
         ),
         (
             umol.StructuralFingerprintConfig,
@@ -375,7 +376,8 @@ def test_public_operation_signature(operation, expected):
         (umol.ChemistryModel, "(*, valence, aromaticity, stereo)"),
         (
             umol.ReactionApplicationConfig,
-            "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis)",
+            "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis, "
+            "relevant_cycle_algorithm=Ellipsis)",
         ),
         (
             umol.ReactionCompositionConfig,
@@ -383,7 +385,8 @@ def test_public_operation_signature(operation, expected):
         ),
         (
             umol.SubstructureSearchConfig,
-            "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis)",
+            "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis, "
+            "relevant_cycle_algorithm=Ellipsis)",
         ),
     ],
 )

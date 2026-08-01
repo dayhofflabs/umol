@@ -29,6 +29,7 @@ from umol import (
     ReactionDefaults,
     ReactionDerivation,
     ReactionMetadata,
+    RelevantCycleEnumerationAlgorithm,
     ResolveConfig,
     RingLimits,
     SmilesIoConfig,
@@ -97,7 +98,7 @@ def test_reaction_composition_config_value(algorithm):
         config.common_subgraph_enumeration_algorithm = algorithm
 
 
-def test_reactionapplicationconfig_default():
+def test_reaction_application_config_default():
     config = ReactionApplicationConfig()
 
     assert config == ReactionApplicationConfig.default()
@@ -106,11 +107,17 @@ def test_reactionapplicationconfig_default():
         config.subgraph_isomorphism_algorithm
         == SubgraphIsomorphismAlgorithm.Vf2Rdkit()
     )
+    assert (
+        config.relevant_cycle_algorithm
+        == RelevantCycleEnumerationAlgorithm.Vismara()
+    )
     assert repr(config) == (
         "ReactionApplicationConfig("
         "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
         "subgraph_isomorphism_algorithm="
-        "SubgraphIsomorphismAlgorithm.Vf2Rdkit())"
+        "SubgraphIsomorphismAlgorithm.Vf2Rdkit(), "
+        "relevant_cycle_algorithm="
+        "RelevantCycleEnumerationAlgorithm.Vismara())"
     )
 
 
@@ -161,25 +168,33 @@ def test_reactionapplicationconfig_default():
         ),
     ],
 )
-def test_reactionapplicationconfig_value(
+def test_reaction_application_config_value(
     match_algorithm, subiso_algorithm, expected_repr
 ):
     config = ReactionApplicationConfig(
         match_algorithm=match_algorithm,
         subgraph_isomorphism_algorithm=subiso_algorithm,
+        relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(),
     )
     equal = ReactionApplicationConfig(
         match_algorithm=match_algorithm,
         subgraph_isomorphism_algorithm=subiso_algorithm,
+        relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(),
     )
 
     assert config == equal
     assert config.match_algorithm == match_algorithm
     assert config.subgraph_isomorphism_algorithm == subiso_algorithm
+    assert (
+        config.relevant_cycle_algorithm
+        == RelevantCycleEnumerationAlgorithm.Vismara()
+    )
     assert repr(config) == (
         "ReactionApplicationConfig("
         f"match_algorithm={match_algorithm!r}, "
-        f"subgraph_isomorphism_algorithm={expected_repr})"
+        f"subgraph_isomorphism_algorithm={expected_repr}, "
+        "relevant_cycle_algorithm="
+        "RelevantCycleEnumerationAlgorithm.Vismara())"
     )
 
 

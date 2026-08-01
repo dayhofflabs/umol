@@ -239,8 +239,9 @@ This is also the binding rule for additional algorithm-selecting operations
 from `umol-ast`: as those operations gain Python bindings, each receives a
 dedicated Python operation-config wrapper instead of exposing a bare algorithm
 keyword. The Rust APIs remain algorithmically transparent and continue to
-accept their selectors directly; no config is added to `umol-ast` solely for
-Python uniformity.
+require every selector explicitly, either as a direct argument or, when selectors compound, in a
+mandatory config without an AST-layer default. No config is added to `umol-ast` solely for Python
+uniformity.
 
 ## Verification requirements
 

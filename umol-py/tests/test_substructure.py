@@ -2,6 +2,7 @@ import pytest
 
 from umol import (
     MoleculeAst,
+    RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
     SubstructureSearchConfig,
@@ -17,11 +18,17 @@ def test_substructure_search_config_default():
         config.subgraph_isomorphism_algorithm
         == SubgraphIsomorphismAlgorithm.Vf2Rdkit()
     )
+    assert (
+        config.relevant_cycle_algorithm
+        == RelevantCycleEnumerationAlgorithm.Vismara()
+    )
     assert repr(config) == (
         "SubstructureSearchConfig("
         "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
         "subgraph_isomorphism_algorithm="
-        "SubgraphIsomorphismAlgorithm.Vf2Rdkit())"
+        "SubgraphIsomorphismAlgorithm.Vf2Rdkit(), "
+        "relevant_cycle_algorithm="
+        "RelevantCycleEnumerationAlgorithm.Vismara())"
     )
 
 
@@ -47,14 +54,21 @@ def test_substructure_search_config_value(
     config = SubstructureSearchConfig(
         match_algorithm=match_algorithm,
         subgraph_isomorphism_algorithm=subgraph_isomorphism_algorithm,
+        relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(),
     )
 
     assert config.match_algorithm == match_algorithm
     assert config.subgraph_isomorphism_algorithm == subgraph_isomorphism_algorithm
+    assert (
+        config.relevant_cycle_algorithm
+        == RelevantCycleEnumerationAlgorithm.Vismara()
+    )
     assert repr(config) == (
         "SubstructureSearchConfig("
         f"match_algorithm={match_algorithm!r}, "
-        f"subgraph_isomorphism_algorithm={subgraph_isomorphism_algorithm!r})"
+        f"subgraph_isomorphism_algorithm={subgraph_isomorphism_algorithm!r}, "
+        "relevant_cycle_algorithm="
+        "RelevantCycleEnumerationAlgorithm.Vismara())"
     )
 
 

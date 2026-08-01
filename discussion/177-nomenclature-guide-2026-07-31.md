@@ -2,7 +2,8 @@
 
 Status: **Informational**
 Date: 2026-07-31
-Relates: [125](125-constraints-as-projections-2026-06-22.md),
+Relates: [117](117-entity-model-extensibility-2026-06-20.md),
+[125](125-constraints-as-projections-2026-06-22.md),
 [166](166-molecule-ops-2026-07-27.md),
 [171](171-aromaticity-inconsistency-policy-2026-07-29.md),
 [176](176-ast-naming-2026-07-31.md)
@@ -129,7 +130,7 @@ state.
 
 **Not:** each other. The difference is whether the input spoke.
 **In code:** `MoleculeDefaults`, `AtomDefaults` against `MoleculeOverrides`, `AtomOverrides`.
-**Settled by:** to fill during the sweep.
+**Settled by:** 094 for defaults. `*Overrides` has no owning document.
 
 ### Transformer naming — unsettled
 
@@ -163,6 +164,24 @@ spelling.
 | `config` for semantic acceptance choices | `model` | config is operational |
 | `policy` for chemical acceptance | `model` | policy acts after acceptance is established |
 
+## Open issues
+
+Findings raised while compiling the guide, each also stated in its entry. This index exists so they
+can be reviewed without reading the whole file. Remove a row when the issue is decided; the entry
+text changes at the same time.
+
+| # | Issue | Where | Kind |
+| --- | --- | --- | --- |
+| 1 | Transformer naming has three patterns in use — agent noun (`Kekulizer`, `Aromatizer`), verb phrase (`DelocalizeCharge`), target phrase (`ToExplicitHydrogens`) — and doc 166 adds two more members. Needs deciding before they land. | *Transformer naming* | decision |
+| 2 | `IncidenceNodeSelection::OVERLAYS` covers four of the six overlay kinds, with `STEREO` separate. The same word means four kinds there and six everywhere else. Either the flag or the term should change. | *Overlay* | scope conflict |
+| 3 | One patch law, two spellings: `apply`/`diff` on `EntityPatch`, `update`/`difference_to` on the entity update surface. | *Patch algebra* | naming split |
+| 4 | `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`; the `CosetSpace` doc on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so line 25 is wrong. | *Coset* | doc error |
+| 5 | The `*Constraints` container convention is currently spelled `*ConstraintsAst`, so the singular/plural rule is hidden inside the `Ast` family. | *Suffixes* table | blocked on doc 176 |
+| 6 | `*Ast` and `*Dsl` are under review in doc 176; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on doc 176 |
+| 7 | `*Failure` and the transformer family are named in settled vocabulary but have no members yet, so the conventions are untested. | *Suffixes* | latent |
+| 8 | Six of eleven `Solution` accessors have no call sites outside `umol-utils`: `into_determined`, `into_data`, `into_contradiction`, `is_determined`, `is_underdetermined`, `contradiction`. API surface rather than nomenclature, but cheap to trim now. | *Solution* | unused surface |
+| 9 | `Derivation`, `Failure` and `Projection` have no `In code` names. | those entries | incomplete |
+
 ## Glossary
 
 Alphabetical by concept. Entry shape: definition, optional detail, then `Not:`, `In code:`,
@@ -187,6 +206,22 @@ every edit succeeds.
 **Not:** plan (which is derived without mutating), transformation.
 **In code:** `apply`, `apply_at`.
 **Settled by:** 166.
+
+### Canonical and canonicalize
+
+**Canonicalize** folds an AST value into its canonical form; the operation is idempotent and returns
+`Err(Contradiction)` when the value is unsatisfiable. **`Canonical<T>`** is the wrapper carrying the
+guarantee that the fold has already run.
+
+Equality is **lazy** by design: `==`, `Hash` and `Ord` on an AST value stay derived-structural — same
+tree — while semantic equality is `canonical_eq`, which compares canonical forms. `Canonical<T>`
+inverts this: because it canonicalizes once on construction, its derived structural equality *is*
+semantic, so it can key a map for semantic deduplication.
+
+**Not:** *canonical labeling*, which is the graph relabeling that makes isomorphic structures
+comparable. Two unrelated canonical forms, one over attribute values and one over graphs.
+**In code:** `Canonicalize`, `canonicalize`, `canonical`, `canonical_eq`, `Canonical<T>`.
+**Settled by:** 113.
 
 ### Class
 
@@ -264,7 +299,7 @@ no recovery policy: every determined failure or mismatch in their scope becomes 
 **Not:** error (operational, outside `Solution`), failure or inconsistency (policy-free
 classifications that a resolver may still act on).
 **In code:** `Solution::Contradictory`, `*Contradiction`.
-**Settled by:** 171.
+**Settled by:** 083; validator obligations in 171.
 
 ### Coset
 
@@ -308,7 +343,7 @@ inconsistencies.
 **Not:** *ground*, which is a property of stored state rather than of an outcome. An operation may
 return `Determined` with a payload that is not ground if the operation's own contract is satisfied.
 **In code:** `Solution::Determined`, `is_determined`, `into_determined`.
-**Settled by:** to fill during the sweep.
+**Settled by:** 083.
 
 ### Embedding kind
 
@@ -340,7 +375,7 @@ entity name in diagnostics and action fields when it matters which kind is affec
 instance. Not *overlay* either: entity covers all eight kinds, overlay covers the six that are not
 topology.
 **In code:** `Entity`, `EntityKind`.
-**Settled by:** 134, 086. Origin of the approach: 079.
+**Settled by:** 117. Origin of the approach: 079.
 
 ### Entity constraint
 
@@ -350,6 +385,27 @@ includes ring constraints.
 **Not:** a name for the non-ring subset — use *incidence constraint* for that.
 **In code:** `EntityConstraint` must not be narrowed to the non-ring subset.
 **Settled by:** 171.
+
+### Equality ladder
+
+Four distinct equality relations exist on AST values and molecules. They are not interchangeable and
+the choice is almost never obvious from context.
+
+- **`==`** — derived structural equality. Same tree, same ids, same order. Deliberately *not*
+  semantic, so it stays cheap on the hot path.
+- **`canonical_eq`** — equality of canonical forms. Semantic on the value axis, blind to framing.
+- **`equiv`** — framed equivalence: the value axis composed with the position axis, in the receiver's
+  current id and participant frame.
+- **`equiv_under`** — the same, after reindexing the receiver into the other's frame via an explicit
+  correspondence or participant order. The work is skipped when the payload is permutation-invariant.
+
+`BiEquiv` is the two-factor analogue for birelation payloads, reindexing per factor before comparing.
+
+**Not:** each other. Reaching for `==` when `equiv` is meant is the common error, because `==` exists
+on everything and silently answers a different question.
+**In code:** `PartialEq`, `Canonicalize::canonical_eq`, `Equiv::equiv`, `Equiv::equiv_under`,
+`BiEquiv`.
+**Settled by:** 113, 156.
 
 ### Error
 
@@ -379,9 +435,28 @@ A **ground term** is a structure in which every inherent field holds a definite 
 structural: it says the lattice is resolved to a bottom element, not that the structure satisfies
 chemistry invariants or that its entities are mutually consistent.
 
+`AsLit` is the exact projection out of a ground value, bound by the totality law
+`value.is_ground() == value.as_lit().is_some()`. It does not canonicalize, apply defaults, validate,
+or merge ground states that happen to have the same downstream numerical effect.
+
 **Not:** valid, or chemically admissible. Doc 173 separates structural groundness from both.
-**In code:** `Lattice::is_ground`, `Ground<T>` (planned, doc 175).
+**In code:** `Lattice::is_ground`, `AsLit::as_lit`, `Ground<T>` (planned, doc 175).
 **Settled by:** 173. Whitepaper glossary carries the chemist-facing form.
+
+### Id, handle, and argument
+
+Three ways to refer to an entity, at three stages.
+
+- **`*Id`** — a resolved index into the entity table, a transparent `u32`. `AtomId`, `BondId`,
+  `AromaticSystemId`.
+- **`*Handle`** — a reference *within an edit batch*: either an existing `*Id`, or the Nth
+  entity-creating edit earlier in the same batch. It refers to something that may not exist yet.
+- **`*Arg`** — a builder argument that may create or refer: a spec creates, an integer selects by
+  creation position, a name selects by name.
+
+**Not:** each other. A `*Handle` outside a batch and an `*Arg` outside a builder are both meaningless.
+**In code:** `AtomId`, `AtomHandle`, `AtomArg`; likewise per entity kind.
+**Settled by:** 141 for handles. `*Arg` has no owning document.
 
 ### Incidence constraint
 
@@ -453,6 +528,24 @@ clarification added for chemist readers and is not repository terminology.
 **In code:** `Lattice`, `meet`, `join`, `matches`, `is_compatible`.
 **Settled by:** 113.
 
+### Leaf type
+
+A **leaf type** is a lattice-valued attribute that bottoms out in a concrete domain rather than in
+other AST types. Every leaf follows one shape: an `Undetermined` variant as the top of the lattice, a
+`Lit` variant carrying a definite value, and whatever enrichments the domain admits.
+
+`BooleanAst` is the minimal case, `Undetermined | Lit(bool)`. `ValueAst` is the richest, adding
+`LitSet`, `RangeFrom`, `RangeTo`, and the two expression arms. `ElectronCountsAst` is shared by
+aromatic systems and multicenter bonds rather than duplicated per kind.
+
+A new leaf type should follow the same shape, and should implement `AsLit` so that
+`is_ground() == as_lit().is_some()` holds.
+
+**Not:** an entity type, which is a record of leaves plus a constraint store.
+**In code:** `BooleanAst`, `ValueAst`, `ElectronCountsAst`, `UnpairedElectronsAst`, `ElementAst`,
+`IsotopeMassAst`.
+**Settled by:** 172, 173.
+
 ### Mismatch
 
 A **mismatch** means that a constraint and entity, or a constraint and its derived value, are each
@@ -507,25 +600,6 @@ over all eight kinds.
 `IncidenceNodeSelection::OVERLAYS` (narrower, see above).
 **Settled by:** 134. Whitepaper §5 carries the chemist-facing definition.
 
-### Parse path
-
-Two paths from EDN text to a Rust value, which a type chooses between and must keep in parity.
-
-- **Tree** — `read_string` materializes an `Edn` tree, then `FromEdn::from_edn` walks it. The
-  canonical path; supports the full data model uniformly.
-- **Streaming** — `FromEdn::from_edn_str` fuses parsing and construction in one pass, bypassing the
-  tree. An optimization for hot types only.
-
-The contract binding them: an override of `from_edn_str` **must be observationally equivalent to the
-default — the same return value and the same error variant, for every input.** That obligation is
-what the streaming/tree parity property tests check, and it is the only non-obvious thing about the
-EDN conversion traits, whose names follow the ordinary `FromStr` / `ToString` idiom.
-
-**Not:** alternatives with different semantics. The streaming path is a latency optimization, not a
-different reading of the input; any divergence is a defect.
-**In code:** `read_string`, `from_edn`, `from_edn_str`, `StreamDeserializer`, `EdnTreeSerializer`.
-**Settled by:** to fill during the sweep.
-
 ### Participant
 
 A **participant** is an entity referenced by an overlay entity — the atoms of an aromatic system, the
@@ -538,6 +612,21 @@ or bond an overlay refers to. The lower layer is the mechanism for the upper one
 **Not:** member, constituent, or argument.
 **In code:** `ParticipantPosition`, `RelationParticipant`, `ParticipantAnchor`.
 **Settled by:** 134.
+
+### Patch algebra
+
+A **delta** is the morphism between two entity states, and the pair of operations over it is a patch
+algebra: `apply` carries a state forward by a delta, `diff` factors two states back into the deltas
+between them.
+
+The law is `apply(lhs, diff(lhs, rhs)) == rhs`. Doc 161 states the same law over the entity update
+API as `x.update(x.difference_to(y)) == y`.
+
+**Naming split to resolve.** One law, two spellings — `apply`/`diff` on `EntityPatch`,
+`update`/`difference_to` on the entity update surface. Pick one pair before either grows further; a
+reader who learns the law under one name will not find it under the other.
+**In code:** `EntityPatch::apply`, `EntityPatch::diff`, `update`, `difference_to`.
+**Settled by:** 134, 161.
 
 ### Perception
 
@@ -698,7 +787,7 @@ the two, but with 4 and 1 call sites they are conveniences rather than establish
 **Not:** `Result`. `Solution` carries the semantic verdict; `Result` carries operational success.
 Both appear in one signature and mean different things.
 **In code:** `Solution`, `umol_utils::solution`.
-**Settled by:** to fill during the sweep.
+**Settled by:** 083.
 
 ### Split
 
@@ -709,24 +798,6 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 **Not:** a partition by any other criterion.
 **In code:** `split`.
 **Settled by:** 086.
-
-### Tag reader
-
-A **tag reader** transforms the value following an EDN tag into an `Edn` value. Readers are
-registered on `ParseConfig` and stored as `Arc<dyn Fn>`, so a closure may capture external state such
-as a registry of permitted tags.
-
-The entry exists for the collision, not the mechanism. `#` marks an EDN tag in the envelope
-(`#inst`, `#uuid`) and also marks a predicate in the \umol\ string sublanguage (`#h`, `#a`, `#R`).
-The two are unrelated: EDN tags are read by tag readers at the envelope level, while string
-predicates are parsed by the entity subgrammars inside a quoted string and never reach the EDN
-reader.
-
-**Not:** the `#`-marked predicates of the string sublanguage. A "tag" in the notation reference means
-the single letter after `#` in an entity string; a "tag" in EDN means the symbol after `#` in the
-envelope.
-**In code:** `TagReaders`, `ParseConfig`.
-**Settled by:** to fill during the sweep.
 
 ### Transformation
 
@@ -745,7 +816,7 @@ or a contradiction.
 
 **Not:** *undetermined*, which is stored state. Do not use the two interchangeably.
 **In code:** `Solution::Underdetermined`.
-**Settled by:** 171.
+**Settled by:** 083.
 
 ### Undetermined
 
@@ -775,7 +846,8 @@ preserve. Every entry carries four slots:
 - `Not:` — the nearby terms it must not be used to mean, spelled out so a search for the wrong word
   reaches this entry;
 - `In code:` — the public type or method names implied by the decision, or `—` if none yet;
-- `Settled by:` — the discussion document owning the decision and any implementation work.
+- `Settled by:` — the document that discusses the term best, which is not always the one that used it
+  first; `—` when no document owns it, which is a legitimate outcome rather than a gap.
 
 Whenever a `Not:` line forbids a specific spelling, add the corresponding row to *Retired and
 discouraged*.
@@ -787,8 +859,6 @@ Keep the file loadable in one piece — under roughly a thousand lines. If it ou
 domain deliberately rather than letting it sprawl past the point where a reader or an agent sees all
 of it.
 
-### Provenance still to fill
-
-`Entity` is credited to the sweep rather than to a document. `Derivation`, `Failure`, and
-`Projection` have no `In code` names yet. Both gaps are expected to close when the terminology sweep
-over the discussion corpus runs.
+Record findings in *Open issues* as well as in the entry, so they can be reviewed without reading the
+whole file. An entry states the issue where a reader will meet it; the index exists so nothing has to
+be rediscovered. Remove the row and amend the entry together when an issue is decided.

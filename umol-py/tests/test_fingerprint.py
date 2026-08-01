@@ -240,11 +240,16 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 subgraph_isomorphism_algorithm=(
                     SubgraphIsomorphismAlgorithm.Vf2Rdkit()
                 ),
+                relevant_cycle_algorithm=(
+                    RelevantCycleEnumerationAlgorithm.Vismara()
+                ),
             ),
             "PatternFingerprintConfig(width=2048, "
             "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
             "subgraph_isomorphism_algorithm="
-            "SubgraphIsomorphismAlgorithm.Vf2Rdkit())",
+            "SubgraphIsomorphismAlgorithm.Vf2Rdkit(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara())",
         ),
         (
             PatternFingerprintConfig(
@@ -253,6 +258,9 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 subgraph_isomorphism_algorithm=(
                     SubgraphIsomorphismAlgorithm.Ullmann()
                 ),
+                relevant_cycle_algorithm=(
+                    RelevantCycleEnumerationAlgorithm.Vismara()
+                ),
             ),
             PatternFingerprintConfig(
                 width=512,
@@ -260,11 +268,16 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 subgraph_isomorphism_algorithm=(
                     SubgraphIsomorphismAlgorithm.Ullmann()
                 ),
+                relevant_cycle_algorithm=(
+                    RelevantCycleEnumerationAlgorithm.Vismara()
+                ),
             ),
             "PatternFingerprintConfig(width=512, "
             "match_algorithm=SubstructureMatchAlgorithm.Incidence(), "
             "subgraph_isomorphism_algorithm="
-            "SubgraphIsomorphismAlgorithm.Ullmann())",
+            "SubgraphIsomorphismAlgorithm.Ullmann(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara())",
         ),
     ],
 )
@@ -275,6 +288,7 @@ def test_pattern_fingerprint_config(value, expected, expected_repr):
         value.subgraph_isomorphism_algorithm
         == expected.subgraph_isomorphism_algorithm
     )
+    assert value.relevant_cycle_algorithm == expected.relevant_cycle_algorithm
     assert value == expected
     assert repr(value) == expected_repr
 

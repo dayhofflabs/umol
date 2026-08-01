@@ -12,8 +12,8 @@ use umol_graph::hash::{EcfpHashScheme as GraphEcfpHashScheme, WlHashScheme as Gr
 use umol_graph_core::RefinementRounds as GraphCoreRefinementRounds;
 
 use crate::algorithm::{
-    AutomorphismAlgorithm, SubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
-    SubstructureMatchAlgorithm,
+    AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
 };
 use crate::ring::RingConfig;
 
@@ -242,6 +242,7 @@ pub struct PatternFingerprintConfig {
     width: usize,
     match_algorithm: SubstructureMatchAlgorithm,
     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
 }
 
 #[pymethods]
@@ -252,11 +253,13 @@ impl PatternFingerprintConfig {
         width=2048,
         match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
         subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     fn new(
         width: isize,
         match_algorithm: SubstructureMatchAlgorithm,
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> PyResult<Self> {
         let width = usize::try_from(width)
             .ok()
@@ -266,6 +269,7 @@ impl PatternFingerprintConfig {
             width,
             match_algorithm,
             subgraph_isomorphism_algorithm,
+            relevant_cycle_algorithm,
         })
     }
 
@@ -284,12 +288,18 @@ impl PatternFingerprintConfig {
         self.subgraph_isomorphism_algorithm
     }
 
+    #[getter]
+    fn relevant_cycle_algorithm(&self) -> RelevantCycleEnumerationAlgorithm {
+        self.relevant_cycle_algorithm
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "PatternFingerprintConfig(width={}, match_algorithm={}, subgraph_isomorphism_algorithm={})",
+            "PatternFingerprintConfig(width={}, match_algorithm={}, subgraph_isomorphism_algorithm={}, relevant_cycle_algorithm={})",
             self.width,
             self.match_algorithm.repr(),
             self.subgraph_isomorphism_algorithm.repr(),
+            self.relevant_cycle_algorithm.repr(),
         )
     }
 }
@@ -309,6 +319,9 @@ impl PatternFingerprintConfig {
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::from_rust(
                 fingerprinter.subgraph_isomorphism_algorithm,
             ),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::from_rust(
+                fingerprinter.relevant_cycle_algorithm,
+            ),
         }
     }
 
@@ -317,6 +330,7 @@ impl PatternFingerprintConfig {
             width: self.width,
             match_algorithm: self.match_algorithm.to_rust(),
             subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
+            relevant_cycle_algorithm: self.relevant_cycle_algorithm.to_rust(),
         }
     }
 }
@@ -454,6 +468,7 @@ mod tests {
     use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
     use umol_graph_core::{
         AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
+        RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
         SubgraphEnumerationAlgorithm as GraphCoreSubgraphEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
     };
@@ -755,31 +770,41 @@ mod tests {
         2048,
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
     #[case::custom(
         512,
         SubstructureMatchAlgorithm::Incidence(),
         SubgraphIsomorphismAlgorithm::Ullmann(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
     fn test_pattern_fingerprint_config_new(
         #[case] width: isize,
         #[case] match_algorithm: SubstructureMatchAlgorithm,
         #[case] subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+        #[case] relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
         #[case] expected: PatternFingerprintConfig,
     ) {
         assert_eq!(
-            PatternFingerprintConfig::new(width, match_algorithm, subgraph_isomorphism_algorithm,)
-                .unwrap(),
+            PatternFingerprintConfig::new(
+                width,
+                match_algorithm,
+                subgraph_isomorphism_algorithm,
+                relevant_cycle_algorithm,
+            )
+            .unwrap(),
             expected
         );
     }
@@ -793,6 +818,7 @@ mod tests {
                 width,
                 SubstructureMatchAlgorithm::GraphAndOverlays(),
                 SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+                RelevantCycleEnumerationAlgorithm::Vismara(),
             )
             .unwrap_err();
 
@@ -811,6 +837,7 @@ mod tests {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
     #[case::custom(
@@ -818,11 +845,13 @@ mod tests {
             width: 512,
             match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         },
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
     fn test_pattern_fingerprint_config_from_rust(
@@ -838,6 +867,7 @@ mod tests {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         GraphPatternFingerprinter::new()
     )]
@@ -846,11 +876,13 @@ mod tests {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         GraphPatternFingerprinter {
             width: 512,
             match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
     )]
     fn test_pattern_fingerprint_config_to_rust(
@@ -866,28 +898,33 @@ mod tests {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         2048,
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
-        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2Rdkit())"
+        RelevantCycleEnumerationAlgorithm::Vismara(),
+        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2Rdkit(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
     )]
     #[case::custom(
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         512,
         SubstructureMatchAlgorithm::Incidence(),
         SubgraphIsomorphismAlgorithm::Ullmann(),
-        "PatternFingerprintConfig(width=512, match_algorithm=SubstructureMatchAlgorithm.Incidence(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann())"
+        RelevantCycleEnumerationAlgorithm::Vismara(),
+        "PatternFingerprintConfig(width=512, match_algorithm=SubstructureMatchAlgorithm.Incidence(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
     )]
     fn test_pattern_fingerprint_config_value(
         #[case] config: PatternFingerprintConfig,
         #[case] expected_width: usize,
         #[case] expected_match_algorithm: SubstructureMatchAlgorithm,
         #[case] expected_subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+        #[case] expected_relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
         #[case] expected_repr: &str,
     ) {
         Python::attach(|py| {
@@ -916,6 +953,14 @@ mod tests {
                     .extract::<SubgraphIsomorphismAlgorithm>()
                     .unwrap(),
                 expected_subgraph_isomorphism_algorithm
+            );
+            assert_eq!(
+                config
+                    .getattr("relevant_cycle_algorithm")
+                    .unwrap()
+                    .extract::<RelevantCycleEnumerationAlgorithm>()
+                    .unwrap(),
+                expected_relevant_cycle_algorithm
             );
             assert_eq!(
                 config.repr().unwrap().extract::<String>().unwrap(),

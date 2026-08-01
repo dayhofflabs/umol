@@ -843,20 +843,28 @@ connected. References outside the molecule are operational errors rather than fa
 Focused tables cover subset and whole-molecule semantics, exact totals, partial values, empty
 selections, disconnected selections, and selector parity where more than one implementation exists.
 
-#### S3f — Subpattern constraints
+#### S3f — Subpattern constraints **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint/molecule.rs`,
-`umol-ast/src/ast/substructure.rs`
+`umol-ast/src/ast/substructure.rs`, `umol-ast/src/ast/reaction.rs`,
+`umol-graph/src/fingerprint/pattern.rs`, `umol-py/src/substructure.rs`,
+`umol-py/src/reaction.rs`, `umol-py/src/fingerprint/config.rs`, and affected callers
 
-**Kind:** additive (green)
+**Kind:** breaking public matching-config migration (red → green)
 
 **Dependencies:** `[dep: S3c, S3e]`
 
-Evaluate `SubPattern` using the supplied `SubstructureMatchAlgorithm` and
-`SubgraphIsomorphismAlgorithm`, preserving each `SubPatternAnchor` form. Thread the selected relevant
-cycle algorithm into derived host ring constraints so subpattern evaluation introduces no hidden
-graph-core algorithm choice. Use the existing substructure-match result to decide the Boolean
-constraint; an early-exit search API is not part of this work unit.
+Add mandatory, default-free `SubstructureMatchConfig` at the AST layer, containing
+`SubstructureMatchAlgorithm`, `SubgraphIsomorphismAlgorithm`, and
+`RelevantCycleEnumerationAlgorithm`. Use it in `MoleculeAst::substructure_matches` and
+`ReactionAst::apply`; higher-level graph and Python configs retain their documented defaults.
+Pass the existing `ConstraintValidateConfig` to `MoleculeConstraintValidator::validate` instead of
+four loose selectors.
+
+Evaluate `SubPattern` using the supplied matching config, preserving each `SubPatternAnchor` form.
+Thread the selected relevant-cycle algorithm into derived host ring constraints so subpattern
+evaluation introduces no hidden graph-core algorithm choice. Use the existing substructure-match
+result to decide the Boolean constraint; an early-exit search API is not part of this work unit.
 
 Focused tables cover unanchored and anchored success, absence, overlays, ring-constrained patterns,
 invalid anchors, and exact equivalence across every supported matching-selector combination.

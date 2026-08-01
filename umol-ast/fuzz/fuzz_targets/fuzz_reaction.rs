@@ -1,9 +1,9 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use umol_ast::ast::{IntoAst, SubstructureMatchAlgorithm};
+use umol_ast::ast::{IntoAst, SubstructureMatchAlgorithm, SubstructureMatchConfig};
 use umol_ast::dsl::{ReactionDefaults, ReactionDsl};
 use umol_edn::{read_string, FromEdn};
-use umol_graph_core::SubgraphIsomorphismAlgorithm;
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
 fuzz_target!(|data: &str| {
     // Streaming path: single-pass over the bytes.
@@ -23,8 +23,11 @@ fuzz_target!(|data: &str| {
         let _ = reaction.validate_application(&reaction.lhs);
         if let Ok(applications) = reaction.apply(
             &reaction.lhs,
-            SubstructureMatchAlgorithm::GraphAndOverlays,
-            SubgraphIsomorphismAlgorithm::Vf2,
+            SubstructureMatchConfig {
+                match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            },
         ) {
             for application in applications.take(16) {
                 let _ = application;

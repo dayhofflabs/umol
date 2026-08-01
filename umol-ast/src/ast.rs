@@ -107,7 +107,7 @@ pub use stereo::{
     StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
     TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoAst, Topicity,
 };
-pub use substructure::SubstructureMatchAlgorithm;
+pub use substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, BiEquiv, Canonical, Canonicalize, EntityPatch, Equiv, FromAst, IntoAst, Lattice,

@@ -5,9 +5,9 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_ast::ast::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
-    StereoBondDelta, SubstructureMatchAlgorithm, TransactionError,
+    StereoBondDelta, SubstructureMatchAlgorithm, SubstructureMatchConfig, TransactionError,
 };
-use umol_graph_core::SubgraphIsomorphismAlgorithm;
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
 use crate::strategies::*;
 
@@ -539,8 +539,11 @@ proptest! {
         let mut applications = reaction
             .apply(
                 &host,
-                SubstructureMatchAlgorithm::GraphAndOverlays,
-                SubgraphIsomorphismAlgorithm::Vf2,
+                SubstructureMatchConfig {
+                    match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                },
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?;
 

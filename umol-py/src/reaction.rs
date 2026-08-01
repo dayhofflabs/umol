@@ -7,11 +7,13 @@ use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+#[cfg(test)]
+use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
 use umol_ast::ast::{
     Canonicalize, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation,
-    SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
+    SubstructureMatchConfig as AstSubstructureMatchConfig,
 };
 use umol_ast::dsl::ReactionDsl as AstReactionDsl;
 use umol_graph::fingerprint::featurize_reaction;
@@ -20,12 +22,18 @@ use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_core::{
     CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
-    Correspondence, NodeId, SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
+    Correspondence, NodeId,
+};
+#[cfg(test)]
+use umol_graph_core::{
+    RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
 use crate::algorithm::{
-    CommonSubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
+    CommonSubgraphEnumerationAlgorithm, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
 };
 use crate::correspondence::{
     Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
@@ -111,6 +119,7 @@ impl ReactionCompositionConfig {
 pub struct ReactionApplicationConfig {
     match_algorithm: SubstructureMatchAlgorithm,
     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
 }
 
 impl Default for ReactionApplicationConfig {
@@ -118,6 +127,7 @@ impl Default for ReactionApplicationConfig {
         Self {
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     }
 }
@@ -129,14 +139,17 @@ impl ReactionApplicationConfig {
         *,
         match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
         subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     fn new(
         match_algorithm: SubstructureMatchAlgorithm,
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Self {
         Self {
             match_algorithm,
             subgraph_isomorphism_algorithm,
+            relevant_cycle_algorithm,
         }
     }
 
@@ -155,11 +168,17 @@ impl ReactionApplicationConfig {
         self.subgraph_isomorphism_algorithm
     }
 
+    #[getter]
+    fn relevant_cycle_algorithm(&self) -> RelevantCycleEnumerationAlgorithm {
+        self.relevant_cycle_algorithm
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "ReactionApplicationConfig(match_algorithm={}, subgraph_isomorphism_algorithm={})",
+            "ReactionApplicationConfig(match_algorithm={}, subgraph_isomorphism_algorithm={}, relevant_cycle_algorithm={})",
             self.match_algorithm.repr(),
             self.subgraph_isomorphism_algorithm.repr(),
+            self.relevant_cycle_algorithm.repr(),
         )
     }
 }
@@ -169,28 +188,24 @@ impl ReactionApplicationConfig {
         dead_code,
         reason = "Rust-to-Python conversion API for configured reaction application"
     )]
-    pub(crate) fn from_rust(
-        match_algorithm: AstSubstructureMatchAlgorithm,
-        subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
-    ) -> Self {
+    pub(crate) fn from_rust(config: AstSubstructureMatchConfig) -> Self {
         Self {
-            match_algorithm: SubstructureMatchAlgorithm::from_rust(match_algorithm),
+            match_algorithm: SubstructureMatchAlgorithm::from_rust(config.match_algorithm),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::from_rust(
-                subgraph_isomorphism_algorithm,
+                config.subgraph_isomorphism_algorithm,
+            ),
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::from_rust(
+                config.relevant_cycle_algorithm,
             ),
         }
     }
 
-    pub(crate) fn to_rust(
-        self,
-    ) -> (
-        AstSubstructureMatchAlgorithm,
-        GraphCoreSubgraphIsomorphismAlgorithm,
-    ) {
-        (
-            self.match_algorithm.to_rust(),
-            self.subgraph_isomorphism_algorithm.to_rust(),
-        )
+    pub(crate) fn to_rust(self) -> AstSubstructureMatchConfig {
+        AstSubstructureMatchConfig {
+            match_algorithm: self.match_algorithm.to_rust(),
+            subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
+            relevant_cycle_algorithm: self.relevant_cycle_algorithm.to_rust(),
+        }
     }
 }
 
@@ -442,13 +457,8 @@ impl ReactionAst {
         reaction
             .validate_application(&host)
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
-        let (match_algorithm, subgraph_isomorphism_algorithm) =
-            config.unwrap_or_default().to_rust();
-        let correspondences = reaction.lhs.substructure_matches(
-            &host,
-            match_algorithm,
-            subgraph_isomorphism_algorithm,
-        );
+        let config = config.unwrap_or_default().to_rust();
+        let correspondences = reaction.lhs.substructure_matches(&host, config);
 
         Py::new(
             py,
@@ -751,6 +761,7 @@ mod tests {
         let expected = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::GraphAndOverlays(),
             SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            RelevantCycleEnumerationAlgorithm::Vismara(),
         );
 
         assert_eq!(ReactionApplicationConfig::default(), expected);
@@ -761,6 +772,7 @@ mod tests {
         let config = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
             SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+            RelevantCycleEnumerationAlgorithm::Vismara(),
         );
 
         assert_eq!(
@@ -772,12 +784,17 @@ mod tests {
             SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 }
         );
         assert_eq!(
+            config.relevant_cycle_algorithm(),
+            RelevantCycleEnumerationAlgorithm::Vismara()
+        );
+        assert_eq!(
             config.__repr__(),
             concat!(
                 "ReactionApplicationConfig(",
                 "match_algorithm=SubstructureMatchAlgorithm.Incidence(), ",
                 "subgraph_isomorphism_algorithm=",
-                "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6))"
+                "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6), ",
+                "relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
             )
         );
         assert_ne!(config, ReactionApplicationConfig::default());
@@ -787,23 +804,31 @@ mod tests {
     #[case::default(
         AstSubstructureMatchAlgorithm::GraphAndOverlays,
         GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
+        GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         ReactionApplicationConfig::default()
     )]
     #[case::incidence_arc_match(
         AstSubstructureMatchAlgorithm::Incidence,
         GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
             SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+            RelevantCycleEnumerationAlgorithm::Vismara(),
         ),
     )]
     fn test_reaction_application_config_from_rust(
         #[case] match_algorithm: AstSubstructureMatchAlgorithm,
         #[case] subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
+        #[case] relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm,
         #[case] expected: ReactionApplicationConfig,
     ) {
         assert_eq!(
-            ReactionApplicationConfig::from_rust(match_algorithm, subgraph_isomorphism_algorithm,),
+            ReactionApplicationConfig::from_rust(AstSubstructureMatchConfig {
+                match_algorithm,
+                subgraph_isomorphism_algorithm,
+                relevant_cycle_algorithm,
+            }),
             expected,
         );
     }
@@ -840,14 +865,16 @@ mod tests {
         let config = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
             subgraph_isomorphism_algorithm,
+            RelevantCycleEnumerationAlgorithm::Vismara(),
         );
 
         assert_eq!(
             config.to_rust(),
-            (
-                AstSubstructureMatchAlgorithm::Incidence,
-                expected_subgraph_isomorphism_algorithm,
-            )
+            AstSubstructureMatchConfig {
+                match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+                subgraph_isomorphism_algorithm: expected_subgraph_isomorphism_algorithm,
+                relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+            }
         );
     }
 
@@ -2161,30 +2188,37 @@ mod tests {
     #[case::vf2(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Vf2(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::ullmann(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Ullmann(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::ri(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Ri(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::arc_match(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::vf2_rdkit(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::ray_kirsch(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::RayKirsch(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::incidence(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::Incidence(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     fn test_reaction_ast_apply_config(
         reaction_application: (

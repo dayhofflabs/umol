@@ -2,13 +2,20 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::SubstructureMatchAlgorithm;
-use umol_graph_core::SubgraphIsomorphismAlgorithm;
+use umol_ast::ast::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
 use crate::strategies::*;
 
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
 const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
+const RELEVANT_CYCLE_ALGORITHM: RelevantCycleEnumerationAlgorithm =
+    RelevantCycleEnumerationAlgorithm::Vismara;
+const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
+    match_algorithm: MATCH_ALGORITHM,
+    subgraph_isomorphism_algorithm: SUBISO_ALGORITHM,
+    relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
+};
 
 proptest! {
     #![proptest_config(Config {
@@ -50,7 +57,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -89,7 +99,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -132,7 +145,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -188,7 +204,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -244,7 +263,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -287,7 +309,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -346,7 +371,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -409,7 +437,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -428,8 +459,7 @@ proptest! {
             prop_assert!(reaction
                 .apply(
                     &reaction.lhs,
-                    MATCH_ALGORITHM,
-                    SUBISO_ALGORITHM,
+                    MATCH_CONFIG,
                 )
                 .unwrap()
                 .any(|derivation| derivation.unwrap().rhs() == &right));
@@ -445,8 +475,7 @@ proptest! {
             prop_assert!(reaction
                 .apply(
                     &reaction.lhs,
-                    MATCH_ALGORITHM,
-                    SUBISO_ALGORITHM,
+                    MATCH_CONFIG,
                 )
                 .unwrap()
                 .any(|derivation| derivation.unwrap().rhs() == &right));
@@ -512,7 +541,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
             .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
@@ -571,7 +603,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
             .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
@@ -644,7 +679,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
             .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
@@ -708,7 +746,10 @@ proptest! {
             ..Default::default()
         });
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
             .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()

@@ -100,7 +100,9 @@ fn compose_all(
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::{Correspondence, SubgraphIsomorphismAlgorithm};
+    use umol_graph_core::{
+        Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    };
 
     use super::super::aromatic::AromaticSystemAst;
     use super::super::atom::AtomAst;
@@ -120,9 +122,15 @@ mod tests {
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
     use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCoset, StereoKind};
-    use super::super::substructure::SubstructureMatchAlgorithm;
+    use super::super::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use super::super::value::ValueAst;
     use super::*;
+
+    const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
+        match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+    };
 
     // C-O order 1→2 then 2→3; the single overlap fuses to 1→3.
     #[rstest]
@@ -752,36 +760,20 @@ mod tests {
                 CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
             )
             .iter()
-            .flat_map(|c| {
-                c.apply(
-                    &host,
-                    SubstructureMatchAlgorithm::GraphAndOverlays,
-                    SubgraphIsomorphismAlgorithm::Vf2,
-                )
-                .unwrap()
-                .map(Result::unwrap)
-            })
+            .flat_map(|c| c.apply(&host, MATCH_CONFIG).unwrap().map(Result::unwrap))
             .map(|derivation| derivation.rhs().clone())
             .collect();
         let sequential: Vec<MoleculeAst> = a
-            .apply(
-                &host,
-                SubstructureMatchAlgorithm::GraphAndOverlays,
-                SubgraphIsomorphismAlgorithm::Vf2,
-            )
+            .apply(&host, MATCH_CONFIG)
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .flat_map(|intermediate| {
-                b.apply(
-                    &intermediate,
-                    SubstructureMatchAlgorithm::GraphAndOverlays,
-                    SubgraphIsomorphismAlgorithm::Vf2,
-                )
-                .unwrap()
-                .map(Result::unwrap)
-                .map(|derivation| derivation.rhs().clone())
-                .collect::<Vec<_>>()
+                b.apply(&intermediate, MATCH_CONFIG)
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .map(|derivation| derivation.rhs().clone())
+                    .collect::<Vec<_>>()
             })
             .collect();
 
@@ -846,7 +838,13 @@ mod tests {
         let alg = SubgraphIsomorphismAlgorithm::Vf2;
         let host = a.lhs.clone();
         let intermediate = a
-            .apply(&host, SubstructureMatchAlgorithm::GraphAndOverlays, alg)
+            .apply(
+                &host,
+                SubstructureMatchConfig {
+                    subgraph_isomorphism_algorithm: alg,
+                    ..MATCH_CONFIG
+                },
+            )
             .unwrap()
             .next()
             .unwrap()
@@ -856,8 +854,10 @@ mod tests {
         let sequential = b
             .apply(
                 &intermediate,
-                SubstructureMatchAlgorithm::GraphAndOverlays,
-                alg,
+                SubstructureMatchConfig {
+                    subgraph_isomorphism_algorithm: alg,
+                    ..MATCH_CONFIG
+                },
             )
             .unwrap()
             .next()
@@ -866,7 +866,13 @@ mod tests {
             .rhs()
             .clone();
         let composed = composite
-            .apply(&host, SubstructureMatchAlgorithm::GraphAndOverlays, alg)
+            .apply(
+                &host,
+                SubstructureMatchConfig {
+                    subgraph_isomorphism_algorithm: alg,
+                    ..MATCH_CONFIG
+                },
+            )
             .unwrap()
             .next()
             .unwrap()

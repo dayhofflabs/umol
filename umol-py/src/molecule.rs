@@ -309,10 +309,9 @@ impl MoleculeAst {
         host: &Self,
         config: Option<SubstructureSearchConfig>,
     ) -> Vec<MoleculeCorrespondence> {
-        let (match_algorithm, subgraph_isomorphism_algorithm) =
-            config.unwrap_or_default().to_rust();
+        let config = config.unwrap_or_default().to_rust();
         self.0
-            .substructure_matches(&host.0, match_algorithm, subgraph_isomorphism_algorithm)
+            .substructure_matches(&host.0, config)
             .into_iter()
             .map(MoleculeCorrespondence::from_rust)
             .collect()
@@ -487,6 +486,7 @@ mod tests {
         NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
         NoncovalentBondKind as AstNoncovalentBondKind,
         SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
+        SubstructureMatchConfig as AstSubstructureMatchConfig,
     };
     use umol_ast::dsl::{AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata};
     use umol_ast::mol_dsl;
@@ -498,6 +498,7 @@ mod tests {
     use umol_graph::ingest::ingest_smiles;
     use umol_graph_core::{
         Correspondence as GraphCoreCorrespondence, NodeId,
+        RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
     };
 
@@ -884,10 +885,11 @@ mod tests {
                 ),
             ),
         )];
-        let config = SubstructureSearchConfig::from_rust(
-            AstSubstructureMatchAlgorithm::Incidence,
-            GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
-        );
+        let config = SubstructureSearchConfig::from_rust(AstSubstructureMatchConfig {
+            match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+        });
 
         assert_eq!(pattern.substructure_matches(&host, Some(config)), expected);
     }
@@ -896,10 +898,11 @@ mod tests {
     fn test_molecule_ast_substructure_matches_empty() {
         let pattern = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["O"] :bonds []}"#));
         let host = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
-        let config = SubstructureSearchConfig::from_rust(
-            AstSubstructureMatchAlgorithm::GraphAndOverlays,
-            GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
-        );
+        let config = SubstructureSearchConfig::from_rust(AstSubstructureMatchConfig {
+            match_algorithm: AstSubstructureMatchAlgorithm::GraphAndOverlays,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
+            relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+        });
 
         assert_eq!(
             pattern.substructure_matches(&host, Some(config)),

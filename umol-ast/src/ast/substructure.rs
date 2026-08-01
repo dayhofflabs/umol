@@ -10,7 +10,8 @@
 use std::borrow::Cow;
 
 use umol_graph_core::{
-    Correspondence, NodeId, ParticipantPosition, RelationData, SubgraphIsomorphismAlgorithm,
+    Correspondence, NodeId, ParticipantPosition, RelationData, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 
 use super::atom::AtomAst;
@@ -40,6 +41,20 @@ pub enum SubstructureMatchAlgorithm {
     Incidence,
 }
 
+/// Algorithms used to enumerate substructure matches.
+///
+/// This type deliberately has no default at the AST layer: every graph
+/// algorithm selection remains explicit at the call site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SubstructureMatchConfig {
+    /// Strategy used to represent and match molecule entities.
+    pub match_algorithm: SubstructureMatchAlgorithm,
+    /// Algorithm used to enumerate embeddings of the selected graph representation.
+    pub subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+    /// Algorithm used to derive relevant-ring constraints requested by the pattern.
+    pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+}
+
 impl MoleculeAst {
     /// Occurrences of `self` (the pattern) within `host`, one injective pattern→host
     /// [`MoleculeCorrespondence`] per occurrence. Pattern predicates are evaluated as
@@ -48,16 +63,20 @@ impl MoleculeAst {
     pub fn substructure_matches(
         &self,
         host: &MoleculeAst,
-        strategy: SubstructureMatchAlgorithm,
-        subiso: SubgraphIsomorphismAlgorithm,
+        config: SubstructureMatchConfig,
     ) -> Vec<MoleculeCorrespondence> {
-        match strategy {
-            SubstructureMatchAlgorithm::GraphAndOverlays => {
-                self.substructure_matches_graph_and_overlays(host, subiso)
-            }
-            SubstructureMatchAlgorithm::Incidence => {
-                self.substructure_matches_incidence(host, subiso)
-            }
+        match config.match_algorithm {
+            SubstructureMatchAlgorithm::GraphAndOverlays => self
+                .substructure_matches_graph_and_overlays(
+                    host,
+                    config.subgraph_isomorphism_algorithm,
+                    config.relevant_cycle_algorithm,
+                ),
+            SubstructureMatchAlgorithm::Incidence => self.substructure_matches_incidence(
+                host,
+                config.subgraph_isomorphism_algorithm,
+                config.relevant_cycle_algorithm,
+            ),
         }
     }
 
@@ -68,6 +87,7 @@ impl MoleculeAst {
     fn host_match_targets<'h>(
         &self,
         host: &'h MoleculeAst,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> (Vec<Cow<'h, AtomAst>>, Vec<Cow<'h, BondAst>>) {
         let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
         let mut atom_ring_scopes = Vec::new();
@@ -112,7 +132,10 @@ impl MoleculeAst {
                     kind: RingSetKind::Relevant,
                     max_ring_size: 22,
                 },
-                RingConfig::default(),
+                RingConfig {
+                    relevant_cycle_algorithm,
+                    ..RingConfig::default()
+                },
             )
         });
 
@@ -172,12 +195,13 @@ impl MoleculeAst {
         &self,
         host: &MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Vec<MoleculeCorrespondence> {
         let pattern = self;
         if pattern.atoms().count() > host.atoms().count() {
             return Vec::new();
         }
-        let (host_atoms, host_bonds) = pattern.host_match_targets(host);
+        let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
 
         host.raw_graph()
             .subgraph_isomorphisms(
@@ -211,6 +235,7 @@ impl MoleculeAst {
         &self,
         host: &MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
+        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Vec<MoleculeCorrespondence> {
         let pattern = self;
         if pattern.atoms().count() > host.atoms().count() {
@@ -219,7 +244,7 @@ impl MoleculeAst {
         let selection = IncidenceNodeSelection::constitution();
         let pattern_levi = pattern.incidence_graph(selection);
         let host_levi = host.incidence_graph(selection);
-        let (host_atoms, host_bonds) = pattern.host_match_targets(host);
+        let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
         let atom_count = pattern.atoms().count();
 
         host_levi
@@ -441,12 +466,15 @@ mod tests {
     use umol_graph_core::SubgraphIsomorphismAlgorithm::{
         ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
     };
-    use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
+    use umol_graph_core::{
+        RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+        ARCMATCH_DEFAULT_PATH_LENGTH,
+    };
 
     use super::super::id::AtomId;
     use super::super::molecule::MoleculeAst;
-    use super::SubstructureMatchAlgorithm;
     use super::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
+    use super::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use crate::mol_dsl;
 
     const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
@@ -566,6 +594,11 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
         vec![]
     )]
+    #[case::stereo_bond(
+        mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :type "Ct1"}]}"#),
+        mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :type "Ct1"}]}"#),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)]]
+    )]
     fn test_molecule_ast_substructure_matches(
         #[case] host: MoleculeAst,
         #[case] pattern: MoleculeAst,
@@ -574,7 +607,14 @@ mod tests {
         for strategy in STRATEGIES {
             for subiso in SUBISO_ALGS {
                 let mut occurrences: Vec<Vec<AtomId>> = pattern
-                    .substructure_matches(&host, strategy, subiso)
+                    .substructure_matches(
+                        &host,
+                        SubstructureMatchConfig {
+                            match_algorithm: strategy,
+                            subgraph_isomorphism_algorithm: subiso,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                        },
+                    )
                     .iter()
                     .map(|c| {
                         c.atoms()

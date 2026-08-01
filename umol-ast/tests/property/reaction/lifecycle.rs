@@ -2,8 +2,10 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::SubstructureMatchAlgorithm;
-use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
+use umol_ast::ast::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_core::{
+    Correspondence, NodeId, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
 
 use crate::strategies::*;
 
@@ -52,8 +54,11 @@ proptest! {
         let mut applications = reaction
             .apply(
                 &reaction.lhs,
-                SubstructureMatchAlgorithm::GraphAndOverlays,
-                SubgraphIsomorphismAlgorithm::Vf2,
+                SubstructureMatchConfig {
+                    match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                },
             )
             .map_err(|error| TestCaseError::fail(format!("matching failed: {error}")))?;
         let mut found = false;

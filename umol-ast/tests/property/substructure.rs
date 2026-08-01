@@ -1,10 +1,15 @@
 use proptest::prelude::*;
 use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-use umol_ast::ast::{AtomId, EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm};
+use umol_ast::ast::{
+    AtomId, EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig,
+};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
-use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
+use umol_graph_core::{
+    RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+};
 use umol_utils::solution::Solution;
 
 use crate::strategies::molecule_ast_strategy;
@@ -38,7 +43,14 @@ fn sorted_matches(
     subiso: SubgraphIsomorphismAlgorithm,
 ) -> Vec<Vec<AtomId>> {
     let mut occurrences: Vec<Vec<AtomId>> = pattern
-        .substructure_matches(host, strategy, subiso)
+        .substructure_matches(
+            host,
+            SubstructureMatchConfig {
+                match_algorithm: strategy,
+                subgraph_isomorphism_algorithm: subiso,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            },
+        )
         .iter()
         .map(|c| {
             c.atoms()

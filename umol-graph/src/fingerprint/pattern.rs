@@ -16,9 +16,11 @@
 
 use std::sync::LazyLock;
 
-use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, SubstructureMatchAlgorithm};
+use umol_ast::ast::{
+    AsLit, AtomId, BondId, MoleculeAst, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+};
 use umol_ast::mol_dsl;
-use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{NodeId, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
 use super::bit_fp::BitFp;
 use super::feature_set::FeatureSet;
@@ -37,6 +39,7 @@ pub struct PatternFingerprinter {
     pub width: usize,
     pub match_algorithm: SubstructureMatchAlgorithm,
     pub subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+    pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
 }
 
 impl Default for PatternFingerprinter {
@@ -51,6 +54,7 @@ impl PatternFingerprinter {
             width: PATTERN_FP_WIDTH,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         }
     }
 
@@ -63,8 +67,11 @@ impl PatternFingerprinter {
         for template in TEMPLATES.iter() {
             let matches = template.pattern.substructure_matches(
                 mol,
-                self.match_algorithm,
-                self.subgraph_isomorphism_algorithm,
+                SubstructureMatchConfig {
+                    match_algorithm: self.match_algorithm,
+                    subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm,
+                    relevant_cycle_algorithm: self.relevant_cycle_algorithm,
+                },
             );
             let mut count_id = template.index + template.atom_count + template.bond_count;
             for embedding in &matches {
@@ -182,6 +189,7 @@ mod tests {
                 width: PATTERN_FP_WIDTH,
                 match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
                 subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
             }
         );
     }
@@ -266,6 +274,7 @@ mod tests {
                 width: PATTERN_FP_WIDTH,
                 match_algorithm,
                 subgraph_isomorphism_algorithm,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
             }
             .fingerprint(&ingest_smiles(smiles).expect("ingest"))
             .unwrap();

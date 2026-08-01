@@ -13,14 +13,17 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_ast::ast::{
-    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm, ValueAst,
+    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
-use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
+use umol_graph_core::{
+    RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+};
 use walkdir::WalkDir;
 
 const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
@@ -181,7 +184,15 @@ fn substructure_benchmark(c: &mut Criterion) {
                 group.bench_function(id, |b| {
                     b.iter(|| {
                         for target in &corpus {
-                            black_box(pat.substructure_matches(target, strategy, algorithm));
+                            black_box(pat.substructure_matches(
+                                target,
+                                SubstructureMatchConfig {
+                                    match_algorithm: strategy,
+                                    subgraph_isomorphism_algorithm: algorithm,
+                                    relevant_cycle_algorithm:
+                                        RelevantCycleEnumerationAlgorithm::Vismara,
+                                },
+                            ));
                         }
                     });
                 });

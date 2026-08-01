@@ -2,14 +2,24 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::SubstructureMatchAlgorithm;
-use umol_graph_core::{CommonSubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_ast::ast::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_core::{
+    CommonSubgraphEnumerationAlgorithm, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
+};
 use umol_utils::solution::Solution;
 
 use crate::strategies::*;
 
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
 const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
+const RELEVANT_CYCLE_ALGORITHM: RelevantCycleEnumerationAlgorithm =
+    RelevantCycleEnumerationAlgorithm::Vismara;
+const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
+    match_algorithm: MATCH_ALGORITHM,
+    subgraph_isomorphism_algorithm: SUBISO_ALGORITHM,
+    relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
+};
 const COMPOSITION_ALGORITHM: CommonSubgraphEnumerationAlgorithm =
     CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking;
 
@@ -34,8 +44,7 @@ proptest! {
                 prop_assert!(composite
                     .apply(
                         &composite.lhs,
-                        MATCH_ALGORITHM,
-                        SUBISO_ALGORITHM,
+                        MATCH_CONFIG,
                     )
                     .unwrap()
                     .any(|derivation| derivation.unwrap().rhs() == &right));
@@ -56,7 +65,10 @@ proptest! {
             .iter()
             .flat_map(|composite| {
                 composite
-                    .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+                    .apply(
+                        &host,
+                        MATCH_CONFIG,
+                    )
                     .unwrap()
                     .map(Result::unwrap)
                     .collect::<Vec<_>>()
@@ -65,7 +77,10 @@ proptest! {
             .collect();
 
         let intermediates: Vec<MoleculeAst> = a
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -75,8 +90,7 @@ proptest! {
             sequential.extend(
                 b.apply(
                     intermediate,
-                    MATCH_ALGORITHM,
-                    SUBISO_ALGORITHM,
+                    MATCH_CONFIG,
                 )
                     .unwrap()
                     .map(Result::unwrap)
@@ -104,8 +118,7 @@ proptest! {
                 prop_assert!(composite
                     .apply(
                         &composite.lhs,
-                        MATCH_ALGORITHM,
-                        SUBISO_ALGORITHM,
+                        MATCH_CONFIG,
                     )
                     .unwrap()
                     .any(|derivation| derivation.unwrap().rhs() == &right));
@@ -126,7 +139,10 @@ proptest! {
             .iter()
             .flat_map(|composite| {
                 composite
-                    .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+                    .apply(
+                        &host,
+                        MATCH_CONFIG,
+                    )
                     .unwrap()
                     .map(Result::unwrap)
                     .collect::<Vec<_>>()
@@ -135,7 +151,10 @@ proptest! {
             .collect();
 
         let intermediates: Vec<MoleculeAst> = a
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -145,8 +164,7 @@ proptest! {
             sequential.extend(
                 b.apply(
                     intermediate,
-                    MATCH_ALGORITHM,
-                    SUBISO_ALGORITHM,
+                    MATCH_CONFIG,
                 )
                     .unwrap()
                     .map(Result::unwrap)
@@ -174,7 +192,10 @@ proptest! {
             .iter()
             .flat_map(|composite| {
                 composite
-                    .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+                    .apply(
+                        &host,
+                        MATCH_CONFIG,
+                    )
                     .unwrap()
                     .map(Result::unwrap)
                     .collect::<Vec<_>>()
@@ -183,7 +204,10 @@ proptest! {
             .collect();
 
         let intermediates: Vec<MoleculeAst> = a
-            .apply(&host, MATCH_ALGORITHM, SUBISO_ALGORITHM)
+            .apply(
+                &host,
+                MATCH_CONFIG,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
@@ -193,8 +217,7 @@ proptest! {
             sequential.extend(
                 b.apply(
                     intermediate,
-                    MATCH_ALGORITHM,
-                    SUBISO_ALGORITHM,
+                    MATCH_CONFIG,
                 )
                     .unwrap()
                     .map(Result::unwrap)
