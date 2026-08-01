@@ -2,15 +2,17 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, BooleanAst, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig, Lattice,
-    LigandSymmetryAst, MoleculeAst, StereoAtomId, StereoBondId, StereoKind, StereoLigandPair,
-    StereoSymmetry, Stereogenicity, StereogenicityAst, Topicity, TopicityAst, TopicityRelationAst,
+    AsLit, AtomId, BondId, BooleanAst, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig,
+    Lattice, LigandSymmetryAst, MoleculeAst, StereoAtomId, StereoBondId, StereoKind,
+    StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityAst, Topicity, TopicityAst,
+    TopicityRelationAst,
 };
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
+use crate::ops::stereo::{StereoInconsistency, StereoPerception};
 
 /// Operational configuration for stereo-conformance validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,6 +55,12 @@ pub struct StereoConformanceValidator {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StereoValidatorContradiction {
+    #[error(transparent)]
+    Inconsistency(#[from] StereoInconsistency),
+    #[error("tetrahedral stereo constraint at atom {atom:?} has no stereo atom")]
+    MissingStereoAtom { atom: AtomId },
+    #[error("cis-trans stereo constraint at bond {bond:?} has no stereo bond")]
+    MissingStereoBond { bond: BondId },
     #[error("stereo {kind:?} coset {coset} out of range 0..{count}")]
     CosetOutOfRange {
         kind: StereoKind,
@@ -104,6 +112,62 @@ impl StereoConformanceValidator {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<(), StereoValidatorContradiction>, StereoValidatorError> {
+        let derivation = StereoPerception::new(&self.model).derive(ast);
+        for &inconsistency in &derivation.inconsistencies {
+            let asserted = match inconsistency {
+                StereoInconsistency::TetrahedralStereoFailure { .. }
+                | StereoInconsistency::TetrahedralStereoMismatch { .. }
+                | StereoInconsistency::CisTransStereoFailure { .. }
+                | StereoInconsistency::CisTransStereoMismatch { .. } => true,
+                StereoInconsistency::StereoAtomFailure { stereo_atom } => {
+                    let atom = ast.stereo_atom(stereo_atom).site_id();
+                    ast.atom(atom)
+                        .ast
+                        .constraints
+                        .tetrahedral_stereo()
+                        .is_some_and(|constraint| !constraint.is_undetermined())
+                }
+                StereoInconsistency::StereoBondFailure { stereo_bond } => {
+                    let bond = ast.stereo_bond(stereo_bond).site_id();
+                    ast.bond(bond)
+                        .ast
+                        .constraints
+                        .cis_trans_stereo()
+                        .is_some_and(|constraint| !constraint.is_undetermined())
+                }
+            };
+            if asserted {
+                return Ok(Solution::Contradictory(inconsistency.into()));
+            }
+        }
+
+        for (atom, _, _) in &derivation.atoms {
+            let asserted = ast
+                .atom(*atom)
+                .ast
+                .constraints
+                .tetrahedral_stereo()
+                .is_some_and(|constraint| !constraint.is_undetermined());
+            if asserted && !ast.stereo_atoms().is_at(*atom) {
+                return Ok(Solution::Contradictory(
+                    StereoValidatorContradiction::MissingStereoAtom { atom: *atom },
+                ));
+            }
+        }
+        for (bond, _, _) in &derivation.bonds {
+            let asserted = ast
+                .bond(*bond)
+                .ast
+                .constraints
+                .cis_trans_stereo()
+                .is_some_and(|constraint| !constraint.is_undetermined());
+            if asserted && !ast.stereo_bonds().is_at(*bond) {
+                return Ok(Solution::Contradictory(
+                    StereoValidatorContradiction::MissingStereoBond { bond: *bond },
+                ));
+            }
+        }
+
         let symmetry = ast.graph_symmetry(&self.config.graph_symmetry_config(&self.model));
         let mut any_undetermined = false;
 
@@ -377,6 +441,148 @@ mod tests {
             .validate(&ast)
             .unwrap();
         assert_eq!(solution, Solution::Determined(()));
+    }
+
+    #[rstest]
+    #[case::missing_stereo_atom(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::MissingStereoAtom {
+            atom: AtomId(1),
+        }),
+    )]
+    #[case::missing_stereo_bond(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h" "C#h" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::MissingStereoBond {
+            bond: BondId(1),
+        }),
+    )]
+    #[case::unrealizable_tetrahedral_stereo(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "S#h0#T1" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "1"]]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) },
+        )),
+    )]
+    #[case::unrealizable_cis_trans_stereo(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h2" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "2#C1"]]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
+            StereoInconsistency::CisTransStereoFailure { bond: BondId(1) },
+        )),
+    )]
+    #[case::unrealizable_stereo_atom(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0] :type "Th1"}]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
+            StereoInconsistency::StereoAtomFailure {
+                stereo_atom: StereoAtomId(0),
+            },
+        )),
+    )]
+    #[case::unrealizable_stereo_bond(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h" "C#h" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0] :type "Ct1"}]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
+            StereoInconsistency::StereoBondFailure {
+                stereo_bond: StereoBondId(0),
+            },
+        )),
+    )]
+    #[case::tetrahedral_stereo_mismatch(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+            :stereo-atoms [{
+                :site 1
+                :ligands [0 2 3 [:h 1]]
+                :type "Th0"
+            }]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoMismatch {
+                atom: AtomId(1),
+                stereo_atom: StereoAtomId(0),
+            },
+        )),
+    )]
+    #[case::cis_trans_stereo_mismatch(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h" "C#h" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
+            :stereo-bonds [{
+                :site 1
+                :ligands [0 [:h 1] 3 [:h 2]]
+                :type "Ct0"
+            }]
+        }"#),
+        Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
+            StereoInconsistency::CisTransStereoMismatch {
+                bond: BondId(1),
+                stereo_bond: StereoBondId(0),
+            },
+        )),
+    )]
+    #[case::conformant_stereo_atom(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+            :stereo-atoms [{
+                :site 1
+                :ligands [0 2 3 [:h 1]]
+                :type "Th1"
+            }]
+        }"#),
+        Solution::Determined(()),
+    )]
+    #[case::conformant_stereo_bond(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h3" "C#h" "C#h" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
+            :stereo-bonds [{
+                :site 1
+                :ligands [0 [:h 1] 3 [:h 2]]
+                :type "Ct1"
+            }]
+        }"#),
+        Solution::Determined(()),
+    )]
+    #[case::undetermined_tetrahedral_stereo(
+        mol_dsl_ground!(r#"{:atoms ["C#T*"]}"#),
+        Solution::Determined(()),
+    )]
+    #[case::undetermined_cis_trans_stereo(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h2" "C#h2"]
+            :bonds [[0 1 "2#C*"]]
+        }"#),
+        Solution::Determined(()),
+    )]
+    fn test_stereo_conformance_validator_validate_constraint(
+        #[case] ast: MoleculeAst,
+        #[case] expected: Solution<(), StereoValidatorContradiction>,
+    ) {
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default())
+                .validate(&ast)
+                .unwrap(),
+            expected
+        );
     }
 
     #[rstest]

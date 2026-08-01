@@ -965,7 +965,7 @@ Focused tables cover participant-set mismatch, per-atom contribution mismatch, l
 mismatch, aromatic-valence mismatch, vacuous projections, model rejection of a stored system,
 non-ground non-vacuous contributions, and a fully conformant existing system.
 
-#### S5b — Stereo constraint conformance
+#### S5b — Stereo constraint conformance **Done**
 
 **Module:** `umol-graph/src/ops/validate/stereo.rs`, `umol-graph/src/ops/validate.rs`
 
