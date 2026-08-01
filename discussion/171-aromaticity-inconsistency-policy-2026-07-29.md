@@ -723,7 +723,7 @@ Focused tables assert complete derivations and planned edits for atom and bond c
 applicable action, including reset interaction, conformant identity, and unchanged input on error.
 Python tables assert exact config conversion and resolution outcomes.
 
-#### S2c — Composite resolver transaction behavior
+#### S2c — Composite resolver transaction behavior **Done**
 
 **Module:** `umol-graph/src/ops/resolve.rs`
 

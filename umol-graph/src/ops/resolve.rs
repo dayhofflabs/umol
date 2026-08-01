@@ -1,5 +1,5 @@
 //! Composite resolver: chains the per-entity resolvers (valence,
-//! aromaticity, bonds, multicenter bonds) on a single `MoleculeAst`.
+//! aromaticity, stereo, bonds, multicenter bonds) on a single `MoleculeAst`.
 //!
 //! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
 //! systems, multicenter bonds, noncovalent bonds) to be ground.
@@ -309,7 +309,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{AtomId, IsotopeMassAst, NoncovalentBondAst};
+    use umol_ast::ast::AtomId;
     use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
 
@@ -490,9 +490,13 @@ mod tests {
 
     #[rstest]
     #[case::aromaticity(
-        mol_dsl_ground!(r#"{
-            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]
+                    [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]
+                    [4 5 "1#c0#u0#s"] [5 0 "1#c0#u0#s"]]
         }"#),
         mol_dsl_ground!(r#"{
             :atoms ["C#h#v2#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
@@ -502,9 +506,10 @@ mod tests {
         }"#)
     )]
     #[case::stereo(
-        mol_dsl_ground!(r#"{
-            :atoms ["C#h#T1" "F" "Cl" "Br"]
-            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h*#n0#u0#s#T1" "F#i=#c0#h0#n0#u0#s"
+                    "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
         }"#),
         mol_dsl_ground!(r#"{
             :atoms ["C#h#v3#a!#T1" "F" "Cl" "Br"]
@@ -517,7 +522,6 @@ mod tests {
         #[case] mut molecule: MoleculeAst,
         #[case] expected: MoleculeAst,
     ) {
-        molecule.atom_mut(AtomId(0)).ast.isotope_mass = IsotopeMassAst::Undetermined;
         assert_eq!(
             Resolver::new(&chemistry_model).resolve(&mut molecule),
             Ok(Solution::Determined(()))
@@ -527,17 +531,25 @@ mod tests {
 
     #[rstest]
     fn test_resolver_resolve_underdetermined(chemistry_model: ChemistryModel) {
-        let molecule = mol_dsl_ground!(r#"{:atoms ["C#h4#v0#a!" "C#h4"]}"#);
-        let mut editor = molecule.edit();
-        editor.add_noncovalent_bond([AtomId(0), AtomId(1)], NoncovalentBondAst::default());
-        let expected = editor.build();
-        let mut molecule = expected.clone();
-        molecule.atom_mut(AtomId(0)).ast.isotope_mass = IsotopeMassAst::Undetermined;
+        let mut molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#i*#c0#h4#n0#u0#s#v0#a!" "C#i=#c0#h4#n0#u0#s"]
+            :noncovalent-bonds [{:atoms [0 1] :type "*"}]
+        }"#
+        );
         assert_eq!(
             Resolver::new(&chemistry_model).resolve(&mut molecule),
             Ok(Solution::Underdetermined(()))
         );
-        assert_eq!(molecule, expected);
+        assert_eq!(
+            molecule,
+            mol_dsl!(
+                r#"{
+                :atoms ["C#i=#c0#h4#n0#u0#s#v0#a!" "C#i=#c0#h4#n0#u0#s"]
+                :noncovalent-bonds [{:atoms [0 1] :type "*"}]
+            }"#
+            )
+        );
     }
 
     #[rstest]
@@ -568,9 +580,12 @@ mod tests {
             scope: ElementScope::Any,
             ring_limits: RingLimits::default(),
         },
-        mol_dsl_ground!(r#"{
-            :atoms ["N#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        mol_dsl!(r#"{
+            :atoms ["N#i*#c0#h#n0#u0#s#a2" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"]
+                    [3 4 "1#c0#u0#s"] [4 0 "1#c0#u0#s"]]
         }"#),
         ResolverContradiction::Aromaticity(AromaticityContradiction::ClarNonBenzenoid(
             "Clar model requires benzenoid input but non-carbon aromatic atoms are present".to_string(),
@@ -578,9 +593,12 @@ mod tests {
     )]
     #[case::aromaticity_projection(
         AromaticityModel::mdl(),
-        mol_dsl_ground!(r#"{
-            :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        mol_dsl!(r#"{
+            :atoms ["O#i*#c0#h0#n1#u0#s#a2" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"]
+                    [3 4 "1#c0#u0#s"] [4 0 "1#c0#u0#s"]]
         }"#),
         ResolverContradiction::Aromaticity(AromaticityContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
@@ -591,9 +609,13 @@ mod tests {
             scope: ElementScope::AllowList(vec![Element::C]),
             ring_limits: RingLimits::default(),
         },
-        mol_dsl_ground!(r#"{
-            :atoms ["C#h#a#T1" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h#n0#u0#s#a#T1" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]
+                    [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]
+                    [4 5 "1#c0#u0#s"] [5 0 "1#c0#u0#s"]]
         }"#),
         ResolverContradiction::Stereo(StereoContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }
@@ -606,7 +628,6 @@ mod tests {
         #[case] expected: ResolverContradiction,
     ) {
         chemistry_model.aromaticity = aromaticity;
-        molecule.atom_mut(AtomId(0)).ast.isotope_mass = IsotopeMassAst::Undetermined;
         let original = molecule.clone();
         assert_eq!(
             Resolver::new(&chemistry_model).resolve(&mut molecule),
