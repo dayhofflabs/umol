@@ -3,6 +3,7 @@ import re
 import pytest
 
 from umol import (
+    AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityResolveConfig,
     AtomAst,
@@ -844,6 +845,72 @@ def test_reaction_ast_from_reaction_smiles_resolve_config():
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "[o:1]1[cH:2][cH:3][cH:4][cH:5]1>>"
+            "[o:1]1[cH:2][cH:3][cH:4][cH:5]1",
+            '{:deltas [] :lhs {:atoms '
+            '["O#i=#c0#h0#n#u0#s#v2#d0#t0#a2#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+            ':bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
+            '[1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] '
+            '[3 4 "1#c0#u0#s#a"]]}}',
+            id="furan",
+        ),
+        pytest.param(
+            "[s:1]1[cH:2][cH:3][cH:4][cH:5]1>>"
+            "[s:1]1[cH:2][cH:3][cH:4][cH:5]1",
+            '{:deltas [] :lhs {:atoms '
+            '["S#i=#c0#h0#n#u0#s#v2#d0#t0#a2#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+            ':bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
+            '[1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] '
+            '[3 4 "1#c0#u0#s#a"]]}}',
+            id="thiophene",
+        ),
+        pytest.param(
+            "[nH:1]1[cH:2][cH:3][cH:4][cH:5]1>>"
+            "[nH:1]1[cH:2][cH:3][cH:4][cH:5]1",
+            '{:deltas [] :lhs {:atoms '
+            '["N#i=#c0#h#n0#u0#s#v2#d0#t0#a2#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
+            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+            ':bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
+            '[1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] '
+            '[3 4 "1#c0#u0#s#a"]]}}',
+            id="pyrrole",
+        ),
+    ],
+)
+def test_reaction_ast_from_reaction_smiles_aromaticity_policy(source, expected):
+    default = ChemistryModel.default()
+
+    assert ReactionAst.from_reaction_smiles(
+        source,
+        chemistry_model=ChemistryModel(
+            valence=default.valence,
+            aromaticity=AromaticityModel.mdl(),
+            stereo=default.stereo,
+        ),
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(
+                aromatic_valence_failure=AromaticityFailurePolicy.Keep
+            ),
+            stereo=StereoResolveConfig(),
+        ),
+    ) == ReactionAst.parse(expected)
+
+
+@pytest.mark.parametrize(
     ("source", "kwargs", "error_type", "message"),
     [
         pytest.param(" C>>C", {}, ParseError, "Leading whitespace", id="syntax"),
@@ -871,6 +938,48 @@ def test_reaction_ast_from_reaction_smiles_resolve_config():
             "reactants: clar: non-benzenoid input: Clar model requires "
             "benzenoid input but non-carbon aromatic atoms are present",
             id="contradiction",
+        ),
+        pytest.param(
+            "o1cccc1>>C",
+            {
+                "chemistry_model": ChemistryModel(
+                    valence=ChemistryModel.default().valence,
+                    aromaticity=AromaticityModel.mdl(),
+                    stereo=ChemistryModel.default().stereo,
+                )
+            },
+            ContradictionError,
+            "reactants: aromaticity inconsistency: aromatic valence at atom "
+            "AtomId(0) cannot produce a valid aromatic system",
+            id="mdl-furan",
+        ),
+        pytest.param(
+            "s1cccc1>>C",
+            {
+                "chemistry_model": ChemistryModel(
+                    valence=ChemistryModel.default().valence,
+                    aromaticity=AromaticityModel.mdl(),
+                    stereo=ChemistryModel.default().stereo,
+                )
+            },
+            ContradictionError,
+            "reactants: aromaticity inconsistency: aromatic valence at atom "
+            "AtomId(0) cannot produce a valid aromatic system",
+            id="mdl-thiophene",
+        ),
+        pytest.param(
+            "[nH]1cccc1>>C",
+            {
+                "chemistry_model": ChemistryModel(
+                    valence=ChemistryModel.default().valence,
+                    aromaticity=AromaticityModel.mdl(),
+                    stereo=ChemistryModel.default().stereo,
+                )
+            },
+            ContradictionError,
+            "reactants: aromaticity inconsistency: aromatic valence at atom "
+            "AtomId(0) cannot produce a valid aromatic system",
+            id="mdl-pyrrole",
         ),
         pytest.param(
             "*>>",

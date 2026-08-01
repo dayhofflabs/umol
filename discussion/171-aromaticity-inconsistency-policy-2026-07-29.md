@@ -1018,7 +1018,7 @@ furan/thiophene/pyrrole
 references. Update charge-sensitive resolution fixtures and snapshots to the localized
 representation; do not normalize them through `DelocalizeCharge` in expected-value construction.
 
-#### S6b — Python ingestion propagation
+#### S6b — Python ingestion propagation **Done**
 
 **Module:** `umol-py/tests/test_molecule.py`, `umol-py/tests/test_reaction.py`,
 `umol-py/tests/test_workflow.py`
