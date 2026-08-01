@@ -7,7 +7,8 @@ use umol_graph::ops::resolve::{
     AromaticityFailurePolicy as GraphAromaticityFailurePolicy,
     AromaticityMismatchPolicy as GraphAromaticityMismatchPolicy,
     AromaticityResolveConfig as GraphAromaticityResolveConfig, ResolveConfig as GraphResolveConfig,
-    StereoInconsistencyPolicy as GraphStereoInconsistencyPolicy,
+    StereoFailurePolicy as GraphStereoFailurePolicy,
+    StereoMismatchPolicy as GraphStereoMismatchPolicy,
     StereoResolveConfig as GraphStereoResolveConfig,
 };
 
@@ -94,29 +95,62 @@ impl AromaticBondConstraintMismatchPolicy {
     }
 }
 
-/// Policy for stereo assertions that cannot be fully realized.
+/// Policy for an independently invalid stereo constraint or entity.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum StereoInconsistencyPolicy {
-    Keep,
-    Strip,
+pub enum StereoFailurePolicy {
     Error,
+    Keep,
+    Remove,
 }
 
-impl StereoInconsistencyPolicy {
-    pub(crate) fn from_rust(policy: GraphStereoInconsistencyPolicy) -> Self {
+impl StereoFailurePolicy {
+    pub(crate) fn from_rust(policy: GraphStereoFailurePolicy) -> Self {
         match policy {
-            GraphStereoInconsistencyPolicy::Keep => Self::Keep,
-            GraphStereoInconsistencyPolicy::Strip => Self::Strip,
-            GraphStereoInconsistencyPolicy::Error => Self::Error,
+            GraphStereoFailurePolicy::Error => Self::Error,
+            GraphStereoFailurePolicy::Keep => Self::Keep,
+            GraphStereoFailurePolicy::Remove => Self::Remove,
         }
     }
 
-    pub(crate) fn to_rust(self) -> GraphStereoInconsistencyPolicy {
+    pub(crate) fn to_rust(self) -> GraphStereoFailurePolicy {
         match self {
-            Self::Keep => GraphStereoInconsistencyPolicy::Keep,
-            Self::Strip => GraphStereoInconsistencyPolicy::Strip,
-            Self::Error => GraphStereoInconsistencyPolicy::Error,
+            Self::Error => GraphStereoFailurePolicy::Error,
+            Self::Keep => GraphStereoFailurePolicy::Keep,
+            Self::Remove => GraphStereoFailurePolicy::Remove,
+        }
+    }
+}
+
+/// Policy for an independently valid stereo constraint and entity that disagree.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum StereoMismatchPolicy {
+    Error,
+    Keep,
+    RemoveConstraint,
+    ReplaceEntity,
+    RemoveBoth,
+}
+
+impl StereoMismatchPolicy {
+    pub(crate) fn from_rust(policy: GraphStereoMismatchPolicy) -> Self {
+        match policy {
+            GraphStereoMismatchPolicy::Error => Self::Error,
+            GraphStereoMismatchPolicy::Keep => Self::Keep,
+            GraphStereoMismatchPolicy::RemoveConstraint => Self::RemoveConstraint,
+            GraphStereoMismatchPolicy::ReplaceEntity => Self::ReplaceEntity,
+            GraphStereoMismatchPolicy::RemoveBoth => Self::RemoveBoth,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphStereoMismatchPolicy {
+        match self {
+            Self::Error => GraphStereoMismatchPolicy::Error,
+            Self::Keep => GraphStereoMismatchPolicy::Keep,
+            Self::RemoveConstraint => GraphStereoMismatchPolicy::RemoveConstraint,
+            Self::ReplaceEntity => GraphStereoMismatchPolicy::ReplaceEntity,
+            Self::RemoveBoth => GraphStereoMismatchPolicy::RemoveBoth,
         }
     }
 }
@@ -221,12 +255,55 @@ pub struct StereoResolveConfig(GraphStereoResolveConfig);
 #[pymethods]
 impl StereoResolveConfig {
     #[new]
-    #[pyo3(signature = (*, reset_stereo_constraints=false, inconsistency=StereoInconsistencyPolicy::Error))]
-    fn new(reset_stereo_constraints: bool, inconsistency: StereoInconsistencyPolicy) -> Self {
+    #[pyo3(signature = (*, tetrahedral_stereo_failure=StereoFailurePolicy::Error, stereo_atom_failure=StereoFailurePolicy::Error, tetrahedral_stereo_mismatch=StereoMismatchPolicy::Error, cis_trans_stereo_failure=StereoFailurePolicy::Error, stereo_bond_failure=StereoFailurePolicy::Error, cis_trans_stereo_mismatch=StereoMismatchPolicy::Error, reset_stereo_constraints=false))]
+    fn new(
+        tetrahedral_stereo_failure: StereoFailurePolicy,
+        stereo_atom_failure: StereoFailurePolicy,
+        tetrahedral_stereo_mismatch: StereoMismatchPolicy,
+        cis_trans_stereo_failure: StereoFailurePolicy,
+        stereo_bond_failure: StereoFailurePolicy,
+        cis_trans_stereo_mismatch: StereoMismatchPolicy,
+        reset_stereo_constraints: bool,
+    ) -> Self {
         Self(GraphStereoResolveConfig {
+            tetrahedral_stereo_failure: tetrahedral_stereo_failure.to_rust(),
+            stereo_atom_failure: stereo_atom_failure.to_rust(),
+            tetrahedral_stereo_mismatch: tetrahedral_stereo_mismatch.to_rust(),
+            cis_trans_stereo_failure: cis_trans_stereo_failure.to_rust(),
+            stereo_bond_failure: stereo_bond_failure.to_rust(),
+            cis_trans_stereo_mismatch: cis_trans_stereo_mismatch.to_rust(),
             reset_stereo_constraints,
-            inconsistency: inconsistency.to_rust(),
         })
+    }
+
+    #[getter]
+    fn tetrahedral_stereo_failure(&self) -> StereoFailurePolicy {
+        StereoFailurePolicy::from_rust(self.0.tetrahedral_stereo_failure)
+    }
+
+    #[getter]
+    fn stereo_atom_failure(&self) -> StereoFailurePolicy {
+        StereoFailurePolicy::from_rust(self.0.stereo_atom_failure)
+    }
+
+    #[getter]
+    fn tetrahedral_stereo_mismatch(&self) -> StereoMismatchPolicy {
+        StereoMismatchPolicy::from_rust(self.0.tetrahedral_stereo_mismatch)
+    }
+
+    #[getter]
+    fn cis_trans_stereo_failure(&self) -> StereoFailurePolicy {
+        StereoFailurePolicy::from_rust(self.0.cis_trans_stereo_failure)
+    }
+
+    #[getter]
+    fn stereo_bond_failure(&self) -> StereoFailurePolicy {
+        StereoFailurePolicy::from_rust(self.0.stereo_bond_failure)
+    }
+
+    #[getter]
+    fn cis_trans_stereo_mismatch(&self) -> StereoMismatchPolicy {
+        StereoMismatchPolicy::from_rust(self.0.cis_trans_stereo_mismatch)
     }
 
     #[getter]
@@ -234,20 +311,20 @@ impl StereoResolveConfig {
         self.0.reset_stereo_constraints
     }
 
-    #[getter]
-    fn inconsistency(&self) -> StereoInconsistencyPolicy {
-        StereoInconsistencyPolicy::from_rust(self.0.inconsistency)
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "StereoResolveConfig(reset_stereo_constraints={}, inconsistency=StereoInconsistencyPolicy.{:?})",
+            "StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.{:?}, stereo_atom_failure=StereoFailurePolicy.{:?}, tetrahedral_stereo_mismatch=StereoMismatchPolicy.{:?}, cis_trans_stereo_failure=StereoFailurePolicy.{:?}, stereo_bond_failure=StereoFailurePolicy.{:?}, cis_trans_stereo_mismatch=StereoMismatchPolicy.{:?}, reset_stereo_constraints={})",
+            self.tetrahedral_stereo_failure(),
+            self.stereo_atom_failure(),
+            self.tetrahedral_stereo_mismatch(),
+            self.cis_trans_stereo_failure(),
+            self.stereo_bond_failure(),
+            self.cis_trans_stereo_mismatch(),
             if self.0.reset_stereo_constraints {
                 "True"
             } else {
                 "False"
             },
-            self.inconsistency(),
         )
     }
 }
@@ -439,35 +516,67 @@ mod tests {
     }
 
     #[rstest]
-    #[case::keep(GraphStereoInconsistencyPolicy::Keep, StereoInconsistencyPolicy::Keep)]
-    #[case::strip(
-        GraphStereoInconsistencyPolicy::Strip,
-        StereoInconsistencyPolicy::Strip
-    )]
-    #[case::error(
-        GraphStereoInconsistencyPolicy::Error,
-        StereoInconsistencyPolicy::Error
-    )]
-    fn test_stereo_inconsistency_policy_from_rust(
-        #[case] policy: GraphStereoInconsistencyPolicy,
-        #[case] expected: StereoInconsistencyPolicy,
+    #[case::error(GraphStereoFailurePolicy::Error, StereoFailurePolicy::Error)]
+    #[case::keep(GraphStereoFailurePolicy::Keep, StereoFailurePolicy::Keep)]
+    #[case::remove(GraphStereoFailurePolicy::Remove, StereoFailurePolicy::Remove)]
+    fn test_stereo_failure_policy_from_rust(
+        #[case] policy: GraphStereoFailurePolicy,
+        #[case] expected: StereoFailurePolicy,
     ) {
-        assert_eq!(StereoInconsistencyPolicy::from_rust(policy), expected);
+        assert_eq!(StereoFailurePolicy::from_rust(policy), expected);
     }
 
     #[rstest]
-    #[case::keep(StereoInconsistencyPolicy::Keep, GraphStereoInconsistencyPolicy::Keep)]
-    #[case::strip(
-        StereoInconsistencyPolicy::Strip,
-        GraphStereoInconsistencyPolicy::Strip
+    #[case::error(StereoFailurePolicy::Error, GraphStereoFailurePolicy::Error)]
+    #[case::keep(StereoFailurePolicy::Keep, GraphStereoFailurePolicy::Keep)]
+    #[case::remove(StereoFailurePolicy::Remove, GraphStereoFailurePolicy::Remove)]
+    fn test_stereo_failure_policy_to_rust(
+        #[case] policy: StereoFailurePolicy,
+        #[case] expected: GraphStereoFailurePolicy,
+    ) {
+        assert_eq!(policy.to_rust(), expected);
+    }
+
+    #[rstest]
+    #[case::error(GraphStereoMismatchPolicy::Error, StereoMismatchPolicy::Error)]
+    #[case::keep(GraphStereoMismatchPolicy::Keep, StereoMismatchPolicy::Keep)]
+    #[case::remove_constraint(
+        GraphStereoMismatchPolicy::RemoveConstraint,
+        StereoMismatchPolicy::RemoveConstraint
     )]
-    #[case::error(
-        StereoInconsistencyPolicy::Error,
-        GraphStereoInconsistencyPolicy::Error
+    #[case::replace_entity(
+        GraphStereoMismatchPolicy::ReplaceEntity,
+        StereoMismatchPolicy::ReplaceEntity
     )]
-    fn test_stereo_inconsistency_policy_to_rust(
-        #[case] policy: StereoInconsistencyPolicy,
-        #[case] expected: GraphStereoInconsistencyPolicy,
+    #[case::remove_both(
+        GraphStereoMismatchPolicy::RemoveBoth,
+        StereoMismatchPolicy::RemoveBoth
+    )]
+    fn test_stereo_mismatch_policy_from_rust(
+        #[case] policy: GraphStereoMismatchPolicy,
+        #[case] expected: StereoMismatchPolicy,
+    ) {
+        assert_eq!(StereoMismatchPolicy::from_rust(policy), expected);
+    }
+
+    #[rstest]
+    #[case::error(StereoMismatchPolicy::Error, GraphStereoMismatchPolicy::Error)]
+    #[case::keep(StereoMismatchPolicy::Keep, GraphStereoMismatchPolicy::Keep)]
+    #[case::remove_constraint(
+        StereoMismatchPolicy::RemoveConstraint,
+        GraphStereoMismatchPolicy::RemoveConstraint
+    )]
+    #[case::replace_entity(
+        StereoMismatchPolicy::ReplaceEntity,
+        GraphStereoMismatchPolicy::ReplaceEntity
+    )]
+    #[case::remove_both(
+        StereoMismatchPolicy::RemoveBoth,
+        GraphStereoMismatchPolicy::RemoveBoth
+    )]
+    fn test_stereo_mismatch_policy_to_rust(
+        #[case] policy: StereoMismatchPolicy,
+        #[case] expected: GraphStereoMismatchPolicy,
     ) {
         assert_eq!(policy.to_rust(), expected);
     }
@@ -566,37 +675,44 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        false,
-        StereoInconsistencyPolicy::Error,
+        StereoResolveConfig::new(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Error,
+            StereoMismatchPolicy::Error,
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Error,
+            StereoMismatchPolicy::Error,
+            false
+        ),
         GraphStereoResolveConfig::default()
     )]
-    #[case::keep(false, StereoInconsistencyPolicy::Keep, GraphStereoResolveConfig {
-        reset_stereo_constraints: false,
-        inconsistency: GraphStereoInconsistencyPolicy::Keep,
-    })]
-    #[case::strip(true, StereoInconsistencyPolicy::Strip, GraphStereoResolveConfig {
-        reset_stereo_constraints: true,
-        inconsistency: GraphStereoInconsistencyPolicy::Strip,
-    })]
+    #[case::configured(
+        StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
+        GraphStereoResolveConfig {
+            tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
+            stereo_atom_failure: GraphStereoFailurePolicy::Remove,
+            tetrahedral_stereo_mismatch: GraphStereoMismatchPolicy::RemoveConstraint,
+            cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
+            stereo_bond_failure: GraphStereoFailurePolicy::Keep,
+            cis_trans_stereo_mismatch: GraphStereoMismatchPolicy::ReplaceEntity,
+            reset_stereo_constraints: true,
+        }
+    )]
     fn test_stereo_resolve_config_new(
-        #[case] reset_stereo_constraints: bool,
-        #[case] inconsistency: StereoInconsistencyPolicy,
+        #[case] config: StereoResolveConfig,
         #[case] expected: GraphStereoResolveConfig,
     ) {
-        assert_eq!(
-            StereoResolveConfig::new(reset_stereo_constraints, inconsistency).0,
-            expected
-        );
+        assert_eq!(config.0, expected);
     }
 
     #[rstest]
     #[case::default(
-        StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error),
-        "StereoResolveConfig(reset_stereo_constraints=False, inconsistency=StereoInconsistencyPolicy.Error)"
+        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, false),
+        "StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Error, stereo_atom_failure=StereoFailurePolicy.Error, tetrahedral_stereo_mismatch=StereoMismatchPolicy.Error, cis_trans_stereo_failure=StereoFailurePolicy.Error, stereo_bond_failure=StereoFailurePolicy.Error, cis_trans_stereo_mismatch=StereoMismatchPolicy.Error, reset_stereo_constraints=False)"
     )]
     #[case::configured(
-        StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
-        "StereoResolveConfig(reset_stereo_constraints=True, inconsistency=StereoInconsistencyPolicy.Strip)"
+        StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
+        "StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True)"
     )]
     fn test_stereo_resolve_config_repr(
         #[case] config: StereoResolveConfig,
@@ -608,16 +724,37 @@ mod tests {
     #[rstest]
     #[case::default(GraphStereoResolveConfig::default())]
     #[case::configured(GraphStereoResolveConfig {
+        tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
+        stereo_atom_failure: GraphStereoFailurePolicy::Remove,
+        tetrahedral_stereo_mismatch: GraphStereoMismatchPolicy::RemoveConstraint,
+        cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
+        stereo_bond_failure: GraphStereoFailurePolicy::Keep,
+        cis_trans_stereo_mismatch: GraphStereoMismatchPolicy::ReplaceEntity,
         reset_stereo_constraints: true,
-        inconsistency: GraphStereoInconsistencyPolicy::Strip,
     })]
     fn test_stereo_resolve_config_from_rust(#[case] config: GraphStereoResolveConfig) {
         assert_eq!(StereoResolveConfig::from_rust(config).0, config);
     }
 
     #[rstest]
-    #[case::default(StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error))]
-    #[case::configured(StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip))]
+    #[case::default(StereoResolveConfig::new(
+        StereoFailurePolicy::Error,
+        StereoFailurePolicy::Error,
+        StereoMismatchPolicy::Error,
+        StereoFailurePolicy::Error,
+        StereoFailurePolicy::Error,
+        StereoMismatchPolicy::Error,
+        false
+    ))]
+    #[case::configured(StereoResolveConfig::new(
+        StereoFailurePolicy::Keep,
+        StereoFailurePolicy::Remove,
+        StereoMismatchPolicy::RemoveConstraint,
+        StereoFailurePolicy::Remove,
+        StereoFailurePolicy::Keep,
+        StereoMismatchPolicy::ReplaceEntity,
+        true
+    ))]
     fn test_stereo_resolve_config_to_rust(#[case] config: StereoResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
     }
@@ -632,12 +769,20 @@ mod tests {
             AromaticBondConstraintMismatchPolicy::Error,
             false
         ),
-        StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error),
+        StereoResolveConfig::new(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Error,
+            StereoMismatchPolicy::Error,
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Error,
+            StereoMismatchPolicy::Error,
+            false
+        ),
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
-        StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error),
+        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, false),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig {
                 perception: Default::default(),
@@ -652,12 +797,17 @@ mod tests {
     )]
     #[case::stereo(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, AromaticityMismatchPolicy::Error, AromaticBondConstraintMismatchPolicy::Error, false),
-        StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
+        StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig::default(),
             stereo: GraphStereoResolveConfig {
+                tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
+                stereo_atom_failure: GraphStereoFailurePolicy::Remove,
+                tetrahedral_stereo_mismatch: GraphStereoMismatchPolicy::RemoveConstraint,
+                cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
+                stereo_bond_failure: GraphStereoFailurePolicy::Keep,
+                cis_trans_stereo_mismatch: GraphStereoMismatchPolicy::ReplaceEntity,
                 reset_stereo_constraints: true,
-                inconsistency: GraphStereoInconsistencyPolicy::Strip,
             },
         },
     )]
@@ -685,9 +835,9 @@ mod tests {
     #[case::configured(
         ResolveConfig::new(
             AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
-            StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
+            StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
         ),
-        "ResolveConfig(aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.RemoveConstraint, reset_aromatic_valence=True), stereo=StereoResolveConfig(reset_stereo_constraints=True, inconsistency=StereoInconsistencyPolicy.Strip))",
+        "ResolveConfig(aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.RemoveConstraint, reset_aromatic_valence=True), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -705,8 +855,13 @@ mod tests {
             reset_aromatic_valence: true,
         },
         stereo: GraphStereoResolveConfig {
+            tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
+            stereo_atom_failure: GraphStereoFailurePolicy::Remove,
+            tetrahedral_stereo_mismatch: GraphStereoMismatchPolicy::RemoveConstraint,
+            cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
+            stereo_bond_failure: GraphStereoFailurePolicy::Keep,
+            cis_trans_stereo_mismatch: GraphStereoMismatchPolicy::ReplaceEntity,
             reset_stereo_constraints: true,
-            inconsistency: GraphStereoInconsistencyPolicy::Strip,
         },
     })]
     fn test_resolve_config_from_rust(#[case] config: GraphResolveConfig) {
@@ -724,7 +879,15 @@ mod tests {
             AromaticBondConstraintMismatchPolicy::RemoveConstraint,
             true
         ),
-        StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
+        StereoResolveConfig::new(
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove,
+            StereoMismatchPolicy::RemoveConstraint,
+            StereoFailurePolicy::Remove,
+            StereoFailurePolicy::Keep,
+            StereoMismatchPolicy::ReplaceEntity,
+            true
+        ),
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);

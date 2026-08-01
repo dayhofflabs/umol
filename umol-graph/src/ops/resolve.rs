@@ -21,8 +21,8 @@ pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
 pub use stereo::{
-    StereoContradiction, StereoError, StereoInconsistencyPolicy, StereoResolveConfig,
-    StereoResolver,
+    StereoContradiction, StereoError, StereoFailurePolicy, StereoMismatchPolicy,
+    StereoResolveConfig, StereoResolver,
 };
 use thiserror::Error;
 use umol_ast::ast::{MoleculeAst, Transaction, TransactionError};
@@ -318,6 +318,7 @@ mod tests {
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
+    use crate::ops::stereo::StereoInconsistency;
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     #[fixture]
@@ -361,7 +362,7 @@ mod tests {
                 },
                 stereo: StereoResolveConfig {
                     reset_stereo_constraints: false,
-                    inconsistency: StereoInconsistencyPolicy::Error,
+                    ..StereoResolveConfig::default()
                 },
             }
         );
@@ -371,11 +372,13 @@ mod tests {
     #[case::contradiction(
         ResolverError::RollbackFailed {
             cause: ResolverRollbackCause::Contradiction(
-                ResolverContradiction::Stereo(StereoContradiction::UnrealizableAtom(AtomId(1))),
+                ResolverContradiction::Stereo(StereoContradiction::Inconsistency(
+                    StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) },
+                )),
             ),
             rollback: TransactionError::OldStateMismatch,
         },
-        "rollback failed after resolver contradiction: tetrahedral stereo assertion at atom AtomId(1) cannot be realized: precondition failed: old state does not match current"
+        "rollback failed after resolver contradiction: stereo inconsistency: tetrahedral stereo constraint at atom AtomId(1) cannot be realized: precondition failed: old state does not match current"
     )]
     #[case::execution(
         ResolverError::RollbackFailed {
@@ -421,7 +424,7 @@ mod tests {
         aromaticity: AromaticityResolveConfig::default(),
         stereo: StereoResolveConfig {
             reset_stereo_constraints: true,
-            inconsistency: StereoInconsistencyPolicy::Error,
+            ..StereoResolveConfig::default()
         },
     })]
     fn test_resolver_with_config(
@@ -592,7 +595,9 @@ mod tests {
             :atoms ["C#h#a#T1" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
         }"#),
-        ResolverContradiction::Stereo(StereoContradiction::UnrealizableAtom(AtomId(0)))
+        ResolverContradiction::Stereo(StereoContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }
+        ))
     )]
     fn test_resolver_resolve_contradiction(
         mut chemistry_model: ChemistryModel,

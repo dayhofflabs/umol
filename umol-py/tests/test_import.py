@@ -168,13 +168,14 @@ PUBLIC_EXPORTS = frozenset(
     StereoBondViews
     StereoConfigurationAst
     StereoCoset
-    StereoInconsistencyPolicy
+    StereoFailurePolicy
     StereoKind
     StereoKindModel
     StereoLigand
     StereoLigandKind
     StereoLigandPair
     StereoModel
+    StereoMismatchPolicy
     StereoResolveConfig
     StereoTerm
     Stereogenicity
@@ -362,7 +363,13 @@ def test_public_operation_signature(operation, expected):
         ),
         (
             umol.StereoResolveConfig,
-            "(*, reset_stereo_constraints=False, inconsistency=Ellipsis)",
+            "(*, tetrahedral_stereo_failure=Ellipsis, "
+            "stereo_atom_failure=Ellipsis, "
+            "tetrahedral_stereo_mismatch=Ellipsis, "
+            "cis_trans_stereo_failure=Ellipsis, "
+            "stereo_bond_failure=Ellipsis, "
+            "cis_trans_stereo_mismatch=Ellipsis, "
+            "reset_stereo_constraints=False)",
         ),
         (umol.ResolveConfig, "(*, aromaticity, stereo)"),
         (umol.ChemistryModel, "(*, valence, aromaticity, stereo)"),

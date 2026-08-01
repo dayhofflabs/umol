@@ -25,7 +25,7 @@ from umol import (
     RingConfig,
     SimpleCycleEnumerationAlgorithm,
     SmilesIoConfig,
-    StereoInconsistencyPolicy,
+    StereoFailurePolicy,
     StereoResolveConfig,
     StructuralFingerprintConfig,
     SubgraphEnumerationAlgorithm,
@@ -64,10 +64,7 @@ def test_resolved_smiles_workflow():
             ),
             reset_aromatic_valence=False,
         ),
-        stereo=StereoResolveConfig(
-            reset_stereo_constraints=False,
-            inconsistency=StereoInconsistencyPolicy.Error,
-        ),
+        stereo=StereoResolveConfig(reset_stereo_constraints=False),
     )
 
     molecule = MoleculeAst.from_smiles(
@@ -104,7 +101,10 @@ def test_resolved_smiles_workflow():
         resolve_config.aromaticity.aromatic_valence_failure
         == AromaticityFailurePolicy.Error
     )
-    assert resolve_config.stereo.inconsistency == StereoInconsistencyPolicy.Error
+    assert (
+        resolve_config.stereo.tetrahedral_stereo_failure
+        == StereoFailurePolicy.Error
+    )
 
     molecule.atoms[0].charge = 3
 

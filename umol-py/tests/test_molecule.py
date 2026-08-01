@@ -39,7 +39,7 @@ from umol import (
     SmilesIoConfig,
     SmilesSyntaxFlags,
     StereoCoset,
-    StereoInconsistencyPolicy,
+    StereoFailurePolicy,
     StereoKind,
     StereoModel,
     StereoResolveConfig,
@@ -375,7 +375,7 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                inconsistency=StereoInconsistencyPolicy.Strip
+                tetrahedral_stereo_failure=StereoFailurePolicy.Remove
             ),
         ),
     )

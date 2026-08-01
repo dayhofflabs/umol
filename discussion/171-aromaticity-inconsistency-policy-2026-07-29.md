@@ -174,15 +174,11 @@ both representations. Policy is applied only by resolvers:
 - `AromaticityConformanceValidator` and `StereoConformanceValidator` consume the same policy-free
   derivation results but always report mismatches as contradictions.
 
-The aromatic derivation distinguishes an internally unrealizable system from a valid system that
-disagrees with a constraint. The stereo derivation remains a foundation rather than the final
-classification API: `StereoMismatch::AtomRelation` and `BondRelation` conflate entity failure with
-entity/constraint mismatch. The stereo resolver-policy refinement must split those cases before
-applying different recovery actions.
-
-The current stereo resolver also discards the relation-mismatch variants emitted by
-`StereoDerivation`; it handles only unrealizable uncovered `#T`/`#C` sites. This is not the lasting
-contract and the tests preserving that identity behavior must change with the policy refinement.
+The aromatic and stereo derivations distinguish an independently unrealizable constraint or entity
+from two independently realizable representations that disagree. Stereo relations are evaluated by
+deriving the canonical ligand frame from the molecule and mapping the relation's stored frame into
+it; relation presence is not evidence of conformance. An explicit `NotStereo` constraint and a valid
+stereo relation therefore form a mismatch.
 
 `Undetermined` constraints are vacuous and do not assert that an entity is missing. Validators ignore
 an absent or `Undetermined` constraint. A non-vacuous assertion without a matching relation, or an
@@ -260,14 +256,22 @@ pub struct StereoPerception {
 pub struct StereoDerivation {
     pub atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
     pub bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
-    pub mismatches: Vec<StereoMismatch>,
+    pub inconsistencies: Vec<StereoInconsistency>,
 }
 
-pub enum StereoMismatch {
-    UnrealizableAtom { atom: AtomId },
-    UnrealizableBond { bond: BondId },
-    AtomRelation { stereo_atom: StereoAtomId },
-    BondRelation { stereo_bond: StereoBondId },
+pub enum StereoInconsistency {
+    TetrahedralStereoFailure { atom: AtomId },
+    StereoAtomFailure { stereo_atom: StereoAtomId },
+    TetrahedralStereoMismatch {
+        atom: AtomId,
+        stereo_atom: StereoAtomId,
+    },
+    CisTransStereoFailure { bond: BondId },
+    StereoBondFailure { stereo_bond: StereoBondId },
+    CisTransStereoMismatch {
+        bond: BondId,
+        stereo_bond: StereoBondId,
+    },
 }
 
 impl StereoPerception {
@@ -291,12 +295,13 @@ impl StereoPerception {
 }
 ```
 
-`StereoResolver` applies its policy to `StereoDerivation`; `StereoConformanceValidator` treats its
-mismatches as contradictions before running the existing relation-shape and graph-symmetry checks.
-The helper that derives the two ligands at one end of a cis-trans bond remains private.
-
-The mismatch enums and resolver configuration shown above require a breaking refinement to encode
-the three failure classes and their separate policies.
+`StereoResolver` applies the six operation-specific policy fields to `StereoDerivation` before
+constructing one edit plan. `Error` returns the exact inconsistency before any edits are applied;
+`Remove` removes only the independently invalid side; and mismatch policies can retain both sides,
+remove the constraint, replace the relation from the constraint, or remove both. For `NotStereo`,
+replacement removes the relation and adds no new relation. `StereoConformanceValidator` integration
+is completed separately in S5b. The helper that derives the two ligands at one end of a cis-trans
+bond remains private.
 
 ### Approved inconsistency and policy names
 
@@ -693,7 +698,7 @@ policy. They include independently invalid constraints and systems, valid-but-di
 atom and bond mismatches, reset interaction, idempotent conformant input, and transaction identity on
 error. Python tables assert exact enum/config values and exact resolved or contradictory outcomes.
 
-#### S2b — Stereo inconsistency classification and policy migration
+#### S2b — Stereo inconsistency classification and policy migration **Done**
 
 **Module:** `umol-graph/src/ops/stereo.rs`, `umol-graph/src/ops/resolve/stereo.rs`,
 `umol-graph/src/ops/validate/stereo.rs`, `umol-py/src/resolve.rs`,
