@@ -1000,7 +1000,7 @@ without resolver policy or mutation. `cargo test -p umol-graph` passes.
 
 ### S6 — Public ingestion acceptance
 
-#### S6a — Rust ingestion propagation
+#### S6a — Rust ingestion propagation **Done**
 
 **Module:** `umol-graph/src/ingest.rs`, `umol-graph/src/parse.rs`,
 `umol-graph/tests/resolution/`

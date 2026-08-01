@@ -269,14 +269,19 @@ mod tests {
 
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemId, AromaticValenceAst, AtomId, StereoCoset, TetrahedralStereoAst, ValueAst,
+        AromaticSystemId, AromaticValenceAst, AtomId, BooleanAst, Deltas, ElectronCountsAst,
+        StereoCoset, TetrahedralStereoAst, ValueAst,
     };
     use umol_ast::{atom_dsl, mol_dsl};
 
     use super::*;
-    use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
+    use crate::ops::aromaticity::{
+        AromaticityContradiction, AromaticityError, AromaticityInconsistency,
+    };
     use crate::ops::model::{AromaticityModel, ElementScope, RingLimits, ValenceModel};
-    use crate::ops::resolve::{AromaticityResolveConfig, StereoResolveConfig};
+    use crate::ops::resolve::{
+        AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
+    };
     use crate::ops::valence::AtomTypeRegistry;
 
     #[rstest]
@@ -751,6 +756,14 @@ mod tests {
         })
     )]
     #[case::underdetermined("*", SmilesInputError::Underdetermined(ResolveUnderdetermined))]
+    #[case::bare_aromatic_nitrogen(
+        "c1cccn1",
+        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        )),
+    )]
     fn test_ingest_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
         assert_eq!(ingest_smiles(input), Err(expected));
     }
@@ -838,6 +851,115 @@ mod tests {
     }
 
     #[rstest]
+    #[case::mdl_benzene(
+        "c1ccccc1",
+        AromaticityModel::mdl(),
+        vec![1, 1, 1, 1, 1, 1],
+    )]
+    #[case::mdl_pyridine(
+        "n1ccccc1",
+        AromaticityModel::mdl(),
+        vec![1, 1, 1, 1, 1, 1],
+    )]
+    #[case::daylight_furan(
+        "o1cccc1",
+        AromaticityModel::daylight(),
+        vec![2, 1, 1, 1, 1],
+    )]
+    #[case::daylight_thiophene(
+        "s1cccc1",
+        AromaticityModel::daylight(),
+        vec![2, 1, 1, 1, 1],
+    )]
+    #[case::daylight_pyrrole(
+        "[nH]1cccc1",
+        AromaticityModel::daylight(),
+        vec![2, 1, 1, 1, 1],
+    )]
+    fn test_ingest_smiles_with_aromaticity(
+        #[case] input: &str,
+        #[case] aromaticity: AromaticityModel,
+        #[case] expected_electrons: Vec<i64>,
+    ) {
+        let model = ChemistryModel {
+            aromaticity,
+            ..ChemistryModel::default()
+        };
+        let ast = ingest_smiles_with(
+            input,
+            &SmilesIoConfig::opensmiles(),
+            &model,
+            &ResolveConfig::default(),
+        )
+        .unwrap();
+        let system = ast.aromatic_system(AromaticSystemId(0));
+
+        assert_eq!(
+            system.atom_ids().collect::<Vec<_>>(),
+            (0..expected_electrons.len())
+                .map(|index| AtomId(u32::try_from(index).unwrap()))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            system.electrons(),
+            &ElectronCountsAst::Lit(expected_electrons)
+        );
+        assert_eq!(
+            ast.aromatic_systems().ids().collect::<Vec<_>>(),
+            vec![AromaticSystemId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::mdl_furan("o1cccc1")]
+    #[case::mdl_thiophene("s1cccc1")]
+    #[case::mdl_pyrrole("[nH]1cccc1")]
+    fn test_ingest_smiles_with_aromaticity_policy(#[case] input: &str) {
+        let model = ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        };
+        let ast = ingest_smiles_with(
+            input,
+            &SmilesIoConfig::opensmiles(),
+            &model,
+            &ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    aromatic_valence_failure: AromaticityFailurePolicy::Keep,
+                    ..AromaticityResolveConfig::default()
+                },
+                stereo: StereoResolveConfig::default(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            ast.atoms()
+                .iter()
+                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .collect::<Vec<_>>(),
+            vec![
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(2))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            ]
+        );
+        assert_eq!(
+            ast.bonds()
+                .iter()
+                .map(|bond| bond.ast.constraints.aromatic())
+                .collect::<Vec<_>>(),
+            vec![BooleanAst::Lit(true); 5]
+        );
+        assert_eq!(
+            ast.aromatic_systems().ids().collect::<Vec<_>>(),
+            Vec::<AromaticSystemId>::new()
+        );
+    }
+
+    #[rstest]
     #[case::retained(
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
@@ -904,6 +1026,48 @@ mod tests {
         },
         ResolveConfig::default(),
         SmilesInputError::Underdetermined(ResolveUnderdetermined)
+    )]
+    #[case::mdl_furan(
+        "o1cccc1",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        )),
+    )]
+    #[case::mdl_thiophene(
+        "s1cccc1",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        )),
+    )]
+    #[case::mdl_pyrrole(
+        "[nH]1cccc1",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        )),
     )]
     fn test_ingest_smiles_with_error(
         #[case] input: &str,
@@ -1035,6 +1199,72 @@ mod tests {
             ),
         )),
     )]
+    #[case::mdl_furan(
+        "o1cccc1>>C",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        Err(ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::Reactants(
+                MoleculeInterpretationError::Contradiction(
+                    ResolverContradiction::Aromaticity(
+                        AromaticityContradiction::Inconsistency(
+                            AromaticityInconsistency::AromaticValenceFailure {
+                                atom: AtomId(0),
+                            },
+                        ),
+                    ),
+                ),
+            ),
+        )),
+    )]
+    #[case::mdl_thiophene(
+        "s1cccc1>>C",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        Err(ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::Reactants(
+                MoleculeInterpretationError::Contradiction(
+                    ResolverContradiction::Aromaticity(
+                        AromaticityContradiction::Inconsistency(
+                            AromaticityInconsistency::AromaticValenceFailure {
+                                atom: AtomId(0),
+                            },
+                        ),
+                    ),
+                ),
+            ),
+        )),
+    )]
+    #[case::mdl_pyrrole(
+        "[nH]1cccc1>>C",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default(),
+        Err(ReactionSmilesInputError::Interpretation(
+            ReactionInterpretationError::Reactants(
+                MoleculeInterpretationError::Contradiction(
+                    ResolverContradiction::Aromaticity(
+                        AromaticityContradiction::Inconsistency(
+                            AromaticityInconsistency::AromaticValenceFailure {
+                                atom: AtomId(0),
+                            },
+                        ),
+                    ),
+                ),
+            ),
+        )),
+    )]
     #[case::resolve(
         "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
         SmilesIoConfig::opensmiles(),
@@ -1053,6 +1283,121 @@ mod tests {
             ingest_reaction_smiles_with(input, &io_config, &model, &resolve_config),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::mdl_benzene(
+        "[cH:1]1[cH:2][cH:3][cH:4][cH:5][cH:6]1>>[cH:1]1[cH:2][cH:3][cH:4][cH:5][cH:6]1",
+        AromaticityModel::mdl(),
+        vec![1, 1, 1, 1, 1, 1],
+    )]
+    #[case::mdl_pyridine(
+        "[n:1]1[cH:2][cH:3][cH:4][cH:5][cH:6]1>>[n:1]1[cH:2][cH:3][cH:4][cH:5][cH:6]1",
+        AromaticityModel::mdl(),
+        vec![1, 1, 1, 1, 1, 1],
+    )]
+    #[case::daylight_furan(
+        "[o:1]1[cH:2][cH:3][cH:4][cH:5]1>>[o:1]1[cH:2][cH:3][cH:4][cH:5]1",
+        AromaticityModel::daylight(),
+        vec![2, 1, 1, 1, 1],
+    )]
+    #[case::daylight_thiophene(
+        "[s:1]1[cH:2][cH:3][cH:4][cH:5]1>>[s:1]1[cH:2][cH:3][cH:4][cH:5]1",
+        AromaticityModel::daylight(),
+        vec![2, 1, 1, 1, 1],
+    )]
+    #[case::daylight_pyrrole(
+        "[nH:1]1[cH:2][cH:3][cH:4][cH:5]1>>[nH:1]1[cH:2][cH:3][cH:4][cH:5]1",
+        AromaticityModel::daylight(),
+        vec![2, 1, 1, 1, 1],
+    )]
+    fn test_ingest_reaction_smiles_with_aromaticity(
+        #[case] input: &str,
+        #[case] aromaticity: AromaticityModel,
+        #[case] expected_electrons: Vec<i64>,
+    ) {
+        let model = ChemistryModel {
+            aromaticity,
+            ..ChemistryModel::default()
+        };
+        let reaction = ingest_reaction_smiles_with(
+            input,
+            &SmilesIoConfig::opensmiles(),
+            &model,
+            &ResolveConfig::default(),
+        )
+        .unwrap();
+        let system = reaction.lhs.aromatic_system(AromaticSystemId(0));
+
+        assert_eq!(
+            system.atom_ids().collect::<Vec<_>>(),
+            (0..expected_electrons.len())
+                .map(|index| AtomId(u32::try_from(index).unwrap()))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            system.electrons(),
+            &ElectronCountsAst::Lit(expected_electrons)
+        );
+        assert_eq!(
+            reaction.lhs.aromatic_systems().ids().collect::<Vec<_>>(),
+            vec![AromaticSystemId(0)]
+        );
+        assert_eq!(reaction.deltas, Deltas::new());
+    }
+
+    #[rstest]
+    #[case::mdl_furan("[o:1]1[cH:2][cH:3][cH:4][cH:5]1>>[o:1]1[cH:2][cH:3][cH:4][cH:5]1")]
+    #[case::mdl_thiophene("[s:1]1[cH:2][cH:3][cH:4][cH:5]1>>[s:1]1[cH:2][cH:3][cH:4][cH:5]1")]
+    #[case::mdl_pyrrole("[nH:1]1[cH:2][cH:3][cH:4][cH:5]1>>[nH:1]1[cH:2][cH:3][cH:4][cH:5]1")]
+    fn test_ingest_reaction_smiles_with_aromaticity_policy(#[case] input: &str) {
+        let model = ChemistryModel {
+            aromaticity: AromaticityModel::mdl(),
+            ..ChemistryModel::default()
+        };
+        let reaction = ingest_reaction_smiles_with(
+            input,
+            &SmilesIoConfig::opensmiles(),
+            &model,
+            &ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    aromatic_valence_failure: AromaticityFailurePolicy::Keep,
+                    ..AromaticityResolveConfig::default()
+                },
+                stereo: StereoResolveConfig::default(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            reaction
+                .lhs
+                .atoms()
+                .iter()
+                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .collect::<Vec<_>>(),
+            vec![
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(2))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            ]
+        );
+        assert_eq!(
+            reaction
+                .lhs
+                .bonds()
+                .iter()
+                .map(|bond| bond.ast.constraints.aromatic())
+                .collect::<Vec<_>>(),
+            vec![BooleanAst::Lit(true); 5]
+        );
+        assert_eq!(
+            reaction.lhs.aromatic_systems().ids().collect::<Vec<_>>(),
+            Vec::<AromaticSystemId>::new()
+        );
+        assert_eq!(reaction.deltas, Deltas::new());
     }
 
     #[rstest]
