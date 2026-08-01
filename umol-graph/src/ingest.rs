@@ -277,8 +277,7 @@ mod tests {
     use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
     use crate::ops::model::{AromaticityModel, ElementScope, RingLimits, ValenceModel};
     use crate::ops::resolve::{
-        AromaticityInconsistencyPolicy, AromaticityResolveConfig, StereoInconsistencyPolicy,
-        StereoResolveConfig,
+        AromaticityResolveConfig, StereoInconsistencyPolicy, StereoResolveConfig,
     };
     use crate::ops::valence::AtomTypeRegistry;
 
@@ -816,9 +815,8 @@ mod tests {
         ChemistryModel::default(),
         ResolveConfig {
             aromaticity: AromaticityResolveConfig {
-                perception: Default::default(),
-                inconsistency: AromaticityInconsistencyPolicy::Error,
                 reset_aromatic_valence: true,
+                ..AromaticityResolveConfig::default()
             },
             stereo: StereoResolveConfig::default(),
         },

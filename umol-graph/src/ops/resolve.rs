@@ -13,7 +13,8 @@ pub mod valence;
 use std::any::Any;
 
 pub use aromaticity::{
-    AromaticityInconsistencyPolicy, AromaticityResolveConfig, AromaticityResolver,
+    AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
+    AromaticityResolveConfig, AromaticityResolver,
 };
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
@@ -313,7 +314,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ops::aromaticity::AromaticityMismatch;
+    use crate::ops::aromaticity::AromaticityInconsistency;
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
@@ -355,9 +356,8 @@ mod tests {
             ResolveConfig::default(),
             ResolveConfig {
                 aromaticity: AromaticityResolveConfig {
-                    perception: Default::default(),
-                    inconsistency: AromaticityInconsistencyPolicy::Error,
                     reset_aromatic_valence: false,
+                    ..AromaticityResolveConfig::default()
                 },
                 stereo: StereoResolveConfig {
                     reset_stereo_constraints: false,
@@ -412,9 +412,8 @@ mod tests {
     #[rstest]
     #[case::reset_aromatic_valence(ResolveConfig {
         aromaticity: AromaticityResolveConfig {
-            perception: Default::default(),
-            inconsistency: AromaticityInconsistencyPolicy::Error,
             reset_aromatic_valence: true,
+            ..AromaticityResolveConfig::default()
         },
         stereo: StereoResolveConfig::default(),
     })]
@@ -580,8 +579,8 @@ mod tests {
             :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
         }"#),
-        ResolverContradiction::Aromaticity(AromaticityContradiction::Mismatch(
-            AromaticityMismatch::AtomProjection { atom: AtomId(0) }
+        ResolverContradiction::Aromaticity(AromaticityContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
         ))
     )]
     #[case::stereo(

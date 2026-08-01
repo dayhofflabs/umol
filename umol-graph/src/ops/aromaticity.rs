@@ -41,8 +41,8 @@ pub enum AromaticityContradiction {
     HmoInvalidInput(String),
     #[error("clar: non-benzenoid input: {0}")]
     ClarNonBenzenoid(String),
-    #[error("aromaticity mismatch: {0}")]
-    Mismatch(#[from] AromaticityMismatch),
+    #[error("aromaticity inconsistency: {0}")]
+    Inconsistency(#[from] AromaticityInconsistency),
 }
 
 /// Setup-level failure returned in `Err`, never inside `Solution`.
@@ -76,30 +76,31 @@ impl Default for AromaticityConfig {
     }
 }
 
-/// Policy-free result of aromaticity perception and projection comparison.
+/// Policy-free result of aromaticity perception and constraint/entity comparison.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticityDerivation {
     /// Aromatic systems accepted by the selected model.
     pub systems: Vec<(Vec<AtomId>, AromaticSystemAst)>,
-    /// Non-vacuous projections and existing systems that disagree with perception.
-    pub mismatches: Vec<AromaticityMismatch>,
+    /// Constraint failures, entity failures, and independently valid mismatches.
+    pub inconsistencies: Vec<AromaticityInconsistency>,
 }
 
-/// A projection or existing aromatic system that disagrees with perception.
+/// Policy-free classification of aromatic constraint and entity inconsistencies.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum AromaticityMismatch {
-    #[error("aromaticity projection at atom {atom:?} disagrees with perception")]
-    AtomProjection { atom: AtomId },
-    #[error("aromaticity projection at bond {bond:?} disagrees with perception")]
-    BondProjection { bond: BondId },
-    #[error("aromatic system {system:?} disagrees with perception")]
-    ExistingSystem { system: AromaticSystemId },
-    #[error(
-        "electron contribution at atom {atom:?} in aromatic system {system:?} disagrees with perception"
-    )]
-    ElectronContribution {
-        system: AromaticSystemId,
+pub enum AromaticityInconsistency {
+    #[error("aromatic valence at atom {atom:?} cannot produce a valid aromatic system")]
+    AromaticValenceFailure { atom: AtomId },
+    #[error("aromatic system {system:?} is not realizable under the selected model")]
+    AromaticSystemFailure { system: AromaticSystemId },
+    #[error("aromatic valence at atom {atom:?} disagrees with aromatic system {system:?}")]
+    AromaticValenceMismatch {
         atom: AtomId,
+        system: AromaticSystemId,
+    },
+    #[error("aromatic constraint at bond {bond:?} disagrees with aromatic system {system:?}")]
+    AromaticBondConstraintMismatch {
+        bond: BondId,
+        system: AromaticSystemId,
     },
 }
 
@@ -184,8 +185,8 @@ impl AromaticityPerception {
         Ok(Solution::Determined(sorted))
     }
 
-    /// Perceive aromatic systems from AST projections and compare every
-    /// non-vacuous projection and existing system with the result.
+    /// Perceive aromatic systems from aromatic-valence constraints, independently assess stored
+    /// systems from their electron contributions, and classify their relationship.
     pub fn derive(
         &self,
         ast: &MoleculeAst,
@@ -233,86 +234,135 @@ impl AromaticityPerception {
             .map(|(atoms, _)| atoms.iter().copied().collect())
             .collect();
         let accepted_atoms: BTreeSet<AtomId> = system_members.iter().flatten().copied().collect();
-        let accepted_bonds: BTreeSet<BondId> = ast
-            .bonds()
-            .iter()
-            .filter(|bond| {
-                let [first, second] = bond.atom_ids();
-                system_members
-                    .iter()
-                    .any(|members| members.contains(&first) && members.contains(&second))
-            })
-            .map(|bond| bond.id)
-            .collect();
+        let mut inconsistencies = BTreeSet::new();
 
-        let mut mismatches = BTreeSet::new();
         for atom in ast.atoms().iter() {
-            let expected = match atom.ast.constraints.aromatic_valence() {
-                Some(AromaticValenceAst::Aromatic(_)) => Some(true),
-                Some(AromaticValenceAst::NotAromatic) => Some(false),
-                Some(AromaticValenceAst::Undetermined) | None => None,
-            };
-            if expected.is_some_and(|expected| expected != accepted_atoms.contains(&atom.id)) {
-                mismatches.insert(AromaticityMismatch::AtomProjection { atom: atom.id });
-            }
-        }
-        for bond in ast.bonds().iter() {
-            if let BooleanAst::Lit(expected) = bond.ast.constraints.aromatic() {
-                if expected != accepted_bonds.contains(&bond.id) {
-                    mismatches.insert(AromaticityMismatch::BondProjection { bond: bond.id });
-                }
+            if matches!(
+                atom.ast.constraints.aromatic_valence(),
+                Some(AromaticValenceAst::Aromatic(_))
+            ) && !accepted_atoms.contains(&atom.id)
+            {
+                inconsistencies
+                    .insert(AromaticityInconsistency::AromaticValenceFailure { atom: atom.id });
             }
         }
 
+        let mut valid_existing = Vec::new();
         for existing in ast.aromatic_systems().iter() {
-            let mut atoms: Vec<AtomId> = existing.atom_ids().collect();
-            atoms.sort_unstable();
-            let Some((perceived_atoms, perceived)) =
-                systems.iter().find(|(candidate, _)| candidate == &atoms)
-            else {
-                mismatches.insert(AromaticityMismatch::ExistingSystem {
-                    system: existing.id,
-                });
-                continue;
-            };
-
-            let (
-                ElectronCountsAst::Lit(existing_electrons),
-                ElectronCountsAst::Lit(perceived_electrons),
-            ) = (&existing.ast.electrons, &perceived.electrons)
-            else {
+            let ElectronCountsAst::Lit(existing_electrons) = &existing.ast.electrons else {
                 return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
             };
-            if existing_electrons.len() != atoms.len()
-                || perceived_electrons.len() != perceived_atoms.len()
-            {
-                mismatches.insert(AromaticityMismatch::ExistingSystem {
+            let existing_atoms: Vec<AtomId> = existing.atom_ids().collect();
+            if existing_electrons.len() != existing_atoms.len() {
+                inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
                     system: existing.id,
                 });
                 continue;
             }
 
-            let existing_contributions: Vec<(AtomId, i64)> = existing
-                .atom_ids()
+            let existing_contributions: Vec<(AtomId, i64)> = existing_atoms
+                .iter()
+                .copied()
                 .zip(existing_electrons.iter().copied())
                 .collect();
-            for (&atom, &perceived_electrons) in perceived_atoms.iter().zip(perceived_electrons) {
-                if existing_contributions
+
+            let perceived = match self.find_systems(ast, config, |atom| {
+                existing_contributions
                     .iter()
-                    .find_map(|&(candidate, electrons)| (candidate == atom).then_some(electrons))
-                    != Some(perceived_electrons)
-                {
-                    mismatches.insert(AromaticityMismatch::ElectronContribution {
+                    .find_map(|&(candidate, electrons)| {
+                        (candidate == atom.id).then(|| u8::try_from(electrons).ok())
+                    })
+                    .flatten()
+            })? {
+                Solution::Determined(perceived) => perceived,
+                Solution::Underdetermined(_) => {
+                    return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+                }
+                Solution::Contradictory(_) => {
+                    inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
                         system: existing.id,
-                        atom,
                     });
+                    continue;
+                }
+            };
+
+            let existing_members: BTreeSet<AtomId> = existing_atoms.iter().copied().collect();
+            let valid = perceived.iter().any(|(perceived_atoms, perceived_system)| {
+                let perceived_members: BTreeSet<AtomId> = perceived_atoms.iter().copied().collect();
+                if perceived_members != existing_members {
+                    return false;
+                }
+                let ElectronCountsAst::Lit(perceived_electrons) = &perceived_system.electrons
+                else {
+                    return false;
+                };
+                perceived_atoms
+                    .iter()
+                    .copied()
+                    .zip(perceived_electrons.iter().copied())
+                    .all(|(atom, electrons)| {
+                        existing_contributions
+                            .iter()
+                            .find_map(|&(candidate, existing)| {
+                                (candidate == atom).then_some(existing)
+                            })
+                            == Some(electrons)
+                    })
+            });
+            if valid {
+                valid_existing.push((existing.id, existing_contributions));
+            } else {
+                inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
+                    system: existing.id,
+                });
+            }
+        }
+
+        for (system, contributions) in valid_existing {
+            let members: BTreeSet<AtomId> = contributions.iter().map(|&(atom, _)| atom).collect();
+            let has_matching_candidate =
+                system_members.iter().any(|candidate| candidate == &members);
+            for atom in ast.atoms().iter() {
+                let Some(constraint) = atom.ast.constraints.aromatic_valence() else {
+                    continue;
+                };
+                let mismatch = match constraint {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(expected)) => {
+                        has_matching_candidate
+                            && contributions
+                                .iter()
+                                .find_map(|&(candidate, actual)| {
+                                    (candidate == atom.id).then_some(actual)
+                                })
+                                .is_some_and(|actual| actual != *expected)
+                    }
+                    AromaticValenceAst::Aromatic(_)
+                    | AromaticValenceAst::NotAromatic
+                    | AromaticValenceAst::Undetermined => false,
+                };
+                if mismatch {
+                    inconsistencies.insert(AromaticityInconsistency::AromaticValenceMismatch {
+                        atom: atom.id,
+                        system,
+                    });
+                }
+            }
+
+            for bond in ast.aromatic_system(system).bonds() {
+                if matches!(bond.ast.constraints.aromatic(), BooleanAst::Lit(false)) {
+                    inconsistencies.insert(
+                        AromaticityInconsistency::AromaticBondConstraintMismatch {
+                            bond: bond.id,
+                            system,
+                        },
+                    );
                 }
             }
         }
 
         Ok(Solution::Determined(AromaticityDerivation {
             systems,
-            mismatches: mismatches.into_iter().collect(),
+            inconsistencies: inconsistencies.into_iter().collect(),
         }))
     }
 
@@ -489,7 +539,7 @@ mod tests {
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
-            mismatches: vec![],
+            inconsistencies: vec![],
         }),
     )]
     #[case::mdl_furan(
@@ -500,17 +550,12 @@ mod tests {
         }"#),
         Solution::Determined(AromaticityDerivation {
             systems: vec![],
-            mismatches: vec![
-                AromaticityMismatch::AtomProjection { atom: AtomId(0) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(1) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(2) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(3) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(4) },
-                AromaticityMismatch::BondProjection { bond: BondId(0) },
-                AromaticityMismatch::BondProjection { bond: BondId(1) },
-                AromaticityMismatch::BondProjection { bond: BondId(2) },
-                AromaticityMismatch::BondProjection { bond: BondId(3) },
-                AromaticityMismatch::BondProjection { bond: BondId(4) },
+            inconsistencies: vec![
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(1) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(2) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(3) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(4) },
             ],
         }),
     )]
@@ -539,10 +584,12 @@ mod tests {
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
-            mismatches: vec![
-                AromaticityMismatch::AtomProjection { atom: AtomId(6) },
-                AromaticityMismatch::BondProjection { bond: BondId(0) },
-                AromaticityMismatch::BondProjection { bond: BondId(6) },
+            inconsistencies: vec![
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(6) },
+                AromaticityInconsistency::AromaticBondConstraintMismatch {
+                    bond: BondId(0),
+                    system: AromaticSystemId(0),
+                },
             ],
         }),
     )]
@@ -571,7 +618,7 @@ mod tests {
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
-            mismatches: vec![],
+            inconsistencies: vec![],
         }),
     )]
     #[case::electron_contribution(
@@ -582,7 +629,7 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4 5]
-                :type "[2,1,1,1,1,1]"
+                :type "[2,0,1,1,1,1]"
             }]
         }"#),
         Solution::Determined(AromaticityDerivation {
@@ -599,10 +646,16 @@ mod tests {
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
-            mismatches: vec![AromaticityMismatch::ElectronContribution {
-                system: AromaticSystemId(0),
-                atom: AtomId(0),
-            }],
+            inconsistencies: vec![
+                AromaticityInconsistency::AromaticValenceMismatch {
+                    atom: AtomId(0),
+                    system: AromaticSystemId(0),
+                },
+                AromaticityInconsistency::AromaticValenceMismatch {
+                    atom: AtomId(1),
+                    system: AromaticSystemId(0),
+                },
+            ],
         }),
     )]
     #[case::conformant_system(
@@ -630,7 +683,7 @@ mod tests {
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             )],
-            mismatches: vec![],
+            inconsistencies: vec![],
         }),
     )]
     #[case::existing_system_rejected(
@@ -645,18 +698,13 @@ mod tests {
         }"#),
         Solution::Determined(AromaticityDerivation {
             systems: vec![],
-            mismatches: vec![
-                AromaticityMismatch::AtomProjection { atom: AtomId(0) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(1) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(2) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(3) },
-                AromaticityMismatch::AtomProjection { atom: AtomId(4) },
-                AromaticityMismatch::BondProjection { bond: BondId(0) },
-                AromaticityMismatch::BondProjection { bond: BondId(1) },
-                AromaticityMismatch::BondProjection { bond: BondId(2) },
-                AromaticityMismatch::BondProjection { bond: BondId(3) },
-                AromaticityMismatch::BondProjection { bond: BondId(4) },
-                AromaticityMismatch::ExistingSystem {
+            inconsistencies: vec![
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(1) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(2) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(3) },
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(4) },
+                AromaticityInconsistency::AromaticSystemFailure {
                     system: AromaticSystemId(0),
                 },
             ],

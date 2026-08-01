@@ -6,7 +6,7 @@ from umol import (
     AromaticSystemAst,
     AromaticValenceAst,
     AromaticityConfig,
-    AromaticityInconsistencyPolicy,
+    AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityResolveConfig,
     AtomAst,
@@ -345,7 +345,7 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
         chemistry_model=chemistry_model,
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(
-                inconsistency=AromaticityInconsistencyPolicy.Keep
+                aromatic_valence_failure=AromaticityFailurePolicy.Keep
             ),
             stereo=StereoResolveConfig(),
         ),

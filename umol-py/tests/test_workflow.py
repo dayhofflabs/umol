@@ -1,9 +1,11 @@
 import pytest
 
 from umol import (
+    AromaticBondConstraintMismatchPolicy,
     AromaticValenceAst,
     AromaticityConfig,
-    AromaticityInconsistencyPolicy,
+    AromaticityFailurePolicy,
+    AromaticityMismatchPolicy,
     AromaticityResolveConfig,
     AutomorphismAlgorithm,
     ChemistryModel,
@@ -54,7 +56,12 @@ def test_resolved_smiles_workflow():
                     MaximumIndependentSetAlgorithm.BranchAndBound()
                 ),
             ),
-            inconsistency=AromaticityInconsistencyPolicy.Error,
+            aromatic_valence_failure=AromaticityFailurePolicy.Error,
+            aromatic_system_failure=AromaticityFailurePolicy.Error,
+            aromatic_valence_mismatch=AromaticityMismatchPolicy.Error,
+            aromatic_bond_constraint_mismatch=(
+                AromaticBondConstraintMismatchPolicy.Error
+            ),
             reset_aromatic_valence=False,
         ),
         stereo=StereoResolveConfig(
@@ -94,8 +101,8 @@ def test_resolved_smiles_workflow():
     assert io_config == SmilesIoConfig.lenient()
     assert chemistry_model == ChemistryModel.default()
     assert (
-        resolve_config.aromaticity.inconsistency
-        == AromaticityInconsistencyPolicy.Error
+        resolve_config.aromaticity.aromatic_valence_failure
+        == AromaticityFailurePolicy.Error
     )
     assert resolve_config.stereo.inconsistency == StereoInconsistencyPolicy.Error
 

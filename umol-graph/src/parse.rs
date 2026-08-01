@@ -66,10 +66,7 @@ mod tests {
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
-    use crate::ops::resolve::{
-        AromaticityInconsistencyPolicy, AromaticityResolveConfig, ResolveConfig,
-        StereoResolveConfig,
-    };
+    use crate::ops::resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig};
     use crate::ops::valence::{CountsValence, ValenceTable};
 
     const METHANE_MOL: &str = "Methane\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n";
@@ -152,9 +149,8 @@ mod tests {
         ChemistryModel::default(),
         ResolveConfig {
             aromaticity: AromaticityResolveConfig {
-                perception: Default::default(),
-                inconsistency: AromaticityInconsistencyPolicy::Error,
                 reset_aromatic_valence: true,
+                ..AromaticityResolveConfig::default()
             },
             stereo: StereoResolveConfig::default(),
         },

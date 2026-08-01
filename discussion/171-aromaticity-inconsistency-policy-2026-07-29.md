@@ -174,11 +174,11 @@ both representations. Policy is applied only by resolvers:
 - `AromaticityConformanceValidator` and `StereoConformanceValidator` consume the same policy-free
   derivation results but always report mismatches as contradictions.
 
-The current derivation types are foundations rather than the final classification API.
-`AromaticityMismatch::ExistingSystem` does not distinguish an internally unrealizable system from a
-valid system that disagrees with a constraint. `StereoMismatch::AtomRelation` and `BondRelation`
-likewise conflate entity failure with entity/constraint mismatch. The resolver-policy refinement must
-split those cases before applying different recovery actions.
+The aromatic derivation distinguishes an internally unrealizable system from a valid system that
+disagrees with a constraint. The stereo derivation remains a foundation rather than the final
+classification API: `StereoMismatch::AtomRelation` and `BondRelation` conflate entity failure with
+entity/constraint mismatch. The stereo resolver-policy refinement must split those cases before
+applying different recovery actions.
 
 The current stereo resolver also discards the relation-mismatch variants emitted by
 `StereoDerivation`; it handles only unrealizable uncovered `#T`/`#C` sites. This is not the lasting
@@ -197,21 +197,24 @@ systems by setting them to `Undetermined`. It is not the lever for a system the 
 `AromaticityPerception` retains `find_systems` as the low-level algorithmic operation whose caller
 supplies the π-electron source. `derive` is the standard AST-facing operation: it reads aromatic
 assertions, calls `find_systems`, and compares the accepted systems with existing relations and
-non-vacuous projections.
+non-vacuous constraints.
 
 ```rust
 pub struct AromaticityDerivation {
     pub systems: Vec<(Vec<AtomId>, AromaticSystemAst)>,
-    pub mismatches: Vec<AromaticityMismatch>,
+    pub inconsistencies: Vec<AromaticityInconsistency>,
 }
 
-pub enum AromaticityMismatch {
-    AtomProjection { atom: AtomId },
-    BondProjection { bond: BondId },
-    ExistingSystem { system: AromaticSystemId },
-    ElectronContribution {
-        system: AromaticSystemId,
+pub enum AromaticityInconsistency {
+    AromaticValenceFailure { atom: AtomId },
+    AromaticSystemFailure { system: AromaticSystemId },
+    AromaticValenceMismatch {
         atom: AtomId,
+        system: AromaticSystemId,
+    },
+    AromaticBondConstraintMismatch {
+        bond: BondId,
+        system: AromaticSystemId,
     },
 }
 
@@ -334,12 +337,22 @@ pub enum AromaticityMismatchPolicy {
     RemoveConstraint,
     ReplaceEntity,
 }
+
+pub enum AromaticBondConstraintMismatchPolicy {
+    Error,
+    Keep,
+    RemoveConstraint,
+}
 ```
 
+An aromatic bond constraint cannot derive a replacement aromatic system, so its mismatch policy does
+not expose `ReplaceEntity`. The dedicated enum keeps every offered recovery action total rather than
+making one variant context-dependent.
+
 Electron-contribution failures within an aromatic system are
-`AromaticityInconsistency::AromaticSystemFailure`; the affected atom remains available as additional
-diagnostic detail. `AromaticSystemConstraintAst::ElectronCount` belongs to constraint validation,
-not aromaticity resolution.
+`AromaticityInconsistency::AromaticSystemFailure`.
+`AromaticSystemConstraintAst::ElectronCount` belongs to constraint validation, not aromaticity
+resolution.
 
 ```rust
 pub enum StereoInconsistency {
@@ -382,7 +395,7 @@ pub struct AromaticityResolveConfig {
     pub aromatic_valence_failure: AromaticityFailurePolicy,
     pub aromatic_system_failure: AromaticityFailurePolicy,
     pub aromatic_valence_mismatch: AromaticityMismatchPolicy,
-    pub aromatic_bond_constraint_mismatch: AromaticityMismatchPolicy,
+    pub aromatic_bond_constraint_mismatch: AromaticBondConstraintMismatchPolicy,
     pub reset_aromatic_valence: bool,
 }
 
@@ -650,7 +663,7 @@ failure-class and recovery-action split.
 
 ### S2 — Final aromaticity and stereo contracts
 
-#### S2a — Aromatic inconsistency classification and policy migration
+#### S2a — Aromatic inconsistency classification and policy migration **Done**
 
 **Module:** `umol-graph/src/ops/aromaticity.rs`,
 `umol-graph/src/ops/resolve/aromaticity.rs`,
@@ -668,11 +681,12 @@ the same atoms. Preserve deterministic ordering and include the exact atom, bond
 fixed above.
 
 Replace the single resolver policy with `AromaticityFailurePolicy`,
-`AromaticityMismatchPolicy`, and the four approved config fields. Implement `Keep`,
-`RemoveConstraint`, and atomic `ReplaceEntity` only for the failure classes whose action tables admit
-them. `Error` returns the exact inconsistency as a contradiction before mutation. Remove the old
-policy type and migrate the Python enum/config surface, conversions, repr, equality, exports, and
-callers in the same subitem.
+`AromaticityMismatchPolicy`, `AromaticBondConstraintMismatchPolicy`, and the four approved config
+fields. The bond-specific policy omits `ReplaceEntity` because an aromatic bond constraint cannot
+derive a complete replacement system. Implement `Keep`, `RemoveConstraint`, and atomic
+`ReplaceEntity` only for the failure classes whose action tables admit them. `Error` returns the exact
+inconsistency as a contradiction before mutation. Remove the old policy type and migrate the Python
+enum/config surface, conversions, repr, equality, exports, and callers in the same subitem.
 
 Focused tables assert the complete derivation and complete planned edits for each inconsistency and
 policy. They include independently invalid constraints and systems, valid-but-different systems,
