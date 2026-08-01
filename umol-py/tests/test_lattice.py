@@ -3,13 +3,31 @@ import pytest
 from umol import (
     AromaticValenceAst,
     BooleanAst,
+    CisTransStereoAst,
     ContradictionError,
     ElectronCountsAst,
     Element,
     ElementAst,
+    FluxionalityAst,
     IsotopeMassAst,
+    LigandPermutation,
+    LigandSymmetryAst,
     MulticenterValenceAst,
+    Orientation,
+    OrientedLigandPermutation,
+    Permutation,
     RelOp,
+    StereoConfigurationAst,
+    StereoCoset,
+    StereoKind,
+    StereoLigandPair,
+    StereoTerm,
+    Stereogenicity,
+    StereogenicityAst,
+    TetrahedralStereoAst,
+    Topicity,
+    TopicityAst,
+    TopicityRelationAst,
     UnpairedElectronsAst,
     ValueAst,
     ValuePredicate,
@@ -662,3 +680,454 @@ def test_lattice_leaf_canonicalize(value, expected):
 def test_lattice_leaf_canonicalize_error(value):
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         value.canonicalize()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(
+            StereoConfigurationAst.Undetermined(), True, False, id="configuration-top"
+        ),
+        pytest.param(
+            StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
+            ),
+            False,
+            False,
+            id="configuration-open",
+        ),
+        pytest.param(
+            TetrahedralStereoAst.Undetermined(), True, False, id="tetrahedral-top"
+        ),
+        pytest.param(
+            TetrahedralStereoAst.NotStereo(), False, True, id="tetrahedral-ground"
+        ),
+        pytest.param(CisTransStereoAst.Undetermined(), True, False, id="cis-trans-top"),
+        pytest.param(
+            CisTransStereoAst.Stereo(StereoCoset.Lit(0)),
+            False,
+            True,
+            id="cis-trans-ground",
+        ),
+        pytest.param(
+            StereogenicityAst.Undetermined(), True, False, id="stereogenicity-top"
+        ),
+        pytest.param(
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            False,
+            True,
+            id="stereogenicity-ground",
+        ),
+        pytest.param(
+            TopicityRelationAst.Undetermined(), True, False, id="topicity-relation-top"
+        ),
+        pytest.param(
+            TopicityRelationAst.Lit(Topicity.Homotopic),
+            False,
+            True,
+            id="topicity-relation-ground",
+        ),
+        pytest.param(
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Undetermined(),
+            ),
+            True,
+            False,
+            id="ligand-symmetry-top",
+        ),
+        pytest.param(
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(True)
+            ),
+            False,
+            True,
+            id="fluxionality-ground",
+        ),
+        pytest.param(
+            TopicityAst(StereoLigandPair(0, 1), TopicityRelationAst.Undetermined()),
+            True,
+            False,
+            id="topicity-top",
+        ),
+        pytest.param(
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            False,
+            True,
+            id="topicity-ground",
+        ),
+    ],
+)
+def test_stereo_leaf_classification(value, expected_undetermined, expected_ground):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
+            ),
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+            id="configuration-compatible",
+        ),
+        pytest.param(
+            TetrahedralStereoAst.Stereo(StereoCoset.Undetermined()),
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)),
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)),
+            id="tetrahedral-compatible",
+        ),
+        pytest.param(
+            CisTransStereoAst.NotStereo(),
+            CisTransStereoAst.Stereo(StereoCoset.Lit(0)),
+            None,
+            id="cis-trans-incompatible",
+        ),
+        pytest.param(
+            StereogenicityAst.LitSet(
+                {Stereogenicity.Prochiral, Stereogenicity.Stereogenic}
+            ),
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            id="stereogenicity-compatible",
+        ),
+        pytest.param(
+            TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            TopicityRelationAst.Lit(Topicity.Homotopic),
+            TopicityRelationAst.Lit(Topicity.Homotopic),
+            id="topicity-relation-compatible",
+        ),
+        pytest.param(
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(False),
+            ),
+            None,
+            id="ligand-symmetry-incompatible",
+        ),
+        pytest.param(
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])),
+                BooleanAst.Undetermined(),
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(False)
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(False)
+            ),
+            id="fluxionality-compatible",
+        ),
+        pytest.param(
+            TopicityAst(
+                StereoLigandPair(0, 1),
+                TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            ),
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            id="topicity-compatible",
+        ),
+    ],
+)
+def test_stereo_leaf_meet(lhs, rhs, expected):
+    assert lhs.meet(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)),
+            StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCoset.LitSet({0, 1})
+            ),
+            id="configuration",
+        ),
+        pytest.param(
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(0)),
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)),
+            TetrahedralStereoAst.Stereo(StereoCoset.LitSet({0, 1})),
+            id="tetrahedral",
+        ),
+        pytest.param(
+            CisTransStereoAst.NotStereo(),
+            CisTransStereoAst.Stereo(StereoCoset.Lit(0)),
+            CisTransStereoAst.Undetermined(),
+            id="cis-trans",
+        ),
+        pytest.param(
+            StereogenicityAst.Lit(Stereogenicity.Prochiral),
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            StereogenicityAst.NotSet({Stereogenicity.Symmetric}),
+            id="stereogenicity",
+        ),
+        pytest.param(
+            TopicityRelationAst.Lit(Topicity.Homotopic),
+            TopicityRelationAst.Lit(Topicity.Enantiotopic),
+            TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            id="topicity-relation",
+        ),
+        pytest.param(
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([1, 0])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            None,
+            id="ligand-symmetry-different-fiber",
+        ),
+        pytest.param(
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(True)
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(False)
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])),
+                BooleanAst.Undetermined(),
+            ),
+            id="fluxionality",
+        ),
+        pytest.param(
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Enantiotopic),
+            TopicityAst(
+                StereoLigandPair(0, 1),
+                TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            ),
+            id="topicity",
+        ),
+    ],
+)
+def test_stereo_leaf_join(lhs, rhs, expected):
+    assert lhs.join(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
+            ),
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+            id="configuration",
+        ),
+        pytest.param(
+            TetrahedralStereoAst.Stereo(StereoCoset.Undetermined()),
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(0)),
+            id="tetrahedral",
+        ),
+        pytest.param(
+            CisTransStereoAst.Undetermined(),
+            CisTransStereoAst.NotStereo(),
+            id="cis-trans",
+        ),
+        pytest.param(
+            StereogenicityAst.NotSet({Stereogenicity.Symmetric}),
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            id="stereogenicity",
+        ),
+        pytest.param(
+            TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            TopicityRelationAst.Lit(Topicity.Homotopic),
+            id="topicity-relation",
+        ),
+        pytest.param(
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Undetermined(),
+            ),
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            id="ligand-symmetry",
+        ),
+        pytest.param(
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])),
+                BooleanAst.Undetermined(),
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(False)
+            ),
+            id="fluxionality",
+        ),
+        pytest.param(
+            TopicityAst(
+                StereoLigandPair(0, 1),
+                TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            ),
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            id="topicity",
+        ),
+    ],
+)
+def test_stereo_leaf_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+            StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0)),
+            id="configuration",
+        ),
+        pytest.param(
+            TetrahedralStereoAst.NotStereo(),
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(0)),
+            id="tetrahedral",
+        ),
+        pytest.param(
+            CisTransStereoAst.Stereo(StereoCoset.Lit(0)),
+            CisTransStereoAst.Stereo(StereoCoset.Lit(1)),
+            id="cis-trans",
+        ),
+        pytest.param(
+            StereogenicityAst.Lit(Stereogenicity.Symmetric),
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            id="stereogenicity",
+        ),
+        pytest.param(
+            TopicityRelationAst.Lit(Topicity.Homotopic),
+            TopicityRelationAst.Lit(Topicity.Diastereotopic),
+            id="topicity-relation",
+        ),
+        pytest.param(
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([1, 0])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            id="ligand-symmetry",
+        ),
+        pytest.param(
+            FluxionalityAst(
+                LigandPermutation(Permutation([0, 1])), BooleanAst.Lit(True)
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(True)
+            ),
+            id="fluxionality",
+        ),
+        pytest.param(
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic),
+            id="topicity",
+        ),
+    ],
+)
+def test_stereo_leaf_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral,
+                StereoCoset.Term(StereoTerm.Swap(StereoTerm.Lit(0))),
+            ),
+            StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)),
+            id="configuration",
+        ),
+        pytest.param(
+            TetrahedralStereoAst.Stereo(
+                StereoCoset.Term(StereoTerm.Swap(StereoTerm.Lit(0)))
+            ),
+            TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)),
+            id="tetrahedral",
+        ),
+        pytest.param(
+            CisTransStereoAst.Stereo(
+                StereoCoset.Term(StereoTerm.Swap(StereoTerm.Lit(0)))
+            ),
+            CisTransStereoAst.Stereo(StereoCoset.Lit(1)),
+            id="cis-trans",
+        ),
+        pytest.param(
+            StereogenicityAst.LitSet({Stereogenicity.Stereogenic}),
+            StereogenicityAst.Lit(Stereogenicity.Stereogenic),
+            id="stereogenicity",
+        ),
+        pytest.param(
+            TopicityRelationAst.LitSet({Topicity.Homotopic, Topicity.Enantiotopic}),
+            TopicityRelationAst.NotSet({Topicity.Diastereotopic}),
+            id="topicity-relation",
+        ),
+        pytest.param(
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            LigandSymmetryAst(
+                OrientedLigandPermutation(
+                    LigandPermutation(Permutation([0, 1])), Orientation.Proper
+                ),
+                BooleanAst.Lit(True),
+            ),
+            id="ligand-symmetry",
+        ),
+        pytest.param(
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(False)
+            ),
+            FluxionalityAst(
+                LigandPermutation(Permutation([1, 0])), BooleanAst.Lit(False)
+            ),
+            id="fluxionality",
+        ),
+        pytest.param(
+            TopicityAst(
+                StereoLigandPair(0, 1),
+                TopicityRelationAst.LitSet({Topicity.Homotopic}),
+            ),
+            TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic),
+            id="topicity",
+        ),
+    ],
+)
+def test_stereo_leaf_canonicalize(value, expected):
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True

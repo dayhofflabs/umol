@@ -102,7 +102,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   Add table-driven Python
   assertions spanning undetermined, literal, set/range, compatible, and incompatible cases.
   **Additive (green).** [dep: S0b]
-- **S1b — Stereo leaves.** Apply the surfaces in `stereo.rs` and `constraint/stereo.rs` to
+- **S1b — Stereo leaves.** **Done.** Apply the surfaces in `stereo.rs` and `constraint/stereo.rs` to
   `StereoConfigurationAst`, `TetrahedralStereoAst`, `CisTransStereoAst`, `StereogenicityAst`,
   `TopicityRelationAst`, `LigandSymmetryAst`, `FluxionalityAst`, and `TopicityAst`. Include a fibered
   no-join case so `join` returning `None` is verified independently of an incompatible meet.

@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    FluxionalityAst as AstFluxionalityAst, Lattice, LigandSymmetryAst as AstLigandSymmetryAst,
+    FluxionalityAst as AstFluxionalityAst, LigandSymmetryAst as AstLigandSymmetryAst,
     StereoAtomConstraintAst as AstStereoAtomConstraintAst,
     StereoAtomConstraintKey as AstStereoAtomConstraintKey,
     StereoAtomConstraintsAst as AstStereoAtomConstraintsAst, StereoAtomId as AstStereoAtomId,
@@ -20,6 +20,7 @@ use umol_ast::ast::{
 
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::stereo::{
     LigandPermutation, OrientedLigandPermutation, StereoAtomAst, StereoBondAst, StereoLigandPair,
@@ -65,6 +66,17 @@ impl TopicityRelationAst {
         variant_repr(slf.bind(py).as_any(), "TopicityRelationAst", variant, arity)
     }
 }
+
+impl_py_lattice!(
+    TopicityRelationAst,
+    AstTopicityRelationAst,
+    |value: &TopicityRelationAst, _py: Python<'_>| -> PyResult<AstTopicityRelationAst> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: AstTopicityRelationAst| -> PyResult<TopicityRelationAst> {
+        Ok(TopicityRelationAst::from_rust(&value))
+    }
+);
 
 impl TopicityRelationAst {
     pub(crate) fn from_rust(ast: &AstTopicityRelationAst) -> Self {
@@ -154,6 +166,17 @@ impl StereogenicityAst {
     }
 }
 
+impl_py_lattice!(
+    StereogenicityAst,
+    AstStereogenicityAst,
+    |value: &StereogenicityAst, _py: Python<'_>| -> PyResult<AstStereogenicityAst> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: AstStereogenicityAst| -> PyResult<StereogenicityAst> {
+        Ok(StereogenicityAst::from_rust(&value))
+    }
+);
+
 impl StereogenicityAst {
     pub(crate) fn from_rust(ast: &AstStereogenicityAst) -> Self {
         match ast {
@@ -223,11 +246,6 @@ impl LigandSymmetryAst {
         self.invariant.clone_ref(py)
     }
 
-    /// Matches iff the permutations are equal and the presence assertions match.
-    pub(crate) fn matches(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py).matches(&other.to_rust(py))
-    }
-
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -248,6 +266,17 @@ impl LigandSymmetryAst {
         ))
     }
 }
+
+impl_py_lattice!(
+    LigandSymmetryAst,
+    AstLigandSymmetryAst,
+    |value: &LigandSymmetryAst, py: Python<'_>| -> PyResult<AstLigandSymmetryAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstLigandSymmetryAst| -> PyResult<LigandSymmetryAst> {
+        LigandSymmetryAst::from_rust(py, &value)
+    }
+);
 
 impl LigandSymmetryAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstLigandSymmetryAst) -> PyResult<Self> {
@@ -297,11 +326,6 @@ impl FluxionalityAst {
         self.active.clone_ref(py)
     }
 
-    /// Matches iff the permutations are equal and the presence assertions match.
-    pub(crate) fn matches(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py).matches(&other.to_rust(py))
-    }
-
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -318,6 +342,17 @@ impl FluxionalityAst {
         ))
     }
 }
+
+impl_py_lattice!(
+    FluxionalityAst,
+    AstFluxionalityAst,
+    |value: &FluxionalityAst, py: Python<'_>| -> PyResult<AstFluxionalityAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstFluxionalityAst| -> PyResult<FluxionalityAst> {
+        FluxionalityAst::from_rust(py, &value)
+    }
+);
 
 impl FluxionalityAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstFluxionalityAst) -> PyResult<Self> {
@@ -367,11 +402,6 @@ impl TopicityAst {
         self.relation.clone_ref(py)
     }
 
-    /// Matches iff the pairs are equal and the per-pair relations match.
-    pub(crate) fn matches(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py).matches(&other.to_rust(py))
-    }
-
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -392,6 +422,15 @@ impl TopicityAst {
         ))
     }
 }
+
+impl_py_lattice!(
+    TopicityAst,
+    AstTopicityAst,
+    |value: &TopicityAst, py: Python<'_>| -> PyResult<AstTopicityAst> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: AstTopicityAst| -> PyResult<TopicityAst> {
+        TopicityAst::from_rust(py, &value)
+    }
+);
 
 impl TopicityAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstTopicityAst) -> PyResult<Self> {

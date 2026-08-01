@@ -74,7 +74,7 @@ macro_rules! impl_py_lattice {
             }
 
             /// Whether `target` refines this pattern.
-            fn matches(&self, py: Python<'_>, target: &$py_type) -> PyResult<bool> {
+            pub(crate) fn matches(&self, py: Python<'_>, target: &$py_type) -> PyResult<bool> {
                 let to_rust = $to_rust;
                 let pattern: $rust_type = to_rust(self, py)?;
                 let target: $rust_type = to_rust(target, py)?;

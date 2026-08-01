@@ -32,6 +32,7 @@ use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 
 /// A permutation of `0..degree` in one-line (image) notation.
@@ -252,6 +253,17 @@ impl TetrahedralStereoAst {
     }
 }
 
+impl_py_lattice!(
+    TetrahedralStereoAst,
+    AstTetrahedralStereoAst,
+    |value: &TetrahedralStereoAst, py: Python<'_>| -> PyResult<AstTetrahedralStereoAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstTetrahedralStereoAst| -> PyResult<TetrahedralStereoAst> {
+        TetrahedralStereoAst::from_rust(py, &value)
+    }
+);
+
 impl TetrahedralStereoAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstTetrahedralStereoAst) -> PyResult<Self> {
         Ok(match ast {
@@ -367,6 +379,17 @@ impl CisTransStereoAst {
         self.to_rust(py).as_lit().map(CisTransStereo::from_rust)
     }
 }
+
+impl_py_lattice!(
+    CisTransStereoAst,
+    AstCisTransStereoAst,
+    |value: &CisTransStereoAst, py: Python<'_>| -> PyResult<AstCisTransStereoAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstCisTransStereoAst| -> PyResult<CisTransStereoAst> {
+        CisTransStereoAst::from_rust(py, &value)
+    }
+);
 
 impl CisTransStereoAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstCisTransStereoAst) -> PyResult<Self> {
@@ -688,6 +711,17 @@ impl StereoConfigurationAst {
         )
     }
 }
+
+impl_py_lattice!(
+    StereoConfigurationAst,
+    AstStereoConfigurationAst,
+    |value: &StereoConfigurationAst, py: Python<'_>| -> PyResult<AstStereoConfigurationAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstStereoConfigurationAst| -> PyResult<StereoConfigurationAst> {
+        StereoConfigurationAst::from_rust(py, &value)
+    }
+);
 
 impl StereoConfigurationAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoConfigurationAst) -> PyResult<Self> {
@@ -1823,9 +1857,9 @@ mod tests {
                 permutation: other_permutation,
                 invariant: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
             };
-            assert!(wildcard.matches(&invariant_true, py));
-            assert!(!invariant_true.matches(&invariant_false, py));
-            assert!(!invariant_true.matches(&other, py));
+            assert!(wildcard.matches(py, &invariant_true).unwrap());
+            assert!(!invariant_true.matches(py, &invariant_false).unwrap());
+            assert!(!invariant_true.matches(py, &other).unwrap());
         });
     }
 
@@ -1897,9 +1931,9 @@ mod tests {
                 permutation: other_permutation,
                 active: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
             };
-            assert!(wildcard.matches(&active_true, py));
-            assert!(!active_true.matches(&active_false, py));
-            assert!(!active_true.matches(&other, py));
+            assert!(wildcard.matches(py, &active_true).unwrap());
+            assert!(!active_true.matches(py, &active_false).unwrap());
+            assert!(!active_true.matches(py, &other).unwrap());
         });
     }
 
@@ -1966,9 +2000,9 @@ mod tests {
                 relation: into_py_variant(py, TopicityRelationAst::Lit(Topicity::Homotopic))
                     .unwrap(),
             };
-            assert!(wildcard.matches(&homotopic, py));
-            assert!(!homotopic.matches(&enantiotopic, py));
-            assert!(!homotopic.matches(&other, py));
+            assert!(wildcard.matches(py, &homotopic).unwrap());
+            assert!(!homotopic.matches(py, &enantiotopic).unwrap());
+            assert!(!homotopic.matches(py, &other).unwrap());
         });
     }
 
