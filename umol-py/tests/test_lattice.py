@@ -1,9 +1,16 @@
 import pytest
 
 from umol import (
+    AromaticValenceAst,
     BooleanAst,
     ContradictionError,
+    ElectronCountsAst,
+    Element,
+    ElementAst,
+    IsotopeMassAst,
+    MulticenterValenceAst,
     RelOp,
+    UnpairedElectronsAst,
     ValueAst,
     ValuePredicate,
     ValueTerm,
@@ -332,3 +339,326 @@ def test_value_ast_canonicalize_error(value):
 )
 def test_value_ast_canonical_eq(lhs, rhs, expected):
     assert lhs.canonical_eq(rhs) is expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(ElementAst.Undetermined(), True, False, id="element-undetermined"),
+        pytest.param(ElementAst.Lit(Element("C")), False, True, id="element-literal"),
+        pytest.param(
+            ElementAst.LitSet({Element("C"), Element("N")}),
+            False,
+            False,
+            id="element-set",
+        ),
+        pytest.param(
+            IsotopeMassAst.Undetermined(), True, False, id="isotope-undetermined"
+        ),
+        pytest.param(IsotopeMassAst.Natural(), False, True, id="isotope-natural"),
+        pytest.param(IsotopeMassAst.LitSet({12, 13}), False, False, id="isotope-set"),
+        pytest.param(
+            UnpairedElectronsAst(ValueAst.Undetermined(), ValueAst.Undetermined()),
+            True,
+            False,
+            id="unpaired-undetermined",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(ValueAst.LitSet({0, 2}), 3),
+            False,
+            False,
+            id="unpaired-partial",
+        ),
+        pytest.param(UnpairedElectronsAst(2, 3), False, True, id="unpaired-ground"),
+        pytest.param(
+            ElectronCountsAst.Undetermined(), True, False, id="electron-undetermined"
+        ),
+        pytest.param(ElectronCountsAst.Lit([1, 1]), False, True, id="electron-literal"),
+        pytest.param(
+            AromaticValenceAst.Undetermined(), True, False, id="aromatic-undetermined"
+        ),
+        pytest.param(AromaticValenceAst.NotAromatic(), False, True, id="not-aromatic"),
+        pytest.param(
+            AromaticValenceAst.Aromatic(ValueAst.LitSet({1, 2})),
+            False,
+            False,
+            id="aromatic-set",
+        ),
+        pytest.param(
+            MulticenterValenceAst.Undetermined(),
+            True,
+            False,
+            id="multicenter-undetermined",
+        ),
+        pytest.param(
+            MulticenterValenceAst.NotMulticenter(),
+            False,
+            True,
+            id="not-multicenter",
+        ),
+        pytest.param(
+            MulticenterValenceAst.Multicenter(ValueAst.LitSet({2, 3})),
+            False,
+            False,
+            id="multicenter-set",
+        ),
+    ],
+)
+def test_lattice_leaf_classification(value, expected_undetermined, expected_ground):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            ElementAst.LitSet({Element("C"), Element("N")}),
+            ElementAst.Lit(Element("C")),
+            ElementAst.Lit(Element("C")),
+            id="element-compatible",
+        ),
+        pytest.param(
+            ElementAst.Lit(Element("C")),
+            ElementAst.Lit(Element("N")),
+            None,
+            id="element-incompatible",
+        ),
+        pytest.param(
+            IsotopeMassAst.LitSet({12, 13}),
+            IsotopeMassAst.Lit(13),
+            IsotopeMassAst.Lit(13),
+            id="isotope-compatible",
+        ),
+        pytest.param(
+            IsotopeMassAst.Natural(),
+            IsotopeMassAst.Lit(13),
+            None,
+            id="isotope-incompatible",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(ValueAst.LitSet({0, 2}), ValueAst.LitSet({1, 3})),
+            UnpairedElectronsAst(2, 3),
+            UnpairedElectronsAst(2, 3),
+            id="unpaired-compatible",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(2, 3),
+            UnpairedElectronsAst(0, 1),
+            None,
+            id="unpaired-incompatible",
+        ),
+        pytest.param(
+            ElectronCountsAst.Undetermined(),
+            ElectronCountsAst.Lit([1, 1]),
+            ElectronCountsAst.Lit([1, 1]),
+            id="electron-compatible",
+        ),
+        pytest.param(
+            ElectronCountsAst.Lit([1, 1]),
+            ElectronCountsAst.Lit([2, 0]),
+            None,
+            id="electron-incompatible",
+        ),
+        pytest.param(
+            AromaticValenceAst.Aromatic(ValueAst.LitSet({1, 2})),
+            AromaticValenceAst.Aromatic(1),
+            AromaticValenceAst.Aromatic(1),
+            id="aromatic-compatible",
+        ),
+        pytest.param(
+            AromaticValenceAst.NotAromatic(),
+            AromaticValenceAst.Aromatic(1),
+            None,
+            id="aromatic-incompatible",
+        ),
+        pytest.param(
+            MulticenterValenceAst.Multicenter(ValueAst.LitSet({2, 3})),
+            MulticenterValenceAst.Multicenter(2),
+            MulticenterValenceAst.Multicenter(2),
+            id="multicenter-compatible",
+        ),
+        pytest.param(
+            MulticenterValenceAst.NotMulticenter(),
+            MulticenterValenceAst.Multicenter(2),
+            None,
+            id="multicenter-incompatible",
+        ),
+    ],
+)
+def test_lattice_leaf_meet(lhs, rhs, expected):
+    assert lhs.meet(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            ElementAst.Lit(Element("C")),
+            ElementAst.Lit(Element("N")),
+            ElementAst.LitSet({Element("C"), Element("N")}),
+            id="element",
+        ),
+        pytest.param(
+            IsotopeMassAst.Lit(12),
+            IsotopeMassAst.Lit(13),
+            IsotopeMassAst.LitSet({12, 13}),
+            id="isotope",
+        ),
+        pytest.param(
+            UnpairedElectronsAst(2, 3),
+            UnpairedElectronsAst(0, 1),
+            UnpairedElectronsAst(ValueAst.LitSet({0, 2}), ValueAst.LitSet({1, 3})),
+            id="unpaired",
+        ),
+        pytest.param(
+            ElectronCountsAst.Lit([1, 1]),
+            ElectronCountsAst.Lit([2, 0]),
+            ElectronCountsAst.Undetermined(),
+            id="electron",
+        ),
+        pytest.param(
+            AromaticValenceAst.NotAromatic(),
+            AromaticValenceAst.Aromatic(1),
+            AromaticValenceAst.Undetermined(),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterValenceAst.NotMulticenter(),
+            MulticenterValenceAst.Multicenter(2),
+            MulticenterValenceAst.Undetermined(),
+            id="multicenter",
+        ),
+    ],
+)
+def test_lattice_leaf_join(lhs, rhs, expected):
+    assert lhs.join(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            ElementAst.LitSet({Element("C"), Element("N")}),
+            ElementAst.Lit(Element("C")),
+            id="element",
+        ),
+        pytest.param(
+            IsotopeMassAst.LitSet({12, 13}), IsotopeMassAst.Lit(13), id="isotope"
+        ),
+        pytest.param(
+            UnpairedElectronsAst(ValueAst.LitSet({0, 2}), ValueAst.LitSet({1, 3})),
+            UnpairedElectronsAst(2, 3),
+            id="unpaired",
+        ),
+        pytest.param(
+            ElectronCountsAst.Undetermined(),
+            ElectronCountsAst.Lit([1, 1]),
+            id="electron",
+        ),
+        pytest.param(
+            AromaticValenceAst.Aromatic(ValueAst.LitSet({1, 2})),
+            AromaticValenceAst.Aromatic(1),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterValenceAst.Multicenter(ValueAst.LitSet({2, 3})),
+            MulticenterValenceAst.Multicenter(2),
+            id="multicenter",
+        ),
+    ],
+)
+def test_lattice_leaf_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(
+            ElementAst.Lit(Element("C")), ElementAst.Lit(Element("N")), id="element"
+        ),
+        pytest.param(IsotopeMassAst.Natural(), IsotopeMassAst.Lit(13), id="isotope"),
+        pytest.param(
+            UnpairedElectronsAst(2, 3), UnpairedElectronsAst(0, 1), id="unpaired"
+        ),
+        pytest.param(
+            ElectronCountsAst.Lit([1, 1]),
+            ElectronCountsAst.Lit([2, 0]),
+            id="electron",
+        ),
+        pytest.param(
+            AromaticValenceAst.NotAromatic(),
+            AromaticValenceAst.Aromatic(1),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterValenceAst.NotMulticenter(),
+            MulticenterValenceAst.Multicenter(2),
+            id="multicenter",
+        ),
+    ],
+)
+def test_lattice_leaf_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            ElementAst.LitSet({Element("C")}),
+            ElementAst.Lit(Element("C")),
+            id="element",
+        ),
+        pytest.param(IsotopeMassAst.LitSet({13}), IsotopeMassAst.Lit(13), id="isotope"),
+        pytest.param(
+            UnpairedElectronsAst(
+                ValueAst.LitSet({2}),
+                ValueAst.Term(ValueTerm.Sum([ValueTerm.Lit(1), ValueTerm.Lit(2)])),
+            ),
+            UnpairedElectronsAst(2, 3),
+            id="unpaired",
+        ),
+        pytest.param(
+            ElectronCountsAst.Lit([1, 1]),
+            ElectronCountsAst.Lit([1, 1]),
+            id="electron",
+        ),
+        pytest.param(
+            AromaticValenceAst.Aromatic(ValueAst.LitSet({1})),
+            AromaticValenceAst.Aromatic(1),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterValenceAst.Multicenter(ValueAst.LitSet({2})),
+            MulticenterValenceAst.Multicenter(2),
+            id="multicenter",
+        ),
+    ],
+)
+def test_lattice_leaf_canonicalize(value, expected):
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(ElementAst.LitSet(set()), id="element"),
+        pytest.param(IsotopeMassAst.LitSet(set()), id="isotope"),
+        pytest.param(UnpairedElectronsAst(ValueAst.LitSet(set()), 1), id="unpaired"),
+        pytest.param(
+            AromaticValenceAst.Aromatic(ValueAst.LitSet(set())), id="aromatic"
+        ),
+        pytest.param(
+            MulticenterValenceAst.Multicenter(ValueAst.LitSet(set())),
+            id="multicenter",
+        ),
+    ],
+)
+def test_lattice_leaf_canonicalize_error(value):
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        value.canonicalize()

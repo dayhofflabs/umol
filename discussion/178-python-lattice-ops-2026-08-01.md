@@ -96,9 +96,10 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
 
 ### S1 — Leaf AST values
 
-- **S1a — Atom and electron leaves.** Apply the surfaces in `atom.rs`, `spin.rs`, `electrons.rs`, and
-  `constraint/atom.rs` to `ElementAst`, `IsotopeMassAst`, `UnpairedElectronsAst`,
-  `ElectronCountsAst`, `AromaticValenceAst`, and `MulticenterValenceAst`. Add table-driven Python
+- **S1a — Atom and electron leaves.** **Done.** Apply the surfaces in `atom.rs`, `spin.rs`,
+  `electrons.rs`, and `constraint/atom.rs` to `ElementAst`, `IsotopeMassAst`,
+  `UnpairedElectronsAst`, `ElectronCountsAst`, `AromaticValenceAst`, and `MulticenterValenceAst`.
+  Add table-driven Python
   assertions spanning undetermined, literal, set/range, compatible, and incompatible cases.
   **Additive (green).** [dep: S0b]
 - **S1b — Stereo leaves.** Apply the surfaces in `stereo.rs` and `constraint/stereo.rs` to

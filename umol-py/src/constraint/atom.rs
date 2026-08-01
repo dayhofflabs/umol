@@ -16,6 +16,7 @@ use umol_ast::ast::{
 use super::ring::{RingMembershipAst, RingScope};
 use crate::atom::AtomAst;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
 use crate::value::{ValueArg, ValueAst};
@@ -101,6 +102,17 @@ impl AromaticValenceAst {
         variant_repr(slf.bind(py).as_any(), "AromaticValenceAst", variant, arity)
     }
 }
+
+impl_py_lattice!(
+    AromaticValenceAst,
+    AstAromaticValenceAst,
+    |value: &AromaticValenceAst, py: Python<'_>| -> PyResult<AstAromaticValenceAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstAromaticValenceAst| -> PyResult<AromaticValenceAst> {
+        AromaticValenceAst::from_rust(py, &value)
+    }
+);
 
 impl AromaticValenceAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstAromaticValenceAst) -> PyResult<Self> {
@@ -251,6 +263,17 @@ impl MulticenterValenceAst {
         }
     }
 }
+
+impl_py_lattice!(
+    MulticenterValenceAst,
+    AstMulticenterValenceAst,
+    |value: &MulticenterValenceAst, py: Python<'_>| -> PyResult<AstMulticenterValenceAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstMulticenterValenceAst| -> PyResult<MulticenterValenceAst> {
+        MulticenterValenceAst::from_rust(py, &value)
+    }
+);
 
 #[derive(FromPyObject)]
 pub(crate) enum MulticenterValenceArg {

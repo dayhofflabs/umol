@@ -7,6 +7,7 @@ use umol_ast::ast::{AsLit, UnpairedElectronsAst as AstUnpairedElectronsAst};
 use umol_chem::spin::{SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons};
 
 use crate::convert::{hash_rust, into_py_variant};
+use crate::lattice::impl_py_lattice;
 use crate::value::{ValueArg, ValueAst};
 
 /// Exact unpaired-electron count and spin multiplicity without physical validation.
@@ -164,6 +165,17 @@ impl UnpairedElectronsAst {
         }
     }
 }
+
+impl_py_lattice!(
+    UnpairedElectronsAst,
+    AstUnpairedElectronsAst,
+    |value: &UnpairedElectronsAst, py: Python<'_>| -> PyResult<AstUnpairedElectronsAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstUnpairedElectronsAst| -> PyResult<UnpairedElectronsAst> {
+        UnpairedElectronsAst::from_rust(py, &value)
+    }
+);
 
 #[cfg(test)]
 mod tests {

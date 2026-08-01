@@ -22,6 +22,7 @@ use crate::constraint::atom::{
 use crate::convert::{hash_rust, variant_repr};
 use crate::element::Element;
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::UnpairedElectronsAst;
 use crate::value::{MemOp, ValueArg, ValueAst};
@@ -64,6 +65,15 @@ impl ElementAst {
         variant_repr(slf.bind(py).as_any(), "ElementAst", variant, arity)
     }
 }
+
+impl_py_lattice!(
+    ElementAst,
+    AstElementAst,
+    |value: &ElementAst, _py: Python<'_>| -> PyResult<AstElementAst> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: AstElementAst| -> PyResult<ElementAst> {
+        Ok(ElementAst::from_rust(&value))
+    }
+);
 
 impl ElementAst {
     pub(crate) fn from_rust(ast: &AstElementAst) -> ElementAst {
@@ -221,6 +231,17 @@ impl IsotopeMassAst {
         }
     }
 }
+
+impl_py_lattice!(
+    IsotopeMassAst,
+    AstIsotopeMassAst,
+    |value: &IsotopeMassAst, _py: Python<'_>| -> PyResult<AstIsotopeMassAst> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: AstIsotopeMassAst| -> PyResult<IsotopeMassAst> {
+        Ok(IsotopeMassAst::from_rust(&value))
+    }
+);
 
 /// An atom: element, isotope, charge, implicit hydrogens, lone pairs, unpaired
 /// electrons, and atom-scope constraints.

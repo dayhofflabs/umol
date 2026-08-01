@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 use umol_ast::ast::{AsLit, ElectronCountsAst as AstElectronCountsAst};
 
 use crate::convert::{hash_rust, variant_repr};
+use crate::lattice::impl_py_lattice;
 
 /// A per-member-atom electron-count vector: undetermined, or a concrete list of
 /// counts positionally aligned to the owning entity's atoms.
@@ -55,6 +56,17 @@ impl ElectronCountsAst {
         }
     }
 }
+
+impl_py_lattice!(
+    ElectronCountsAst,
+    AstElectronCountsAst,
+    |value: &ElectronCountsAst, _py: Python<'_>| -> PyResult<AstElectronCountsAst> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: AstElectronCountsAst| -> PyResult<ElectronCountsAst> {
+        Ok(ElectronCountsAst::from_rust(&value))
+    }
+);
 
 /// Setter coercion for an electron-counts field: a Python `list[int]` → `Lit`, or an
 /// `ElectronCountsAst` passthrough (matching `impl From<Vec<i64>>`).
