@@ -789,7 +789,7 @@ constraint variant and all three `Solution` outcomes. Complement-set forms belon
 stereo relation lattices evaluated in the later relational/conformance stages; the incidence leaf
 types do not define one.
 
-#### S3c — Ring constraint evaluation
+#### S3c — Ring constraint evaluation **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint/ring.rs`
 

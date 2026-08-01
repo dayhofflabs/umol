@@ -51,6 +51,7 @@ pub enum ConstraintContradiction {
 pub enum ConstraintError {
     #[error("constraint references unavailable {entity}")]
     InvalidReference { entity: Entity },
+    /// Dative-bond ring topology is deferred to the coordination/haptic entity split in doc 117.
     #[error("ring membership is not defined for dative bond {bond:?}")]
     DativeBondRingMembershipUnsupported { bond: DativeBondId },
 }

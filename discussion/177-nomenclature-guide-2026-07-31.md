@@ -61,6 +61,91 @@ and none is a synonym for another.
 **Determinacy.** *Undetermined* is stored lattice state on a value. *Underdetermined* is an operation
 outcome. The words differ by two letters and by kind; the glossary keeps them apart deliberately.
 
+## Suffixes
+
+The generative core of this guide. Each family gains members as work lands, so a new type's suffix
+should be chosen here rather than by analogy with whichever neighbour was read last. Counts are as of
+2026-07-31.
+
+| Suffix | Means | Count | Crates |
+| --- | --- | --- | --- |
+| `*Algorithm` | selects one implementation of one algorithmic problem | 36 | graph-core (primitives), ast, graph |
+| `*Config` | composite operational configuration | 30 | ast (ops), graph, io, py — never graph-core |
+| `*Model` | semantic choices deciding chemical acceptance | 13 | graph |
+| `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
+| `*Kind` | unit-variant enum discriminating a family | 11 | ast, geometric, graph-core, msym, py |
+| `*Constraint` | one assertable predicate over an entity | 6 | ast, py |
+| `*Constraints` | the container holding an entity's constraints | — | currently spelled `*ConstraintsAst` |
+| `*Key` | identifies a constraint slot within a container | 13 | ast, perm, py |
+| `*View` / `*Views` / `*ViewMut` | borrowed accessor into a molecule; plural is the collection; `Mut` is the editing form | 37 / 15 / 16 | ast, io, py |
+| `*Delta` | an encoded change belonging to a reaction side | 18 | ast, py |
+| `*Update` | a field-level change applied to one entity | 10 | ast |
+| `*Defaults` | values used where an input states nothing | 13 | ast, py |
+| `*Overrides` | values that replace what an input stated | 10 | ast |
+| `*Entry` | one row of a table-shaped registry or format | 41 | several |
+| `*Contradiction` | a semantic rejection, the `Solution::Contradictory` payload | 18 | ast, graph |
+| `*Mismatch` | two independently meaningful things that disagree | 3 | graph |
+| `*Error` | operational or setup failure, the `Err` side | 58 | all |
+| `*Validator` | performs one validation tier or one check within it | 12 | ast, graph |
+| `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
+| `*Ast` / `*Dsl` | internal representation / boundary surface | 77 / 38 | ast — **under review, doc 176** |
+
+Families with no member yet, named in settled vocabulary and expected to gain one:
+`*Failure` (doc 171), transformers (doc 166 — see *Transformer naming* below).
+
+### Constraint singular and plural
+
+`*Constraint` is one assertable predicate. `*Constraints` is the container holding an entity's
+constraints. The plural is never a synonym for "several constraints" in a signature; it names the
+store.
+
+**Not:** using the plural for a `Vec<Constraint>` parameter.
+**In code:** `AtomConstraintAst` against `AtomConstraintsAst`; likewise for every entity kind.
+**Settled by:** 138.
+
+### View, Views, ViewMut
+
+A `*View` is a borrowed accessor into a molecule, not an owned value. `*Views` is the collection over
+one entity kind. `*ViewMut` is the editing form. Sub-families exist: `*ConstraintsView`,
+`*EditorView`, `*EditorViewMut`.
+
+**Not:** the owned representation, which is the `*Ast` type; a view does not survive its molecule.
+**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorViewMut`.
+**Settled by:** 086.
+
+### Delta and Update
+
+A `*Delta` is an encoded change belonging to a reaction side. A `*Update` is a field-level change
+applied to one entity. They are not interchangeable and exist per entity kind in both families.
+
+**Not:** each other. `AtomDelta` is reaction-side change encoding; `AtomUpdate` is an entity edit.
+**In code:** `AtomDelta`, `Deltas`, `ConstraintDelta` against `AtomUpdate`, `AtomFieldChange`.
+**Settled by:** 134.
+
+### Defaults and Overrides
+
+`*Defaults` supplies values where an input states nothing. `*Overrides` replaces values the input did
+state.
+
+**Not:** each other. The difference is whether the input spoke.
+**In code:** `MoleculeDefaults`, `AtomDefaults` against `MoleculeOverrides`, `AtomOverrides`.
+**Settled by:** to fill during the sweep.
+
+### Transformer naming — unsettled
+
+Three patterns are in use for the same family, and doc 166 adds two more members:
+
+- agent noun: `Kekulizer`, `Aromatizer`, each having grown `*Error` and `*Config`;
+- verb phrase: `DelocalizeCharge`;
+- target phrase: `ToExplicitHydrogens`, `ToImplicitHydrogens` (doc 166, not yet written).
+
+The house pattern for a thing that performs an operation is the agent noun — `Resolver`, `Validator`,
+`Kekulizer`. The counter-argument is that `Kekulizer` and `Aromatizer` are configured engines with
+their own error and config types, while `DelocalizeCharge` and the hydrogen transforms are
+parameterless operations, which may justify two conventions rather than one.
+
+This needs a decision before doc 166 lands its three transformers, not after.
+
 ## Retired and discouraged
 
 Indexed by the word not to use. Add a row whenever an entry's `Not:` line forbids a specific
@@ -102,6 +187,17 @@ every edit succeeds.
 **Not:** plan (which is derived without mutating), transformation.
 **In code:** `apply`, `apply_at`.
 **Settled by:** 166.
+
+### Combine
+
+**Combine** forms the disjoint union of two structures, yielding one structure with two components.
+
+Named `join` originally; renamed to avoid collision with the lattice join. Implemented and unlikely
+to gain analogues, so it is recorded rather than generative.
+
+**Not:** *join*, which is the lattice least upper bound.
+**In code:** `combine`, `combine_all`, `combine_from`.
+**Settled by:** 151.
 
 ### Config
 
@@ -162,9 +258,10 @@ aromatic system, multicenter bond, noncovalent bond, stereo atom, or stereo bond
 entity name in diagnostics and action fields when it matters which kind is affected.
 
 **Not:** *kind*, which names what distinguishes one entity family from another rather than an
-instance.
+instance. Not *overlay* either: entity covers all eight kinds, overlay covers the six that are not
+topology.
 **In code:** `Entity`, `EntityKind`.
-**Settled by:** to fill during the sweep.
+**Settled by:** 134, 086. Origin of the approach: 079.
 
 ### Entity constraint
 
@@ -194,6 +291,16 @@ failure means that a structurally readable entity is not realizable under them.
 be configured to retain or remove the affected input).
 **In code:** —
 **Settled by:** 171.
+
+### Ground term
+
+A **ground term** is a structure in which every inherent field holds a definite value. Groundness is
+structural: it says the lattice is resolved to a bottom element, not that the structure satisfies
+chemistry invariants or that its entities are mutually consistent.
+
+**Not:** valid, or chemically admissible. Doc 173 separates structural groundness from both.
+**In code:** `Lattice::is_ground`, `Ground<T>` (planned, doc 175).
+**Settled by:** 173. Whitepaper glossary carries the chemist-facing form.
 
 ### Incidence constraint
 
@@ -228,6 +335,15 @@ where sound, replace the entity, or report a contradiction.
 site and entity involved.
 **Settled by:** 171.
 
+### Inherent field
+
+An **inherent field** identifies an entity and is always present on it, though its value may be
+undetermined.
+
+**Not:** constraint, which is assertable without contributing to identity and may be absent.
+**In code:** the non-constraint fields of each `*Ast` entity type.
+**Settled by:** 104, 173.
+
 ### Integrity
 
 **Integrity** concerns well-formed storage, entity shape, references, and model-independent
@@ -246,6 +362,16 @@ well-formed structure.
 **In code:** `validate_invariants`, `ValenceInvariantsValidator`, `SpinInvariantsValidator`.
 **Settled by:** 171.
 
+### Lattice
+
+**Lattice** is the internal term for the partial order on attribute values under which matching,
+meet, and join are defined. The whitepaper calls it the *attribute lattice*; "attribute" is a
+clarification added for chemist readers and is not repository terminology.
+
+**Not:** *attribute lattice* in code or internal documentation.
+**In code:** `Lattice`, `meet`, `join`, `matches`, `is_compatible`.
+**Settled by:** 113.
+
 ### Mismatch
 
 A **mismatch** means that a constraint and entity, or a constraint and its derived value, are each
@@ -263,6 +389,51 @@ A **model** contains semantic choices defining which result is chemically accept
 **Not:** config, policy, algorithm.
 **In code:** `ChemistryModel`, `ValenceModel`, `AromaticityModel`, `StereoModel`, `RingModel`.
 **Settled by:** 171.
+
+### Molecular structure
+
+A **molecular structure** is a molecular topology together with its overlay entities.
+
+**Not:** molecular topology, which excludes them.
+**In code:** —
+**Settled by:** whitepaper glossary; no settled repository term.
+
+### Molecular topology
+
+The **molecular topology** is the attributed undirected simple graph of atoms and localized bonds,
+carrying no aromatic, stereo, or coordination information.
+
+**Not:** molecular structure, which includes the overlay entities.
+**In code:** —
+**Settled by:** whitepaper glossary; no settled repository term.
+
+### Overlay
+
+An **overlay** is one of the six entity kinds that are not molecular topology: dative bond, aromatic
+system, multicenter bond, noncovalent bond, stereo atom, stereo bond. Atoms and localized bonds are
+the topology and are not overlays.
+
+**Scope conflict, unresolved.** `IncidenceNodeSelection::OVERLAYS` covers only four of the six —
+dative, aromatic, multicenter, noncovalent — with `STEREO` as a separate flag, so that
+`constitution()` is atoms, bonds and those four while `full()` adds stereo. The narrower sense is
+chemically motivated (constitution against configuration) but it makes the same word mean four kinds
+in one place and six everywhere else. Either the flag or the term should change.
+
+**Not:** *relation* or *hyperedge*, which are whitepaper framings for the same thing and appear in
+source comments descriptively; overlay is the repository term. Not *entity*, which is the umbrella
+over all eight kinds.
+**In code:** `GraphAndOverlays`, `verify_overlays`, `RemovedOverlays`,
+`IncidenceNodeSelection::OVERLAYS` (narrower, see above).
+**Settled by:** 134. Whitepaper §5 carries the chemist-facing definition.
+
+### Participant
+
+A **participant** is an entity referenced by an overlay entity — the atoms of an aromatic system, the
+donors and acceptor of a dative bond, the site and ligands of a stereo element.
+
+**Not:** member, constituent, or argument.
+**In code:** `ParticipantPosition`.
+**Settled by:** 134.
 
 ### Perception
 
@@ -321,6 +492,21 @@ supplies the context.
 **In code:** the variants above.
 **Settled by:** 171.
 
+### Refinement
+
+**Refinement** names three unrelated operations. Always qualify it.
+
+- **Lattice refinement** — the order relation on attribute values; `b` refines `a` when `a ∧ b = b`.
+  Doc 113.
+- **Colour refinement** — the automorphism and canonical-labelling procedure. `RefinementAlgorithm`,
+  `umol-graph-core/src/algorithms/refinement.rs`.
+- **Circular refinement** — the fingerprint iteration over atom environments.
+  `CircularRefinementAlgorithm`, `CircularRefinementHash`. Docs 126, 154.
+
+**Not:** any of the three used unqualified where another could be meant.
+**In code:** `RefinementAlgorithm`, `CircularRefinementAlgorithm`, `Lattice::matches`.
+**Settled by:** 113, 126, 154.
+
 ### Relational constraint
 
 A **relational constraint** is a molecule-scope, reference-bearing constraint relating an overlay
@@ -362,6 +548,16 @@ relevant-cycle enumeration algorithm is operational configuration.
 **Not:** incidence constraint.
 **In code:** `RingConstraintValidator`, `RingConstraintContradiction`.
 **Settled by:** 171.
+
+### Split
+
+**Split** decomposes a structure into its connected components.
+
+Implemented and unlikely to gain analogues; recorded rather than generative.
+
+**Not:** a partition by any other criterion.
+**In code:** `split`.
+**Settled by:** 086.
 
 ### Transformation
 
