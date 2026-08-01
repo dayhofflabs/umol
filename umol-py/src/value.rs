@@ -15,6 +15,7 @@ use umol_ast::ast::{
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::{impl_py_canonicalize, impl_py_lattice};
 
 /// Relational operator in a value predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -171,6 +172,15 @@ impl ValueTerm {
         }
     }
 }
+
+impl_py_canonicalize!(
+    ValueTerm,
+    AstValueTerm,
+    |value: &ValueTerm, py: Python<'_>| -> PyResult<AstValueTerm> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: AstValueTerm| -> PyResult<ValueTerm> {
+        ValueTerm::from_rust(py, &value)
+    }
+);
 
 /// Boolean predicate over value terms.
 #[pyclass]
@@ -332,6 +342,13 @@ impl ValueAst {
         }
     }
 }
+
+impl_py_lattice!(
+    ValueAst,
+    AstValueAst,
+    |value: &ValueAst, py: Python<'_>| -> PyResult<AstValueAst> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: AstValueAst| -> PyResult<ValueAst> { ValueAst::from_rust(py, &value) }
+);
 
 /// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), matching `impl Into<ValueAst>`
 /// on the Rust builders. The `*Arg` convention for binding coercion inputs (`*Input`

@@ -87,9 +87,9 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   Wire the module from `lib.rs` and apply both surfaces to `BooleanAst` as the direct-conversion case.
   Add exact Python assertions for top, ground, compatible, incompatible, meet, join, matching,
   canonicalization, and canonical equality. **Additive (green).** [dep: none]
-- **S0b — Cover Python-dependent conversions and contradictions.** Apply the generated surfaces to
-  `ValueAst` and the canonicalization-only surface to `ValueTerm`, exercising wrappers whose
-  conversions require `Python` and can fail. Test structural-versus-canonical equality, `None` from
+- **S0b — Cover Python-dependent conversions and contradictions.** **Done.** Apply the generated
+  surfaces to `ValueAst` and the canonicalization-only surface to `ValueTerm`, exercising wrappers
+  whose conversions require `Python` and can fail. Test structural-versus-canonical equality, `None` from
   absent bounds, `ContradictionError` from `canonicalize`, and Rust's
   two-contradictions-compare-equal rule.
   **Additive (green).** [dep: S0a]
