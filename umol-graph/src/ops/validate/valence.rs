@@ -38,9 +38,8 @@ impl<'a> ValenceConformanceValidator<'a> {
 
     pub fn validate(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ValenceConformanceContradiction>, ValenceConformanceError> {
-        let ast = ast.as_ref();
         let mut any_undetermined = false;
         for id in ast.atoms().ids() {
             let outcome = match self {

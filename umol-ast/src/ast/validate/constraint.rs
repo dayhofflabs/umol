@@ -58,7 +58,7 @@ pub enum ConstraintError {
 impl ConstraintValidator {
     pub fn validate(
         &self,
-        _ast: impl AsRef<MoleculeAst>,
+        _ast: &MoleculeAst,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         // TODO: stub. Per-relation constraint evaluators not yet implemented.
         // Entity constraint consistency: an entity's inline (entity-local) constraints

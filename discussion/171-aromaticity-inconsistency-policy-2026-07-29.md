@@ -474,7 +474,9 @@ Constraint evaluation and model conformance are separate responsibilities:
 
 - `EntityStructureValidator` rejects malformed entity storage unconditionally.
 - `IncidenceConstraintValidator` evaluates entity-local constraints derived from fields and directly
-  incident localized bonds or overlay relations. It has no algorithm configuration.
+  incident localized bonds or overlay relations. Its focused AST-layer operation receives a
+  `ConnectedComponentsAlgorithm` for noncovalent `#I`; every other incidence constraint is
+  algorithm-free.
 - `RingConstraintValidator` evaluates ring membership, ring degree, and ring valence under the fixed
   Relevant-through-22 semantics. Its focused AST-layer operation receives a
   `RelevantCycleEnumerationAlgorithm` directly.
@@ -525,10 +527,11 @@ pub struct ConstraintValidateConfig {
 ```
 
 `ConstraintValidator` stores this config. The higher-level `umol_graph::ValidateConfig` nests it as
-`constraint` and supplies documented defaults. A focused incidence validator needs no selector; a
-focused ring validator receives `RelevantCycleEnumerationAlgorithm` directly. The complete
-constraint validator runs ring enumeration, connected-components analysis, or substructure matching
-only when a present non-vacuous leaf requires it.
+`constraint` and supplies documented defaults. A focused incidence validator receives
+`ConnectedComponentsAlgorithm` directly for `#I`; a focused ring validator receives
+`RelevantCycleEnumerationAlgorithm` directly. The complete constraint validator runs ring
+enumeration, connected-components analysis, or substructure matching only when a present non-vacuous
+leaf requires it.
 
 The dedicated aromaticity and stereo validators then answer the separate model-conformance question.
 Doc 166 now points to this work unit for the complete constraint-integrity implementation.
@@ -762,7 +765,7 @@ and do not add one-field config wrappers to focused validators.
 Focused tables establish construction and exact contradiction/error wrapping. No test merely checks
 that an error or contradiction is present.
 
-#### S3b — Algorithm-free entity constraint evaluation
+#### S3b — Entity incidence constraint evaluation **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint/incidence.rs` and focused evaluator modules under
 `umol-ast/src/ast/validate/constraint/`
@@ -774,15 +777,17 @@ that an error or contradiction is present.
 Implement the focused incidence evaluator over `AtomView`, `BondView`, and overlay views. Cover atom
 valence, donated and accepted pairs, aromatic and multicenter valence, tetrahedral stereo incidence,
 degree, total degree, total valence, and total hydrogens; localized-bond aromatic and cis-trans
-incidence; binary dative aromatic incidence; noncovalent intramolecular status; and the
-algorithm-free entity aggregates for aromatic-system and multicenter-bond electron counts. The
-multi-donor `#d`/`#t` case remains an explicit unimplemented branch pointing to doc 117 rather than
-acquiring provisional semantics.
+incidence; binary dative aromatic incidence; noncovalent intramolecular status using an explicit
+`ConnectedComponentsAlgorithm`; and the algorithm-free entity aggregates for aromatic-system and
+multicenter-bond electron counts. The multi-donor `#d`/`#t` case remains an explicit unimplemented
+branch pointing to doc 117 rather than acquiring provisional semantics.
 
-Evaluate literal, set, negated-set, and undetermined values through their lattice semantics. Vacuous
+Evaluate literal, finite-set, range, and undetermined values through their lattice semantics. Vacuous
 constraints are determined identities; non-vacuous values whose derived side is unavailable are
 underdetermined; decided disagreement returns the exact contradiction. Focused tables cover every
-constraint variant and all three `Solution` outcomes.
+constraint variant and all three `Solution` outcomes. Complement-set forms belong to the finite
+stereo relation lattices evaluated in the later relational/conformance stages; the incidence leaf
+types do not define one.
 
 #### S3c — Ring constraint evaluation
 

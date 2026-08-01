@@ -46,9 +46,8 @@ pub enum SpinInvariantsError {}
 impl SpinInvariantsValidator {
     pub fn validate(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
-        let ast = ast.as_ref();
         let mut any_undetermined = false;
 
         for atom in ast.atoms().iter() {
@@ -376,7 +375,7 @@ mod tests {
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate(MoleculeAst::from_parts(parts))
+                .validate(&MoleculeAst::from_parts(parts))
                 .unwrap(),
             expected,
         );
@@ -528,7 +527,7 @@ mod tests {
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate(MoleculeAst::from_parts(parts))
+                .validate(&MoleculeAst::from_parts(parts))
                 .unwrap(),
             expected,
         );
@@ -601,7 +600,7 @@ mod tests {
                 Solution::Determined(())
             };
 
-            prop_assert_eq!(SpinInvariantsValidator.validate(molecule).unwrap(), expected);
+            prop_assert_eq!(SpinInvariantsValidator.validate(&molecule).unwrap(), expected);
         }
     }
 }

@@ -119,9 +119,8 @@ impl<'a> Validator<'a> {
     /// Integrity: entity-structure shape and constraint cross-checks.
     pub fn validate_integrity(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
-        let ast = ast.as_ref();
         let mut any_undetermined = false;
         match self.entity_structure.validate(ast)? {
             Solution::Determined(()) => {}
@@ -139,9 +138,8 @@ impl<'a> Validator<'a> {
     /// Invariants: electron count and spin coupling.
     pub fn validate_invariants(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
-        let ast = ast.as_ref();
         let mut any_undetermined = false;
         match self.valence_invariants.validate(ast)? {
             Solution::Determined(()) => {}
@@ -160,9 +158,8 @@ impl<'a> Validator<'a> {
     /// aromaticity, and stereo.
     pub fn validate_conformance(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
-        let ast = ast.as_ref();
         let mut any_undetermined = false;
         match self.valence_conformance.validate(ast)? {
             Solution::Determined(()) => {}
@@ -185,9 +182,8 @@ impl<'a> Validator<'a> {
     /// All validators in order: integrity → invariants → conformance.
     pub fn validate(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
-        let ast = ast.as_ref();
         let mut any_undetermined = false;
         for outcome in [
             self.validate_integrity(ast)?,

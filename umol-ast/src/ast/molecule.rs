@@ -68,12 +68,6 @@ pub struct MoleculeAst {
     constraints: Constraints,
 }
 
-impl AsRef<MoleculeAst> for MoleculeAst {
-    fn as_ref(&self) -> &MoleculeAst {
-        self
-    }
-}
-
 /// Constructor input for [`MoleculeAst::from_parts`].
 #[derive(Debug, Default, Clone)]
 pub struct MoleculeParts {

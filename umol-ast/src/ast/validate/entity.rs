@@ -70,9 +70,8 @@ pub enum EntityStructureError {}
 impl EntityStructureValidator {
     pub fn validate(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), EntityStructureContradiction>, EntityStructureError> {
-        let ast = ast.as_ref();
         let contradiction = bond_structure_check(ast)
             .or_else(|| dative_structure_check(ast))
             .or_else(|| noncovalent_structure_check(ast))
@@ -292,7 +291,7 @@ mod tests {
     #[case::multicenter_partial_overlap(mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [1 2 3] :type "*"}]}"#))]
     fn test_entity_structure_validator_validate(#[case] ast: MoleculeAst) {
         assert_eq!(
-            EntityStructureValidator.validate(ast).unwrap(),
+            EntityStructureValidator.validate(&ast).unwrap(),
             Solution::Determined(())
         );
     }
@@ -367,7 +366,7 @@ mod tests {
         #[case] expected: EntityStructureContradiction,
     ) {
         assert_eq!(
-            EntityStructureValidator.validate(ast).unwrap(),
+            EntityStructureValidator.validate(&ast).unwrap(),
             Solution::Contradictory(expected)
         );
     }

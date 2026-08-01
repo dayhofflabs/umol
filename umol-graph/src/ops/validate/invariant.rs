@@ -19,9 +19,9 @@ pub enum ValenceInvariantsError {}
 impl ValenceInvariantsValidator {
     pub fn validate(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ValenceMismatch>, ValenceInvariantsError> {
-        Ok(ValenceInvariants::check(ast.as_ref()))
+        Ok(ValenceInvariants::check(ast))
     }
 
     pub fn validate_atom(

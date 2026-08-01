@@ -83,9 +83,8 @@ impl<'a> ConnectivityValidator<'a> {
 
     pub fn validate(
         &self,
-        ast: impl AsRef<MoleculeAst>,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), ConnectivityContradiction>, ConnectivityError> {
-        let ast = ast.as_ref();
         let atom_count = ast.atoms().count();
         let mut union = UnionFind::new(atom_count);
         for bond in ast.bonds().iter() {
