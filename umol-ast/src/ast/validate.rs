@@ -16,6 +16,7 @@ pub use connectivity::{
 pub use constraint::{
     ConstraintContradiction, ConstraintError, ConstraintValidateConfig, ConstraintValidator,
     IncidenceConstraintContradiction, IncidenceConstraintValidator,
+    MoleculeConstraintContradiction, MoleculeConstraintValidator,
     RelationalConstraintContradiction, RelationalConstraintValidator, RingConstraintContradiction,
     RingConstraintValidator,
 };

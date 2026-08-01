@@ -188,6 +188,20 @@ every edit succeeds.
 **In code:** `apply`, `apply_at`.
 **Settled by:** 166.
 
+### Class
+
+A **class** is the stereo family a configuration belongs to: either a named permutation-group family
+with its degree, or a coordination geometry whose proper-rotation group fixes the cosets. The class
+determines the coset space, and therefore what a configuration index means.
+
+Named families: `Symmetric(n)`, `Alternating(n)`, `Cyclic(n)`, `Dihedral(n)`. Geometries:
+`Tetrahedral`, `CisTrans`, `Axial`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral`.
+
+**Not:** *kind*, which discriminates entity families. A stereo atom's kind is `StereoKind`; its class
+is `ClassKey`.
+**In code:** `ClassKey`, and the `class` field of the stereo `:type` payload.
+**Settled by:** 104.
+
 ### Combine
 
 **Combine** forms the disjoint union of two structures, yielding one structure with two components.
@@ -211,6 +225,16 @@ algorithm selectors directly.
 **In code:** `*Config`, e.g. `ResolveConfig`, `ValidateConfig`, `SubstructureSearchConfig`,
 `ConstraintValidateConfig`, `SmilesIoConfig`.
 **Settled by:** 171.
+
+### Configuration
+
+A **configuration** is a ligand-to-position map. Two configurations describe the same arrangement
+when a proper rotation relates them, so the observable descriptor is the coset rather than the map.
+
+**Not:** *coset*, which is the equivalence class the configuration falls into; not *conformation*,
+which umol does not represent.
+**In code:** `StereoConfigurationAst`; the `configuration` attribute of stereo atoms and bonds.
+**Settled by:** 104.
 
 ### Conformance
 
@@ -242,6 +266,32 @@ classifications that a resolver may still act on).
 **In code:** `Solution::Contradictory`, `*Contradiction`.
 **Settled by:** 171.
 
+### Coset
+
+A **coset** is the observable stereo descriptor: the equivalence class of ligand-to-position maps
+under the proper-rotation group of the class. Two configurations `σ` and `r∘σ` are the same
+arrangement for any proper rotation `r`, so the class is the right coset `Rσ`, and the canonical
+representative is its minimum-rank element.
+
+A `CosetSpace` is `R\P` for the proper-rotation group `R` inside a parent group `P`, where `P` is the
+group of realizable arrangements — `Sₙ` for the geometry classes, a partition subgroup for cis/trans,
+where substituents are bonded to fixed sp² carbons. A *decomposition* numbers the cosets:
+`CanonicalRank` is the generic Lehmer-minimum ordering, which reduces to the parity bit for a
+two-coset space; the geometry decompositions reproduce the OpenSMILES arrangement numbers.
+
+This is the standard group-theoretic term used in its ordinary sense; the entry exists because the
+coset, not the configuration, is what the notation stores and what `#T` and `#C` carry.
+
+**Not:** *configuration*, which is one representative map. Not *orbit* — the ligand permutation group
+acts, but the stored descriptor is a coset of the rotation subgroup.
+**In code:** `CosetSpace`, `coset_rep`, `observable_coset`, `orbit_reps`; the coset index in
+`#T<n>` / `#C<n>`.
+**Settled by:** 104, 113.
+
+**Notation slip to fix:** `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`, and the
+`CosetSpace` doc comment on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so `R\P` is
+correct and the struct comment is wrong.
+
 ### Derivation
 
 A **derivation** is the policy-free result of perception, including candidates and exact
@@ -259,6 +309,26 @@ inconsistencies.
 return `Determined` with a payload that is not ground if the operation's own contract is satisfied.
 **In code:** `Solution::Determined`, `is_determined`, `into_determined`.
 **Settled by:** to fill during the sweep.
+
+### Embedding kind
+
+**Embedding kind** selects how strictly a correspondence must preserve non-edges, and is a required
+argument to every common-subgraph and substructure operation.
+
+- **Induced** — a pair of mapped nodes is adjacent in one graph exactly when it is adjacent in the
+  other. An edge present on one side and absent on the other is inadmissible.
+- **Monomorphism** — edges must map to edges, but the host may carry additional edges between mapped
+  nodes.
+
+The distinction is what Raymond and Willett call maximum common *induced* subgraph against maximum
+common *edge* subgraph, and it decides whether the "exactly one source edge exists" case is
+admissible in the modular product.
+
+**Not:** an algorithm. `EmbeddingKind` says which answer is wanted; `*Algorithm` says how to compute
+it.
+**In code:** `EmbeddingKind::Induced`, `EmbeddingKind::Monomorphism`; also `McisAlgorithm` and
+`McesAlgorithm`.
+**Settled by:** 162.
 
 ### Entity
 
@@ -437,13 +507,36 @@ over all eight kinds.
 `IncidenceNodeSelection::OVERLAYS` (narrower, see above).
 **Settled by:** 134. Whitepaper §5 carries the chemist-facing definition.
 
+### Parse path
+
+Two paths from EDN text to a Rust value, which a type chooses between and must keep in parity.
+
+- **Tree** — `read_string` materializes an `Edn` tree, then `FromEdn::from_edn` walks it. The
+  canonical path; supports the full data model uniformly.
+- **Streaming** — `FromEdn::from_edn_str` fuses parsing and construction in one pass, bypassing the
+  tree. An optimization for hot types only.
+
+The contract binding them: an override of `from_edn_str` **must be observationally equivalent to the
+default — the same return value and the same error variant, for every input.** That obligation is
+what the streaming/tree parity property tests check, and it is the only non-obvious thing about the
+EDN conversion traits, whose names follow the ordinary `FromStr` / `ToString` idiom.
+
+**Not:** alternatives with different semantics. The streaming path is a latency optimization, not a
+different reading of the input; any divergence is a defect.
+**In code:** `read_string`, `from_edn`, `from_edn_str`, `StreamDeserializer`, `EdnTreeSerializer`.
+**Settled by:** to fill during the sweep.
+
 ### Participant
 
 A **participant** is an entity referenced by an overlay entity — the atoms of an aromatic system, the
 donors and acceptor of a dative bond, the site and ligands of a stereo element.
 
+The word carries the same idea at two layers. In `umol-graph-core` a participant is a typed value
+occupying a relation factor, routed through the incidence index; in the entity model it is the atom
+or bond an overlay refers to. The lower layer is the mechanism for the upper one.
+
 **Not:** member, constituent, or argument.
-**In code:** `ParticipantPosition`.
+**In code:** `ParticipantPosition`, `RelationParticipant`, `ParticipantAnchor`.
 **Settled by:** 134.
 
 ### Perception
@@ -466,7 +559,10 @@ A **plan** is the complete edit sequence derived without mutating the source obj
 ### Policy
 
 A **policy** is operational configuration mapping a classified inconsistency to a recovery action.
-Policies belong to resolvers, not perception, derivation, chemistry models, or validators. A policy
+Within the chemistry layer, policies belong to resolvers, not perception, derivation, chemistry
+models, or validators. The suffix is also used outside that layer for the same shape of decision —
+`DuplicateKeyPolicy` in `umol-edn` maps a duplicate map key to `Error` or `LastWins` — so the
+resolver restriction scopes where policies may live in `umol-graph`, not what the suffix means. A policy
 enum is shared when the available action set is identical; the config field supplies the concrete
 constraint or entity context.
 
@@ -514,9 +610,36 @@ supplies the context.
 - **Circular refinement** — the fingerprint iteration over atom environments.
   `CircularRefinementAlgorithm`, `CircularRefinementHash`. Docs 126, 154.
 
+Both graph refinements take **rounds**: `ToFixpoint` runs until the colouring stabilizes, `Fixed(n)`
+runs exactly `n`. A fixed count is what makes a fingerprint reproducible; a fixpoint is what makes a
+canonical form.
+
 **Not:** any of the three used unqualified where another could be meant.
-**In code:** `RefinementAlgorithm`, `CircularRefinementAlgorithm`, `Lattice::matches`.
+**In code:** `RefinementAlgorithm`, `CircularRefinementAlgorithm`, `RefinementRounds`,
+`Lattice::matches`.
 **Settled by:** 113, 126, 154.
+
+### Relation set
+
+A **relation set** stores n-ary relations over typed participants — `NodeId`, `EdgeId`, or an
+external type implementing `RelationParticipant` — with a shared incidence index so that a relation
+is reachable from any of its participants.
+
+Three axes parameterize a set, and the vocabulary is worth keeping straight:
+
+- **arity** — `FixedRelationSet` has compile-time-known arity; `VarRelationSet` is variable-arity;
+- **ordering** — `Unordered` or `Ordered`, which is what controls canonicalization;
+- **factor** — a birelation set relates *two* factors, each with its own participant type, ordering,
+  and arity. `FixedFixedBirelationSet`, `FixedVarBirelationSet`, `VarVarBirelationSet`.
+
+The incidence index of a birelation set spans both factors, so a relation is reachable from a
+participant regardless of which id-space it belongs to.
+
+**Not:** a relational-database table, though the whitepaper uses that reading to explain overlays.
+Not the overlay itself: an overlay entity is *stored in* a relation set.
+**In code:** `FixedRelationSet`, `VarRelationSet`, `FixedFixedBirelationSet`, `ParticipantAnchor`,
+`RelationParticipant`.
+**Settled by:** 134. Whitepaper §5 carries the chemist-facing reading.
 
 ### Relational constraint
 
@@ -586,6 +709,24 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 **Not:** a partition by any other criterion.
 **In code:** `split`.
 **Settled by:** 086.
+
+### Tag reader
+
+A **tag reader** transforms the value following an EDN tag into an `Edn` value. Readers are
+registered on `ParseConfig` and stored as `Arc<dyn Fn>`, so a closure may capture external state such
+as a registry of permitted tags.
+
+The entry exists for the collision, not the mechanism. `#` marks an EDN tag in the envelope
+(`#inst`, `#uuid`) and also marks a predicate in the \umol\ string sublanguage (`#h`, `#a`, `#R`).
+The two are unrelated: EDN tags are read by tag readers at the envelope level, while string
+predicates are parsed by the entity subgrammars inside a quoted string and never reach the EDN
+reader.
+
+**Not:** the `#`-marked predicates of the string sublanguage. A "tag" in the notation reference means
+the single letter after `#` in an entity string; a "tag" in EDN means the symbol after `#` in the
+envelope.
+**In code:** `TagReaders`, `ParseConfig`.
+**Settled by:** to fill during the sweep.
 
 ### Transformation
 

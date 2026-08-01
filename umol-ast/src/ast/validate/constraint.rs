@@ -8,10 +8,12 @@ use umol_graph_core::{
 use umol_utils::solution::Solution;
 
 pub mod incidence;
+pub mod molecule;
 pub mod relational;
 pub mod ring;
 
 pub use incidence::{IncidenceConstraintContradiction, IncidenceConstraintValidator};
+pub use molecule::{MoleculeConstraintContradiction, MoleculeConstraintValidator};
 pub use relational::{RelationalConstraintContradiction, RelationalConstraintValidator};
 pub use ring::{RingConstraintContradiction, RingConstraintValidator};
 
@@ -49,6 +51,8 @@ pub enum ConstraintContradiction {
     Ring(#[from] RingConstraintContradiction),
     #[error(transparent)]
     Relational(#[from] RelationalConstraintContradiction),
+    #[error(transparent)]
+    Molecule(#[from] MoleculeConstraintContradiction),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -84,7 +88,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{
-        AtomConstraintAst, BondConstraintAst, RelationalConstraint, RingScope,
+        AtomConstraintAst, BondConstraintAst, MoleculeConstraint, RelationalConstraint, RingScope,
     };
     use crate::ast::id::{AtomId, BondId, DativeBondId};
 
@@ -120,6 +124,18 @@ mod tests {
             constraint: RelationalConstraint::DativeBondDonor {
                 bond: DativeBondId(1),
                 atom: AtomId(2),
+            },
+        })
+    )]
+    #[case::molecule(
+        MoleculeConstraintContradiction {
+            constraint: MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(1), AtomId(2)]),
+            },
+        },
+        ConstraintContradiction::Molecule(MoleculeConstraintContradiction {
+            constraint: MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(1), AtomId(2)]),
             },
         })
     )]

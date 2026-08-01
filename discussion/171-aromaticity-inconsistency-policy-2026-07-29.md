@@ -824,7 +824,7 @@ including the shared ring projection when needed.
 Focused tables cover every relational variant, bad references as operational errors, determined
 truth and contradiction, vacuous nested predicates, and underdetermined nested predicates.
 
-#### S3e — Molecule aggregate and connectivity constraints
+#### S3e — Molecule aggregate and connectivity constraints **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint/molecule.rs`
 
@@ -832,10 +832,13 @@ truth and contradiction, vacuous nested predicates, and underdetermined nested p
 
 **Dependencies:** `[dep: S3a, S3b]`
 
-Evaluate `ChargeSum`, `UnpairedElectronCoupling`, and `BondOrderSum` over explicit subsets or the
-whole-molecule scope, preserving underdetermination whenever a required value is non-literal.
-Evaluate `Connected` with the supplied `ConnectedComponentsAlgorithm`, including empty and explicit
-atom subsets. References outside the molecule are operational errors rather than false predicates.
+Evaluate `ChargeSum` and `BondOrderSum` over explicit subsets or the whole-molecule scope,
+preserving underdetermination whenever a required value is non-literal. Validate the atom scope of
+`UnpairedElectronCoupling`; its vacuous target is determined and every non-vacuous target remains
+underdetermined pending the angular-momentum operation specified in doc 173. Evaluate `Connected`
+with the supplied `ConnectedComponentsAlgorithm`: selected atoms must belong to one localized-bond
+component, paths may pass through unselected atoms, and empty or singleton selections are
+connected. References outside the molecule are operational errors rather than false predicates.
 
 Focused tables cover subset and whole-molecule semantics, exact totals, partial values, empty
 selections, disconnected selections, and selector parity where more than one implementation exists.
