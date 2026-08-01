@@ -21,7 +21,6 @@ from umol import (
     ElementAst,
     ElementScope,
     Entity,
-    InconsistencyPolicy,
     MaximumIndependentSetAlgorithm,
     MetadataError,
     ModelConversionError,
@@ -40,6 +39,7 @@ from umol import (
     SmilesIoConfig,
     SmilesSyntaxFlags,
     StereoCoset,
+    StereoInconsistencyPolicy,
     StereoKind,
     StereoModel,
     StereoResolveConfig,
@@ -375,7 +375,7 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                inconsistency=InconsistencyPolicy.Strip
+                inconsistency=StereoInconsistencyPolicy.Strip
             ),
         ),
     )

@@ -4,8 +4,8 @@
 use pyo3::prelude::*;
 use umol_graph::ops::resolve::{
     AromaticityInconsistencyPolicy as GraphAromaticityInconsistencyPolicy,
-    AromaticityResolveConfig as GraphAromaticityResolveConfig,
-    InconsistencyPolicy as GraphInconsistencyPolicy, ResolveConfig as GraphResolveConfig,
+    AromaticityResolveConfig as GraphAromaticityResolveConfig, ResolveConfig as GraphResolveConfig,
+    StereoInconsistencyPolicy as GraphStereoInconsistencyPolicy,
     StereoResolveConfig as GraphStereoResolveConfig,
 };
 
@@ -38,26 +38,26 @@ impl AromaticityInconsistencyPolicy {
 /// Policy for stereo assertions that cannot be fully realized.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum InconsistencyPolicy {
+pub enum StereoInconsistencyPolicy {
     Keep,
     Strip,
     Error,
 }
 
-impl InconsistencyPolicy {
-    pub(crate) fn from_rust(policy: GraphInconsistencyPolicy) -> Self {
+impl StereoInconsistencyPolicy {
+    pub(crate) fn from_rust(policy: GraphStereoInconsistencyPolicy) -> Self {
         match policy {
-            GraphInconsistencyPolicy::Keep => Self::Keep,
-            GraphInconsistencyPolicy::Strip => Self::Strip,
-            GraphInconsistencyPolicy::Error => Self::Error,
+            GraphStereoInconsistencyPolicy::Keep => Self::Keep,
+            GraphStereoInconsistencyPolicy::Strip => Self::Strip,
+            GraphStereoInconsistencyPolicy::Error => Self::Error,
         }
     }
 
-    pub(crate) fn to_rust(self) -> GraphInconsistencyPolicy {
+    pub(crate) fn to_rust(self) -> GraphStereoInconsistencyPolicy {
         match self {
-            Self::Keep => GraphInconsistencyPolicy::Keep,
-            Self::Strip => GraphInconsistencyPolicy::Strip,
-            Self::Error => GraphInconsistencyPolicy::Error,
+            Self::Keep => GraphStereoInconsistencyPolicy::Keep,
+            Self::Strip => GraphStereoInconsistencyPolicy::Strip,
+            Self::Error => GraphStereoInconsistencyPolicy::Error,
         }
     }
 }
@@ -138,8 +138,8 @@ pub struct StereoResolveConfig(GraphStereoResolveConfig);
 #[pymethods]
 impl StereoResolveConfig {
     #[new]
-    #[pyo3(signature = (*, reset_stereo_constraints=false, inconsistency=InconsistencyPolicy::Error))]
-    fn new(reset_stereo_constraints: bool, inconsistency: InconsistencyPolicy) -> Self {
+    #[pyo3(signature = (*, reset_stereo_constraints=false, inconsistency=StereoInconsistencyPolicy::Error))]
+    fn new(reset_stereo_constraints: bool, inconsistency: StereoInconsistencyPolicy) -> Self {
         Self(GraphStereoResolveConfig {
             reset_stereo_constraints,
             inconsistency: inconsistency.to_rust(),
@@ -152,13 +152,13 @@ impl StereoResolveConfig {
     }
 
     #[getter]
-    fn inconsistency(&self) -> InconsistencyPolicy {
-        InconsistencyPolicy::from_rust(self.0.inconsistency)
+    fn inconsistency(&self) -> StereoInconsistencyPolicy {
+        StereoInconsistencyPolicy::from_rust(self.0.inconsistency)
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "StereoResolveConfig(reset_stereo_constraints={}, inconsistency=InconsistencyPolicy.{:?})",
+            "StereoResolveConfig(reset_stereo_constraints={}, inconsistency=StereoInconsistencyPolicy.{:?})",
             if self.0.reset_stereo_constraints {
                 "True"
             } else {
@@ -283,23 +283,35 @@ mod tests {
     }
 
     #[rstest]
-    #[case::keep(GraphInconsistencyPolicy::Keep, InconsistencyPolicy::Keep)]
-    #[case::strip(GraphInconsistencyPolicy::Strip, InconsistencyPolicy::Strip)]
-    #[case::error(GraphInconsistencyPolicy::Error, InconsistencyPolicy::Error)]
-    fn test_inconsistency_policy_from_rust(
-        #[case] policy: GraphInconsistencyPolicy,
-        #[case] expected: InconsistencyPolicy,
+    #[case::keep(GraphStereoInconsistencyPolicy::Keep, StereoInconsistencyPolicy::Keep)]
+    #[case::strip(
+        GraphStereoInconsistencyPolicy::Strip,
+        StereoInconsistencyPolicy::Strip
+    )]
+    #[case::error(
+        GraphStereoInconsistencyPolicy::Error,
+        StereoInconsistencyPolicy::Error
+    )]
+    fn test_stereo_inconsistency_policy_from_rust(
+        #[case] policy: GraphStereoInconsistencyPolicy,
+        #[case] expected: StereoInconsistencyPolicy,
     ) {
-        assert_eq!(InconsistencyPolicy::from_rust(policy), expected);
+        assert_eq!(StereoInconsistencyPolicy::from_rust(policy), expected);
     }
 
     #[rstest]
-    #[case::keep(InconsistencyPolicy::Keep, GraphInconsistencyPolicy::Keep)]
-    #[case::strip(InconsistencyPolicy::Strip, GraphInconsistencyPolicy::Strip)]
-    #[case::error(InconsistencyPolicy::Error, GraphInconsistencyPolicy::Error)]
-    fn test_inconsistency_policy_to_rust(
-        #[case] policy: InconsistencyPolicy,
-        #[case] expected: GraphInconsistencyPolicy,
+    #[case::keep(StereoInconsistencyPolicy::Keep, GraphStereoInconsistencyPolicy::Keep)]
+    #[case::strip(
+        StereoInconsistencyPolicy::Strip,
+        GraphStereoInconsistencyPolicy::Strip
+    )]
+    #[case::error(
+        StereoInconsistencyPolicy::Error,
+        GraphStereoInconsistencyPolicy::Error
+    )]
+    fn test_stereo_inconsistency_policy_to_rust(
+        #[case] policy: StereoInconsistencyPolicy,
+        #[case] expected: GraphStereoInconsistencyPolicy,
     ) {
         assert_eq!(policy.to_rust(), expected);
     }
@@ -381,18 +393,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(false, InconsistencyPolicy::Error, GraphStereoResolveConfig::default())]
-    #[case::keep(false, InconsistencyPolicy::Keep, GraphStereoResolveConfig {
+    #[case::default(
+        false,
+        StereoInconsistencyPolicy::Error,
+        GraphStereoResolveConfig::default()
+    )]
+    #[case::keep(false, StereoInconsistencyPolicy::Keep, GraphStereoResolveConfig {
         reset_stereo_constraints: false,
-        inconsistency: GraphInconsistencyPolicy::Keep,
+        inconsistency: GraphStereoInconsistencyPolicy::Keep,
     })]
-    #[case::strip(true, InconsistencyPolicy::Strip, GraphStereoResolveConfig {
+    #[case::strip(true, StereoInconsistencyPolicy::Strip, GraphStereoResolveConfig {
         reset_stereo_constraints: true,
-        inconsistency: GraphInconsistencyPolicy::Strip,
+        inconsistency: GraphStereoInconsistencyPolicy::Strip,
     })]
     fn test_stereo_resolve_config_new(
         #[case] reset_stereo_constraints: bool,
-        #[case] inconsistency: InconsistencyPolicy,
+        #[case] inconsistency: StereoInconsistencyPolicy,
         #[case] expected: GraphStereoResolveConfig,
     ) {
         assert_eq!(
@@ -403,12 +419,12 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        StereoResolveConfig::new(false, InconsistencyPolicy::Error),
-        "StereoResolveConfig(reset_stereo_constraints=False, inconsistency=InconsistencyPolicy.Error)"
+        StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error),
+        "StereoResolveConfig(reset_stereo_constraints=False, inconsistency=StereoInconsistencyPolicy.Error)"
     )]
     #[case::configured(
-        StereoResolveConfig::new(true, InconsistencyPolicy::Strip),
-        "StereoResolveConfig(reset_stereo_constraints=True, inconsistency=InconsistencyPolicy.Strip)"
+        StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
+        "StereoResolveConfig(reset_stereo_constraints=True, inconsistency=StereoInconsistencyPolicy.Strip)"
     )]
     fn test_stereo_resolve_config_repr(
         #[case] config: StereoResolveConfig,
@@ -421,15 +437,15 @@ mod tests {
     #[case::default(GraphStereoResolveConfig::default())]
     #[case::configured(GraphStereoResolveConfig {
         reset_stereo_constraints: true,
-        inconsistency: GraphInconsistencyPolicy::Strip,
+        inconsistency: GraphStereoInconsistencyPolicy::Strip,
     })]
     fn test_stereo_resolve_config_from_rust(#[case] config: GraphStereoResolveConfig) {
         assert_eq!(StereoResolveConfig::from_rust(config).0, config);
     }
 
     #[rstest]
-    #[case::default(StereoResolveConfig::new(false, InconsistencyPolicy::Error))]
-    #[case::configured(StereoResolveConfig::new(true, InconsistencyPolicy::Strip))]
+    #[case::default(StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error))]
+    #[case::configured(StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip))]
     fn test_stereo_resolve_config_to_rust(#[case] config: StereoResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
     }
@@ -441,12 +457,12 @@ mod tests {
             AromaticityInconsistencyPolicy::Error,
             false
         ),
-        StereoResolveConfig::new(false, InconsistencyPolicy::Error),
+        StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error),
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityInconsistencyPolicy::Keep, true),
-        StereoResolveConfig::new(false, InconsistencyPolicy::Error),
+        StereoResolveConfig::new(false, StereoInconsistencyPolicy::Error),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig {
                 perception: Default::default(),
@@ -458,12 +474,12 @@ mod tests {
     )]
     #[case::stereo(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityInconsistencyPolicy::Error, false),
-        StereoResolveConfig::new(true, InconsistencyPolicy::Strip),
+        StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig::default(),
             stereo: GraphStereoResolveConfig {
                 reset_stereo_constraints: true,
-                inconsistency: GraphInconsistencyPolicy::Strip,
+                inconsistency: GraphStereoInconsistencyPolicy::Strip,
             },
         },
     )]
@@ -491,9 +507,9 @@ mod tests {
     #[case::configured(
         ResolveConfig::new(
             AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityInconsistencyPolicy::Keep, true),
-            StereoResolveConfig::new(true, InconsistencyPolicy::Strip),
+            StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
         ),
-        "ResolveConfig(aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), inconsistency=AromaticityInconsistencyPolicy.Keep, reset_aromatic_valence=True), stereo=StereoResolveConfig(reset_stereo_constraints=True, inconsistency=InconsistencyPolicy.Strip))",
+        "ResolveConfig(aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), inconsistency=AromaticityInconsistencyPolicy.Keep, reset_aromatic_valence=True), stereo=StereoResolveConfig(reset_stereo_constraints=True, inconsistency=StereoInconsistencyPolicy.Strip))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -509,7 +525,7 @@ mod tests {
         },
         stereo: GraphStereoResolveConfig {
             reset_stereo_constraints: true,
-            inconsistency: GraphInconsistencyPolicy::Strip,
+            inconsistency: GraphStereoInconsistencyPolicy::Strip,
         },
     })]
     fn test_resolve_config_from_rust(#[case] config: GraphResolveConfig) {
@@ -524,7 +540,7 @@ mod tests {
             AromaticityInconsistencyPolicy::Keep,
             true
         ),
-        StereoResolveConfig::new(true, InconsistencyPolicy::Strip),
+        StereoResolveConfig::new(true, StereoInconsistencyPolicy::Strip),
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);

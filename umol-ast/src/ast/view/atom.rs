@@ -145,16 +145,18 @@ impl<'a> AtomView<'a> {
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 
-    /// Sum of `order` over incident dative bonds where this atom is the sole
-    /// donor (multi-donor datives contribute nothing per individual donor —
-    /// the donated pair is collective and has no well-defined per-atom
-    /// share). Returns `ValueAst::Lit(0)` when this atom donates to no
-    /// single-donor dative bonds; collapses to `Undetermined` if any
-    /// contributing dative's `order` is non-`Lit`.
+    /// Sum of `order` over incident binary dative bonds where this atom is the
+    /// sole donor. Multi-donor entries are currently skipped: their per-atom
+    /// projection is a stub pending the dative versus coordination/haptic
+    /// entity split in discussion doc 117. Returns `ValueAst::Lit(0)` when
+    /// this atom donates to no single-donor dative bonds; collapses to
+    /// `Undetermined` if any contributing dative's `order` is non-`Lit`.
     pub fn donated_pairs(&self) -> ValueAst {
         let mut sum = ValueAst::Lit(0);
         for view in self.dative_bonds() {
             let donor_ids: Vec<AtomId> = view.donor_ids().collect();
+            // TODO(doc 117): define this projection after separating binary
+            // dative bonds from coordination/haptic relations.
             if donor_ids.len() != 1 || donor_ids[0] != self.id {
                 continue;
             }
@@ -164,15 +166,19 @@ impl<'a> AtomView<'a> {
     }
 
     /// Sum of `order` over incident dative bonds where this atom is the
-    /// acceptor. Returns `ValueAst::Lit(0)` when this atom is not an
-    /// acceptor; collapses to `Undetermined` if any contributing dative's
-    /// `order` is non-`Lit`.
+    /// acceptor. The contribution from multi-donor entries is provisional and
+    /// must not define validation semantics before the dative versus
+    /// coordination/haptic entity split in discussion doc 117. Returns
+    /// `ValueAst::Lit(0)` when this atom is not an acceptor; collapses to
+    /// `Undetermined` if any contributing dative's `order` is non-`Lit`.
     pub fn accepted_pairs(&self) -> ValueAst {
         let mut sum = ValueAst::Lit(0);
         for view in self.dative_bonds() {
             if view.acceptor_id() != self.id {
                 continue;
             }
+            // TODO(doc 117): define the multi-donor acceptor projection after
+            // separating binary dative bonds from coordination/haptic relations.
             sum = sum + view.ast.order.clone();
         }
         sum

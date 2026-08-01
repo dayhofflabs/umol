@@ -2,7 +2,8 @@
 
 Status: In Progress
 Date: 2026-07-29
-Relates: [166](166-molecule-ops-2026-07-27.md)
+Relates: [166](166-molecule-ops-2026-07-27.md),
+[177](177-nomenclature-guide-2026-07-31.md)
 
 Aromatic input that the chemistry model declines currently leaves projections behind with no relation
 to project from. This document states the problem, the resolver policy that follows from
@@ -48,9 +49,9 @@ invalid molecule**. Discarding aromaticity requires *supplying* the alternating 
 in for.
 
 Stereo does not have the same bond-order dependency. Removing an unrealizable stereo assertion leaves
-the constitution and localized bond orders intact, so `Strip` is a sound explicit stereo-resolution
-policy. A shared policy enum would therefore either expose an unsound aromatic option or remove a
-sound stereo option.
+the constitution and localized bond orders intact, so removing stereo information is a sound explicit
+stereo-resolution action. The policy must still say whether it removes the projection, the entity, or
+both. A shared policy enum would expose actions that are unsound for aromaticity.
 
 ## Constraint: perception is flag-driven
 
@@ -62,27 +63,88 @@ Consequence: once the flags are discarded there is no flag-driven path that redi
 This rules out `Strip`. It does not rule out `Keep`: retaining the assertions preserves the information
 needed by a later operation or a different chemistry model.
 
-## Policy
+## Representation-consistency policy
 
-**Kekulization and aromatization are explicit operations, not part of any sanitization.** A resolver
-must therefore not kekulize on the caller's behalf, which removes the only variant that could have
-repaired the structure in place.
+The base entity and its stored projections are independent inputs. Neither is authoritative merely
+because it is materialized or because it appears in a constraint container. Derivation evaluates the
+two independently and classifies their relationship; only resolution applies a provenance-sensitive
+policy.
 
-- **`Error`** — resolution returns `Contradictory` when the input asserts aromaticity the model
-  declines. This is the default.
-- **`Keep`** — retain the unmatched assertion and continue without materializing the declined
-  relation. This is an explicit opt-in for callers that need the staging information.
+Three failure classes are distinct:
 
-`AromaticityInconsistencyPolicy` therefore has `Keep` and `Error`.
-`StereoInconsistencyPolicy` retains `Keep`, `Strip`, and `Error`. Both are operational resolver
-configuration and live beside `AromaticityResolveConfig` and `StereoResolveConfig`, respectively.
-The current generic stereo `InconsistencyPolicy` is renamed rather than generalized.
+| Failure | Meaning |
+| --- | --- |
+| Constraint failure | A non-vacuous constraint cannot produce a valid entity under the selected topology and model |
+| Entity failure | A structurally readable entity is not realizable under the selected topology and model |
+| Entity/constraint mismatch | The entity and constraint are independently realizable but disagree |
 
-Validators have no inconsistency policy. They validate the AST against the selected model and return
-`Contradictory` for an asserted projection that is absent, unrealizable, or inconsistent with its
-materialized relation.
+Malformed representation shape is outside this policy. Dangling participants, participant/data
+length mismatches, duplicate sites, and similar conditions are unconditional
+`EntityStructureValidator` contradictions. A resolver must not interpret malformed storage in order
+to choose which information to retain.
 
-`Kekulize` is an operation, not a policy, because it changes localized bond orders.
+Resolver policies are separate per failure class and per operation. A bare `Strip` does not say which
+representation is discarded and is therefore not an adequate policy name.
+
+| Failure | Aromaticity | Stereo |
+| --- | --- | --- |
+| Constraint failure | error or keep | error, keep, or remove the constraint |
+| Entity failure | error or keep | error, keep, or remove the entity |
+| Entity/constraint mismatch | error, keep, remove the constraint, or replace the entity from the constraint | error, keep, remove the constraint, replace the entity from the constraint, or remove both |
+
+Replacing an entity is one atomic plan: remove the conflicting relation and materialize the valid
+constraint-derived replacement. Removing the entity while retaining the constraint is not a stable
+resolution result because a subsequent call would recreate it. Removing a constraint retains the
+independently valid entity and clears only the redundant assertion.
+
+Aromaticity admits fewer recovery actions because the aromatic-system relation carries bond
+information not otherwise present in the localized representation:
+
+- an unmatched constraint cannot simply be removed;
+- an internally invalid entity cannot be removed without a valid replacement;
+- an entity/constraint mismatch may replace the entity only when the constraint independently yields
+  a valid complete system;
+- removing both sides is never sound.
+
+Stereo relations do not carry constitutional bond information, so removing an invalid stereo entity
+or removing both sides of a mismatch is sound. This does not make either representation authoritative;
+it only makes more explicit recovery choices available.
+
+The same symmetry applies to model-independent projections. Localized topology versus `#v`, dative
+relations versus `#d`/`#t`, and multicenter relations versus `#m` must never be silently reconciled.
+Their scalar projections cannot reconstruct the contributing bonds, so the generic recovery choices
+are error, keep, or remove the projection; removing the underlying relation is a separate structural
+operation.
+
+For now, the dative rule applies only to binary donor→acceptor bonds. Multi-donor entries conflate
+coordination/haptic bonding with binary dative bonding; their `#d`/`#t` projection remains an explicit
+stub pending the entity split and extensibility work in
+[doc 117](117-entity-model-extensibility-2026-06-20.md). This deferral limits coverage but does not
+change the representation-consistency policy.
+
+The policy covers all entity kinds without requiring a generic repair operation:
+
+- atom and bond constraints are checked against their `AtomView` and `BondView` projections;
+- dative, aromatic, multicenter, noncovalent, stereo-atom, and stereo-bond constraints are checked
+  against their corresponding relation views;
+- entity-local aggregate constraints, such as aromatic-system and multicenter-bond electron counts,
+  are checked against the entity fields from which they are derived;
+- relational and molecule constraints are evaluated against the complete molecule;
+- ring constraints are evaluated against the explicitly selected fixed ring projection.
+
+Where no resolver can reconstruct a sound replacement, this policy adds validation but not an
+automatic mutation. A caller may still remove a constraint or structural entity through the explicit
+editing API. Resolution policy is added only to an operation that can define a stable result for every
+offered variant.
+
+Validators have no inconsistency policy. Every determined constraint failure, entity failure, and
+entity/constraint mismatch is `Contradictory`. Absent and `Undetermined` constraints are vacuous. A
+non-vacuous assertion that cannot yet be decided is `Underdetermined`.
+
+**Transformations are explicit operations, not policy variants or reaction primitives.** Resolution
+and validation never invoke them implicitly. Kekulization and aromatization are the transformations
+at issue here; in particular, kekulization has no simple inverse that would make it a sound primitive
+reaction operation.
 
 Raw parse/raise has no aromatic-system relation for `Kekulizer` to consume. A caller who wants furan
 localized before applying `mdl()` must first resolve it under a model that accepts the source aromatic
@@ -96,36 +158,41 @@ The current Python surface does not expose this full chain.
 
 ## Derivation and verification
 
-The consistency decision belongs with the derivation that has enough information to make it. Policy
-is applied only by resolvers:
+The consistency classification belongs with the derivation that has enough information to evaluate
+both representations. Policy is applied only by resolvers:
 
-- `AromaticityPerception::derive` returns an `AromaticityDerivation` containing independently
-  accepted systems and exact unmatched atom, bond, and existing-system IDs.
-- `StereoPerception::derive` returns a `StereoDerivation` containing realizable atom and bond
-  materializations and exact unrealizable or mismatched sites.
+- the constraint is evaluated without treating an existing entity as evidence that the constraint is
+  realizable;
+- the entity is evaluated without treating its constraint as evidence that the entity conforms;
+- only after both evaluations does derivation classify a constraint failure, entity failure, or
+  entity/constraint mismatch;
 - The `*Perception` types carry the model and perform the operation. The `*Derivation` values are
   policy-free results consumed by resolvers and validators.
-- Existing aromatic and stereo relations are compared with independently perceived results; their
-  presence is not itself evidence of conformance.
-- `AromaticityResolver` applies `Keep` or `Error` to unmatched aromatic projections before planning
-  additions.
-- `StereoResolver` applies `Keep`, `Strip`, or `Error` to unrealizable stereo projections before
-  planning additions or removals.
+- each inconsistency identifies both the failure class and the affected constraint site or entity ID;
+- resolvers apply the separately configured policy for that failure class before constructing one
+  atomic plan;
 - `AromaticityConformanceValidator` and `StereoConformanceValidator` consume the same policy-free
   derivation results but always report mismatches as contradictions.
 
-Under aromatic `Keep`, an existing aromatic system rejected by the selected model remains unchanged;
-resolution does not delete a materialized relation. `Error` reports it as a contradiction.
+The current derivation types are foundations rather than the final classification API.
+`AromaticityMismatch::ExistingSystem` does not distinguish an internally unrealizable system from a
+valid system that disagrees with a constraint. `StereoMismatch::AtomRelation` and `BondRelation`
+likewise conflate entity failure with entity/constraint mismatch. The resolver-policy refinement must
+split those cases before applying different recovery actions.
 
-`Undetermined` constraints are vacuous and are not missing projections. Validators ignore an absent
-or `Undetermined` projection. A non-vacuous assertion without a matching relation, or an explicit
-projection that contradicts its relation, is `Contradictory`. A non-ground but non-vacuous assertion
-that cannot yet be decided is `Underdetermined`.
+The current stereo resolver also discards the relation-mismatch variants emitted by
+`StereoDerivation`; it handles only unrealizable uncovered `#T`/`#C` sites. This is not the lasting
+contract and the tests preserving that identity behavior must change with the policy refinement.
+
+`Undetermined` constraints are vacuous and do not assert that an entity is missing. Validators ignore
+an absent or `Undetermined` constraint. A non-vacuous assertion without a matching relation, or an
+explicit constraint that contradicts its relation, is `Contradictory`. A non-ground but non-vacuous
+assertion that cannot yet be decided is `Underdetermined`.
 
 `reset_aromatic_valence` clears the aromatic-valence constraints on atoms of newly materialized
 systems by setting them to `Undetermined`. It is not the lever for a system the model declines.
 
-### Public perception API
+### Current perception API
 
 `AromaticityPerception` retains `find_systems` as the low-level algorithmic operation whose caller
 supplies the π-electron source. `derive` is the standard AST-facing operation: it reads aromatic
@@ -225,6 +292,111 @@ impl StereoPerception {
 mismatches as contradictions before running the existing relation-shape and graph-symmetry checks.
 The helper that derives the two ligands at one end of a cis-trans bond remains private.
 
+The mismatch enums and resolver configuration shown above require a breaking refinement to encode
+the three failure classes and their separate policies.
+
+### Approved inconsistency and policy names
+
+The settled meanings of constraint, failure, mismatch, inconsistency, policy, contradiction, error,
+and the associated operation names are recorded in the repository-wide
+[nomenclature guide](177-nomenclature-guide-2026-07-31.md#glossary).
+
+Diagnostic variants and config fields use the concrete constraint and entity names. They do not
+introduce a generic `Projection` or `Representation` vocabulary, and they do not force parallel
+wording where the underlying constraint and entity names differ. `AromaticBondConstraint` refers to
+`BondConstraintAst::Aromatic`; it does not introduce another AST type.
+
+The following blocks fix the public names. Their diagnostic fields show the required identity
+information but may acquire further detail when the classifications are implemented.
+
+```rust
+pub enum AromaticityInconsistency {
+    AromaticValenceFailure { atom: AtomId },
+    AromaticSystemFailure { system: AromaticSystemId },
+    AromaticValenceMismatch {
+        atom: AtomId,
+        system: AromaticSystemId,
+    },
+    AromaticBondConstraintMismatch {
+        bond: BondId,
+        system: AromaticSystemId,
+    },
+}
+
+pub enum AromaticityFailurePolicy {
+    Error,
+    Keep,
+}
+
+pub enum AromaticityMismatchPolicy {
+    Error,
+    Keep,
+    RemoveConstraint,
+    ReplaceEntity,
+}
+```
+
+Electron-contribution failures within an aromatic system are
+`AromaticityInconsistency::AromaticSystemFailure`; the affected atom remains available as additional
+diagnostic detail. `AromaticSystemConstraintAst::ElectronCount` belongs to constraint validation,
+not aromaticity resolution.
+
+```rust
+pub enum StereoInconsistency {
+    TetrahedralStereoFailure { atom: AtomId },
+    StereoAtomFailure { stereo_atom: StereoAtomId },
+    TetrahedralStereoMismatch {
+        atom: AtomId,
+        stereo_atom: StereoAtomId,
+    },
+    CisTransStereoFailure { bond: BondId },
+    StereoBondFailure { stereo_bond: StereoBondId },
+    CisTransStereoMismatch {
+        bond: BondId,
+        stereo_bond: StereoBondId,
+    },
+}
+
+pub enum StereoFailurePolicy {
+    Error,
+    Keep,
+    Remove,
+}
+
+pub enum StereoMismatchPolicy {
+    Error,
+    Keep,
+    RemoveConstraint,
+    ReplaceEntity,
+    RemoveBoth,
+}
+```
+
+Policy enums are shared where their action sets are identical; the config field identifies the
+specific constraint or entity affected by `Remove`, `RemoveConstraint`, `ReplaceEntity`, or
+`RemoveBoth`. All policies default to `Error`.
+
+```rust
+pub struct AromaticityResolveConfig {
+    pub perception: AromaticityConfig,
+    pub aromatic_valence_failure: AromaticityFailurePolicy,
+    pub aromatic_system_failure: AromaticityFailurePolicy,
+    pub aromatic_valence_mismatch: AromaticityMismatchPolicy,
+    pub aromatic_bond_constraint_mismatch: AromaticityMismatchPolicy,
+    pub reset_aromatic_valence: bool,
+}
+
+pub struct StereoResolveConfig {
+    pub tetrahedral_stereo_failure: StereoFailurePolicy,
+    pub stereo_atom_failure: StereoFailurePolicy,
+    pub tetrahedral_stereo_mismatch: StereoMismatchPolicy,
+    pub cis_trans_stereo_failure: StereoFailurePolicy,
+    pub stereo_bond_failure: StereoFailurePolicy,
+    pub cis_trans_stereo_mismatch: StereoMismatchPolicy,
+    pub reset_stereo_constraints: bool,
+}
+```
+
 ## Resolver boundary
 
 Charge delocalization moves out of `AromaticityResolver` into the explicit transformer specified
@@ -276,13 +448,77 @@ independent perception:
   match.
 
 This work was previously listed in doc 166 and belongs here because the resolver and validator must
-use the same policy-free projection comparison.
+use the same policy-free constraint comparison.
+
+## Validator ownership
+
+Constraint evaluation and model conformance are separate responsibilities:
+
+- `EntityStructureValidator` rejects malformed entity storage unconditionally.
+- `IncidenceConstraintValidator` evaluates entity-local constraints derived from fields and directly
+  incident localized bonds or overlay relations. It has no algorithm configuration.
+- `RingConstraintValidator` evaluates ring membership, ring degree, and ring valence under the fixed
+  Relevant-through-22 semantics. Its focused AST-layer operation receives a
+  `RelevantCycleEnumerationAlgorithm` directly.
+- `ConstraintValidator` coordinates model-independent, closed-world constraint evaluation over a
+  resolved molecule and folds `And`/`Or`/`Not`. A logical tree may mix incidence, ring, relational,
+  and molecule-scope leaves, so the complete fold cannot be split into independent validator
+  outcomes.
+- `AromaticityConformanceValidator` and `StereoConformanceValidator` own model-dependent entity
+  realizability and entity/constraint classification.
+- the composite `Validator` preserves the integrity → invariants → conformance order.
+
+Thus an atom's `#v`, `#d`, `#t`, `#a`, `#m`, and `#T` are incidence constraints evaluated through
+`AtomView`; `#a` and `#C` on localized bonds are evaluated through `BondView`. These values may be
+Boolean, counts, or weighted sums: incidence describes their structural source, not their value
+type. Ring-derived variants remain stored in the entity constraint containers but dispatch to the
+ring evaluator.
+
+Stereo-atom and stereo-bond constraint leaves have two distinct uses. The AST constraint evaluator
+can compare their references and stored values while folding a logical constraint tree. Chemical
+claims such as ligand symmetry, topicity, and stereogenicity are evaluated only by
+`StereoConformanceValidator`, using `StereoValidateConfig` and the selected `StereoModel`; the AST
+validator does not duplicate graph-symmetry perception. The same division applies generally:
+model-independent constraint evaluation establishes what the AST asserts, while conformance decides
+whether a model accepts the assertion.
+
+The contradiction hierarchy follows evaluation mechanism first, then the concrete entity and
+constraint name. Ring contradictions therefore do not sit among incidence contradictions merely
+because both constraints are stored on an atom or bond. `RelationalConstraint` retains its narrower
+meaning of a reference-bearing molecule-scope constraint; it is not another name for an incidence
+constraint.
+
+Ring enumeration is performed once and only when the logical tree or inline containers contain a
+ring-derived constraint. Dative-bond ring membership remains the explicit unimplemented case pending
+the dative versus coordination/haptic topology decision in doc 117.
+
+The direct specialized operations receive their algorithm selectors explicitly. Composite
+constraint validation uses structured operation config rather than flattening every subsidiary
+selector into one method signature. The AST-layer config has no default because its selectors are
+algorithmically transparent:
+
+```rust
+pub struct ConstraintValidateConfig {
+    pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+    pub connected_components_algorithm: ConnectedComponentsAlgorithm,
+    pub substructure_match_algorithm: SubstructureMatchAlgorithm,
+    pub subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+}
+```
+
+`ConstraintValidator` stores this config. The higher-level `umol_graph::ValidateConfig` nests it as
+`constraint` and supplies documented defaults. A focused incidence validator needs no selector; a
+focused ring validator receives `RelevantCycleEnumerationAlgorithm` directly. The complete
+constraint validator runs ring enumeration, connected-components analysis, or substructure matching
+only when a present non-vacuous leaf requires it.
+
+The dedicated aromaticity and stereo validators then answer the separate model-conformance question.
+Doc 166 now points to this work unit for the complete constraint-integrity implementation.
 
 ## Open
 
 - Whether the contradiction should name the offending atoms and the reason (element out of scope
   against ring size), beyond the exact unmatched atom and bond IDs required initially.
-- Whether kekulization is reachable inside a reaction at all; it is not currently a primitive delta.
 - Which high-level Python transformation surface should expose the source-resolve → kekulize → target
   resolve/validate chain.
 
@@ -291,6 +527,11 @@ use the same policy-free projection comparison.
 Every Rust subitem carries focused `#[rstest]` coverage and leaves its affected crate green; Python
 subitems carry focused pytest coverage. Tests use exact `Solution`, contradiction, edit-plan, error,
 or molecule equality rather than summary-only assertions.
+
+S0 and S1 record completed foundation work. They remain part of the dependency graph, but their
+initial mismatch enums and single-policy resolver configs are not the final public contract. S2
+performs those breaking migrations explicitly; the completed subitems are not relabeled as though
+they had already implemented the refined classifications.
 
 ### S0 — Policy-free foundations
 
@@ -386,7 +627,7 @@ Migrate all Rust config literals and the Python wrapper in the same subitem. Pyt
 coverage, and all affected workflow/molecule/reaction tests. The localized post-ingest charge
 representation becomes the new exact expected value.
 
-#### S1b — Stereo policy rename
+#### S1b — Stereo policy rename **Done**
 
 **Module:** `umol-graph/src/ops/resolve/stereo.rs`, `umol-graph/src/ops/resolve.rs`,
 `umol-graph/src/ingest.rs`, `umol-py/src/resolve.rs`, `umol-py/src/lib.rs`, and the affected Rust and
@@ -402,26 +643,285 @@ behavior. Migrate every Rust import/config literal and every Python import, anno
 repr, and exact enum/config test in the same subitem. Rewire `StereoResolver` to the S0c derivation
 through `StereoPerception` without changing its planned edits.
 
-**Stage exit:** each resolver owns a policy whose variants are sound for that operation; aromatic
-resolution changes no determined value, while stereo retains its explicit stripping option.
+**Stage exit:** the initial operation-specific config migration is green. S2 performs the final
+failure-class and recovery-action split.
 `cargo test -p umol-graph`, `cargo test -p umol-py`, `maturin develop`, and
 `pytest -q umol-py/tests` pass with Python 3.13 active.
 
-### S2 — Conformance completion
+### S2 — Final aromaticity and stereo contracts
 
-#### S2a — Aromatic projection conformance
+#### S2a — Aromatic inconsistency classification and policy migration
+
+**Module:** `umol-graph/src/ops/aromaticity.rs`,
+`umol-graph/src/ops/resolve/aromaticity.rs`,
+`umol-graph/src/ops/validate/aromaticity.rs`, `umol-py/src/resolve.rs`,
+`umol-py/src/lib.rs`, and affected Rust and Python callers
+
+**Kind:** breaking public type and config migration (red → green)
+
+**Dependencies:** `[dep: S0a, S0b, S1a]`
+
+Replace `AromaticityMismatch` with `AromaticityInconsistency` and independently derive constraint
+failure, entity failure, and entity/constraint mismatch. An existing system is re-evaluated from its
+own participants and contributions; it is not accepted merely because perception finds a system on
+the same atoms. Preserve deterministic ordering and include the exact atom, bond, and system IDs
+fixed above.
+
+Replace the single resolver policy with `AromaticityFailurePolicy`,
+`AromaticityMismatchPolicy`, and the four approved config fields. Implement `Keep`,
+`RemoveConstraint`, and atomic `ReplaceEntity` only for the failure classes whose action tables admit
+them. `Error` returns the exact inconsistency as a contradiction before mutation. Remove the old
+policy type and migrate the Python enum/config surface, conversions, repr, equality, exports, and
+callers in the same subitem.
+
+Focused tables assert the complete derivation and complete planned edits for each inconsistency and
+policy. They include independently invalid constraints and systems, valid-but-different systems,
+atom and bond mismatches, reset interaction, idempotent conformant input, and transaction identity on
+error. Python tables assert exact enum/config values and exact resolved or contradictory outcomes.
+
+#### S2b — Stereo inconsistency classification and policy migration
+
+**Module:** `umol-graph/src/ops/stereo.rs`, `umol-graph/src/ops/resolve/stereo.rs`,
+`umol-graph/src/ops/validate/stereo.rs`, `umol-py/src/resolve.rs`,
+`umol-py/src/lib.rs`, and affected Rust and Python callers
+
+**Kind:** breaking public type and config migration (red → green)
+
+**Dependencies:** `[dep: S0c, S1b]`
+
+Replace `StereoMismatch` with `StereoInconsistency` and distinguish tetrahedral/cis-trans constraint
+failure, stereo-atom/stereo-bond entity failure, and independently realizable mismatches. Existing
+relations are assessed through the same public per-entity derivation operations as uncovered
+constraint sites; relation presence is not evidence of conformance.
+
+Replace `StereoInconsistencyPolicy` with `StereoFailurePolicy`, `StereoMismatchPolicy`, and the six
+approved config fields. Implement `Remove` for the exact failed side identified by its config field,
+and implement `RemoveConstraint`, atomic `ReplaceEntity`, and `RemoveBoth` for mismatches. Remove the
+old behavior that silently ignored relation mismatches. Migrate the Python enum/config surface and
+all callers in the same subitem.
+
+Focused tables assert complete derivations and planned edits for atom and bond cases under every
+applicable action, including reset interaction, conformant identity, and unchanged input on error.
+Python tables assert exact config conversion and resolution outcomes.
+
+#### S2c — Composite resolver transaction behavior
+
+**Module:** `umol-graph/src/ops/resolve.rs`
+
+**Kind:** behavioral correction (green)
+
+**Dependencies:** `[dep: S2a, S2b]`
+
+Update the composite resolver to propagate the refined aromaticity and stereo contradictions without
+losing their payloads. Verify that a late inconsistency rolls back edits from every earlier resolver
+stage, while successful stages are materialized before the next stage derives its plan. Cover both
+aromaticity and stereo failures with exact source-molecule equality after rollback and exact final
+molecule equality after success.
+
+**Stage exit:** derivation, resolution, validation consumers, Rust callers, and Python bindings use
+only the final inconsistency and policy types. The workspace is green; the old mismatch and policy
+types no longer exist.
+
+### S3 — Model-independent constraint evaluation
+
+#### S3a — Configuration and contradiction foundations
+
+**Module:** `umol-ast/src/ast/validate/constraint.rs`,
+`umol-ast/src/ast/validate/constraint/`, `umol-ast/src/ast.rs`
+
+**Kind:** additive (green)
+
+**Dependencies:** `[dep: none]`
+
+Add public `ConstraintValidateConfig`, `IncidenceConstraintValidator`,
+`IncidenceConstraintContradiction`, `RingConstraintValidator`, and
+`RingConstraintContradiction`. Establish the `ConstraintContradiction` hierarchy by evaluation
+mechanism and concrete entity/constraint identity. Keep operational failures in `ConstraintError`;
+semantic failures remain on the `Solution::Contradictory` side. Do not add defaults at the AST layer
+and do not add one-field config wrappers to focused validators.
+
+Focused tables establish construction and exact contradiction/error wrapping. No test merely checks
+that an error or contradiction is present.
+
+#### S3b — Algorithm-free entity constraint evaluation
+
+**Module:** `umol-ast/src/ast/validate/constraint/incidence.rs` and focused evaluator modules under
+`umol-ast/src/ast/validate/constraint/`
+
+**Kind:** additive (green)
+
+**Dependencies:** `[dep: S3a]`
+
+Implement the focused incidence evaluator over `AtomView`, `BondView`, and overlay views. Cover atom
+valence, donated and accepted pairs, aromatic and multicenter valence, tetrahedral stereo incidence,
+degree, total degree, total valence, and total hydrogens; localized-bond aromatic and cis-trans
+incidence; binary dative aromatic incidence; noncovalent intramolecular status; and the
+algorithm-free entity aggregates for aromatic-system and multicenter-bond electron counts. The
+multi-donor `#d`/`#t` case remains an explicit unimplemented branch pointing to doc 117 rather than
+acquiring provisional semantics.
+
+Evaluate literal, set, negated-set, and undetermined values through their lattice semantics. Vacuous
+constraints are determined identities; non-vacuous values whose derived side is unavailable are
+underdetermined; decided disagreement returns the exact contradiction. Focused tables cover every
+constraint variant and all three `Solution` outcomes.
+
+#### S3c — Ring constraint evaluation
+
+**Module:** `umol-ast/src/ast/validate/constraint/ring.rs`
+
+**Kind:** additive (green)
+
+**Dependencies:** `[dep: S3a]`
+
+Implement `RingConstraintValidator` for atom ring degree, ring valence, and membership and localized
+bond membership under the fixed Relevant-through-22 semantics. Its public focused operation takes
+`RelevantCycleEnumerationAlgorithm` directly. Build one ring projection per validation call and
+reuse it across every requested size and entity. Do not attempt dative-bond ring membership; return
+the explicit unsupported operational error tied to doc 117.
+
+Focused tables cover acyclic, monocyclic, fused, bridged, size-filtered, vacuous, non-ground, and
+contradictory cases. The current Vismara case verifies explicit selector forwarding; future
+relevant-cycle implementations join the same exact-outcome table.
+
+#### S3d — Relational constraint evaluation
+
+**Module:** `umol-ast/src/ast/validate/constraint/relational.rs`
+
+**Kind:** additive (green)
+
+**Dependencies:** `[dep: S3b, S3c]`
+
+Evaluate every `RelationalConstraint` variant against the referenced dative bond, aromatic system,
+multicenter bond, noncovalent bond, stereo atom, or stereo bond. Exact-set, contains, all, any,
+acceptor/site, endpoint, and parallel-bond forms retain their declared ordered or unordered
+semantics. Nested atom predicates dispatch through the same atom-constraint evaluation path,
+including the shared ring projection when needed.
+
+Focused tables cover every relational variant, bad references as operational errors, determined
+truth and contradiction, vacuous nested predicates, and underdetermined nested predicates.
+
+#### S3e — Molecule aggregate and connectivity constraints
+
+**Module:** `umol-ast/src/ast/validate/constraint/molecule.rs`
+
+**Kind:** additive (green)
+
+**Dependencies:** `[dep: S3a, S3b]`
+
+Evaluate `ChargeSum`, `UnpairedElectronCoupling`, and `BondOrderSum` over explicit subsets or the
+whole-molecule scope, preserving underdetermination whenever a required value is non-literal.
+Evaluate `Connected` with the supplied `ConnectedComponentsAlgorithm`, including empty and explicit
+atom subsets. References outside the molecule are operational errors rather than false predicates.
+
+Focused tables cover subset and whole-molecule semantics, exact totals, partial values, empty
+selections, disconnected selections, and selector parity where more than one implementation exists.
+
+#### S3f — Subpattern constraints
+
+**Module:** `umol-ast/src/ast/validate/constraint/molecule.rs`,
+`umol-ast/src/ast/substructure.rs`
+
+**Kind:** additive (green)
+
+**Dependencies:** `[dep: S3c, S3e]`
+
+Evaluate `SubPattern` using the supplied `SubstructureMatchAlgorithm` and
+`SubgraphIsomorphismAlgorithm`, preserving each `SubPatternAnchor` form. Thread the selected relevant
+cycle algorithm into derived host ring constraints so subpattern evaluation introduces no hidden
+graph-core algorithm choice. Use the existing substructure-match result to decide the Boolean
+constraint; an early-exit search API is not part of this work unit.
+
+Focused tables cover unanchored and anchored success, absence, overlays, ring-constrained patterns,
+invalid anchors, and exact equivalence across every supported matching-selector combination.
+
+#### S3g — Recursive constraint coordinator
+
+**Module:** `umol-ast/src/ast/validate/constraint.rs`, `umol-ast/src/ast.rs`, and all AST-layer callers
+
+**Kind:** breaking validator construction and call migration (red → green)
+
+**Dependencies:** `[dep: S3b, S3c, S3d, S3e, S3f]`
+
+Replace the unit stub with a configured `ConstraintValidator`. Evaluate inline entity containers and
+the top-level `Constraints` store as one conjunction, and recursively fold `Constraint::And`, `Or`,
+and `Not` without discarding contradiction or underdetermination. Lazily initialize ring,
+connectivity, and substructure data only when a present non-vacuous leaf needs it. Stereo-entity
+leaves compare references and stored values here; graph-symmetry truth remains solely in
+`StereoConformanceValidator`.
+
+Migrate every AST-layer caller to explicit `ConstraintValidateConfig`. Focused tables assert exact
+mixed-category logical outcomes. Property tests cover permutation invariance of `And`/`Or`, double
+negation, vacuous conjunction, and agreement between inline constraints and their equivalent
+top-level entity leaves without using the coordinator to construct expected values.
+
+**Stage exit:** every supported model-independent constraint has explicit determined,
+underdetermined, contradictory, and operational-error semantics; the dative-ring stub has an explicit
+outcome and doc-117 reference. `ConstraintValidator` is no longer a stub, and
+`cargo test -p umol-ast` plus the feature-gated property suite pass.
+
+### S4 — Higher-level validation and resolver preconditions
+
+#### S4a — Composite validation configuration
+
+**Module:** `umol-graph/src/ops/validate.rs` and affected Rust callers
+
+**Kind:** breaking public config migration (red → green)
+
+**Dependencies:** `[dep: S3g]`
+
+Add `constraint: ConstraintValidateConfig` to `umol_graph::ValidateConfig`, construct the AST
+validator from it, and preserve integrity → invariants → conformance ordering. Its documented
+higher-level defaults are Relevant/Vismara, connected-components/BFS,
+substructure/GraphAndOverlays, and subgraph-isomorphism/VF2-RDKit. Migrate every config literal and
+caller in the same subitem. Composite validation must not run an algorithmic evaluator that the
+input does not require.
+
+Focused tables assert the complete default config, explicit selector propagation, exact wrapping of
+each constraint contradiction/error category, and unchanged outcomes for molecules without
+constraints.
+
+#### S4b — Resolver constraint preconditions
+
+**Module:** `umol-graph/src/ops/resolve/valence.rs`,
+`umol-graph/src/ops/resolve/aromaticity.rs`,
+`umol-graph/src/ops/resolve/multicenter.rs`, `umol-graph/src/ops/resolve/stereo.rs`,
+`umol-graph/src/ops/resolve.rs`
+
+**Kind:** behavioral correction (green)
+
+**Dependencies:** `[dep: S2c, S3b]`
+
+Before candidate selection, each direct resolver checks the incidence constraints that form its
+preconditions: localized valence and dative pair counts, aromatic valence and aromatic-bond
+incidence, multicenter valence, and tetrahedral/cis-trans stereo incidence. A determined mismatch is
+an exact contradiction; a vacuous constraint does nothing; an underdetermined prerequisite stops the
+resolution chain without emitting a partial plan. Keep the multidonor dative case as the documented
+stub.
+
+The composite resolver continues to materialize each successful stage before deriving the next and
+applies the complete sequence transactionally. Focused tables assert no emitted edits on an
+underdetermined stop, exact contradiction payloads, dependence on the materialized intermediate
+state, and rollback of every earlier stage after a later precondition failure.
+
+**Stage exit:** higher-level validation exposes documented defaults without hiding AST-layer
+selectors, and every resolver rejects the model-independent inconsistencies relevant to its own
+candidate derivation. `cargo test -p umol-graph` passes.
+
+### S5 — Conformance completion
+
+#### S5a — Aromatic constraint conformance
 
 **Module:** `umol-graph/src/ops/validate/aromaticity.rs`, `umol-graph/src/ops/validate.rs`
 
 **Kind:** behavioral correction (green)
 
-**Dependencies:** `[dep: S0b, S1a]`
+**Dependencies:** `[dep: S2a]`
 
 Keep `AromaticityConfig` as the validator's algorithm configuration; do not add a validation
-inconsistency policy. Replace the current count-and-atom-set-only comparison with the S0b projection
-comparison. An asserted projection without a matching relation, a stored relation rejected by
-perception, or an explicit projection/relation mismatch is `Solution::Contradictory`. Absent and
-`Undetermined` projections are ignored; a non-ground, non-vacuous contribution that cannot be
+inconsistency policy. Replace the current count-and-atom-set-only comparison with the S2a
+classification. An asserted constraint without a matching relation, a stored relation rejected by
+perception, or an explicit constraint/entity mismatch is `Solution::Contradictory`. Absent and
+`Undetermined` constraints are ignored; a non-ground, non-vacuous contribution that cannot be
 decided is `Solution::Underdetermined`. Extend `AromaticityValidatorContradiction` with exact
 deterministic payloads and preserve the existing setup-error boundary.
 
@@ -429,17 +929,17 @@ Focused tables cover participant-set mismatch, per-atom contribution mismatch, l
 mismatch, aromatic-valence mismatch, vacuous projections, model rejection of a stored system,
 non-ground non-vacuous contributions, and a fully conformant existing system.
 
-#### S2b — Stereo projection conformance
+#### S5b — Stereo constraint conformance
 
 **Module:** `umol-graph/src/ops/validate/stereo.rs`, `umol-graph/src/ops/validate.rs`
 
 **Kind:** behavioral correction (green)
 
-**Dependencies:** `[dep: S0c, S1b]`
+**Dependencies:** `[dep: S2b]`
 
 Keep `StereoValidateConfig` limited to graph-symmetry algorithms and iteration limits; do not add an
 inconsistency field. Before the existing relation and symmetry checks, use `StereoDerivation` to
-from `StereoPerception::derive` to require every non-vacuous asserted `#T` and `#C` site to have a
+require every non-vacuous asserted `#T` and `#C` site from `StereoPerception::derive` to have a
 realizable, matching stereo relation. Absent and `Undetermined` projections are ignored. Add exact
 atom/bond contradiction variants for an unrealizable, absent, or mismatched relation.
 
@@ -447,48 +947,49 @@ Focused tables cover absent and unrealizable tetrahedral/cis-trans relations, re
 mismatch, conformant existing relations, and preservation of every existing graph-symmetry
 validation result.
 
-#### S2c — Composite conformance outcomes
+#### S5c — Composite conformance outcomes
 
 **Module:** `umol-graph/src/ops/validate.rs`
 
 **Kind:** additive tests (green)
 
-**Dependencies:** `[dep: S2a, S2b]`
+**Dependencies:** `[dep: S4a, S5a, S5b]`
 
 Extend the composite validator tables with exact aromatic and stereo projection contradictions and
 an underdetermined aromatic contribution. Assert that the contradiction is wrapped in the correct
 `ValidatorContradiction` variant and that validation does not mutate the input.
 
-**Stage exit:** standalone and composite validators reject projection/relation inconsistencies
+**Stage exit:** standalone and composite validators reject constraint/entity inconsistencies
 without resolver policy or mutation. `cargo test -p umol-graph` passes.
 
-### S3 — Public ingestion acceptance
+### S6 — Public ingestion acceptance
 
-#### S3a — Rust ingestion propagation
+#### S6a — Rust ingestion propagation
 
 **Module:** `umol-graph/src/ingest.rs`, `umol-graph/src/parse.rs`,
 `umol-graph/tests/resolution/`
 
 **Kind:** additive (green)
 
-**Dependencies:** `[dep: S1a]`
+**Dependencies:** `[dep: S2a, S4b, S5a]`
 
 Add molecule and reaction SMILES table cases proving that MDL furan, thiophene, and pyrrole return
 the exact aromatic contradiction by default, while explicit `Keep` preserves the unmatched
-projections without adding a system. Add the bare-n `c1cccn1` case from doc 174 as an interim
-regression: default ingestion returns the exact nitrogen projection contradiction instead of the old
-closed-shell C4H4N result. Retain positive MDL pyridine/benzene and Daylight furan/thiophene/pyrrole
+constraints without adding a system. Add the bare-n `c1cccn1` case from doc 174 as an interim
+regression: default ingestion returns the exact nitrogen aromatic-valence contradiction instead of
+the old closed-shell C4H4N result. Retain positive MDL pyridine/benzene and Daylight
+furan/thiophene/pyrrole
 references. Update charge-sensitive resolution fixtures and snapshots to the localized
 representation; do not normalize them through `DelocalizeCharge` in expected-value construction.
 
-#### S3b — Python ingestion propagation
+#### S6b — Python ingestion propagation
 
 **Module:** `umol-py/tests/test_molecule.py`, `umol-py/tests/test_reaction.py`,
 `umol-py/tests/test_workflow.py`
 
 **Kind:** additive (green)
 
-**Dependencies:** `[dep: S1a, S3a]`
+**Dependencies:** `[dep: S2a, S6a]`
 
 Verify that configured molecule and reaction SMILES ingestion maps default aromatic rejection to the
 existing `ContradictionError`, that explicit `Keep` returns the exact preserved representation, and
@@ -503,20 +1004,24 @@ Python suite pass.
 
 ## Critical path and deferral
 
-The aromatic resolver path is `S0a + S0b → S1a → S3a → S3b`; aromatic conformance is
-`S0b → S1a → S2a → S2c`. The stereo cleanup is `S0c → S1b → S2b → S2c`.
+The final aromatic resolver path is `S0a + S0b → S1a → S2a → S2c → S4b → S6a → S6b`;
+aromatic conformance is `S2a → S5a → S5c`. The stereo path is
+`S0c → S1b → S2b → S2c → S4b → S5b → S5c`. Constraint validation is
+`S3a → S3b + S3c → S3d + S3e → S3f → S3g → S4a`.
 
 No stage in this work unit is deferrable. Rich model-rejection reasons, `LocalizeCharge`,
-reaction-level kekulization, and Python transformation/validation methods remain separate proposed
-work.
+and Python transformation/validation methods remain separate proposed work. Transformations remain
+explicit and outside the reaction primitive set.
 
 Final verification is:
 
 1. `cargo fmt --all`
-2. `cargo test -p umol-graph`
-3. `cargo test -p umol-graph --features conformance --test resolution`
-4. `cargo test --workspace`
-5. `cargo clippy --workspace --all-targets -- -D warnings`
-6. With `umol-py/.venv` active and `python` confirmed as Python 3.13,
+2. `cargo test -p umol-ast`
+3. `cargo test -p umol-ast --features proptest --test property --no-fail-fast`
+4. `cargo test -p umol-graph`
+5. `cargo test -p umol-graph --features conformance --test resolution`
+6. `cargo test --workspace`
+7. `cargo clippy --workspace --all-targets -- -D warnings`
+8. With `umol-py/.venv` active and `python` confirmed as Python 3.13,
    `maturin develop` and `pytest -q umol-py/tests`
-7. `git diff --check`
+9. `git diff --check`

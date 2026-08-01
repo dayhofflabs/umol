@@ -81,7 +81,6 @@ PUBLIC_EXPORTS = frozenset(
     FluxionalityAst
     HashedFeatureSet
     HashedFingerprintConfig
-    InconsistencyPolicy
     InvalidStructureError
     IsotopeMass
     IsotopeMassAst
@@ -167,6 +166,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoBondViews
     StereoConfigurationAst
     StereoCoset
+    StereoInconsistencyPolicy
     StereoKind
     StereoKindModel
     StereoLigand

@@ -53,6 +53,20 @@ Both targets are already-existing relation shapes:
 
 The split is clean at the storage layer; the cost is the per-entity surface (§3), not new plumbing.
 
+### Current validation boundary
+
+The `#d`/`#t` projection is defined cleanly only for the binary donor→acceptor case. Validation may
+cross-check binary dative bond order against the donor and acceptor projections. The corresponding
+multi-donor validation path remains a stub/TODO: it must not establish zero, `Underdetermined`, or an
+apportionment rule as lasting semantics while the current entity still conflates coordination/haptic
+bonding with binary dative bonding.
+
+Do not implement the split merely to complete that validator. First reduce or organize the mechanical
+cost of extending the entity-kind set—constraints, DSL, views, deltas, edits, undos, updates, remapping,
+matching, and bindings—so that the chemical distinction does not require another bespoke sweep of the
+entire stack. The validation stub is therefore an explicit dependency on the broader extensibility
+decision, not evidence that multi-donor donation equals zero.
+
 ## 2. Other entity types — scaffold
 
 Shallow enumeration, no deep dive. "Existing" = already an entity; "candidate" = fits the locality

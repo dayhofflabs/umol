@@ -4,8 +4,8 @@ from umol import (
     AromaticityConfig,
     AromaticityInconsistencyPolicy,
     AromaticityResolveConfig,
-    InconsistencyPolicy,
     ResolveConfig,
+    StereoInconsistencyPolicy,
     StereoResolveConfig,
 )
 
@@ -76,51 +76,51 @@ def test_aromaticity_inconsistency_policy_mutation(policy):
 @pytest.mark.parametrize(
     ("left", "right", "expected"),
     [
-        (InconsistencyPolicy.Keep, InconsistencyPolicy.Keep, True),
-        (InconsistencyPolicy.Strip, InconsistencyPolicy.Strip, True),
-        (InconsistencyPolicy.Error, InconsistencyPolicy.Error, True),
-        (InconsistencyPolicy.Keep, InconsistencyPolicy.Strip, False),
-        (InconsistencyPolicy.Strip, InconsistencyPolicy.Error, False),
-        (InconsistencyPolicy.Error, InconsistencyPolicy.Keep, False),
+        (StereoInconsistencyPolicy.Keep, StereoInconsistencyPolicy.Keep, True),
+        (StereoInconsistencyPolicy.Strip, StereoInconsistencyPolicy.Strip, True),
+        (StereoInconsistencyPolicy.Error, StereoInconsistencyPolicy.Error, True),
+        (StereoInconsistencyPolicy.Keep, StereoInconsistencyPolicy.Strip, False),
+        (StereoInconsistencyPolicy.Strip, StereoInconsistencyPolicy.Error, False),
+        (StereoInconsistencyPolicy.Error, StereoInconsistencyPolicy.Keep, False),
     ],
 )
-def test_inconsistency_policy_equality(left, right, expected):
+def test_stereo_inconsistency_policy_equality(left, right, expected):
     assert (left == right) is expected
 
 
-def test_inconsistency_policy_hash():
+def test_stereo_inconsistency_policy_hash():
     policies = {
-        InconsistencyPolicy.Keep: "keep",
-        InconsistencyPolicy.Strip: "strip",
-        InconsistencyPolicy.Error: "error",
+        StereoInconsistencyPolicy.Keep: "keep",
+        StereoInconsistencyPolicy.Strip: "strip",
+        StereoInconsistencyPolicy.Error: "error",
     }
 
-    assert policies[InconsistencyPolicy.Keep] == "keep"
-    assert policies[InconsistencyPolicy.Strip] == "strip"
-    assert policies[InconsistencyPolicy.Error] == "error"
+    assert policies[StereoInconsistencyPolicy.Keep] == "keep"
+    assert policies[StereoInconsistencyPolicy.Strip] == "strip"
+    assert policies[StereoInconsistencyPolicy.Error] == "error"
 
 
 @pytest.mark.parametrize(
     ("policy", "expected"),
     [
-        (InconsistencyPolicy.Keep, "InconsistencyPolicy.Keep"),
-        (InconsistencyPolicy.Strip, "InconsistencyPolicy.Strip"),
-        (InconsistencyPolicy.Error, "InconsistencyPolicy.Error"),
+        (StereoInconsistencyPolicy.Keep, "StereoInconsistencyPolicy.Keep"),
+        (StereoInconsistencyPolicy.Strip, "StereoInconsistencyPolicy.Strip"),
+        (StereoInconsistencyPolicy.Error, "StereoInconsistencyPolicy.Error"),
     ],
 )
-def test_inconsistency_policy_repr(policy, expected):
+def test_stereo_inconsistency_policy_repr(policy, expected):
     assert repr(policy) == expected
 
 
 @pytest.mark.parametrize(
     "policy",
     [
-        InconsistencyPolicy.Keep,
-        InconsistencyPolicy.Strip,
-        InconsistencyPolicy.Error,
+        StereoInconsistencyPolicy.Keep,
+        StereoInconsistencyPolicy.Strip,
+        StereoInconsistencyPolicy.Error,
     ],
 )
-def test_inconsistency_policy_mutation(policy):
+def test_stereo_inconsistency_policy_mutation(policy):
     with pytest.raises(AttributeError):
         policy.value = "changed"
 
@@ -221,16 +221,16 @@ def test_stereo_resolve_config_default():
     config = StereoResolveConfig()
 
     assert config.reset_stereo_constraints is False
-    assert config.inconsistency == InconsistencyPolicy.Error
+    assert config.inconsistency == StereoInconsistencyPolicy.Error
     assert config == StereoResolveConfig()
 
 
 @pytest.mark.parametrize(
     ("reset_stereo_constraints", "inconsistency"),
     [
-        (False, InconsistencyPolicy.Keep),
-        (True, InconsistencyPolicy.Strip),
-        (False, InconsistencyPolicy.Error),
+        (False, StereoInconsistencyPolicy.Keep),
+        (True, StereoInconsistencyPolicy.Strip),
+        (False, StereoInconsistencyPolicy.Error),
     ],
 )
 def test_stereo_resolve_config_new(
@@ -256,15 +256,15 @@ def test_stereo_resolve_config_new_error():
         (
             StereoResolveConfig(),
             "StereoResolveConfig(reset_stereo_constraints=False, "
-            "inconsistency=InconsistencyPolicy.Error)",
+            "inconsistency=StereoInconsistencyPolicy.Error)",
         ),
         (
             StereoResolveConfig(
                 reset_stereo_constraints=True,
-                inconsistency=InconsistencyPolicy.Strip,
+                inconsistency=StereoInconsistencyPolicy.Strip,
             ),
             "StereoResolveConfig(reset_stereo_constraints=True, "
-            "inconsistency=InconsistencyPolicy.Strip)",
+            "inconsistency=StereoInconsistencyPolicy.Strip)",
         ),
     ],
 )
@@ -276,7 +276,7 @@ def test_stereo_resolve_config_repr(config, expected):
     ("field", "value"),
     [
         ("reset_stereo_constraints", True),
-        ("inconsistency", InconsistencyPolicy.Keep),
+        ("inconsistency", StereoInconsistencyPolicy.Keep),
     ],
 )
 def test_stereo_resolve_config_mutation(field, value):
@@ -338,7 +338,7 @@ def test_resolve_config_new_error():
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
                 reset_stereo_constraints=True,
-                inconsistency=InconsistencyPolicy.Strip,
+                inconsistency=StereoInconsistencyPolicy.Strip,
             ),
         ),
     ],
@@ -359,7 +359,7 @@ def test_resolve_config_equality(other):
                 ),
                 stereo=StereoResolveConfig(
                     reset_stereo_constraints=True,
-                    inconsistency=InconsistencyPolicy.Strip,
+                    inconsistency=StereoInconsistencyPolicy.Strip,
                 ),
             ),
             "ResolveConfig(aromaticity=AromaticityResolveConfig(perception="
@@ -373,7 +373,7 @@ def test_resolve_config_equality(other):
             "inconsistency=AromaticityInconsistencyPolicy.Keep, "
             "reset_aromatic_valence=True), "
             "stereo=StereoResolveConfig(reset_stereo_constraints=True, "
-            "inconsistency=InconsistencyPolicy.Strip))",
+            "inconsistency=StereoInconsistencyPolicy.Strip))",
         ),
     ],
 )

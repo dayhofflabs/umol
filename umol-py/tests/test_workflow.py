@@ -9,7 +9,6 @@ from umol import (
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     HashedFingerprintConfig,
-    InconsistencyPolicy,
     InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     MoleculeAst,
@@ -24,6 +23,7 @@ from umol import (
     RingConfig,
     SimpleCycleEnumerationAlgorithm,
     SmilesIoConfig,
+    StereoInconsistencyPolicy,
     StereoResolveConfig,
     StructuralFingerprintConfig,
     SubgraphEnumerationAlgorithm,
@@ -59,7 +59,7 @@ def test_resolved_smiles_workflow():
         ),
         stereo=StereoResolveConfig(
             reset_stereo_constraints=False,
-            inconsistency=InconsistencyPolicy.Error,
+            inconsistency=StereoInconsistencyPolicy.Error,
         ),
     )
 
@@ -97,7 +97,7 @@ def test_resolved_smiles_workflow():
         resolve_config.aromaticity.inconsistency
         == AromaticityInconsistencyPolicy.Error
     )
-    assert resolve_config.stereo.inconsistency == InconsistencyPolicy.Error
+    assert resolve_config.stereo.inconsistency == StereoInconsistencyPolicy.Error
 
     molecule.atoms[0].charge = 3
 

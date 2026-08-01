@@ -96,8 +96,8 @@ use crate::{
         ReactionApplicationConfig, ReactionAst, ReactionCompositionConfig, ReactionDerivation,
     },
     resolve::{
-        AromaticityInconsistencyPolicy, AromaticityResolveConfig, InconsistencyPolicy,
-        ResolveConfig, StereoResolveConfig,
+        AromaticityInconsistencyPolicy, AromaticityResolveConfig, ResolveConfig,
+        StereoInconsistencyPolicy, StereoResolveConfig,
     },
     ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
@@ -217,7 +217,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticityConfig>()?;
         module.add_class::<AromaticityModel>()?;
         module.add_class::<AromaticityInconsistencyPolicy>()?;
-        module.add_class::<InconsistencyPolicy>()?;
+        module.add_class::<StereoInconsistencyPolicy>()?;
         module.add_class::<StereoKindModel>()?;
         module.add_class::<StereoModel>()?;
         module.add_class::<ChemistryModel>()?;
