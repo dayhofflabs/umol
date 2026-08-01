@@ -1,15 +1,13 @@
 //! Aromaticity validator. Wraps [`AromaticityPerception`] and verifies that
-//! the aromatic systems already in the AST agree with what perception
-//! independently finds. Input contract: AST atoms carry filled-in
-//! `AromaticValenceAst::Aromatic(Lit(n))` (atom-typing has run) and the AST
-//! already carries one or more `AromaticSystemAst` entries.
+//! aromatic constraints and systems agree with the selected model.
 
 use thiserror::Error;
-use umol_ast::ast::{AromaticValence, AromaticValenceAst, AsLit, AtomId, MoleculeAst};
+use umol_ast::ast::MoleculeAst;
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
-    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
+    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityInconsistency,
+    AromaticityPerception,
 };
 use crate::ops::model::AromaticityModel;
 
@@ -23,18 +21,8 @@ pub struct AromaticityConformanceValidator {
 pub enum AromaticityValidatorContradiction {
     #[error("perception rejected the input: {0}")]
     Perception(AromaticityContradiction),
-    #[error(
-        "aromatic system count mismatch: AST has {ast_count}, perception found {perception_count}"
-    )]
-    SystemCountMismatch {
-        ast_count: usize,
-        perception_count: usize,
-    },
-    #[error("aromatic system atoms differ: AST {ast_atoms:?}, perception {perception_atoms:?}")]
-    AtomsMismatch {
-        ast_atoms: Vec<AtomId>,
-        perception_atoms: Vec<AtomId>,
-    },
+    #[error(transparent)]
+    Inconsistency(#[from] AromaticityInconsistency),
 }
 
 impl AromaticityConformanceValidator {
@@ -53,72 +41,27 @@ impl AromaticityConformanceValidator {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
-        let outcome = self.perception.find_systems(ast, self.config, |v| {
-            match v
-                .ast
-                .constraints
-                .aromatic_valence()
-                .unwrap_or(&AromaticValenceAst::Undetermined)
-                .as_lit()
-            {
-                Some(AromaticValence::Aromatic(n)) if n >= 0 => Some(n as u8),
-                _ => None,
+        match self.perception.derive(ast, self.config)? {
+            Solution::Determined(derivation) => {
+                if let Some(&inconsistency) = derivation.inconsistencies.first() {
+                    Ok(Solution::Contradictory(inconsistency.into()))
+                } else {
+                    Ok(Solution::Determined(()))
+                }
             }
-        })?;
-        let perception_systems = match outcome {
-            Solution::Determined(systems) => systems,
-            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
-            Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(
-                    AromaticityValidatorContradiction::Perception(c),
-                ));
-            }
-        };
-
-        let ast_systems: Vec<Vec<AtomId>> = ast
-            .aromatic_systems()
-            .iter()
-            .map(|view| {
-                let mut atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms.sort_unstable();
-                atoms
-            })
-            .collect();
-        let mut ast_systems_sorted = ast_systems;
-        ast_systems_sorted.sort_by(|a, b| a.first().cmp(&b.first()));
-
-        if ast_systems_sorted.len() != perception_systems.len() {
-            return Ok(Solution::Contradictory(
-                AromaticityValidatorContradiction::SystemCountMismatch {
-                    ast_count: ast_systems_sorted.len(),
-                    perception_count: perception_systems.len(),
-                },
-            ));
+            Solution::Underdetermined(_) => Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => Ok(Solution::Contradictory(
+                AromaticityValidatorContradiction::Perception(contradiction),
+            )),
         }
-        for (ast_atoms, (perception_atoms, _)) in
-            ast_systems_sorted.iter().zip(perception_systems.iter())
-        {
-            if ast_atoms != perception_atoms {
-                return Ok(Solution::Contradictory(
-                    AromaticityValidatorContradiction::AtomsMismatch {
-                        ast_atoms: ast_atoms.clone(),
-                        perception_atoms: perception_atoms.clone(),
-                    },
-                ));
-            }
-        }
-        Ok(Solution::Determined(()))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use rstest::*;
-    use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraintAst, BondAst, MoleculeAst, MoleculeParts,
-        RingConfig, UnpairedElectronsAst, ValueAst,
-    };
-    use umol_chem::element::Element;
+    use rstest::rstest;
+    use umol_ast::ast::{AromaticSystemId, AtomId, BondId, RingConfig};
+    use umol_ast::mol_dsl;
     use umol_graph_core::{
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
@@ -126,97 +69,215 @@ mod tests {
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};
-    use crate::ops::resolve::aromaticity::AromaticityResolver;
-
-    #[fixture]
-    fn carbon_only() -> AromaticityModel {
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
-        }
-    }
-
-    #[fixture]
-    fn benzene() -> MoleculeAst {
-        let atoms: Vec<AtomAst> = (0..6)
-            .map(|_| {
-                let mut atom = AtomAst::from_element(Element::C);
-                atom.charge = ValueAst::Lit(0);
-                atom.implicit_hydrogens = ValueAst::Lit(1);
-                atom.lone_pairs = ValueAst::Lit(0);
-                atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
-                atom.constraints.set(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
-                ));
-                atom
-            })
-            .collect();
-        let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
-            .collect();
-        MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
 
     #[rstest]
-    fn test_aromaticity_conformance_validator_with_config(
-        benzene: MoleculeAst,
-        carbon_only: AromaticityModel,
-    ) {
-        let mut ast = benzene;
-        AromaticityResolver::new(&carbon_only)
-            .resolve(&mut ast)
-            .unwrap();
-        let expected = AromaticityConformanceValidator::new(&carbon_only).validate(&ast);
-        let configured = AromaticityConformanceValidator::with_config(
-            &carbon_only,
-            AromaticityConfig {
-                ring_config: RingConfig {
-                    simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
-                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
-                },
-                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-                maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
-            },
-        )
-        .validate(&ast);
+    fn test_aromaticity_conformance_validator_new() {
+        let model = AromaticityModel::daylight();
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#
+        );
 
-        assert_eq!(configured, expected);
-    }
-
-    #[rstest]
-    fn test_aromaticity_conformance_validator_validate(
-        benzene: MoleculeAst,
-        carbon_only: AromaticityModel,
-    ) {
-        let mut ast = benzene;
-        AromaticityResolver::new(&carbon_only)
-            .resolve(&mut ast)
-            .unwrap();
         assert_eq!(
-            AromaticityConformanceValidator::new(&carbon_only)
-                .validate(&ast)
-                .unwrap(),
-            Solution::Determined(())
+            AromaticityConformanceValidator::new(&model).validate(&molecule),
+            AromaticityConformanceValidator::with_config(&model, AromaticityConfig::default())
+                .validate(&molecule)
         );
     }
 
     #[rstest]
-    fn test_aromaticity_conformance_validator_validate_error(
-        benzene: MoleculeAst,
-        carbon_only: AromaticityModel,
+    fn test_aromaticity_conformance_validator_with_config() {
+        let model = AromaticityModel::daylight();
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#
+        );
+
+        assert_eq!(
+            AromaticityConformanceValidator::with_config(
+                &model,
+                AromaticityConfig {
+                    ring_config: RingConfig {
+                        simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    },
+                    connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                    maximum_independent_set_algorithm:
+                        MaximumIndependentSetAlgorithm::BranchAndBound,
+                },
+            )
+            .validate(&molecule),
+            Ok(Solution::Determined(()))
+        );
+    }
+
+    #[rstest]
+    #[case::assertion_without_system(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{:atoms ["C#a"]}"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+        )),
+    )]
+    #[case::participant_set_mismatch(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticSystemFailure {
+                system: AromaticSystemId(0),
+            },
+        )),
+    )]
+    #[case::contribution_mismatch(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[2,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticSystemFailure {
+                system: AromaticSystemId(0),
+            },
+        )),
+    )]
+    #[case::bond_constraint_mismatch(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a!"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticBondConstraintMismatch {
+                bond: BondId(0),
+                system: AromaticSystemId(0),
+            },
+        )),
+    )]
+    #[case::aromatic_valence_mismatch(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[2,0,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticValenceMismatch {
+                atom: AtomId(0),
+                system: AromaticSystemId(0),
+            },
+        )),
+    )]
+    #[case::model_rejection(
+        AromaticityModel::mdl(),
+        mol_dsl!(r#"{
+            :atoms ["O#n1" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticSystemFailure {
+                system: AromaticSystemId(0),
+            },
+        )),
+    )]
+    #[case::perception_rejection(
+        AromaticityModel::Clar {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        mol_dsl!(r#"{
+            :atoms ["N#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        }"#),
+        Solution::Contradictory(AromaticityValidatorContradiction::Perception(
+            AromaticityContradiction::ClarNonBenzenoid(
+                "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
+                    .to_string(),
+            ),
+        )),
+    )]
+    #[case::absent(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Determined(()),
+    )]
+    #[case::vacuous(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a*" "C#a*" "C#a*" "C#a*" "C#a*" "C#a*"]
+            :bonds [[0 1 "1#a*"] [1 2 "1#a*"] [2 3 "1#a*"] [3 4 "1#a*"]
+                    [4 5 "1#a*"] [5 0 "1#a*"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Determined(()),
+    )]
+    #[case::conformant(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                    [4 5 "1#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Determined(()),
+    )]
+    #[case::non_ground(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        Solution::Underdetermined(()),
+    )]
+    fn test_aromaticity_conformance_validator_validate(
+        #[case] model: AromaticityModel,
+        #[case] molecule: MoleculeAst,
+        #[case] expected: Solution<(), AromaticityValidatorContradiction>,
     ) {
         assert_eq!(
-            AromaticityConformanceValidator::new(&carbon_only)
-                .validate(&benzene)
-                .unwrap(),
-            Solution::Contradictory(AromaticityValidatorContradiction::SystemCountMismatch {
-                ast_count: 0,
-                perception_count: 1,
-            })
+            AromaticityConformanceValidator::new(&model).validate(&molecule),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_conformance_validator_validate_error() {
+        let model = AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.0,
+        };
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#a2" "C#a2" "C#a2" "C#a2" "C#a2" "C#a2"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#
+        );
+
+        assert_eq!(
+            AromaticityConformanceValidator::new(&model).validate(&molecule),
+            Err(AromaticityError::HmoMissingParameters(
+                "no Van-Catledge parameters for C with 2 pi-electrons".to_string(),
+            ))
         );
     }
 }

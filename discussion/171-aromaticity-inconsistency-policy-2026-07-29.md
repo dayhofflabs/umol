@@ -945,7 +945,7 @@ candidate derivation. `cargo test -p umol-graph` passes.
 
 ### S5 — Conformance completion
 
-#### S5a — Aromatic constraint conformance
+#### S5a — Aromatic constraint conformance **Done**
 
 **Module:** `umol-graph/src/ops/validate/aromaticity.rs`, `umol-graph/src/ops/validate.rs`
 
