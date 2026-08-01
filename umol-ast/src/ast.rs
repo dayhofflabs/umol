@@ -115,9 +115,11 @@ pub use traits::{
 };
 pub use validate::{
     ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
-    ConstraintContradiction, ConstraintError, ConstraintValidator, DpoContradiction, DpoError,
-    DpoValidator, EntityStructureContradiction, EntityStructureError, EntityStructureValidator,
+    ConstraintContradiction, ConstraintError, ConstraintValidateConfig, ConstraintValidator,
+    DpoContradiction, DpoError, DpoValidator, EntityStructureContradiction, EntityStructureError,
+    EntityStructureValidator, IncidenceConstraintContradiction, IncidenceConstraintValidator,
     ReactionIntegrityContradiction, ReactionIntegrityError, ReactionIntegrityValidator,
+    RingConstraintContradiction, RingConstraintValidator,
 };
 pub use value::{ValueAst, ValuePredicate, ValueTerm};
 pub use view::{

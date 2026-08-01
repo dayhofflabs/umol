@@ -13,7 +13,11 @@ pub mod reaction;
 pub use connectivity::{
     ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
 };
-pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
+pub use constraint::{
+    ConstraintContradiction, ConstraintError, ConstraintValidateConfig, ConstraintValidator,
+    IncidenceConstraintContradiction, IncidenceConstraintValidator, RingConstraintContradiction,
+    RingConstraintValidator,
+};
 pub use dpo::{DpoContradiction, DpoError, DpoValidator};
 pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
 pub use reaction::{

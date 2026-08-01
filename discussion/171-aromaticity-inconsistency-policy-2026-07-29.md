@@ -743,7 +743,7 @@ types no longer exist.
 
 ### S3 — Model-independent constraint evaluation
 
-#### S3a — Configuration and contradiction foundations
+#### S3a — Configuration and contradiction foundations **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint.rs`,
 `umol-ast/src/ast/validate/constraint/`, `umol-ast/src/ast.rs`
