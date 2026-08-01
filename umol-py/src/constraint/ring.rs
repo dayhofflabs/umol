@@ -4,6 +4,7 @@ use pyo3::prelude::*;
 use umol_ast::ast::{RingMembershipAst as AstRingMembershipAst, RingScope as AstRingScope};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::value::{ValueArg, ValueAst};
 
 #[pyclass]
@@ -81,6 +82,17 @@ impl RingMembershipAst {
         ))
     }
 }
+
+impl_py_lattice!(
+    RingMembershipAst,
+    AstRingMembershipAst,
+    |value: &RingMembershipAst, py: Python<'_>| -> PyResult<AstRingMembershipAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstRingMembershipAst| -> PyResult<RingMembershipAst> {
+        RingMembershipAst::from_rust(py, &value)
+    }
+);
 
 impl RingMembershipAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstRingMembershipAst) -> PyResult<Self> {

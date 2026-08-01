@@ -13,10 +13,14 @@ from umol import (
     LigandPermutation,
     LigandSymmetryAst,
     MulticenterValenceAst,
+    NoncovalentBondKind,
+    NoncovalentBondKindAst,
     Orientation,
     OrientedLigandPermutation,
     Permutation,
     RelOp,
+    RingMembershipAst,
+    RingScope,
     StereoConfigurationAst,
     StereoCoset,
     StereoKind,
@@ -1131,3 +1135,170 @@ def test_stereo_leaf_is_compatible(lhs, rhs):
 def test_stereo_leaf_canonicalize(value, expected):
     assert value.canonicalize() == expected
     assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(
+            NoncovalentBondKindAst.Undetermined(),
+            True,
+            False,
+            id="noncovalent-top",
+        ),
+        pytest.param(
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            False,
+            True,
+            id="noncovalent-ground",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.All(), ValueAst.Undetermined()),
+            True,
+            False,
+            id="ring-top",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.Size(6), 2),
+            False,
+            True,
+            id="ring-ground",
+        ),
+    ],
+)
+def test_remaining_leaf_classification(value, expected_undetermined, expected_ground):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            NoncovalentBondKindAst.Undetermined(),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            id="noncovalent-compatible",
+        ),
+        pytest.param(
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic),
+            None,
+            id="noncovalent-incompatible",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2})),
+            RingMembershipAst(RingScope.Size(6), 2),
+            RingMembershipAst(RingScope.Size(6), 2),
+            id="ring-compatible",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.All(), 2),
+            RingMembershipAst(RingScope.Size(6), 2),
+            None,
+            id="ring-different-fiber",
+        ),
+    ],
+)
+def test_remaining_leaf_meet(lhs, rhs, expected):
+    assert lhs.meet(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic),
+            NoncovalentBondKindAst.Undetermined(),
+            id="noncovalent",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.Size(6), 1),
+            RingMembershipAst(RingScope.Size(6), 2),
+            RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2})),
+            id="ring",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.All(), 2),
+            RingMembershipAst(RingScope.Size(6), 2),
+            None,
+            id="ring-different-fiber",
+        ),
+    ],
+)
+def test_remaining_leaf_join(lhs, rhs, expected):
+    assert lhs.join(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            NoncovalentBondKindAst.Undetermined(),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HalogenBond),
+            id="noncovalent",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.All(), ValueAst.LitSet({1, 2})),
+            RingMembershipAst(RingScope.All(), 2),
+            id="ring",
+        ),
+    ],
+)
+def test_remaining_leaf_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic),
+            id="noncovalent",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.All(), 2),
+            RingMembershipAst(RingScope.Size(6), 2),
+            id="ring",
+        ),
+    ],
+)
+def test_remaining_leaf_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.VanDerWaals),
+            NoncovalentBondKindAst.Lit(NoncovalentBondKind.VanDerWaals),
+            id="noncovalent",
+        ),
+        pytest.param(
+            RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({2})),
+            RingMembershipAst(RingScope.Size(6), 2),
+            id="ring",
+        ),
+    ],
+)
+def test_remaining_leaf_canonicalize(value, expected):
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(
+            RingMembershipAst(RingScope.All(), ValueAst.LitSet(set())), id="ring"
+        ),
+    ],
+)
+def test_remaining_leaf_canonicalize_error(value):
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        value.canonicalize()

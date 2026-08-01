@@ -107,7 +107,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   `TopicityRelationAst`, `LigandSymmetryAst`, `FluxionalityAst`, and `TopicityAst`. Include a fibered
   no-join case so `join` returning `None` is verified independently of an incompatible meet.
   **Additive (green).** [dep: S0b]
-- **S1c — Remaining leaves.** Apply the surfaces in `noncovalent.rs` and `constraint/ring.rs` to
+- **S1c — Remaining leaves.** **Done.** Apply the surfaces in `noncovalent.rs` and `constraint/ring.rs` to
   `NoncovalentBondKindAst` and `RingMembershipAst`. Verify both operations through their public
   constructors and exact expected wrapper values. **Additive (green).** [dep: S0b]
 

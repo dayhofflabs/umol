@@ -26,6 +26,7 @@ use crate::constraint::noncovalent::{
 };
 use crate::convert::{hash_rust, variant_repr};
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 
 /// A noncovalent interaction kind. A fieldless, hashable value enum whose members
@@ -98,6 +99,17 @@ impl NoncovalentBondKindAst {
         )
     }
 }
+
+impl_py_lattice!(
+    NoncovalentBondKindAst,
+    AstNoncovalentBondKindAst,
+    |value: &NoncovalentBondKindAst, _py: Python<'_>| -> PyResult<AstNoncovalentBondKindAst> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: AstNoncovalentBondKindAst| -> PyResult<NoncovalentBondKindAst> {
+        Ok(NoncovalentBondKindAst::from_rust(&value))
+    }
+);
 
 impl NoncovalentBondKindAst {
     pub(crate) fn from_rust(ast: &AstNoncovalentBondKindAst) -> Self {
