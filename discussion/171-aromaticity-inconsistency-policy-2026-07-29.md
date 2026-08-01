@@ -1,6 +1,6 @@
 # 171 — Aromaticity resolution and conformance
 
-Status: In Progress
+Status: Completed
 Date: 2026-07-29
 Relates: [166](166-molecule-ops-2026-07-27.md),
 [177](177-nomenclature-guide-2026-07-31.md)
@@ -437,9 +437,6 @@ the summed charge onto the system, sets the contributing atoms to literal zero, 
 π-electron contributions so the total is preserved. It leaves undetermined or non-literal charges
 unchanged and is idempotent.
 
-No `LocalizeCharge` inverse is added: the choice of which atom receives the charge is not canonical,
-so localization is not a function of the delocalized structure.
-
 The localized and delocalized representations are observably distinct. A `"C#c-1"` pattern matches
 the localized form and not the delocalized form; `"C#a2"` and `"C#a1"` likewise distinguish their
 stored contributions. The choice cannot be made silently.
@@ -536,12 +533,12 @@ leaf requires it.
 The dedicated aromaticity and stereo validators then answer the separate model-conformance question.
 Doc 166 now points to this work unit for the complete constraint-integrity implementation.
 
-## Open
+## Follow-up ownership
 
-- Whether the contradiction should name the offending atoms and the reason (element out of scope
-  against ring size), beyond the exact unmatched atom and bond IDs required initially.
-- Which high-level Python transformation surface should expose the source-resolve → kekulize → target
-  resolve/validate chain.
+- Richer aromaticity model-rejection diagnostics are tracked in
+  [doc 168](168-api-hygiene-2026-07-27.md#errors-and-diagnostics).
+- The high-level Python transformation and validation surface is tracked in
+  [doc 166](166-molecule-ops-2026-07-27.md#python-operation-surface).
 
 ## Staged implementation plan
 
