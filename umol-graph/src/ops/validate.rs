@@ -275,6 +275,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::ops::aromaticity::AromaticityInconsistency;
     use crate::ops::model::ChemistryModel;
 
     #[rstest]
@@ -610,15 +611,48 @@ mod tests {
     }
 
     #[rstest]
-    fn test_validator_validate_conformance() {
-        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+    #[case::ground(
+        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+        Solution::Determined(()),
+    )]
+    #[case::aromaticity(
+        mol_dsl!(r#"{:atoms ["C#a"]}"#),
+        Solution::Contradictory(ValidatorContradiction::Aromaticity(
+            AromaticityValidatorContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        )),
+    )]
+    #[case::stereo(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h0#T1" "C#h3" "C#h3" "C#h3" "C#h3"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        }"#),
+        Solution::Contradictory(ValidatorContradiction::Stereo(
+            StereoValidatorContradiction::MissingStereoAtom { atom: AtomId(0) },
+        )),
+    )]
+    #[case::aromaticity_partial(
+        mol_dsl!(r#"{
+            :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        Solution::Underdetermined(()),
+    )]
+    fn test_validator_validate_conformance(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: Solution<(), ValidatorContradiction>,
+    ) {
+        let original = molecule.clone();
         let model = ChemistryModel::default();
+
         assert_eq!(
             Validator::new(&model)
                 .validate_conformance(&molecule)
                 .unwrap(),
-            Solution::Determined(())
+            expected
         );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

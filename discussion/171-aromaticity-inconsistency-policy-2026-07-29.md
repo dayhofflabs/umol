@@ -983,7 +983,7 @@ Focused tables cover absent and unrealizable tetrahedral/cis-trans relations, re
 mismatch, conformant existing relations, and preservation of every existing graph-symmetry
 validation result.
 
-#### S5c — Composite conformance outcomes
+#### S5c — Composite conformance outcomes **Done**
 
 **Module:** `umol-graph/src/ops/validate.rs`
 
