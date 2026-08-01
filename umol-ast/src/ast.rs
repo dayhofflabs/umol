@@ -119,7 +119,8 @@ pub use validate::{
     DpoContradiction, DpoError, DpoValidator, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, IncidenceConstraintContradiction, IncidenceConstraintValidator,
     ReactionIntegrityContradiction, ReactionIntegrityError, ReactionIntegrityValidator,
-    RingConstraintContradiction, RingConstraintValidator,
+    RelationalConstraintContradiction, RelationalConstraintValidator, RingConstraintContradiction,
+    RingConstraintValidator,
 };
 pub use value::{ValueAst, ValuePredicate, ValueTerm};
 pub use view::{

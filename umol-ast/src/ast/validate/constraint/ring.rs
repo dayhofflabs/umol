@@ -12,6 +12,7 @@ use super::super::super::molecule::MoleculeAst;
 use super::super::super::ring::{RingConfig, RingModel};
 use super::super::super::traits::Lattice;
 use super::super::super::value::ValueAst;
+use super::super::super::view::{AtomView, RingViews};
 use super::ConstraintError;
 
 /// Evaluates ring constraints with an explicit relevant-cycle algorithm selector.
@@ -35,28 +36,9 @@ impl RingConstraintValidator {
         let mut any_underdetermined = false;
 
         for atom in ast.atoms().iter() {
-            let ring_atom = rings.atom(atom.id);
             for constraint in atom.constraints().iter() {
-                let (asserted, derived) = match constraint {
-                    AtomConstraintAst::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
-                    AtomConstraintAst::RingValence(asserted) => {
-                        (asserted, ring_atom.ring_valence())
-                    }
-                    AtomConstraintAst::RingMembership(membership) => (
-                        &membership.count,
-                        ring_atom.ring_membership(membership.scope),
-                    ),
-                    _ => continue,
-                };
                 if let Some(contradiction) = observe(
-                    evaluate(
-                        asserted,
-                        &derived,
-                        RingConstraintContradiction::Atom {
-                            atom: atom.id,
-                            constraint: constraint.clone(),
-                        },
-                    ),
+                    self.validate_atom(atom, &rings, constraint),
                     &mut any_underdetermined,
                 ) {
                     return Ok(Solution::Contradictory(contradiction));
@@ -103,6 +85,34 @@ impl RingConstraintValidator {
         } else {
             Solution::Determined(())
         })
+    }
+
+    /// Validate one atom ring constraint against a precomputed ring projection.
+    /// Non-ring constraints are determined identities here.
+    pub fn validate_atom(
+        &self,
+        atom: AtomView<'_>,
+        rings: &RingViews<'_>,
+        constraint: &AtomConstraintAst,
+    ) -> Solution<(), RingConstraintContradiction> {
+        let ring_atom = rings.atom(atom.id);
+        let (asserted, derived) = match constraint {
+            AtomConstraintAst::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
+            AtomConstraintAst::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
+            AtomConstraintAst::RingMembership(membership) => (
+                &membership.count,
+                ring_atom.ring_membership(membership.scope),
+            ),
+            _ => return Solution::Determined(()),
+        };
+        evaluate(
+            asserted,
+            &derived,
+            RingConstraintContradiction::Atom {
+                atom: atom.id,
+                constraint: constraint.clone(),
+            },
+        )
     }
 }
 

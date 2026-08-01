@@ -15,7 +15,8 @@ pub use connectivity::{
 };
 pub use constraint::{
     ConstraintContradiction, ConstraintError, ConstraintValidateConfig, ConstraintValidator,
-    IncidenceConstraintContradiction, IncidenceConstraintValidator, RingConstraintContradiction,
+    IncidenceConstraintContradiction, IncidenceConstraintValidator,
+    RelationalConstraintContradiction, RelationalConstraintValidator, RingConstraintContradiction,
     RingConstraintValidator,
 };
 pub use dpo::{DpoContradiction, DpoError, DpoValidator};

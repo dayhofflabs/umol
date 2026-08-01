@@ -37,7 +37,10 @@ impl IncidenceConstraintValidator {
         let mut any_underdetermined = false;
 
         for atom in ast.atoms().iter() {
-            if let Some(contradiction) = observe(validate_atom(atom), &mut any_underdetermined) {
+            if let Some(contradiction) = observe(
+                validate_atom_constraints(self, atom),
+                &mut any_underdetermined,
+            ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
@@ -95,46 +98,15 @@ impl IncidenceConstraintValidator {
             Solution::Determined(())
         })
     }
-}
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub enum IncidenceConstraintContradiction {
-    #[error("atom {atom:?} does not satisfy incidence constraint {constraint:?}")]
-    Atom {
-        atom: AtomId,
-        constraint: AtomConstraintAst,
-    },
-    #[error("bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
-    Bond {
-        bond: BondId,
-        constraint: BondConstraintAst,
-    },
-    #[error("dative bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
-    DativeBond {
-        bond: DativeBondId,
-        constraint: DativeBondConstraintAst,
-    },
-    #[error("aromatic system {system:?} does not satisfy incidence constraint {constraint:?}")]
-    AromaticSystem {
-        system: AromaticSystemId,
-        constraint: AromaticSystemConstraintAst,
-    },
-    #[error("multicenter bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
-    MulticenterBond {
-        bond: MulticenterBondId,
-        constraint: MulticenterBondConstraintAst,
-    },
-    #[error("noncovalent bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
-    NoncovalentBond {
-        bond: NoncovalentBondId,
-        constraint: NoncovalentBondConstraintAst,
-    },
-}
-
-fn validate_atom(atom: AtomView<'_>) -> Solution<(), IncidenceConstraintContradiction> {
-    let mut any_underdetermined = false;
-    for constraint in atom.constraints().iter() {
-        let outcome = match constraint {
+    /// Validate one non-ring atom constraint against its incidence-derived value.
+    /// Ring constraints are outside this validator and are determined identities here.
+    pub fn validate_atom(
+        &self,
+        atom: AtomView<'_>,
+        constraint: &AtomConstraintAst,
+    ) -> Solution<(), IncidenceConstraintContradiction> {
+        match constraint {
             AtomConstraintAst::Valence(_) => evaluate(
                 constraint,
                 &AtomConstraintAst::valence(atom.valence()),
@@ -238,8 +210,52 @@ fn validate_atom(atom: AtomView<'_>) -> Solution<(), IncidenceConstraintContradi
             ),
             AtomConstraintAst::RingDegree(_)
             | AtomConstraintAst::RingValence(_)
-            | AtomConstraintAst::RingMembership(_) => continue,
-        };
+            | AtomConstraintAst::RingMembership(_) => Solution::Determined(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum IncidenceConstraintContradiction {
+    #[error("atom {atom:?} does not satisfy incidence constraint {constraint:?}")]
+    Atom {
+        atom: AtomId,
+        constraint: AtomConstraintAst,
+    },
+    #[error("bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
+    Bond {
+        bond: BondId,
+        constraint: BondConstraintAst,
+    },
+    #[error("dative bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
+    DativeBond {
+        bond: DativeBondId,
+        constraint: DativeBondConstraintAst,
+    },
+    #[error("aromatic system {system:?} does not satisfy incidence constraint {constraint:?}")]
+    AromaticSystem {
+        system: AromaticSystemId,
+        constraint: AromaticSystemConstraintAst,
+    },
+    #[error("multicenter bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
+    MulticenterBond {
+        bond: MulticenterBondId,
+        constraint: MulticenterBondConstraintAst,
+    },
+    #[error("noncovalent bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
+    NoncovalentBond {
+        bond: NoncovalentBondId,
+        constraint: NoncovalentBondConstraintAst,
+    },
+}
+
+fn validate_atom_constraints(
+    validator: &IncidenceConstraintValidator,
+    atom: AtomView<'_>,
+) -> Solution<(), IncidenceConstraintContradiction> {
+    let mut any_underdetermined = false;
+    for constraint in atom.constraints().iter() {
+        let outcome = validator.validate_atom(atom, constraint);
         if let Some(contradiction) = observe(outcome, &mut any_underdetermined) {
             return Solution::Contradictory(contradiction);
         }

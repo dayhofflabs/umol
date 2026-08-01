@@ -807,7 +807,7 @@ Focused tables cover acyclic, monocyclic, fused, bridged, size-filtered, vacuous
 contradictory cases. The current Vismara case verifies explicit selector forwarding; future
 relevant-cycle implementations join the same exact-outcome table.
 
-#### S3d — Relational constraint evaluation
+#### S3d — Relational constraint evaluation **Done**
 
 **Module:** `umol-ast/src/ast/validate/constraint/relational.rs`
 

@@ -251,6 +251,15 @@ inconsistencies.
 **In code:** —
 **Settled by:** 171.
 
+### Determined
+
+**Determined** is an operation outcome: the pass produced a fully resolved result.
+
+**Not:** *ground*, which is a property of stored state rather than of an outcome. An operation may
+return `Determined` with a payload that is not ground if the operation's own contract is satisfied.
+**In code:** `Solution::Determined`, `is_determined`, `into_determined`.
+**Settled by:** to fill during the sweep.
+
 ### Entity
 
 An **entity** is one of the eight kinds represented by `Entity`: atom, localized bond, dative bond,
@@ -278,7 +287,9 @@ An **error** is an operational or setup failure outside the semantic `Solution`,
 transaction or unavailable model parameters.
 
 **Not:** contradiction, failure, inconsistency — all of which are semantic.
-**In code:** the `Err` side of `Result<Solution<_, _>, _>`.
+**In code:** the `Err` side of `Result<Solution<_, _>, _>`. Every module error type implements
+`umol_utils::UmolError`, which supplies `as_any` for downcasting; `Box<dyn UmolError>` is the
+cross-module boundary form and `?` promotes into it.
 **Settled by:** 171.
 
 ### Failure
@@ -548,6 +559,23 @@ relevant-cycle enumeration algorithm is operational configuration.
 **Not:** incidence constraint.
 **In code:** `RingConstraintValidator`, `RingConstraintContradiction`.
 **Settled by:** 171.
+
+### Solution
+
+**`Solution<T, C>`** is the three-valued outcome of an engine pass: `Determined`, `Underdetermined`,
+or `Contradictory(C)` with a typed diagnostic payload. Setup and parameter failures travel separately
+in `Result` and never collapse into it, so every umol engine returns `Result<Solution<_, _>, _>`.
+
+An operation must decide which outcomes it treats as success, and the two reasonable answers differ
+precisely on `Underdetermined`: a validator accepts it (only `Contradictory` fails), a transformer
+does not (it cannot rewrite a representation on partial information). State the choice when adding an
+operation; it is the outcome most easily overlooked. `into_observation` and `into_decisive` encode
+the two, but with 4 and 1 call sites they are conveniences rather than established vocabulary.
+
+**Not:** `Result`. `Solution` carries the semantic verdict; `Result` carries operational success.
+Both appear in one signature and mean different things.
+**In code:** `Solution`, `umol_utils::solution`.
+**Settled by:** to fill during the sweep.
 
 ### Split
 

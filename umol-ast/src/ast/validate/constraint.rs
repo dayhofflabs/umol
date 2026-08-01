@@ -8,9 +8,11 @@ use umol_graph_core::{
 use umol_utils::solution::Solution;
 
 pub mod incidence;
+pub mod relational;
 pub mod ring;
 
 pub use incidence::{IncidenceConstraintContradiction, IncidenceConstraintValidator};
+pub use relational::{RelationalConstraintContradiction, RelationalConstraintValidator};
 pub use ring::{RingConstraintContradiction, RingConstraintValidator};
 
 use super::super::entity::Entity;
@@ -45,6 +47,8 @@ pub enum ConstraintContradiction {
     Incidence(#[from] IncidenceConstraintContradiction),
     #[error(transparent)]
     Ring(#[from] RingConstraintContradiction),
+    #[error(transparent)]
+    Relational(#[from] RelationalConstraintContradiction),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -79,8 +83,10 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::ast::constraint::{AtomConstraintAst, BondConstraintAst, RingScope};
-    use crate::ast::id::{AtomId, BondId};
+    use crate::ast::constraint::{
+        AtomConstraintAst, BondConstraintAst, RelationalConstraint, RingScope,
+    };
+    use crate::ast::id::{AtomId, BondId, DativeBondId};
 
     #[rstest]
     #[case::incidence(
@@ -101,6 +107,20 @@ mod tests {
         ConstraintContradiction::Ring(RingConstraintContradiction::Bond {
             bond: BondId(3),
             constraint: BondConstraintAst::ring_membership(RingScope::Size(6), 1),
+        })
+    )]
+    #[case::relational(
+        RelationalConstraintContradiction {
+            constraint: RelationalConstraint::DativeBondDonor {
+                bond: DativeBondId(1),
+                atom: AtomId(2),
+            },
+        },
+        ConstraintContradiction::Relational(RelationalConstraintContradiction {
+            constraint: RelationalConstraint::DativeBondDonor {
+                bond: DativeBondId(1),
+                atom: AtomId(2),
+            },
         })
     )]
     fn test_constraint_contradiction_from<T>(
