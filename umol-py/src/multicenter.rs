@@ -23,6 +23,7 @@ use crate::constraint::multicenter::{
 };
 use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::UnpairedElectronsAst;
 use crate::value::{ValueArg, ValueAst};
@@ -161,6 +162,17 @@ impl MulticenterBondAst {
         MulticenterBondAst(bond)
     }
 }
+
+impl_py_lattice!(
+    MulticenterBondAst,
+    AstMulticenterBondAst,
+    |value: &MulticenterBondAst, _py: Python<'_>| -> PyResult<AstMulticenterBondAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstMulticenterBondAst| -> PyResult<MulticenterBondAst> {
+        Ok(MulticenterBondAst::from_inner(value))
+    }
+);
 
 /// A view of one multicenter bond within a molecule: a handle to the molecule plus
 /// the bond's index. Field reads rebuild the transient Rust view; the molecule is

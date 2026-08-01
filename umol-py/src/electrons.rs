@@ -72,8 +72,8 @@ impl_py_lattice!(
 /// `ElectronCountsAst` passthrough (matching `impl From<Vec<i64>>`).
 #[derive(FromPyObject)]
 pub(crate) enum ElectronCountsArg {
-    Lit(Vec<i64>),
     Ast(Py<ElectronCountsAst>),
+    Lit(Vec<i64>),
 }
 
 impl ElectronCountsArg {

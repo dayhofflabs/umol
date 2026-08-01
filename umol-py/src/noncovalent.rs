@@ -253,6 +253,17 @@ impl NoncovalentBondAst {
     }
 }
 
+impl_py_lattice!(
+    NoncovalentBondAst,
+    AstNoncovalentBondAst,
+    |value: &NoncovalentBondAst, _py: Python<'_>| -> PyResult<AstNoncovalentBondAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstNoncovalentBondAst| -> PyResult<NoncovalentBondAst> {
+        Ok(NoncovalentBondAst::from_inner(value))
+    }
+);
+
 /// A view of one noncovalent bond within a molecule: a handle to the molecule plus the
 /// bond's index. Field reads rebuild the transient Rust view; the molecule is never
 /// copied. The two endpoint atom indices are read-only topology; the kind and

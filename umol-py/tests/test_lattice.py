@@ -1,12 +1,14 @@
 import pytest
 
 from umol import (
+    AromaticSystemAst,
     AromaticValenceAst,
     AtomAst,
     BooleanAst,
     BondAst,
     CisTransStereoAst,
     ContradictionError,
+    DativeBondAst,
     ElectronCountsAst,
     Element,
     ElementAst,
@@ -15,6 +17,8 @@ from umol import (
     LigandPermutation,
     LigandSymmetryAst,
     MulticenterValenceAst,
+    MulticenterBondAst,
+    NoncovalentBondAst,
     NoncovalentBondKind,
     NoncovalentBondKindAst,
     Orientation,
@@ -1470,3 +1474,252 @@ def test_entity_canonicalize(value, expected):
 def test_entity_canonicalize_error(value):
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         value.canonicalize()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(
+            DativeBondAst(ValueAst.Undetermined()),
+            True,
+            False,
+            id="dative-undetermined",
+        ),
+        pytest.param(DativeBondAst(1), False, True, id="dative-ground"),
+        pytest.param(
+            AromaticSystemAst(ElectronCountsAst.Undetermined()),
+            True,
+            False,
+            id="aromatic-undetermined",
+        ),
+        pytest.param(
+            AromaticSystemAst(
+                [1, 1],
+                charge=0,
+                unpaired_electrons=UnpairedElectronsAst(0, 1),
+            ),
+            False,
+            True,
+            id="aromatic-ground",
+        ),
+        pytest.param(
+            MulticenterBondAst(ElectronCountsAst.Undetermined()),
+            True,
+            False,
+            id="multicenter-undetermined",
+        ),
+        pytest.param(
+            MulticenterBondAst(
+                [1, 0, 1],
+                charge=0,
+                unpaired_electrons=UnpairedElectronsAst(0, 1),
+            ),
+            False,
+            True,
+            id="multicenter-ground",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKindAst.Undetermined()),
+            True,
+            False,
+            id="noncovalent-undetermined",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            False,
+            True,
+            id="noncovalent-ground",
+        ),
+    ],
+)
+def test_overlay_entity_classification(value, expected_undetermined, expected_ground):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            DativeBondAst(ValueAst.LitSet({1, 2})),
+            DativeBondAst(1),
+            DativeBondAst(1),
+            id="dative-compatible",
+        ),
+        pytest.param(
+            DativeBondAst(1),
+            DativeBondAst(2),
+            None,
+            id="dative-incompatible",
+        ),
+        pytest.param(
+            AromaticSystemAst(
+                ElectronCountsAst.Undetermined(), charge=ValueAst.LitSet({0, 1})
+            ),
+            AromaticSystemAst([1, 1], charge=0),
+            AromaticSystemAst([1, 1], charge=0),
+            id="aromatic-compatible",
+        ),
+        pytest.param(
+            AromaticSystemAst([1, 1]),
+            AromaticSystemAst([2, 0]),
+            None,
+            id="aromatic-incompatible",
+        ),
+        pytest.param(
+            MulticenterBondAst(
+                ElectronCountsAst.Undetermined(), charge=ValueAst.LitSet({0, 1})
+            ),
+            MulticenterBondAst([1, 0, 1], charge=0),
+            MulticenterBondAst([1, 0, 1], charge=0),
+            id="multicenter-compatible",
+        ),
+        pytest.param(
+            MulticenterBondAst([1, 0, 1]),
+            MulticenterBondAst([2, 0, 0]),
+            None,
+            id="multicenter-incompatible",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKindAst.Undetermined()),
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            id="noncovalent-compatible",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondAst(NoncovalentBondKind.Ionic),
+            None,
+            id="noncovalent-incompatible",
+        ),
+    ],
+)
+def test_overlay_entity_meet(lhs, rhs, expected):
+    assert lhs.meet(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            DativeBondAst(1),
+            DativeBondAst(2),
+            DativeBondAst(ValueAst.LitSet({1, 2})),
+            id="dative",
+        ),
+        pytest.param(
+            AromaticSystemAst([1, 1], charge=0),
+            AromaticSystemAst([2, 0], charge=1),
+            AromaticSystemAst(
+                ElectronCountsAst.Undetermined(), charge=ValueAst.LitSet({0, 1})
+            ),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterBondAst([1, 0, 1], charge=0),
+            MulticenterBondAst([2, 0, 0], charge=1),
+            MulticenterBondAst(
+                ElectronCountsAst.Undetermined(), charge=ValueAst.LitSet({0, 1})
+            ),
+            id="multicenter",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondAst(NoncovalentBondKind.Ionic),
+            NoncovalentBondAst(NoncovalentBondKindAst.Undetermined()),
+            id="noncovalent",
+        ),
+    ],
+)
+def test_overlay_entity_join(lhs, rhs, expected):
+    assert lhs.join(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            DativeBondAst(ValueAst.LitSet({1, 2})),
+            DativeBondAst(1),
+            id="dative",
+        ),
+        pytest.param(
+            AromaticSystemAst(
+                ElectronCountsAst.Undetermined(), charge=ValueAst.LitSet({0, 1})
+            ),
+            AromaticSystemAst([1, 1], charge=0),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterBondAst(
+                ElectronCountsAst.Undetermined(), charge=ValueAst.LitSet({0, 1})
+            ),
+            MulticenterBondAst([1, 0, 1], charge=0),
+            id="multicenter",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKindAst.Undetermined()),
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            id="noncovalent",
+        ),
+    ],
+)
+def test_overlay_entity_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(DativeBondAst(1), DativeBondAst(2), id="dative"),
+        pytest.param(
+            AromaticSystemAst([1, 1]),
+            AromaticSystemAst([2, 0]),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterBondAst([1, 0, 1]),
+            MulticenterBondAst([2, 0, 0]),
+            id="multicenter",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            NoncovalentBondAst(NoncovalentBondKind.Ionic),
+            id="noncovalent",
+        ),
+    ],
+)
+def test_overlay_entity_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            DativeBondAst(ValueAst.LitSet({1})),
+            DativeBondAst(1),
+            id="dative",
+        ),
+        pytest.param(
+            AromaticSystemAst([1, 1], charge=ValueAst.LitSet({0})),
+            AromaticSystemAst([1, 1], charge=0),
+            id="aromatic",
+        ),
+        pytest.param(
+            MulticenterBondAst([1, 0, 1], charge=ValueAst.LitSet({0})),
+            MulticenterBondAst([1, 0, 1], charge=0),
+            id="multicenter",
+        ),
+        pytest.param(
+            NoncovalentBondAst(NoncovalentBondKind.VanDerWaals),
+            NoncovalentBondAst(NoncovalentBondKind.VanDerWaals),
+            id="noncovalent",
+        ),
+    ],
+)
+def test_overlay_entity_canonicalize(value, expected):
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True

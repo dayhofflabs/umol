@@ -20,6 +20,7 @@ use crate::constraint::dative::{
     DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsUpdate,
 };
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::value::{ValueArg, ValueAst};
 
@@ -121,6 +122,17 @@ impl DativeBondAst {
         DativeBondAst(bond)
     }
 }
+
+impl_py_lattice!(
+    DativeBondAst,
+    AstDativeBondAst,
+    |value: &DativeBondAst, _py: Python<'_>| -> PyResult<AstDativeBondAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstDativeBondAst| -> PyResult<DativeBondAst> {
+        Ok(DativeBondAst::from_inner(value))
+    }
+);
 
 /// A view of one dative bond within a molecule: a handle to the molecule plus the
 /// bond's index. Field reads rebuild the transient Rust view; the molecule is never

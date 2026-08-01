@@ -116,7 +116,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
 - **S2a — Atom and bond entities.** **Done.** Apply the lattice and canonicalization surfaces to `AtomAst` and
   `BondAst`. Test full-value results rather than reaching into individual fields, including one
   compatible refinement and one incompatible pair for each entity. **Additive (green).** [dep: S1a]
-- **S2b — Overlay entities.** Apply the surfaces to `DativeBondAst`, `AromaticSystemAst`,
+- **S2b — Overlay entities.** **Done.** Apply the surfaces to `DativeBondAst`, `AromaticSystemAst`,
   `MulticenterBondAst`, and `NoncovalentBondAst` in their entity modules. Verify composite meet,
   join, matching direction, and canonical equality with exact expected objects.
   **Additive (green).** [dep: S1a, S1c]

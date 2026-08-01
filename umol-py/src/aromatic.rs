@@ -14,6 +14,7 @@ use umol_ast::ast::{
 
 use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
 use crate::error::parse_error;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::UnpairedElectronsAst;
 use crate::value::{ValueArg, ValueAst};
@@ -152,6 +153,17 @@ impl AromaticSystemAst {
         AromaticSystemAst(system)
     }
 }
+
+impl_py_lattice!(
+    AromaticSystemAst,
+    AstAromaticSystemAst,
+    |value: &AromaticSystemAst, _py: Python<'_>| -> PyResult<AstAromaticSystemAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstAromaticSystemAst| -> PyResult<AromaticSystemAst> {
+        Ok(AromaticSystemAst::from_inner(value))
+    }
+);
 
 /// A view of one aromatic system within a molecule: a handle to the molecule plus
 /// the system's index. Field reads rebuild the transient Rust view; the molecule is
