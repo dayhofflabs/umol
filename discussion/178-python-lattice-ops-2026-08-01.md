@@ -117,13 +117,15 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   `BondAst`. Test full-value results rather than reaching into individual fields, including one
   compatible refinement and one incompatible pair for each entity. **Additive (green).** [dep: S1a]
 - **S2b — Overlay entities.** **Done.** Apply the surfaces to `DativeBondAst`, `AromaticSystemAst`,
-  `MulticenterBondAst`, and `NoncovalentBondAst` in their entity modules. Verify composite meet,
-  join, matching direction, and canonical equality with exact expected objects.
+  `MulticenterBondAst`, `NoncovalentBondAst`, `StereoAtomAst`, and `StereoBondAst` in their entity
+  modules. The stereo entity wrappers are macro-generated and remain part of the inventory. Verify
+  composite meet, join, matching direction, and canonical equality with exact expected objects.
   **Additive (green).** [dep: S1a, S1c]
-- **S2c — Atom and bond constraint families.** Apply the surfaces to the enum and container pairs in
-  `constraint/atom.rs` and `constraint/bond.rs`: `AtomConstraintAst`, `AtomConstraintsAst`,
-  `BondConstraintAst`, and `BondConstraintsAst`. Test same-kind bounds, different-fiber `join`,
-  container canonicalization, and `matches` direction. **Additive (green).** [dep: S1a]
+- **S2c — Atom and bond constraint families.** **Done.** Apply the surfaces to the enum and
+  container pairs in `constraint/atom.rs` and `constraint/bond.rs`: `AtomConstraintAst`,
+  `AtomConstraintsAst`, `BondConstraintAst`, and `BondConstraintsAst`. Test same-kind bounds,
+  different-fiber `join`, container canonicalization, and `matches` direction.
+  **Additive (green).** [dep: S1a]
 - **S2d — Overlay constraint families.** Apply the surfaces to the enum and container pairs in
   `constraint/aromatic.rs`, `constraint/dative.rs`, `constraint/multicenter.rs`, and
   `constraint/noncovalent.rs`. Use table-driven Python cases covering every family and exact outputs

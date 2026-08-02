@@ -1,11 +1,14 @@
 import pytest
-
 from umol import (
     AromaticSystemAst,
     AromaticValenceAst,
     AtomAst,
-    BooleanAst,
+    AtomConstraintAst,
+    AtomConstraintsAst,
     BondAst,
+    BondConstraintAst,
+    BondConstraintsAst,
+    BooleanAst,
     CisTransStereoAst,
     ContradictionError,
     DativeBondAst,
@@ -16,8 +19,8 @@ from umol import (
     IsotopeMassAst,
     LigandPermutation,
     LigandSymmetryAst,
-    MulticenterValenceAst,
     MulticenterBondAst,
+    MulticenterValenceAst,
     NoncovalentBondAst,
     NoncovalentBondKind,
     NoncovalentBondKindAst,
@@ -27,13 +30,15 @@ from umol import (
     RelOp,
     RingMembershipAst,
     RingScope,
+    StereoAtomAst,
+    StereoBondAst,
     StereoConfigurationAst,
     StereoCoset,
+    Stereogenicity,
+    StereogenicityAst,
     StereoKind,
     StereoLigandPair,
     StereoTerm,
-    Stereogenicity,
-    StereogenicityAst,
     TetrahedralStereoAst,
     Topicity,
     TopicityAst,
@@ -1721,5 +1726,484 @@ def test_overlay_entity_is_compatible(lhs, rhs):
     ],
 )
 def test_overlay_entity_canonicalize(value, expected):
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(
+            StereoAtomAst(StereoConfigurationAst.Undetermined()),
+            True,
+            False,
+            id="stereo-atom-undetermined",
+        ),
+        pytest.param(
+            StereoAtomAst.parse("Th*"),
+            False,
+            False,
+            id="stereo-atom-kinded",
+        ),
+        pytest.param(
+            StereoAtomAst.parse("Th0"),
+            False,
+            True,
+            id="stereo-atom-ground",
+        ),
+        pytest.param(
+            StereoBondAst(StereoConfigurationAst.Undetermined()),
+            True,
+            False,
+            id="stereo-bond-undetermined",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct*"),
+            False,
+            False,
+            id="stereo-bond-kinded",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct0"),
+            False,
+            True,
+            id="stereo-bond-ground",
+        ),
+    ],
+)
+def test_stereo_entity_classification(value, expected_undetermined, expected_ground):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            StereoAtomAst.parse("Th*"),
+            StereoAtomAst.parse("Th0"),
+            StereoAtomAst.parse("Th0"),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct*"),
+            StereoBondAst.parse("Ct0"),
+            StereoBondAst.parse("Ct0"),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_entity_meet(lhs, rhs, expected):
+    result = lhs.meet(rhs)
+    assert result is not None
+    assert result.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            StereoAtomAst.parse("Th0"),
+            StereoAtomAst.parse("Th1"),
+            StereoAtomAst.parse("Th{0,1}"),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct0"),
+            StereoBondAst.parse("Ct1"),
+            StereoBondAst.parse("Ct{0,1}"),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_entity_join(lhs, rhs, expected):
+    result = lhs.join(rhs)
+    assert result is not None
+    assert result.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            StereoAtomAst.parse("Th*"),
+            StereoAtomAst.parse("Th0"),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct*"),
+            StereoBondAst.parse("Ct0"),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_entity_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(
+            StereoAtomAst.parse("Th0"),
+            StereoAtomAst.parse("Th1"),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct0"),
+            StereoBondAst.parse("Ct1"),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_entity_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            StereoAtomAst.parse("Th{0}"),
+            StereoAtomAst.parse("Th0"),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondAst.parse("Ct{0}"),
+            StereoBondAst.parse("Ct0"),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_entity_canonicalize(value, expected):
+    canonical = value.canonicalize()
+    assert str(canonical) == str(expected)
+    assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_undetermined", "expected_ground"),
+    [
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.Undetermined()),
+            True,
+            False,
+            id="atom-constraint-undetermined",
+        ),
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            False,
+            True,
+            id="atom-constraint-ground",
+        ),
+        pytest.param(
+            BondConstraintAst.Aromatic(BooleanAst.Undetermined()),
+            True,
+            False,
+            id="bond-constraint-undetermined",
+        ),
+        pytest.param(
+            BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            False,
+            True,
+            id="bond-constraint-ground",
+        ),
+        pytest.param(
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Undetermined())]),
+            True,
+            False,
+            id="atom-constraints-undetermined",
+        ),
+        pytest.param(
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+            False,
+            True,
+            id="atom-constraints-ground",
+        ),
+        pytest.param(
+            BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Undetermined())]),
+            True,
+            False,
+            id="bond-constraints-undetermined",
+        ),
+        pytest.param(
+            BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+            False,
+            True,
+            id="bond-constraints-ground",
+        ),
+    ],
+)
+def test_entity_constraint_classification(
+    value, expected_undetermined, expected_ground
+):
+    assert value.is_undetermined() is expected_undetermined
+    assert value.is_ground() is expected_ground
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.LitSet({3, 4})),
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            id="atom-constraint",
+        ),
+        pytest.param(
+            BondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+            ),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), 1)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), 1)),
+            id="bond-constraint",
+        ),
+        pytest.param(
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.LitSet({3, 4}))]),
+            AtomConstraintsAst(
+                [
+                    AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                    AtomConstraintAst.Degree(ValueAst.Lit(3)),
+                ]
+            ),
+            AtomConstraintsAst(
+                [
+                    AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                    AtomConstraintAst.Degree(ValueAst.Lit(3)),
+                ]
+            ),
+            id="atom-constraints",
+        ),
+        pytest.param(
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+                    )
+                ]
+            ),
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    ),
+                ]
+            ),
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    ),
+                ]
+            ),
+            id="bond-constraints",
+        ),
+    ],
+)
+def test_entity_constraint_meet(lhs, rhs, expected):
+    assert lhs.meet(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs", "expected"),
+    [
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.Lit(3)),
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Valence(ValueAst.LitSet({3, 4})),
+            id="atom-constraint-same-fiber",
+        ),
+        pytest.param(
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), 1)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), 2)),
+            BondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+            ),
+            id="bond-constraint-same-fiber",
+        ),
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Degree(ValueAst.Lit(4)),
+            None,
+            id="atom-constraint-different-fiber",
+        ),
+        pytest.param(
+            BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), 1)),
+            None,
+            id="bond-constraint-different-fiber",
+        ),
+        pytest.param(
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(3))]),
+            AtomConstraintsAst(
+                [
+                    AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                ]
+            ),
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.LitSet({3, 4}))]),
+            id="atom-constraints",
+        ),
+        pytest.param(
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 2)
+                    ),
+                ]
+            ),
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+                    )
+                ]
+            ),
+            id="bond-constraints",
+        ),
+    ],
+)
+def test_entity_constraint_join(lhs, rhs, expected):
+    assert lhs.join(rhs) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "target"),
+    [
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.LitSet({3, 4})),
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            id="atom-constraint",
+        ),
+        pytest.param(
+            BondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+            ),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), 1)),
+            id="bond-constraint",
+        ),
+        pytest.param(
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.LitSet({3, 4}))]),
+            AtomConstraintsAst(
+                [
+                    AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                    AtomConstraintAst.Degree(ValueAst.Lit(3)),
+                ]
+            ),
+            id="atom-constraints",
+        ),
+        pytest.param(
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+                    )
+                ]
+            ),
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    ),
+                ]
+            ),
+            id="bond-constraints",
+        ),
+    ],
+)
+def test_entity_constraint_matches(pattern, target):
+    assert pattern.matches(target) is True
+    assert target.matches(pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("lhs", "rhs"),
+    [
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Degree(ValueAst.Lit(4)),
+            id="atom-constraint",
+        ),
+        pytest.param(
+            BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), 1)),
+            id="bond-constraint",
+        ),
+        pytest.param(
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(3))]),
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+            id="atom-constraints",
+        ),
+        pytest.param(
+            BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+            BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(False))]),
+            id="bond-constraints",
+        ),
+    ],
+)
+def test_entity_constraint_is_compatible(lhs, rhs):
+    assert lhs.is_compatible(rhs) is False
+    assert rhs.is_compatible(lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            AtomConstraintAst.Valence(ValueAst.LitSet({4})),
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            id="atom-constraint",
+        ),
+        pytest.param(
+            BondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1}))
+            ),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), 1)),
+            id="bond-constraint",
+        ),
+        pytest.param(
+            AtomConstraintsAst(
+                [
+                    AtomConstraintAst.Valence(ValueAst.LitSet({4})),
+                    AtomConstraintAst.Degree(ValueAst.Undetermined()),
+                ]
+            ),
+            AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+            id="atom-constraints",
+        ),
+        pytest.param(
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.Aromatic(BooleanAst.Undetermined()),
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1}))
+                    ),
+                ]
+            ),
+            BondConstraintsAst(
+                [
+                    BondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            id="bond-constraints",
+        ),
+    ],
+)
+def test_entity_constraint_canonicalize(value, expected):
     assert value.canonicalize() == expected
     assert value.canonical_eq(expected) is True

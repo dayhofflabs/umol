@@ -14,6 +14,7 @@ use super::ring::{RingMembershipAst, RingScope};
 use crate::bond::BondAst;
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::stereo::{CisTransStereoArg, CisTransStereoAst};
 use crate::value::{ValueArg, ValueAst};
@@ -103,6 +104,17 @@ impl BondConstraintAst {
         variant_repr(slf.bind(py).as_any(), "BondConstraintAst", variant, 1)
     }
 }
+
+impl_py_lattice!(
+    BondConstraintAst,
+    AstBondConstraintAst,
+    |value: &BondConstraintAst, py: Python<'_>| -> PyResult<AstBondConstraintAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstBondConstraintAst| -> PyResult<BondConstraintAst> {
+        BondConstraintAst::from_rust(py, &value)
+    }
+);
 
 impl BondConstraintAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstBondConstraintAst) -> PyResult<Self> {
@@ -424,6 +436,17 @@ impl BondConstraintsAst {
         BondConstraintsAst(constraints)
     }
 }
+
+impl_py_lattice!(
+    BondConstraintsAst,
+    AstBondConstraintsAst,
+    |value: &BondConstraintsAst, _py: Python<'_>| -> PyResult<AstBondConstraintsAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstBondConstraintsAst| -> PyResult<BondConstraintsAst> {
+        Ok(BondConstraintsAst(value))
+    }
+);
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn bond_constraints_iter(

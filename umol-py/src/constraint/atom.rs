@@ -465,6 +465,17 @@ impl AtomConstraintAst {
     }
 }
 
+impl_py_lattice!(
+    AtomConstraintAst,
+    AstAtomConstraintAst,
+    |value: &AtomConstraintAst, py: Python<'_>| -> PyResult<AstAtomConstraintAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstAtomConstraintAst| -> PyResult<AtomConstraintAst> {
+        AtomConstraintAst::from_rust(py, &value)
+    }
+);
+
 impl AtomConstraintAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstAtomConstraintAst) -> PyResult<Self> {
         Ok(match ast {
@@ -1011,6 +1022,17 @@ impl AtomConstraintsAst {
         AtomConstraintsAst(constraints)
     }
 }
+
+impl_py_lattice!(
+    AtomConstraintsAst,
+    AstAtomConstraintsAst,
+    |value: &AtomConstraintsAst, _py: Python<'_>| -> PyResult<AstAtomConstraintsAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstAtomConstraintsAst| -> PyResult<AtomConstraintsAst> {
+        Ok(AtomConstraintsAst(value))
+    }
+);
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn atom_constraints_iter(

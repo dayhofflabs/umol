@@ -1068,6 +1068,17 @@ macro_rules! stereo_value {
 
             stereo_value!(@from_inner $from_inner, $value, $ast_value);
         }
+
+        impl_py_lattice!(
+            $value,
+            $ast_value,
+            |value: &$value, _py: Python<'_>| -> PyResult<$ast_value> {
+                Ok(value.inner().clone())
+            },
+            |_py: Python<'_>, value: $ast_value| -> PyResult<$value> {
+                Ok($value::from_inner(value))
+            }
+        );
     };
 }
 
