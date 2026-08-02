@@ -6,7 +6,8 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [125](125-constraints-as-projections-2026-06-22.md),
 [166](166-molecule-ops-2026-07-27.md),
 [171](171-aromaticity-inconsistency-policy-2026-07-29.md),
-[176](176-ast-naming-2026-07-31.md)
+[176](176-ast-naming-2026-07-31.md),
+[179](179-python-editing-and-transactions-2026-08-02.md)
 
 ## Purpose
 
@@ -1146,6 +1147,18 @@ the two, but with 4 and 1 call sites they are conveniences rather than establish
 Both appear in one signature and mean different things.
 **In code:** `Solution`, `umol_utils::solution`.
 **Settled by:** 083.
+
+### Snapshot
+
+A **snapshot** is a non-consuming materialization of transient working state whose ordinary
+finalization would consume the working object. Taking a snapshot preserves that object so subsequent
+operations can continue from the same transient state. The implementation may clone, but the name
+describes the lifecycle operation rather than the copying mechanism.
+
+**Not:** ordinary finalization, which consumes the working object; transaction rollback, which
+replays a realized undo journal; a general synonym for `clone`.
+**In code:** planned `MoleculeEditor::snapshot`.
+**Settled by:** 179.
 
 ### Split
 

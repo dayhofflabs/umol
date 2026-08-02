@@ -76,6 +76,11 @@ pub enum TransactionError {
     },
 }
 
+/// Detached journal of the realized undos for one successfully applied edit batch.
+///
+/// Detachment permits journals for consecutive transactions to be appended and rolled back as a
+/// unit. Rollback therefore requires the exact post-transaction editor state, or the end state of
+/// the consecutively appended transaction chain.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Transaction {
     undo: Vec<Undo>,

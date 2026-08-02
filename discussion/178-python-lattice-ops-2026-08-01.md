@@ -1,14 +1,13 @@
 # 178 — Expose the lattice operations on the Python surface
 
-Status: Proposed
+Status: Completed
 Date: 2026-08-01
 Relates: [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
 [177](177-nomenclature-guide-2026-07-31.md)
 
-The `Lattice` and `Canonicalize` operations are Rust-only. Python callers can construct and inspect
-AST values but cannot ask any of the four questions the algebra answers. This makes the central idea
-of the model unreachable from the interface most users have, and it is the one part of the whitepaper
-whose printed claims cannot be reproduced by a reader.
+The `Lattice` and `Canonicalize` operations are exposed uniformly on every applicable exported
+Python type. Python callers can construct and inspect AST values and ask the four questions the
+algebra answers. The corresponding whitepaper example has executable Python verification.
 
 ## Scope
 
@@ -72,9 +71,9 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   The binding tests instead verify complete method availability and representative cross-boundary
   results for bounded, fibered, contradictory, leaf, container, and entity AST values. This tests
   the binding without introducing a second property-testing stack or duplicating the Rust suite.
-- The whitepaper's `tab:lattice-ops` (Section 8) was computed in Rust and is currently unreproducible
-  by a reader. Once this lands, rerun it through Python and replace the table with a listing, putting
-  Section 8 on the same footing as Sections 3–7 where everything printed executes.
+- `test_lattice_operations_whitepaper` reproduces every row of the whitepaper's
+  `tab:lattice-ops` (Section 8) using only the public Python API and asserts its complete printed
+  output. The whitepaper presentation remains independent of the executable verification.
 
 ## Staged implementation plan
 
@@ -162,20 +161,28 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
 
 ### S4 — Reader-facing verification
 
-- **S4a — Reproduce the whitepaper lattice example through Python.** Express the inputs and
-  operations behind `tab:lattice-ops` solely with the public Python API, assert the printed values in
-  the Python suite, and replace the static whitepaper table with the executable listing and its
-  output. Run formatting, clippy, the `umol-py` Rust tests, rebuild the Python extension under the
-  Python 3.13 virtual environment, and run the complete Python suite. **Additive (green).**
-  [dep: S3c]
+- **S4a — Reproduce the whitepaper lattice example through Python.** **Done.** Express the inputs and
+  operations behind `tab:lattice-ops` solely with the public Python API and assert the complete
+  printed output in the Python suite, leaving the whitepaper presentation separate. Run formatting,
+  clippy, the `umol-py` Rust tests, rebuild the Python extension under the Python 3.13 virtual
+  environment, and run the complete Python suite. **Additive (green).**
+  [dep: S3d]
 
-**Critical path:** S0a → S0b → S1a/S1b/S1c → S2 → S3 → S4a.
+**Critical path:** S0a → S0b → S1a/S1b/S1c → S2 → S3 → S3d → S4a.
 
 No implementation stage is deferrable: S3c establishes the promised uniform surface, and S4a closes
 the reader-reproducibility requirement that motivated the work.
 
 ## Notes
 
+- **Whitepaper side, settled 2026-08-01.** `tab:lattice-ops` was kept and a short listing added
+  before it showing all four operations on `{C,N}` and `{N,O}`. Printed output would have been a
+  regression: the wrappers repr as constructor calls —
+  `ElementAst.LitSet({Element('N'), Element('O'), Element('C')})` for what the table prints as
+  `{C,N,O}` — so eight rows by six columns of that reads far worse than the typeset table, and the
+  set repr is unsorted. The leaf AST types expose no DSL rendering, so there is no third option. The
+  repr order was verified stable across `PYTHONHASHSEED`; the suite's assertion does not depend on it
+  either way, since it keys a label map on the objects rather than printing reprs.
 - Method names are unaffected by the naming question in doc 176; only the classes they hang off would
   move. Landing this first is safe, at the cost of touching the binding surface twice.
 - If mutating lattice operations are added later, `narrow_from` and `widen_with` remain the

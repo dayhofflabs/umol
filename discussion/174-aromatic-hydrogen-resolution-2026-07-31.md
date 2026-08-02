@@ -171,6 +171,45 @@ preference order:
 Add the corrected F420 structure as a fourth case once completion is implemented: unique solution,
 C29H36N5O18P.
 
+## The same failure at boron, and a second defect behind it
+
+Verified 2026-08-01 against a release rebuild of `umol-py`.
+
+The registry already carries the two neutral aromatic boron rows
+(`umol-graph/config/default-registry.toml:46-47`):
+
+```toml
+"B #v3 #a0",    # neutral aromatic B with substituent: borepin BR, boroxine BR3, 1-substituted 1,2-azaborine
+"B #v2 #a0 #h", # neutral aromatic B with H: borazine BH, 1,2-azaborine BH, borepin BH
+```
+
+Written in the DSL with `#a0` on boron, borepin is accepted and keeps its system intact
+(`:type "[0,1,1,1,1,1,1]"`). From SMILES it is not, and the spelling selects which of two
+independent defects it hits:
+
+| input | error | cause |
+| --- | --- | --- |
+| `b1cccccc1` | `no atom-typing match for AtomId(0) (element B, charge Some(0))` | the reader pins `#h0` on the bare lowercase heteroatom, so boron reaches atom typing as `#v2 #h0`; `B #v3 #a0` wants valence 3 and `B #v2 #a0 #h` wants a hydrogen |
+| `[bH]1cccccc1` | `aromaticity inconsistency: aromatic valence at atom AtomId(0) cannot produce a valid aromatic system` | atom typing passes; the aromaticity phase rejects the zero contribution |
+
+**The first is this document's issue.** Boron is affected exactly as pyrrole nitrogen is, for the
+same reason and by the same mechanism, and the proposal above fixes it: with `#h` left open the
+valence phase can reach `#v2 #h1` and match the second row.
+
+**The second is separate and is not the hydrogen circularity.** Borepin is a legitimate 4n+2 system
+— six pi electrons from three C=C over seven centres, boron contributing none through its empty p
+orbital. The notation expresses this, the registry admits it, and perception refuses to produce it.
+The same failure appears for `[bH]1[nH][bH][nH][bH][nH]1` (borazine) and `[bH]1cccc[nH]1`
+(1,2-azaborine), so it is the general zero-contributor case rather than anything about
+seven-membered rings.
+
+Borepin therefore needs both fixes to be reachable from SMILES. Fixing only the hydrogen
+circularity moves it from the first error to the second.
+
+Note that a zero contribution must be written out. Omitting the count means 1 for every numeric
+predicate — `#v`, `#h`, `#n`, `#a` alike — and undetermined always carries its own symbol, so `#a0`
+has no shorthand and `#a` is `#a1`.
+
 ## Open
 
 - Whether hydrogen completion is offered at all, or whether unkekulizable input is simply rejected
@@ -185,4 +224,7 @@ C29H36N5O18P.
   double bond even in correctly written input. 2-pyridone, uracil and 4-pyranone all fail as `[nH]`
   forms that RDKit accepts. The registry has no row for a carbon at localized valence 4 with aromatic
   valence 0. This is coverage, and it also blocks the F420 structure independently of the hydrogen
-  question.
+  question. **Open question:** this is also an `#a0` case, so it may share a root cause with the
+  zero-contributor perception defect above. They present differently — carbon has no registry row,
+  whereas boron has one and perception refuses it anyway — so they are recorded separately until
+  someone establishes whether one fix covers both.
