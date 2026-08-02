@@ -1,4 +1,5 @@
 import pytest
+import umol
 from umol import (
     AromaticSystemAst,
     AromaticSystemConstraintAst,
@@ -3356,3 +3357,97 @@ def test_molecule_constraints_canonicalize_recursively(value, expected):
 def test_molecule_constraints_canonicalize_error(value):
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         value.canonicalize()
+
+
+def test_lattice_method_inventory():
+    lattice_type_names = {
+        "AromaticSystemAst",
+        "AromaticSystemConstraintAst",
+        "AromaticSystemConstraintsAst",
+        "AromaticValenceAst",
+        "AtomAst",
+        "AtomConstraintAst",
+        "AtomConstraintsAst",
+        "BondAst",
+        "BondConstraintAst",
+        "BondConstraintsAst",
+        "BooleanAst",
+        "CisTransStereoAst",
+        "DativeBondAst",
+        "DativeBondConstraintAst",
+        "DativeBondConstraintsAst",
+        "ElectronCountsAst",
+        "ElementAst",
+        "FluxionalityAst",
+        "IsotopeMassAst",
+        "LigandSymmetryAst",
+        "MulticenterBondAst",
+        "MulticenterBondConstraintAst",
+        "MulticenterBondConstraintsAst",
+        "MulticenterValenceAst",
+        "NoncovalentBondAst",
+        "NoncovalentBondConstraintAst",
+        "NoncovalentBondConstraintsAst",
+        "NoncovalentBondKindAst",
+        "RingMembershipAst",
+        "StereoAtomAst",
+        "StereoAtomConstraintAst",
+        "StereoAtomConstraintsAst",
+        "StereoBondAst",
+        "StereoBondConstraintAst",
+        "StereoBondConstraintsAst",
+        "StereoConfigurationAst",
+        "StereogenicityAst",
+        "TetrahedralStereoAst",
+        "TopicityAst",
+        "TopicityRelationAst",
+        "UnpairedElectronsAst",
+        "ValueAst",
+    }
+    canonical_only_type_names = {
+        "Constraint",
+        "Constraints",
+        "Deltas",
+        "MoleculeConstraint",
+        "ReactionAst",
+        "RelationalConstraint",
+        "ValueTerm",
+    }
+    canonical_methods = {"canonicalize", "canonical_eq"}
+    lattice_methods = canonical_methods | {
+        "is_undetermined",
+        "is_ground",
+        "meet",
+        "join",
+        "matches",
+        "is_compatible",
+    }
+    unambiguous_lattice_methods = lattice_methods - canonical_methods - {"matches"}
+    exported_types = {
+        name: getattr(umol, name)
+        for name in umol.__all__
+        if isinstance(getattr(umol, name), type)
+    }
+
+    assert {
+        name
+        for name, class_ in exported_types.items()
+        if canonical_methods <= set(dir(class_))
+    } == lattice_type_names | canonical_only_type_names
+    assert {
+        name
+        for name, class_ in exported_types.items()
+        if lattice_methods <= set(dir(class_))
+    } == lattice_type_names
+    assert {
+        name
+        for name, class_ in exported_types.items()
+        if name not in lattice_type_names | canonical_only_type_names
+        and canonical_methods.intersection(dir(class_))
+    } == set()
+    assert {
+        name
+        for name, class_ in exported_types.items()
+        if name not in lattice_type_names
+        and unambiguous_lattice_methods.intersection(dir(class_))
+    } == set()
