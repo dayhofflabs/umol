@@ -12,6 +12,8 @@ from umol import (
     BondConstraintsAst,
     BooleanAst,
     CisTransStereoAst,
+    Constraint,
+    Constraints,
     ContradictionError,
     DativeBondAst,
     DativeBondConstraintAst,
@@ -23,6 +25,7 @@ from umol import (
     IsotopeMassAst,
     LigandPermutation,
     LigandSymmetryAst,
+    MoleculeConstraint,
     MulticenterBondAst,
     MulticenterBondConstraintAst,
     MulticenterBondConstraintsAst,
@@ -35,6 +38,7 @@ from umol import (
     Orientation,
     OrientedLigandPermutation,
     Permutation,
+    RelationalConstraint,
     RelOp,
     RingMembershipAst,
     RingScope,
@@ -3267,3 +3271,88 @@ def test_stereo_constraint_canonicalize(
     assert constraint.canonical_eq(expected_constraint) is True
     assert container.canonicalize() == expected_container
     assert container.canonical_eq(expected_container) is True
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            RelationalConstraint.DativeBondAllDonors(
+                0, AtomConstraintAst.Valence(ValueAst.LitSet({4}))
+            ),
+            RelationalConstraint.DativeBondAllDonors(
+                0, AtomConstraintAst.Valence(ValueAst.Lit(4))
+            ),
+            id="relational",
+        ),
+        pytest.param(
+            MoleculeConstraint.ChargeSum([2, 0], ValueAst.LitSet({1})),
+            MoleculeConstraint.ChargeSum([0, 2], ValueAst.Lit(1)),
+            id="molecule",
+        ),
+        pytest.param(
+            Constraint.Not(
+                Constraint.Atom(0, AtomConstraintAst.Valence(ValueAst.LitSet({4})))
+            ),
+            Constraint.Not(
+                Constraint.Atom(0, AtomConstraintAst.Valence(ValueAst.Lit(4)))
+            ),
+            id="constraint",
+        ),
+        pytest.param(
+            Constraints(
+                [
+                    Constraint.And(
+                        [
+                            Constraint.Atom(
+                                0,
+                                AtomConstraintAst.Valence(ValueAst.LitSet({4})),
+                            )
+                        ]
+                    ),
+                    Constraint.Atom(0, AtomConstraintAst.Valence(ValueAst.LitSet({4}))),
+                ]
+            ),
+            Constraints(
+                [Constraint.Atom(0, AtomConstraintAst.Valence(ValueAst.Lit(4)))]
+            ),
+            id="container",
+        ),
+    ],
+)
+def test_molecule_constraints_canonicalize_recursively(value, expected):
+    assert value != expected
+    assert value.canonicalize() == expected
+    assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(
+            RelationalConstraint.DativeBondAllDonors(
+                0, AtomConstraintAst.Valence(ValueAst.LitSet(set()))
+            ),
+            id="relational",
+        ),
+        pytest.param(
+            MoleculeConstraint.ChargeSum(None, ValueAst.LitSet(set())),
+            id="molecule",
+        ),
+        pytest.param(
+            Constraint.Not(
+                Constraint.Atom(0, AtomConstraintAst.Valence(ValueAst.LitSet(set())))
+            ),
+            id="constraint",
+        ),
+        pytest.param(
+            Constraints(
+                [Constraint.Atom(0, AtomConstraintAst.Valence(ValueAst.LitSet(set())))]
+            ),
+            id="container",
+        ),
+    ],
+)
+def test_molecule_constraints_canonicalize_error(value):
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        value.canonicalize()

@@ -21,6 +21,7 @@ use super::multicenter::MulticenterBondConstraintAst;
 use super::noncovalent::NoncovalentBondConstraintAst;
 use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::{into_py_variant, variant_repr};
+use crate::lattice::impl_py_canonicalize;
 use crate::molecule::MoleculeAst;
 use crate::spin::UnpairedElectronsAst;
 use crate::stereo::StereoKind;
@@ -136,6 +137,15 @@ impl Constraint {
         variant_repr(slf.bind(py).as_any(), "Constraint", variant, arity)
     }
 }
+
+impl_py_canonicalize!(
+    Constraint,
+    AstConstraint,
+    |value: &Constraint, py: Python<'_>| -> PyResult<AstConstraint> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: AstConstraint| -> PyResult<Constraint> {
+        Constraint::from_rust(py, &value)
+    }
+);
 
 impl Constraint {
     pub(crate) fn from_rust(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
@@ -436,14 +446,21 @@ impl Constraints {
         &mut self.0
     }
 
-    #[allow(
-        dead_code,
-        reason = "AST conversion for the unregistered Constraints pyclass"
-    )]
     pub(crate) fn from_inner(constraints: AstConstraints) -> Self {
         Self(constraints)
     }
 }
+
+impl_py_canonicalize!(
+    Constraints,
+    AstConstraints,
+    |value: &Constraints, _py: Python<'_>| -> PyResult<AstConstraints> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstConstraints| -> PyResult<Constraints> {
+        Ok(Constraints::from_inner(value))
+    }
+);
 
 /// A live handle onto the molecule-level constraints of one `MoleculeAst`.
 #[pyclass]
@@ -554,6 +571,17 @@ impl MoleculeConstraint {
         }
     }
 }
+
+impl_py_canonicalize!(
+    MoleculeConstraint,
+    AstMoleculeConstraint,
+    |value: &MoleculeConstraint, py: Python<'_>| -> PyResult<AstMoleculeConstraint> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstMoleculeConstraint| -> PyResult<MoleculeConstraint> {
+        MoleculeConstraint::from_rust(py, &value)
+    }
+);
 
 impl MoleculeConstraint {
     pub(crate) fn from_rust(py: Python<'_>, constraint: &AstMoleculeConstraint) -> PyResult<Self> {
@@ -1004,6 +1032,17 @@ impl RelationalConstraint {
         }
     }
 }
+
+impl_py_canonicalize!(
+    RelationalConstraint,
+    AstRelationalConstraint,
+    |value: &RelationalConstraint, py: Python<'_>| -> PyResult<AstRelationalConstraint> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstRelationalConstraint| -> PyResult<RelationalConstraint> {
+        RelationalConstraint::from_rust(py, &value)
+    }
+);
 
 #[pymethods]
 impl SubPatternAnchor {

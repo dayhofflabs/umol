@@ -137,7 +137,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
 
 ### S3 — Canonicalization-only types and completeness
 
-- **S3a — Molecule-constraint expressions.** Apply the canonicalization surface in
+- **S3a — Molecule-constraint expressions.** **Done.** Apply the canonicalization surface in
   `constraint/molecule.rs` to every exported canonicalizable non-lattice type there, including
   `RelationalConstraint`, `MoleculeConstraint`, `Constraint`, and `Constraints`. Test recursive
   canonicalization, contradiction propagation, structural inequality before canonicalization, and
