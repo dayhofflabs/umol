@@ -14,6 +14,7 @@ use umol_ast::ast::{
 
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::noncovalent::NoncovalentBondAst;
 
@@ -96,6 +97,19 @@ impl NoncovalentBondConstraintAst {
         )
     }
 }
+
+impl_py_lattice!(
+    NoncovalentBondConstraintAst,
+    AstNoncovalentBondConstraintAst,
+    |value: &NoncovalentBondConstraintAst,
+     py: Python<'_>|
+     -> PyResult<AstNoncovalentBondConstraintAst> { Ok(value.to_rust(py)) },
+    |py: Python<'_>,
+     value: AstNoncovalentBondConstraintAst|
+     -> PyResult<NoncovalentBondConstraintAst> {
+        NoncovalentBondConstraintAst::from_rust(py, &value)
+    }
+);
 
 impl NoncovalentBondConstraintAst {
     pub(crate) fn from_rust(
@@ -362,6 +376,17 @@ impl NoncovalentBondConstraintsAst {
         NoncovalentBondConstraintsAst(constraints)
     }
 }
+
+impl_py_lattice!(
+    NoncovalentBondConstraintsAst,
+    AstNoncovalentBondConstraintsAst,
+    |value: &NoncovalentBondConstraintsAst,
+     _py: Python<'_>|
+     -> PyResult<AstNoncovalentBondConstraintsAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>,
+     value: AstNoncovalentBondConstraintsAst|
+     -> PyResult<NoncovalentBondConstraintsAst> { Ok(NoncovalentBondConstraintsAst(value)) }
+);
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn noncovalent_bond_constraints_iter(

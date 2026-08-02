@@ -1,6 +1,8 @@
 import pytest
 from umol import (
     AromaticSystemAst,
+    AromaticSystemConstraintAst,
+    AromaticSystemConstraintsAst,
     AromaticValenceAst,
     AtomAst,
     AtomConstraintAst,
@@ -12,6 +14,8 @@ from umol import (
     CisTransStereoAst,
     ContradictionError,
     DativeBondAst,
+    DativeBondConstraintAst,
+    DativeBondConstraintsAst,
     ElectronCountsAst,
     Element,
     ElementAst,
@@ -20,8 +24,12 @@ from umol import (
     LigandPermutation,
     LigandSymmetryAst,
     MulticenterBondAst,
+    MulticenterBondConstraintAst,
+    MulticenterBondConstraintsAst,
     MulticenterValenceAst,
     NoncovalentBondAst,
+    NoncovalentBondConstraintAst,
+    NoncovalentBondConstraintsAst,
     NoncovalentBondKind,
     NoncovalentBondKindAst,
     Orientation,
@@ -2207,3 +2215,492 @@ def test_entity_constraint_is_compatible(lhs, rhs):
 def test_entity_constraint_canonicalize(value, expected):
     assert value.canonicalize() == expected
     assert value.canonical_eq(expected) is True
+
+
+@pytest.mark.parametrize(
+    ("open_constraint", "ground_constraint", "open_container", "ground_container"),
+    [
+        pytest.param(
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Undetermined()),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Undetermined())]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.Aromatic(BooleanAst.Undetermined()),
+            DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            DativeBondConstraintsAst(
+                [DativeBondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+            ),
+            DativeBondConstraintsAst(
+                [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+            ),
+            id="dative-bond",
+        ),
+        pytest.param(
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Undetermined()),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Undetermined())]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined()),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined())]
+            ),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))]
+            ),
+            id="noncovalent-bond",
+        ),
+    ],
+)
+def test_overlay_constraint_classification(
+    open_constraint, ground_constraint, open_container, ground_container
+):
+    assert open_constraint.is_undetermined() is True
+    assert open_constraint.is_ground() is False
+    assert ground_constraint.is_undetermined() is False
+    assert ground_constraint.is_ground() is True
+    assert open_container.is_undetermined() is True
+    assert open_container.is_ground() is False
+    assert ground_container.is_undetermined() is False
+    assert ground_container.is_ground() is True
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint_lhs",
+        "constraint_rhs",
+        "expected_constraint",
+        "container_lhs",
+        "container_rhs",
+        "expected_container",
+    ),
+    [
+        pytest.param(
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6, 8})),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6, 8}))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+            ),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), 1)
+            ),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), 1)
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            id="dative-bond",
+        ),
+        pytest.param(
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({2, 4})),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({2, 4}))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined()),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False)),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False)),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined())]
+            ),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False))]
+            ),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False))]
+            ),
+            id="noncovalent-bond",
+        ),
+    ],
+)
+def test_overlay_constraint_meet(
+    constraint_lhs,
+    constraint_rhs,
+    expected_constraint,
+    container_lhs,
+    container_rhs,
+    expected_container,
+):
+    assert constraint_lhs.meet(constraint_rhs) == expected_constraint
+    assert container_lhs.meet(container_rhs) == expected_container
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint_lhs",
+        "constraint_rhs",
+        "expected_constraint",
+        "container_lhs",
+        "container_rhs",
+        "expected_container",
+    ),
+    [
+        pytest.param(
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(8)),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6, 8})),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(8))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6, 8}))]
+            ),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), 1)
+            ),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), 2)
+            ),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 2)
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+                    )
+                ]
+            ),
+            id="dative-bond",
+        ),
+        pytest.param(
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(2)),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({2, 4})),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(2))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({2, 4}))]
+            ),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False)),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined()),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))]
+            ),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False))]
+            ),
+            NoncovalentBondConstraintsAst([]),
+            id="noncovalent-bond",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.All(), 1)
+            ),
+            None,
+            DativeBondConstraintsAst(
+                [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.All(), 1)
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst([]),
+            id="dative-bond-different-fiber",
+        ),
+    ],
+)
+def test_overlay_constraint_join(
+    constraint_lhs,
+    constraint_rhs,
+    expected_constraint,
+    container_lhs,
+    container_rhs,
+    expected_container,
+):
+    assert constraint_lhs.join(constraint_rhs) == expected_constraint
+    assert container_lhs.join(container_rhs) == expected_container
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint_pattern",
+        "constraint_target",
+        "container_pattern",
+        "container_target",
+    ),
+    [
+        pytest.param(
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6, 8})),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6, 8}))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+            ),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), 1)
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1, 2}))
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            id="dative-bond",
+        ),
+        pytest.param(
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({2, 4})),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({2, 4}))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined()),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined())]
+            ),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))]
+            ),
+            id="noncovalent-bond",
+        ),
+    ],
+)
+def test_overlay_constraint_matches(
+    constraint_pattern, constraint_target, container_pattern, container_target
+):
+    assert constraint_pattern.matches(constraint_target) is True
+    assert constraint_target.matches(constraint_pattern) is False
+    assert container_pattern.matches(container_target) is True
+    assert container_target.matches(container_pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("constraint_lhs", "constraint_rhs", "container_lhs", "container_rhs"),
+    [
+        pytest.param(
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(8)),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(8))]
+            ),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            DativeBondConstraintAst.Aromatic(BooleanAst.Lit(False)),
+            DativeBondConstraintsAst(
+                [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+            ),
+            DativeBondConstraintsAst(
+                [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(False))]
+            ),
+            id="dative-bond",
+        ),
+        pytest.param(
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(2)),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(2))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False)),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))]
+            ),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False))]
+            ),
+            id="noncovalent-bond",
+        ),
+    ],
+)
+def test_overlay_constraint_is_compatible(
+    constraint_lhs, constraint_rhs, container_lhs, container_rhs
+):
+    assert constraint_lhs.is_compatible(constraint_rhs) is False
+    assert constraint_rhs.is_compatible(constraint_lhs) is False
+    assert container_lhs.is_compatible(container_rhs) is False
+    assert container_rhs.is_compatible(container_lhs) is False
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint",
+        "expected_constraint",
+        "container",
+        "expected_container",
+    ),
+    [
+        pytest.param(
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6})),
+            AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.LitSet({6}))]
+            ),
+            AromaticSystemConstraintsAst(
+                [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            ),
+            id="aromatic-system",
+        ),
+        pytest.param(
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1}))
+            ),
+            DativeBondConstraintAst.RingMembership(
+                RingMembershipAst(RingScope.Size(6), 1)
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), ValueAst.LitSet({1}))
+                    )
+                ]
+            ),
+            DativeBondConstraintsAst(
+                [
+                    DativeBondConstraintAst.RingMembership(
+                        RingMembershipAst(RingScope.Size(6), 1)
+                    )
+                ]
+            ),
+            id="dative-bond",
+        ),
+        pytest.param(
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({4})),
+            MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4)),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.LitSet({4}))]
+            ),
+            MulticenterBondConstraintsAst(
+                [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(4))]
+            ),
+            id="multicenter-bond",
+        ),
+        pytest.param(
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+            NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+            NoncovalentBondConstraintsAst(
+                [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Undetermined())]
+            ),
+            NoncovalentBondConstraintsAst([]),
+            id="noncovalent-bond",
+        ),
+    ],
+)
+def test_overlay_constraint_canonicalize(
+    constraint, expected_constraint, container, expected_container
+):
+    assert constraint.canonicalize() == expected_constraint
+    assert constraint.canonical_eq(expected_constraint) is True
+    assert container.canonicalize() == expected_container
+    assert container.canonical_eq(expected_container) is True

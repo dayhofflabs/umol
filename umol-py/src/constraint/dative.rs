@@ -16,6 +16,7 @@ use super::ring::{RingMembershipAst, RingScope};
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::value::{ValueArg, ValueAst};
 
@@ -104,6 +105,17 @@ impl DativeBondConstraintAst {
         variant_repr(slf.bind(py).as_any(), "DativeBondConstraintAst", variant, 1)
     }
 }
+
+impl_py_lattice!(
+    DativeBondConstraintAst,
+    AstDativeBondConstraintAst,
+    |value: &DativeBondConstraintAst, py: Python<'_>| -> PyResult<AstDativeBondConstraintAst> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: AstDativeBondConstraintAst| -> PyResult<DativeBondConstraintAst> {
+        DativeBondConstraintAst::from_rust(py, &value)
+    }
+);
 
 impl DativeBondConstraintAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &AstDativeBondConstraintAst) -> PyResult<Self> {
@@ -405,6 +417,17 @@ impl DativeBondConstraintsAst {
         DativeBondConstraintsAst(constraints)
     }
 }
+
+impl_py_lattice!(
+    DativeBondConstraintsAst,
+    AstDativeBondConstraintsAst,
+    |value: &DativeBondConstraintsAst, _py: Python<'_>| -> PyResult<AstDativeBondConstraintsAst> {
+        Ok(value.inner().clone())
+    },
+    |_py: Python<'_>, value: AstDativeBondConstraintsAst| -> PyResult<DativeBondConstraintsAst> {
+        Ok(DativeBondConstraintsAst(value))
+    }
+);
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn dative_bond_constraints_iter(

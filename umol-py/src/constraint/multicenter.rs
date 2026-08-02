@@ -13,6 +13,7 @@ use umol_ast::ast::{
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::multicenter::MulticenterBondAst;
 use crate::value::{ValueArg, ValueAst};
@@ -96,6 +97,19 @@ impl MulticenterBondConstraintAst {
         )
     }
 }
+
+impl_py_lattice!(
+    MulticenterBondConstraintAst,
+    AstMulticenterBondConstraintAst,
+    |value: &MulticenterBondConstraintAst,
+     py: Python<'_>|
+     -> PyResult<AstMulticenterBondConstraintAst> { Ok(value.to_rust(py)) },
+    |py: Python<'_>,
+     value: AstMulticenterBondConstraintAst|
+     -> PyResult<MulticenterBondConstraintAst> {
+        MulticenterBondConstraintAst::from_rust(py, &value)
+    }
+);
 
 impl MulticenterBondConstraintAst {
     pub(crate) fn from_rust(
@@ -379,6 +393,17 @@ impl MulticenterBondConstraintsAst {
         MulticenterBondConstraintsAst(constraints)
     }
 }
+
+impl_py_lattice!(
+    MulticenterBondConstraintsAst,
+    AstMulticenterBondConstraintsAst,
+    |value: &MulticenterBondConstraintsAst,
+     _py: Python<'_>|
+     -> PyResult<AstMulticenterBondConstraintsAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>,
+     value: AstMulticenterBondConstraintsAst|
+     -> PyResult<MulticenterBondConstraintsAst> { Ok(MulticenterBondConstraintsAst(value)) }
+);
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn multicenter_bond_constraints_iter(

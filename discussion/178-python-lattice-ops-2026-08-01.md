@@ -126,8 +126,8 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   `AtomConstraintsAst`, `BondConstraintAst`, and `BondConstraintsAst`. Test same-kind bounds,
   different-fiber `join`, container canonicalization, and `matches` direction.
   **Additive (green).** [dep: S1a]
-- **S2d — Overlay constraint families.** Apply the surfaces to the enum and container pairs in
-  `constraint/aromatic.rs`, `constraint/dative.rs`, `constraint/multicenter.rs`, and
+- **S2d — Overlay constraint families.** **Done.** Apply the surfaces to the enum and container
+  pairs in `constraint/aromatic.rs`, `constraint/dative.rs`, `constraint/multicenter.rs`, and
   `constraint/noncovalent.rs`. Use table-driven Python cases covering every family and exact outputs
   for both enum and container operations. **Additive (green).** [dep: S1c, S2b]
 - **S2e — Stereo constraint families.** Apply the surfaces to `StereoAtomConstraintAst`,

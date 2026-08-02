@@ -14,6 +14,7 @@ use umol_ast::ast::{
 
 use crate::aromatic::AromaticSystemAst;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::value::{ValueArg, ValueAst};
 
@@ -96,6 +97,19 @@ impl AromaticSystemConstraintAst {
         )
     }
 }
+
+impl_py_lattice!(
+    AromaticSystemConstraintAst,
+    AstAromaticSystemConstraintAst,
+    |value: &AromaticSystemConstraintAst,
+     py: Python<'_>|
+     -> PyResult<AstAromaticSystemConstraintAst> { Ok(value.to_rust(py)) },
+    |py: Python<'_>,
+     value: AstAromaticSystemConstraintAst|
+     -> PyResult<AromaticSystemConstraintAst> {
+        AromaticSystemConstraintAst::from_rust(py, &value)
+    }
+);
 
 impl AromaticSystemConstraintAst {
     pub(crate) fn from_rust(
@@ -379,6 +393,17 @@ impl AromaticSystemConstraintsAst {
         AromaticSystemConstraintsAst(constraints)
     }
 }
+
+impl_py_lattice!(
+    AromaticSystemConstraintsAst,
+    AstAromaticSystemConstraintsAst,
+    |value: &AromaticSystemConstraintsAst,
+     _py: Python<'_>|
+     -> PyResult<AstAromaticSystemConstraintsAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>,
+     value: AstAromaticSystemConstraintsAst|
+     -> PyResult<AromaticSystemConstraintsAst> { Ok(AromaticSystemConstraintsAst(value)) }
+);
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn aromatic_system_constraints_iter(
