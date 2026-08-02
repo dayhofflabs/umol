@@ -1184,6 +1184,82 @@ def test_reactionast_canonicalize_error():
     assert source == snapshot
 
 
+def test_reactionast_canonical_eq():
+    source = ReactionAst(
+        MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))]),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=1,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                        ),
+                    )
+                ),
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        ),
+                    )
+                ),
+            ]
+        ),
+    )
+    reordered = ReactionAst(
+        MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))]),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        ),
+                    )
+                ),
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=1,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                        ),
+                    )
+                ),
+            ]
+        ),
+    )
+    renumbered = ReactionAst(
+        MoleculeAst.from_parts([AtomAst(Element("O")), AtomAst(Element("C"))]),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                        ),
+                    )
+                ),
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=1,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        ),
+                    )
+                ),
+            ]
+        ),
+    )
+
+    assert source != reordered
+    assert source.canonical_eq(reordered) is True
+    assert source.canonical_eq(renumbered) is False
+
+
 def test_reactionast_reverse():
     source = ReactionAst.parse(
         '{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}'

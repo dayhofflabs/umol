@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 #[cfg(test)]
 use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
 use umol_ast::ast::{
-    Canonicalize, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
+    FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation,
     SubstructureMatchConfig as AstSubstructureMatchConfig,
@@ -46,6 +46,7 @@ use crate::error::{
 };
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
+use crate::lattice::impl_py_canonicalize;
 use crate::metadata::ReactionMetadata;
 use crate::model::ChemistryModel;
 use crate::molecule::MoleculeAst;
@@ -410,15 +411,6 @@ impl ReactionAst {
         Ok(())
     }
 
-    /// Return a fresh canonical reaction, leaving this facade unchanged.
-    fn canonicalize(&self, py: Python<'_>) -> PyResult<Self> {
-        let reaction = self
-            .to_rust(py)
-            .canonicalize()
-            .map_err(contradiction_error)?;
-        Self::from_rust(py, reaction)
-    }
-
     /// Return the reverse reaction in the product's compacted id space.
     fn reverse(&self, py: Python<'_>) -> PyResult<Self> {
         let reaction = self.to_rust(py).reverse().map_err(contradiction_error)?;
@@ -493,6 +485,15 @@ impl ReactionAst {
         Ok(format!("ReactionAst(lhs={lhs}, deltas={deltas})"))
     }
 }
+
+impl_py_canonicalize!(
+    ReactionAst,
+    AstReactionAst,
+    |value: &ReactionAst, py: Python<'_>| -> PyResult<AstReactionAst> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: AstReactionAst| -> PyResult<ReactionAst> {
+        ReactionAst::from_rust(py, value)
+    }
+);
 
 impl ReactionAst {
     /// Wrap a Rust reaction in fresh Python-owned components.
@@ -638,7 +639,7 @@ mod tests {
         AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
         AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId, BondAst as AstBondAst,
         BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
-        Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
+        Canonicalize, Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
         DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
         DativeBondId as AstDativeBondId, Delta as AstDelta, Deltas as AstDeltas,
         Entity as AstEntity, MoleculeAst as AstMoleculeAst,

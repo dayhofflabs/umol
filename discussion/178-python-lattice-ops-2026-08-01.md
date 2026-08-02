@@ -142,7 +142,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   `RelationalConstraint`, `MoleculeConstraint`, `Constraint`, and `Constraints`. Test recursive
   canonicalization, contradiction propagation, structural inequality before canonicalization, and
   canonical equality afterward. **Additive (green).** [dep: S1a, S1b, S2c, S2d, S2e]
-- **S3b — Delta and reaction containers.** Move the existing `Deltas.canonicalize` and
+- **S3b — Delta and reaction containers.** **Done.** Move the existing `Deltas.canonicalize` and
   `ReactionAst.canonicalize` bindings onto the uniform canonicalization implementation and add
   `canonical_eq` without changing their existing exception behavior. Test detached results and
   canonical equality for reordered deltas; for reactions, preserve the fixed LHS id-space semantics.

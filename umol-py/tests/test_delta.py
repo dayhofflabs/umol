@@ -2917,3 +2917,49 @@ def test_deltas_canonicalize_error():
         source.canonicalize()
 
     assert source == snapshot
+
+
+def test_deltas_canonical_eq():
+    lhs = Deltas(
+        [
+            Delta.Bond(
+                BondDelta.ModifyField(
+                    id=0,
+                    change=BondFieldChange.Order(
+                        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                    ),
+                )
+            ),
+            Delta.Atom(
+                AtomDelta.ModifyField(
+                    id=0,
+                    change=AtomFieldChange.Charge(
+                        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                    ),
+                )
+            ),
+        ]
+    )
+    rhs = Deltas(
+        [
+            Delta.Atom(
+                AtomDelta.ModifyField(
+                    id=0,
+                    change=AtomFieldChange.Charge(
+                        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                    ),
+                )
+            ),
+            Delta.Bond(
+                BondDelta.ModifyField(
+                    id=0,
+                    change=BondFieldChange.Order(
+                        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                    ),
+                )
+            ),
+        ]
+    )
+
+    assert lhs != rhs
+    assert lhs.canonical_eq(rhs) is True

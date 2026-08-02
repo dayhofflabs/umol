@@ -10,7 +10,7 @@ use umol_ast::ast::{
     AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
     AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId, BondAst as AstBondAst,
     BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
-    Canonicalize, Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
+    Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
     DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
     Delta as AstDelta, Deltas as AstDeltas, MulticenterBondAst as AstMulticenterBondAst,
@@ -40,7 +40,7 @@ use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst
 use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
 use crate::electrons::ElectronCountsAst;
-use crate::error::contradiction_error;
+use crate::lattice::impl_py_canonicalize;
 use crate::multicenter::MulticenterBondAst;
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use crate::spin::UnpairedElectronsAst;
@@ -2117,14 +2117,6 @@ impl Deltas {
         resolved.apply(slf.borrow_mut(py).inner_mut());
     }
 
-    /// Return a fresh canonical delta sequence, leaving this container unchanged.
-    fn canonicalize(&self) -> PyResult<Self> {
-        self.to_rust()
-            .canonicalize()
-            .map(Self::from_rust)
-            .map_err(contradiction_error)
-    }
-
     fn __len__(&self) -> usize {
         self.0.len()
     }
@@ -2138,6 +2130,13 @@ impl Deltas {
         delta_iter(py, &self.0)
     }
 }
+
+impl_py_canonicalize!(
+    Deltas,
+    AstDeltas,
+    |value: &Deltas, _py: Python<'_>| -> PyResult<AstDeltas> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: AstDeltas| -> PyResult<Deltas> { Ok(Deltas::from_rust(value)) }
+);
 
 impl Deltas {
     pub(crate) fn from_rust(deltas: AstDeltas) -> Self {
@@ -5352,11 +5351,13 @@ mod tests {
         let source = Deltas::from_rust(input.into_iter().collect());
         let before = source.to_rust();
 
-        let canonical = source.canonicalize().unwrap();
+        Python::attach(|py| {
+            let canonical = source.canonicalize(py).unwrap();
 
-        assert_eq!(canonical.to_rust(), expected.into_iter().collect());
-        assert_eq!(source.to_rust(), before);
-        assert_eq!(canonical.canonicalize().unwrap(), canonical);
+            assert_eq!(canonical.to_rust(), expected.into_iter().collect());
+            assert_eq!(source.to_rust(), before);
+            assert_eq!(canonical.canonicalize(py).unwrap(), canonical);
+        });
     }
 
     #[rstest]
@@ -5384,7 +5385,7 @@ mod tests {
         let before = source.to_rust();
 
         Python::attach(|py| {
-            let error = source.canonicalize().err().unwrap();
+            let error = source.canonicalize(py).err().unwrap();
             assert!(error.is_instance_of::<ContradictionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
