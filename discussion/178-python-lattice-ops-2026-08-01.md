@@ -14,10 +14,8 @@ whose printed claims cannot be reproduced by a reader.
 
 **Every exported `Lattice` type, uniformly.** Every one is already exported to `umol-py`
 (`add_class::<…>`), so no new classes are needed — only methods on existing ones. Verified
-2026-08-01: the Rust trait inventory contains 42 unique `Lattice` types, and all 42 are exported. The
-property suite exercises 40; its omissions are the macro-defined `StereoAtomAst` and
-`StereoBondAst`, tracked by S3d below. The trait bound, not either snapshot count, defines the Python
-scope.
+2026-08-01: the Rust trait inventory contains 42 unique `Lattice` types; all 42 are exported and
+exercised by the property suite. The trait bound, not this snapshot count, defines the Python scope.
 
 Uniformity is the point. A scoped subset would leave callers to discover by trial which types happen
 to answer `meet`, and "why does `AtomAst` have it but `IsotopeMassAst` not" has no good answer. The
@@ -154,10 +152,11 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   wrapper not covered by S3a/S3b, and add one explicit Python inventory test asserting the complete
   method set on every applicable exported class and its absence from unrelated classes.
   **Additive (green).** [dep: S2a, S2b, S2c, S2d, S2e, S3a, S3b]
-- **S3d — Complete the Rust lattice-law inventory.** Add `StereoAtomAst` and `StereoBondAst` cases to
-  `umol-ast/tests/property/lattice.rs` using the existing `stereo_atom_ast_strategy` and
-  `stereo_bond_ast_strategy`. Each case generates a value triple and applies both
-  `assert_lattice_laws` and `assert_canonical_lattice_laws`, matching the other entity AST cases.
+- **S3d — Complete the Rust lattice-law inventory.** **Done.** Add `StereoAtomAst` and
+  `StereoBondAst` cases to `umol-ast/tests/property/lattice.rs` using the existing
+  `stereo_atom_ast_strategy` and `stereo_bond_ast_strategy`. Each case generates a value triple and
+  applies both `assert_lattice_laws` and `assert_canonical_lattice_laws`, matching the other entity
+  AST cases.
   Run the two cases directly before the complete `umol-ast` lattice property module.
   **Additive (green).** [dep: S3c]
 

@@ -379,6 +379,26 @@ proptest! {
     }
 
     #[test]
+    fn test_stereo_atom_ast_lattice_laws(
+        a in stereo_atom_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in stereo_atom_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in stereo_atom_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_stereo_bond_ast_lattice_laws(
+        a in stereo_bond_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in stereo_bond_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in stereo_bond_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_atom_constraints_lattice_laws(
         a in atom_constraints_strategy(),
         b in atom_constraints_strategy(),
