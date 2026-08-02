@@ -39,7 +39,11 @@ from umol import (
     RingMembershipAst,
     RingScope,
     StereoAtomAst,
+    StereoAtomConstraintAst,
+    StereoAtomConstraintsAst,
     StereoBondAst,
+    StereoBondConstraintAst,
+    StereoBondConstraintsAst,
     StereoConfigurationAst,
     StereoCoset,
     Stereogenicity,
@@ -2698,6 +2702,565 @@ def test_overlay_constraint_is_compatible(
     ],
 )
 def test_overlay_constraint_canonicalize(
+    constraint, expected_constraint, container, expected_container
+):
+    assert constraint.canonicalize() == expected_constraint
+    assert constraint.canonical_eq(expected_constraint) is True
+    assert container.canonicalize() == expected_container
+    assert container.canonical_eq(expected_container) is True
+
+
+@pytest.mark.parametrize(
+    ("open_constraint", "ground_constraint", "open_container", "ground_container"),
+    [
+        pytest.param(
+            StereoAtomConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Undetermined()
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Undetermined()
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_constraint_classification(
+    open_constraint, ground_constraint, open_container, ground_container
+):
+    assert open_constraint.is_undetermined() is True
+    assert open_constraint.is_ground() is False
+    assert ground_constraint.is_undetermined() is False
+    assert ground_constraint.is_ground() is True
+    assert open_container.is_undetermined() is True
+    assert open_container.is_ground() is False
+    assert ground_container.is_undetermined() is False
+    assert ground_container.is_ground() is True
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint_lhs",
+        "constraint_rhs",
+        "expected_constraint",
+        "container_lhs",
+        "container_rhs",
+        "expected_container",
+    ),
+    [
+        pytest.param(
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.LitSet(
+                    {Stereogenicity.Prochiral, Stereogenicity.Stereogenic}
+                )
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.LitSet(
+                            {
+                                Stereogenicity.Prochiral,
+                                Stereogenicity.Stereogenic,
+                            }
+                        )
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-atom-same-fiber",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.LitSet(
+                    {Stereogenicity.Prochiral, Stereogenicity.Stereogenic}
+                )
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.LitSet(
+                            {
+                                Stereogenicity.Prochiral,
+                                Stereogenicity.Stereogenic,
+                            }
+                        )
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-bond-same-fiber",
+        ),
+        pytest.param(
+            StereoAtomConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+            ),
+            StereoAtomConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+            ),
+            None,
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+                    ),
+                    StereoAtomConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+                    ),
+                ]
+            ),
+            id="stereo-atom-cross-fiber",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+            ),
+            StereoBondConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+            ),
+            None,
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+                    ),
+                    StereoBondConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+                    ),
+                ]
+            ),
+            id="stereo-bond-cross-fiber",
+        ),
+    ],
+)
+def test_stereo_constraint_meet(
+    constraint_lhs,
+    constraint_rhs,
+    expected_constraint,
+    container_lhs,
+    container_rhs,
+    expected_container,
+):
+    assert constraint_lhs.meet(constraint_rhs) == expected_constraint
+    assert container_lhs.meet(container_rhs) == expected_container
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint_lhs",
+        "constraint_rhs",
+        "expected_constraint",
+        "container_lhs",
+        "container_rhs",
+        "expected_container",
+    ),
+    [
+        pytest.param(
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Prochiral)
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.NotSet({Stereogenicity.Symmetric})
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Prochiral)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.NotSet({Stereogenicity.Symmetric})
+                    )
+                ]
+            ),
+            id="stereo-atom-same-fiber",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Prochiral)
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.NotSet({Stereogenicity.Symmetric})
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Prochiral)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.NotSet({Stereogenicity.Symmetric})
+                    )
+                ]
+            ),
+            id="stereo-bond-same-fiber",
+        ),
+        pytest.param(
+            StereoAtomConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+            ),
+            StereoAtomConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+            ),
+            None,
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst([]),
+            id="stereo-atom-cross-fiber",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+            ),
+            StereoBondConstraintAst.Topicity(
+                TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+            ),
+            None,
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 1), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Topicity(
+                        TopicityAst(StereoLigandPair(0, 2), Topicity.Homotopic)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst([]),
+            id="stereo-bond-cross-fiber",
+        ),
+    ],
+)
+def test_stereo_constraint_join(
+    constraint_lhs,
+    constraint_rhs,
+    expected_constraint,
+    container_lhs,
+    container_rhs,
+    expected_container,
+):
+    assert constraint_lhs.join(constraint_rhs) == expected_constraint
+    assert container_lhs.join(container_rhs) == expected_container
+
+
+@pytest.mark.parametrize(
+    (
+        "constraint_pattern",
+        "constraint_target",
+        "container_pattern",
+        "container_target",
+    ),
+    [
+        pytest.param(
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.LitSet(
+                    {Stereogenicity.Prochiral, Stereogenicity.Stereogenic}
+                )
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.LitSet(
+                            {
+                                Stereogenicity.Prochiral,
+                                Stereogenicity.Stereogenic,
+                            }
+                        )
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.LitSet(
+                    {Stereogenicity.Prochiral, Stereogenicity.Stereogenic}
+                )
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.LitSet(
+                            {
+                                Stereogenicity.Prochiral,
+                                Stereogenicity.Stereogenic,
+                            }
+                        )
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_constraint_matches(
+    constraint_pattern, constraint_target, container_pattern, container_target
+):
+    assert constraint_pattern.matches(constraint_target) is True
+    assert constraint_target.matches(constraint_pattern) is False
+    assert container_pattern.matches(container_target) is True
+    assert container_target.matches(container_pattern) is False
+
+
+@pytest.mark.parametrize(
+    ("constraint_lhs", "constraint_rhs", "container_lhs", "container_rhs"),
+    [
+        pytest.param(
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Symmetric)
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Symmetric)
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Symmetric)
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Symmetric)
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                    )
+                ]
+            ),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_constraint_is_compatible(
+    constraint_lhs, constraint_rhs, container_lhs, container_rhs
+):
+    assert constraint_lhs.is_compatible(constraint_rhs) is False
+    assert constraint_rhs.is_compatible(constraint_lhs) is False
+    assert container_lhs.is_compatible(container_rhs) is False
+    assert container_rhs.is_compatible(container_lhs) is False
+
+
+@pytest.mark.parametrize(
+    ("constraint", "expected_constraint", "container", "expected_container"),
+    [
+        pytest.param(
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.LitSet({Stereogenicity.Stereogenic})
+            ),
+            StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoAtomConstraintsAst(
+                [
+                    StereoAtomConstraintAst.Stereogenicity(
+                        StereogenicityAst.Undetermined()
+                    )
+                ]
+            ),
+            StereoAtomConstraintsAst([]),
+            id="stereo-atom",
+        ),
+        pytest.param(
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.LitSet({Stereogenicity.Stereogenic})
+            ),
+            StereoBondConstraintAst.Stereogenicity(
+                StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+            ),
+            StereoBondConstraintsAst(
+                [
+                    StereoBondConstraintAst.Stereogenicity(
+                        StereogenicityAst.Undetermined()
+                    )
+                ]
+            ),
+            StereoBondConstraintsAst([]),
+            id="stereo-bond",
+        ),
+    ],
+)
+def test_stereo_constraint_canonicalize(
     constraint, expected_constraint, container, expected_container
 ):
     assert constraint.canonicalize() == expected_constraint

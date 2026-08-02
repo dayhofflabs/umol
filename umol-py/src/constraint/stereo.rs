@@ -563,6 +563,17 @@ macro_rules! stereo_constraints {
             }
         }
 
+        impl_py_lattice!(
+            $constraint,
+            $ast_constraint,
+            |value: &$constraint, py: Python<'_>| -> PyResult<$ast_constraint> {
+                Ok(value.to_rust(py))
+            },
+            |py: Python<'_>, value: $ast_constraint| -> PyResult<$constraint> {
+                $constraint::from_rust(py, &value)
+            }
+        );
+
         impl $constraint {
             pub(crate) fn from_rust(py: Python<'_>, ast: &$ast_constraint) -> PyResult<Self> {
                 Ok(match ast {
@@ -891,6 +902,17 @@ macro_rules! stereo_constraints {
                 $constraints(constraints)
             }
         }
+
+        impl_py_lattice!(
+            $constraints,
+            $ast_constraints,
+            |value: &$constraints, _py: Python<'_>| -> PyResult<$ast_constraints> {
+                Ok(value.inner().clone())
+            },
+            |_py: Python<'_>, value: $ast_constraints| -> PyResult<$constraints> {
+                Ok($constraints(value))
+            }
+        );
 
         #[pyclass]
         pub struct $key_iter {

@@ -130,7 +130,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   pairs in `constraint/aromatic.rs`, `constraint/dative.rs`, `constraint/multicenter.rs`, and
   `constraint/noncovalent.rs`. Use table-driven Python cases covering every family and exact outputs
   for both enum and container operations. **Additive (green).** [dep: S1c, S2b]
-- **S2e — Stereo constraint families.** Apply the surfaces to `StereoAtomConstraintAst`,
+- **S2e — Stereo constraint families.** **Done.** Apply the surfaces to `StereoAtomConstraintAst`,
   `StereoAtomConstraintsAst`, `StereoBondConstraintAst`, and `StereoBondConstraintsAst`. Verify
   same-fiber and cross-fiber behavior and canonicalization of the corresponding containers.
   **Additive (green).** [dep: S1b]
