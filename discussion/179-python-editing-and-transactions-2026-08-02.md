@@ -681,6 +681,7 @@ the section ships.
   after `build` raises `RuntimeError`. Test that repeated snapshots track current state, snapshot
   does not consume the editor, build does, and the built molecule is detached. **Additive (green).**
   [dep: S1j, S4d]
+  **Done.**
 - **S5c — Bind checked transactions and rollback.** In `umol-py/src/transaction.rs`, add and
   register the consumable `Transaction` wrapper, `MoleculeEditor.transact(edits)`, and
   `transaction.rollback(editor)`. Preserve Rust's detached

@@ -115,6 +115,7 @@ use crate::{
         TetrahedralStereo, TetrahedralStereoAst, Topicity,
     },
     substructure::SubstructureSearchConfig,
+    transaction::MoleculeEditor,
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
@@ -177,6 +178,8 @@ mod stereo;
 #[cfg(feature = "graph")]
 mod substructure;
 #[cfg(feature = "graph")]
+mod transaction;
+#[cfg(feature = "graph")]
 mod value;
 
 /// The native extension module. Wrapper types are registered here as the
@@ -219,6 +222,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             module.py().get_type::<UnderdeterminedError>(),
         )?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<MoleculeEditor>()?;
         module.add_class::<MoleculeDefaults>()?;
         module.add_class::<ReactionDefaults>()?;
         module.add_class::<AtomTypeRegistry>()?;

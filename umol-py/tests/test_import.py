@@ -103,6 +103,7 @@ PUBLIC_EXPORTS = frozenset(
     MoleculeConstraint
     MoleculeCorrespondence
     MoleculeDefaults
+    MoleculeEditor
     MoleculeMetadata
     MulticenterBondAst
     MulticenterBondUpdate
