@@ -23,9 +23,9 @@ use super::super::constraint::{Constraint, Constraints};
 use super::super::dative::DativeBondAst;
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, CascadedConstraints,
-    RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond,
-    RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
+    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, RemovedAromaticSystem, RemovedAtom,
+    RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
+    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
 };
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -1355,7 +1355,6 @@ impl MoleculeEditor {
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
         undo_compaction: &UndoCompaction,
-        cascade: CascadedConstraints,
     ) {
         self.restore_atoms(atoms, undo_compaction);
         self.restore_bonds(bonds, undo_compaction);
@@ -1365,7 +1364,6 @@ impl MoleculeEditor {
         self.restore_noncovalent_bonds(overlays.noncovalent_bonds, undo_compaction);
         self.restore_stereo_atoms(overlays.stereo_atoms, undo_compaction);
         self.restore_stereo_bonds(overlays.stereo_bonds, undo_compaction);
-        cascade.rollback_into(&mut self.constraints);
     }
 
     // -- Restore primitives ---------------------------------------------------
@@ -1570,9 +1568,7 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::AtomConstraintAst;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::RemovedConstraint;
     use crate::mol_dsl;
 
     #[derive(Debug)]
@@ -1675,8 +1671,6 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_restore_topology(mut triatomic: MoleculeEditor) {
-        let dropped_constraint = Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3));
-        triatomic.push_constraint(dropped_constraint.clone());
         let expected = triatomic.clone().build();
         let removed_atoms = vec![RemovedAtom {
             id: AtomId(1),
@@ -1701,13 +1695,6 @@ mod tests {
             removed_bonds,
             RemovedOverlays::default(),
             &compaction.undo_compaction(),
-            CascadedConstraints {
-                removed: vec![RemovedConstraint {
-                    position: 0,
-                    constraint: dropped_constraint,
-                }],
-                modified: Vec::new(),
-            },
         );
 
         assert_eq!(triatomic.build(), expected);

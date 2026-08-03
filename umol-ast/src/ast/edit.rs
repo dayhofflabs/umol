@@ -14,7 +14,7 @@ use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 use super::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
 use super::bond::{BondAst, BondUpdate};
 use super::constraint::{
-    AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
+    AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
     DativeBondConstraintAst, MulticenterBondConstraintAst, NoncovalentBondConstraintAst,
     StereoAtomConstraintAst, StereoBondConstraintAst,
 };
@@ -407,7 +407,7 @@ pub enum Edit {
     },
 
     // Molecule-list constraints — a true multiset, so add/remove by value
-    // (remove takes the first matching entry; its position is captured for undo).
+    // (remove takes the last matching entry; its position is captured for undo).
     AddMoleculeConstraint {
         constraint: Constraint,
     },
@@ -1321,20 +1321,6 @@ pub struct CascadedConstraints {
 impl CascadedConstraints {
     pub fn is_empty(&self) -> bool {
         self.removed.is_empty() && self.modified.is_empty()
-    }
-
-    pub fn rollback_into(self, constraints: &mut Constraints) {
-        let mut items = constraints.take();
-        for modified in self.modified {
-            if let Some(pos) = items.iter().position(|c| *c == modified.new) {
-                items[pos] = modified.old;
-            }
-        }
-        for removed in self.removed {
-            let position = removed.position.min(items.len());
-            items.insert(position, removed.constraint);
-        }
-        *constraints = items.into_iter().collect();
     }
 }
 

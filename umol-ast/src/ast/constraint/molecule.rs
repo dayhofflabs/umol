@@ -1340,47 +1340,6 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn test_constraint_update_rollback_into() {
-        let mut cs = Constraints::new();
-        cs.push(Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)));
-        cs.push(Constraint::Bond(
-            BondId(1),
-            BondConstraintAst::ring_membership(RingScope::Size(6), 1),
-        ));
-
-        CascadedConstraints {
-            removed: vec![RemovedConstraint {
-                position: 1,
-                constraint: Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3)),
-            }],
-            modified: vec![ModifiedConstraint {
-                position: 2,
-                old: Constraint::Bond(
-                    BondId(2),
-                    BondConstraintAst::ring_membership(RingScope::Size(6), 1),
-                ),
-                new: Constraint::Bond(
-                    BondId(1),
-                    BondConstraintAst::ring_membership(RingScope::Size(6), 1),
-                ),
-            }],
-        }
-        .rollback_into(&mut cs);
-
-        assert_eq!(
-            cs.as_slice(),
-            &[
-                Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-                Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3)),
-                Constraint::Bond(
-                    BondId(2),
-                    BondConstraintAst::ring_membership(RingScope::Size(6), 1)
-                ),
-            ],
-        );
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::flattens_top_level_and_then_sorts(

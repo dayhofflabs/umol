@@ -438,6 +438,7 @@ the section ships.
   field and constraint receivers, and exact molecule-constraint duplicate ordering. Add rustdoc to
   `Transaction`, `rollback`, and `RollbackStateMismatch` stating the three-part guarantee boundary
   above. **Breaking implementation and unit tests (red within S1).** [dep: S1d]
+  **Done.**
 - **S1f — Complete the transaction-law properties.** Add prepared valid-edit strategies spanning
   every `Edit` and `Undo` family, including all field-change variants, all eight constraint receivers,
   both stereo overlay families, molecule constraints, direct removals, and topology cascades. Verify
