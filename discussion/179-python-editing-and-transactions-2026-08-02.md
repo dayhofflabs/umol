@@ -498,6 +498,7 @@ the section ships.
   and a topology removal whose meaning cannot be reproduced by sequential removal edits.
   The lowering path must append through `Edits` rather than constructing an intermediate vector.
   **Additive (green).** [dep: S1i, S2a]
+  **Done.**
 - **S2c — Encode dative, aromatic, multicenter, and noncovalent edits.** Add the corresponding
   forms, including singular additions, batched plural removals with participant and AST
   preconditions, checked field updates, and constraint updates. Test every operation for each family
