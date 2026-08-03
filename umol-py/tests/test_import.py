@@ -59,6 +59,7 @@ PUBLIC_EXPORTS = frozenset(
     ConnectedComponentsAlgorithm
     Constraint
     ConstraintDelta
+    ConstraintEdit
     Constraints
     ConstraintsView
     ContradictionError
@@ -80,6 +81,7 @@ PUBLIC_EXPORTS = frozenset(
     E
     EcfpHashScheme
     ElectronCountsAst
+    Edit
     Element
     ElementAst
     ElementScope

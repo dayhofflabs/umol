@@ -63,7 +63,7 @@ use crate::{
         NoncovalentBondFieldChange, StereoAtomDelta, StereoAtomFieldChange, StereoBondDelta,
         StereoBondFieldChange,
     },
-    edit::New,
+    edit::{ConstraintEdit, Edit, New},
     electrons::ElectronCountsAst,
     element::Element,
     error::{
@@ -256,6 +256,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Delta>()?;
         module.add_class::<Deltas>()?;
         module.add_class::<New>()?;
+        module.add_class::<ConstraintEdit>()?;
+        module.add_class::<Edit>()?;
         module.add_class::<ReactionCompositionConfig>()?;
         module.add_class::<ReactionApplicationConfig>()?;
         module.add_class::<ReactionAst>()?;

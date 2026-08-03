@@ -641,9 +641,11 @@ the section ships.
   **Done.**
 - **S4b — Bind the raw `Edit` enum.** In `umol-py/src/edit.rs`, expose every Rust `Edit` variant
   with exact `from_rust`/`to_rust`, value equality, and repr, reusing the existing field-change,
-  entity AST, constraint, and stereo-ligand wrappers. Do not add a second static add/remove/update
+  entity AST, constraint, and stereo-ligand wrappers. Expose `ConstraintEdit` as the handle-aware
+  value carried by molecule-constraint edit variants. Do not add a second static add/remove/update
   construction API on `Edit`. Test every variant in both directions. **Additive (green).**
   [dep: S1i, S4a]
+  **Done.**
 - **S4c — Bind `Edits` storage and additions.** Expose value equality, construction from entries,
   raw `append(Edit)`, length, indexing, snapshot iteration, and every singular/batched `add_*`
   method with its returned generic Python `New` handle. Test order and duplicate preservation,
@@ -656,10 +658,10 @@ the section ships.
   Test zero- and multi-entry updates, exact old-state capture, complete removal preconditions,
   all-family DSL round trips, defaults, and parse-error classification. **Additive (green).**
   [dep: S2h, S3c, S3d, S3e, S3f, S3g, S3h, S3i, S3j, S4c]
-- **S4e — Register and inventory the editing data surface.** Register `New`, `Edit`, `Edits`, both
-  leaf updates, and all eight entity updates in `umol-py/src/lib.rs`; add import-surface assertions
-  for the complete inventory and for the deliberate absence of typed handle classes. **Additive
-  (green).** [dep: S4d]
+- **S4e — Register and inventory the editing data surface.** Register `New`, `ConstraintEdit`,
+  `Edit`, `Edits`, both leaf updates, and all eight entity updates in `umol-py/src/lib.rs`; add
+  import-surface assertions for the complete inventory and for the deliberate absence of typed
+  handle classes. **Additive (green).** [dep: S4d]
 
 ### S5 — Python editor and transaction lifecycle
 
