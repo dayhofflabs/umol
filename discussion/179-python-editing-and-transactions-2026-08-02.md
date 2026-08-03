@@ -456,6 +456,7 @@ the section ships.
   scheduled additions, updates, removals, and constraints through the complete container surface
   without losing batching. Migrate the corresponding AST unit tests, property generators, fuzz
   targets, fixtures, examples, and benchmarks. **Breaking (red within S1).** [dep: S1f]
+  **Done.**
 - **S1h — Migrate valence and structurally narrow graph plans.** Change the valence, atom-typing,
   bond, and multicenter resolver/planner results from `Vec<Edit>`/`Solution<Vec<Edit>, _>` to
   `Edits`/`Solution<Edits, _>`, construct their batches through `Edits`, and migrate their tests and

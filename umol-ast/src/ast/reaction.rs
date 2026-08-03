@@ -22,7 +22,7 @@ use super::delta::{
 };
 use super::edit::{
     AddBond, AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle,
-    BondFieldChange, BondHandle, DativeBondFieldChange, DativeBondHandle, Edit,
+    BondFieldChange, BondHandle, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
     MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
     NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval,
     StereoBondFieldChange, StereoBondHandle, StereoBondRemoval,
@@ -429,7 +429,7 @@ impl ReactionAst {
 
         let mut created_atoms: BTreeMap<AtomId, AtomAst> = BTreeMap::new();
         let mut created_bonds: BTreeMap<BondId, ([AtomId; 2], BondAst)> = BTreeMap::new();
-        let mut sets: Vec<Edit> = Vec::new();
+        let mut sets = Edits::new();
         let mut remove_atoms: Vec<AtomHandle> = Vec::new();
         let mut remove_bonds: Vec<BondHandle> = Vec::new();
         let mut removed_host_atoms: Vec<AtomId> = Vec::new();
@@ -480,11 +480,7 @@ impl ReactionAst {
                         },
                     };
                     let host_id = host_atom(*id)?;
-                    sets.extend(Edit::for_atom_update(
-                        AtomHandle::Id(host_id),
-                        host.atom(host_id).ast,
-                        &update,
-                    ));
+                    sets.update_atom(AtomHandle::Id(host_id), host.atom(host_id).ast, &update);
                 }
                 Delta::Atom(AtomDelta::ModifyConstraint { id, old, new }) => {
                     let constraint = new
@@ -492,14 +488,14 @@ impl ReactionAst {
                         .or_else(|| old.as_ref().map(|constraint| constraint.as_undetermined()));
                     if let Some(constraint) = constraint {
                         let host_id = host_atom(*id)?;
-                        sets.extend(Edit::for_atom_update(
+                        sets.update_atom(
                             AtomHandle::Id(host_id),
                             host.atom(host_id).ast,
                             &AtomUpdate {
                                 constraints: constraint.into(),
                                 ..Default::default()
                             },
-                        ));
+                        );
                     }
                 }
                 Delta::Bond(BondDelta::Add { id, atoms, ast }) => {
@@ -526,11 +522,7 @@ impl ReactionAst {
                         },
                     };
                     let host_id = host_bond(*id)?;
-                    sets.extend(Edit::for_bond_update(
-                        BondHandle::Id(host_id),
-                        host.bond(host_id).ast,
-                        &update,
-                    ));
+                    sets.update_bond(BondHandle::Id(host_id), host.bond(host_id).ast, &update);
                 }
                 Delta::Bond(BondDelta::ModifyConstraint { id, old, new }) => {
                     let constraint = new
@@ -538,14 +530,14 @@ impl ReactionAst {
                         .or_else(|| old.as_ref().map(|constraint| constraint.as_undetermined()));
                     if let Some(constraint) = constraint {
                         let host_id = host_bond(*id)?;
-                        sets.extend(Edit::for_bond_update(
+                        sets.update_bond(
                             BondHandle::Id(host_id),
                             host.bond(host_id).ast,
                             &BondUpdate {
                                 constraints: constraint.into(),
                                 ..Default::default()
                             },
-                        ));
+                        );
                     }
                 }
                 Delta::DativeBond(d) => match d {
@@ -557,11 +549,11 @@ impl ReactionAst {
                             },
                         };
                         let host_id = host_dative(*id)?;
-                        sets.extend(Edit::for_dative_bond_update(
+                        sets.update_dative_bond(
                             DativeBondHandle::Id(host_id),
                             host.dative_bond(host_id).ast,
                             &update,
-                        ));
+                        );
                     }
                     DativeBondDelta::ModifyConstraint { id, old, new } => {
                         let constraint = new.clone().or_else(|| {
@@ -569,14 +561,14 @@ impl ReactionAst {
                         });
                         if let Some(constraint) = constraint {
                             let host_id = host_dative(*id)?;
-                            sets.extend(Edit::for_dative_bond_update(
+                            sets.update_dative_bond(
                                 DativeBondHandle::Id(host_id),
                                 host.dative_bond(host_id).ast,
                                 &DativeBondUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
                                 },
-                            ));
+                            );
                         }
                     }
                     DativeBondDelta::Add { .. } => {}
@@ -605,11 +597,11 @@ impl ReactionAst {
                             }
                         };
                         let host_id = host_aromatic(*id)?;
-                        sets.extend(Edit::for_aromatic_system_update(
+                        sets.update_aromatic_system(
                             AromaticSystemHandle::Id(host_id),
                             host.aromatic_system(host_id).ast,
                             &update,
-                        ));
+                        );
                     }
                     AromaticSystemDelta::ModifyConstraint { id, old, new } => {
                         let constraint = new.clone().or_else(|| {
@@ -617,14 +609,14 @@ impl ReactionAst {
                         });
                         if let Some(constraint) = constraint {
                             let host_id = host_aromatic(*id)?;
-                            sets.extend(Edit::for_aromatic_system_update(
+                            sets.update_aromatic_system(
                                 AromaticSystemHandle::Id(host_id),
                                 host.aromatic_system(host_id).ast,
                                 &AromaticSystemUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
                                 },
-                            ));
+                            );
                         }
                     }
                     AromaticSystemDelta::Add { .. } => {}
@@ -655,11 +647,11 @@ impl ReactionAst {
                             }
                         };
                         let host_id = host_multicenter(*id)?;
-                        sets.extend(Edit::for_multicenter_bond_update(
+                        sets.update_multicenter_bond(
                             MulticenterBondHandle::Id(host_id),
                             host.multicenter_bond(host_id).ast,
                             &update,
-                        ));
+                        );
                     }
                     MulticenterBondDelta::ModifyConstraint { id, old, new } => {
                         let constraint = new.clone().or_else(|| {
@@ -667,14 +659,14 @@ impl ReactionAst {
                         });
                         if let Some(constraint) = constraint {
                             let host_id = host_multicenter(*id)?;
-                            sets.extend(Edit::for_multicenter_bond_update(
+                            sets.update_multicenter_bond(
                                 MulticenterBondHandle::Id(host_id),
                                 host.multicenter_bond(host_id).ast,
                                 &MulticenterBondUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
                                 },
-                            ));
+                            );
                         }
                     }
                     MulticenterBondDelta::Add { .. } => {}
@@ -691,11 +683,11 @@ impl ReactionAst {
                             },
                         };
                         let host_id = host_noncovalent(*id)?;
-                        sets.extend(Edit::for_noncovalent_bond_update(
+                        sets.update_noncovalent_bond(
                             NoncovalentBondHandle::Id(host_id),
                             host.noncovalent_bond(host_id).ast,
                             &update,
-                        ));
+                        );
                     }
                     NoncovalentBondDelta::ModifyConstraint { id, old, new } => {
                         let constraint = new.clone().or_else(|| {
@@ -703,14 +695,14 @@ impl ReactionAst {
                         });
                         if let Some(constraint) = constraint {
                             let host_id = host_noncovalent(*id)?;
-                            sets.extend(Edit::for_noncovalent_bond_update(
+                            sets.update_noncovalent_bond(
                                 NoncovalentBondHandle::Id(host_id),
                                 host.noncovalent_bond(host_id).ast,
                                 &NoncovalentBondUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
                                 },
-                            ));
+                            );
                         }
                     }
                     NoncovalentBondDelta::Add { .. } => {}
@@ -923,12 +915,11 @@ impl ReactionAst {
             Some(&index) => Ok(AtomHandle::New(index)),
             None => host_atom(id).map(AtomHandle::Id),
         };
-        // `AddBonds` follows `AddAtoms`, so a created bond continues the shared `New(..)` created-entity
-        // numbering after the created atoms (a stereo bond's `New` site indexes this joint list).
+        // Created bonds use their own `New(0..k)` namespace in ascending id order.
         let new_bond_index: HashMap<BondId, usize> = created_bonds
             .keys()
             .enumerate()
-            .map(|(index, &id)| (id, created_atoms.len() + index))
+            .map(|(index, &id)| (id, index))
             .collect();
         let bond_handle = |id: BondId| match new_bond_index.get(&id) {
             Some(&index) => Ok(BondHandle::New(index)),
@@ -941,7 +932,7 @@ impl ReactionAst {
         // so each overlay id space is compacted once against the pre-removal state (a sequence of
         // single-id removes would stale the not-yet-processed ids). Dative `atoms` is
         // `[donors…, acceptor]` (acceptor last, per transact).
-        let mut overlay_adds: Vec<Edit> = Vec::new();
+        let mut overlay_adds = Edits::new();
         let mut remove_dative: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondAst)> = Vec::new();
         let mut remove_aromatic: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemAst)> =
             Vec::new();
@@ -970,10 +961,7 @@ impl ReactionAst {
                         .map(|a| atom_handle(*a))
                         .collect::<Result<_, _>>()?;
                     atoms.push(atom_handle(*acceptor)?);
-                    overlay_adds.push(Edit::AddDativeBond {
-                        atoms,
-                        ast: ast.clone(),
-                    });
+                    overlay_adds.add_dative_bond(atoms, ast.clone());
                 }
                 Delta::DativeBond(DativeBondDelta::Remove {
                     id,
@@ -993,13 +981,13 @@ impl ReactionAst {
                     ));
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, ast, .. }) => {
-                    overlay_adds.push(Edit::AddAromaticSystem {
-                        atoms: atoms
+                    overlay_adds.add_aromatic_system(
+                        atoms
                             .iter()
                             .map(|a| atom_handle(*a))
                             .collect::<Result<_, _>>()?,
-                        ast: ast.clone(),
-                    });
+                        ast.clone(),
+                    );
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, ast }) => {
                     remove_aromatic.push((
@@ -1012,13 +1000,13 @@ impl ReactionAst {
                     ));
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, ast, .. }) => {
-                    overlay_adds.push(Edit::AddMulticenterBond {
-                        atoms: atoms
+                    overlay_adds.add_multicenter_bond(
+                        atoms
                             .iter()
                             .map(|a| atom_handle(*a))
                             .collect::<Result<_, _>>()?,
-                        ast: ast.clone(),
-                    });
+                        ast.clone(),
+                    );
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, ast }) => {
                     remove_multicenter.push((
@@ -1031,10 +1019,10 @@ impl ReactionAst {
                     ));
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, ast, .. }) => {
-                    overlay_adds.push(Edit::AddNoncovalentBond {
-                        atoms: [atom_handle(atoms[0])?, atom_handle(atoms[1])?],
-                        ast: ast.clone(),
-                    });
+                    overlay_adds.add_noncovalent_bond(
+                        [atom_handle(atoms[0])?, atom_handle(atoms[1])?],
+                        ast.clone(),
+                    );
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, ast }) => {
                     remove_noncovalent.push((
@@ -1046,14 +1034,14 @@ impl ReactionAst {
                 Delta::StereoAtom(StereoAtomDelta::Add {
                     site, ligands, ast, ..
                 }) => {
-                    overlay_adds.push(Edit::AddStereoAtom {
-                        site: atom_handle(*site)?,
-                        ligands: ligands
+                    overlay_adds.add_stereo_atom(
+                        atom_handle(*site)?,
+                        ligands
                             .iter()
                             .map(|l| atom_handle(l.atom_id).map(|atom| (atom, l.kind)))
                             .collect::<Result<_, _>>()?,
-                        ast: ast.clone(),
-                    });
+                        ast.clone(),
+                    );
                 }
                 Delta::StereoAtom(StereoAtomDelta::Remove {
                     id,
@@ -1074,14 +1062,14 @@ impl ReactionAst {
                 Delta::StereoBond(StereoBondDelta::Add {
                     site, ligands, ast, ..
                 }) => {
-                    overlay_adds.push(Edit::AddStereoBond {
-                        site: bond_handle(*site)?,
-                        ligands: ligands
+                    overlay_adds.add_stereo_bond(
+                        bond_handle(*site)?,
+                        ligands
                             .iter()
                             .map(|l| atom_handle(l.atom_id).map(|atom| (atom, l.kind)))
                             .collect::<Result<_, _>>()?,
-                        ast: ast.clone(),
-                    });
+                        ast.clone(),
+                    );
                 }
                 Delta::StereoBond(StereoBondDelta::Remove {
                     id,
@@ -1102,36 +1090,24 @@ impl ReactionAst {
                 _ => {}
             }
         }
-        let mut overlay_removes: Vec<Edit> = Vec::new();
+        let mut overlay_removes = Edits::new();
         if !remove_dative.is_empty() {
-            overlay_removes.push(Edit::RemoveDativeBonds {
-                removes: remove_dative,
-            });
+            overlay_removes.remove_dative_bonds(remove_dative);
         }
         if !remove_aromatic.is_empty() {
-            overlay_removes.push(Edit::RemoveAromaticSystems {
-                removes: remove_aromatic,
-            });
+            overlay_removes.remove_aromatic_systems(remove_aromatic);
         }
         if !remove_multicenter.is_empty() {
-            overlay_removes.push(Edit::RemoveMulticenterBonds {
-                removes: remove_multicenter,
-            });
+            overlay_removes.remove_multicenter_bonds(remove_multicenter);
         }
         if !remove_noncovalent.is_empty() {
-            overlay_removes.push(Edit::RemoveNoncovalentBonds {
-                removes: remove_noncovalent,
-            });
+            overlay_removes.remove_noncovalent_bonds(remove_noncovalent);
         }
         if !remove_stereo_atom.is_empty() {
-            overlay_removes.push(Edit::RemoveStereoAtoms {
-                removes: remove_stereo_atom,
-            });
+            overlay_removes.remove_stereo_atoms(remove_stereo_atom);
         }
         if !remove_stereo_bond.is_empty() {
-            overlay_removes.push(Edit::RemoveStereoBonds {
-                removes: remove_stereo_bond,
-            });
+            overlay_removes.remove_stereo_bonds(remove_stereo_bond);
         }
 
         // Molecule-level constraints lower to `Edit::{Add,Remove}MoleculeConstraint`, refs
@@ -1140,7 +1116,7 @@ impl ReactionAst {
         // constraint compaction updates them (remapping surviving refs, dropping refs to a deleted
         // entity). The overlay/stereo maps cover only `lhs` overlays — a constraint referencing a
         // rule-created overlay is unsupported.
-        let mut constraint_edits: Vec<Edit> = Vec::new();
+        let mut constraint_edits = Edits::new();
         if !constraint_deltas.is_empty() {
             let host_atom_count = host.atoms().count();
             let host_bond_count = host.bonds().count();
@@ -1204,27 +1180,23 @@ impl ReactionAst {
             );
             for delta in constraint_deltas {
                 match delta {
-                    ConstraintDelta::Add(c) => constraint_edits.push(Edit::AddMoleculeConstraint {
-                        constraint: c.remap(&match_map),
-                    }),
+                    ConstraintDelta::Add(c) => {
+                        constraint_edits.add_molecule_constraint(c.remap(&match_map));
+                    }
                     ConstraintDelta::Remove(c) => {
-                        constraint_edits.push(Edit::RemoveMoleculeConstraint {
-                            constraint: c.remap(&match_map),
-                        })
+                        constraint_edits.remove_molecule_constraint(c.remap(&match_map));
                     }
                 }
             }
         }
 
-        let mut edits: Vec<Edit> = Vec::new();
+        let mut edits = Edits::new();
         if !created_atoms.is_empty() {
-            edits.push(Edit::AddAtoms {
-                atoms: created_atoms.values().cloned().collect(),
-            });
+            edits.add_atoms(created_atoms.values().cloned());
         }
         if !created_bonds.is_empty() {
-            edits.push(Edit::AddBonds {
-                bonds: created_bonds
+            edits.add_bonds(
+                created_bonds
                     .values()
                     .map(|(atoms, ast)| {
                         Ok(AddBond {
@@ -1232,21 +1204,26 @@ impl ReactionAst {
                             ast: ast.clone(),
                         })
                     })
-                    .collect::<Result<_, ApplyError>>()?,
-            });
+                    .collect::<Result<Vec<_>, ApplyError>>()?,
+            );
         }
-        edits.extend(overlay_adds);
-        edits.extend(sets);
+        for edit in overlay_adds {
+            edits.push(edit);
+        }
+        for edit in sets {
+            edits.push(edit);
+        }
         // Constraints precede all removals (overlay and topology) so each removal's constraint
         // compaction updates them — a constraint referencing a surviving overlay whose lower-id
         // sibling is removed would otherwise carry a stale id.
-        edits.extend(constraint_edits);
-        edits.extend(overlay_removes);
+        for edit in constraint_edits {
+            edits.push(edit);
+        }
+        for edit in overlay_removes {
+            edits.push(edit);
+        }
         if !remove_atoms.is_empty() || !remove_bonds.is_empty() {
-            edits.push(Edit::RemoveTopology {
-                atoms: remove_atoms,
-                bonds: remove_bonds,
-            });
+            edits.remove_topology(remove_atoms, remove_bonds);
         }
 
         let mut builder = host.edit();
@@ -2567,10 +2544,8 @@ mod tests {
         assert_eq!(rhs, expected);
     }
 
-    // Adding a stereo bond whose site is a rule-created bond: the site resolves through a `New` handle
-    // into the shared created-entity list, which `AddBonds` fills after `AddAtoms` — so the created
-    // bond's `New` index must clear the created atoms. Regression for the stereo-bond-only compose
-    // failure (a created-bond `New` site aliasing a created atom → `RefTypeMismatch`).
+    // A stereo-bond addition can name a bond added by the same reaction. Its `BondHandle::New`
+    // index is the bond creation ordinal and is independent of the atom creation namespace.
     #[rstest]
     #[case::coset_0(0u32)]
     fn test_reaction_ast_apply_stereo_bond_created_site(#[case] coset: u32) {

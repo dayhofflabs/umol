@@ -23,6 +23,7 @@ use super::super::constraint::{
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondAst;
+use super::super::edit::{AtomHandle, BondHandle, Edit, Edits};
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -1659,14 +1660,13 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
 
 #[rstest]
 fn test_molecule_ast_edits(#[from(rich_molecule)] ast: MoleculeAst) {
-    use super::super::edit::{AtomHandle, BondHandle, Edit};
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
     assert_eq!(
         ast.edits(&sub),
-        vec![Edit::RemoveTopology {
+        Edits::from_iter([Edit::RemoveTopology {
             atoms: vec![AtomHandle::Id(AtomId(3))],
             bonds: vec![BondHandle::Id(BondId(2))],
-        }]
+        }])
     );
 }
 
@@ -1674,7 +1674,7 @@ fn test_molecule_ast_edits(#[from(rich_molecule)] ast: MoleculeAst) {
 fn test_molecule_ast_edits_identity(#[from(rich_molecule)] ast: MoleculeAst) {
     let atom_ids: Vec<AtomId> = ast.atoms().iter().map(|v| v.id).collect();
     let sub = ast.induced_subgraph(&atom_ids);
-    assert_eq!(ast.edits(&sub), Vec::new());
+    assert_eq!(ast.edits(&sub), Edits::new());
 }
 
 #[rstest]

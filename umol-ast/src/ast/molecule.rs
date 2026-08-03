@@ -20,7 +20,7 @@ use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
-use super::edit::{AtomHandle, BondHandle, Edit};
+use super::edit::{AtomHandle, BondHandle, Edits};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -875,7 +875,7 @@ impl MoleculeAst {
 
     /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the
     /// host atoms/bonds not in `sub` (empty when `sub` covers the whole molecule).
-    pub fn edits(&self, sub: &MoleculeCorrespondence) -> Vec<Edit> {
+    pub fn edits(&self, sub: &MoleculeCorrespondence) -> Edits {
         let kept: HashSet<AtomId> = sub
             .atoms()
             .matched_pairs()
@@ -899,12 +899,11 @@ impl MoleculeAst {
             .map(BondHandle::Id)
             .collect();
         if removed_atoms.is_empty() && removed_bonds.is_empty() {
-            return Vec::new();
+            return Edits::new();
         }
-        vec![Edit::RemoveTopology {
-            atoms: removed_atoms,
-            bonds: removed_bonds,
-        }]
+        let mut edits = Edits::new();
+        edits.remove_topology(removed_atoms, removed_bonds);
+        edits
     }
 
     pub fn is_ground(&self) -> bool {
