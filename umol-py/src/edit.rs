@@ -1771,6 +1771,10 @@ impl Edits {
     pub(crate) fn from_rust(edits: AstEdits) -> Self {
         Self(edits)
     }
+
+    pub(crate) fn to_rust(&self) -> AstEdits {
+        self.0.clone()
+    }
 }
 
 #[cfg(test)]

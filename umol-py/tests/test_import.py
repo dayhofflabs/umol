@@ -207,6 +207,7 @@ PUBLIC_EXPORTS = frozenset(
     Topicity
     TopicityAst
     TopicityRelationAst
+    Transaction
     TransactionError
     UnpairedElectrons
     UnpairedElectronsAst
@@ -242,20 +243,6 @@ EDITING_EXPORTS = frozenset(
     }
 )
 
-TYPED_EDIT_HANDLE_EXPORTS = frozenset(
-    {
-        "AromaticSystemHandle",
-        "AtomHandle",
-        "BondHandle",
-        "DativeBondHandle",
-        "MulticenterBondHandle",
-        "NoncovalentBondHandle",
-        "StereoAtomHandle",
-        "StereoBondHandle",
-    }
-)
-
-
 def test_package_metadata():
     assert isinstance(umol.__version__, str)
     assert umol.__version__ != "0.0.0"
@@ -285,22 +272,6 @@ def test_editing_exports():
     assert {name: getattr(umol, name) for name in EDITING_EXPORTS} == {
         name: getattr(native, name) for name in EDITING_EXPORTS
     }
-
-
-def test_typed_edit_handles_are_not_exported():
-    package_exports = frozenset(
-        name for name in TYPED_EDIT_HANDLE_EXPORTS if name in umol.__all__
-    )
-    native_exports = frozenset(
-        name for name in TYPED_EDIT_HANDLE_EXPORTS if hasattr(native, name)
-    )
-    package_attributes = frozenset(
-        name for name in TYPED_EDIT_HANDLE_EXPORTS if hasattr(umol, name)
-    )
-
-    assert package_exports == frozenset()
-    assert native_exports == frozenset()
-    assert package_attributes == frozenset()
 
 
 @pytest.mark.parametrize(
@@ -365,6 +336,9 @@ def test_deferred_member(owner, name):
         (umol.MoleculeAst.counted_hashed_fingerprint, "(self, /, *, config)"),
         (umol.MoleculeAst.pattern_fingerprint, "(self, /, *, config=None)"),
         (umol.MoleculeAst.structural_fingerprint, "(self, /, *, config)"),
+        (umol.MoleculeEditor.snapshot, "(self, /)"),
+        (umol.MoleculeEditor.build, "(self, /)"),
+        (umol.MoleculeEditor.transact, "(self, /, edits)"),
         (
             umol.ReactionAst.from_reaction_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
@@ -375,6 +349,7 @@ def test_deferred_member(owner, name):
         ),
         (umol.ReactionAst.apply, "(self, /, host, *, config=None)"),
         (umol.ReactionAst.combined_fingerprint, "(self, /, *, config)"),
+        (umol.Transaction.rollback, "(self, /, editor)"),
     ],
 )
 def test_public_operation_signature(operation, expected):

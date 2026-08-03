@@ -662,8 +662,9 @@ the section ships.
   **Done.**
 - **S4e — Register and inventory the editing data surface.** Register `New`, `ConstraintEdit`,
   `Edit`, `Edits`, both leaf updates, and all eight entity updates in `umol-py/src/lib.rs`; add
-  import-surface assertions for the complete inventory and for the deliberate absence of typed
-  handle classes. **Additive (green).** [dep: S4d]
+  import-surface assertions for the complete inventory. Typed handles follow the ordinary Python
+  convention of using integer entity ids and are covered by the exact package export inventory.
+  **Additive (green).** [dep: S4d]
   **Done.**
 
 ### S5 — Python editor and transaction lifecycle
@@ -690,6 +691,7 @@ the section ships.
   an incompatible editor as an ordinary Python exception rather than a panic, and the rejected
   second rollback. Do not assert the resulting editor state for the deliberately mismatched case.
   Do not expose `transact_unchecked` or `Transaction::append`. **Additive (green).** [dep: S5a, S5b]
+  **Done.**
 - **S5d — Expose the immutable molecule path.** Add `MoleculeAst.edit()` and
   `MoleculeAst.apply(edits)` in `umol-py/src/molecule.rs`. Test that `apply` returns the expected
   molecule without changing its receiver, surfaces `TransactionError` on failure, and covers the

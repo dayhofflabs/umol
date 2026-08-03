@@ -115,7 +115,7 @@ use crate::{
         TetrahedralStereo, TetrahedralStereoAst, Topicity,
     },
     substructure::SubstructureSearchConfig,
-    transaction::MoleculeEditor,
+    transaction::{MoleculeEditor, Transaction},
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
@@ -223,6 +223,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?;
         module.add_class::<MoleculeAst>()?;
         module.add_class::<MoleculeEditor>()?;
+        module.add_class::<Transaction>()?;
         module.add_class::<MoleculeDefaults>()?;
         module.add_class::<ReactionDefaults>()?;
         module.add_class::<AtomTypeRegistry>()?;
