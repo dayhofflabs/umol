@@ -5,14 +5,76 @@ from umol import (
     AromaticSystemConstraintAst,
     AromaticSystemConstraintKey,
     AromaticSystemConstraintsAst,
+    AromaticSystemUpdate,
     AtomAst,
     ElectronCountsAst,
     Element,
     MoleculeAst,
     ParseError,
     UnpairedElectronsAst,
+    UnpairedElectronsUpdate,
     ValueAst,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (
+            AromaticSystemUpdate(),
+            (None, None, UnpairedElectronsUpdate(), AromaticSystemConstraintsAst([])),
+        ),
+        (
+            AromaticSystemUpdate(
+                electrons=[1, 1, 1],
+                charge=-1,
+                unpaired_electrons=UnpairedElectronsUpdate(count=2),
+                constraints=AromaticSystemConstraintsAst(
+                    [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+                ),
+            ),
+            (
+                ElectronCountsAst.Lit([1, 1, 1]),
+                ValueAst.Lit(-1),
+                UnpairedElectronsUpdate(count=2),
+                AromaticSystemConstraintsAst(
+                    [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+                ),
+            ),
+        ),
+        (
+            AromaticSystemUpdate(
+                unpaired_electrons=UnpairedElectronsUpdate(multiplicity=1),
+                constraints=AromaticSystemConstraintsAst(
+                    [
+                        AromaticSystemConstraintAst.ElectronCount(
+                            ValueAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+            (
+                None,
+                None,
+                UnpairedElectronsUpdate(multiplicity=1),
+                AromaticSystemConstraintsAst(
+                    [
+                        AromaticSystemConstraintAst.ElectronCount(
+                            ValueAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_aromatic_system_update(update, expected):
+    assert (
+        update.electrons,
+        update.charge,
+        update.unpaired_electrons,
+        update.constraints,
+    ) == expected
 
 
 def benzene():

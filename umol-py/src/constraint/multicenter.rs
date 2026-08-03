@@ -388,7 +388,6 @@ impl MulticenterBondConstraintsAst {
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
     /// in-crate construction wraps `MulticenterBondConstraintsAst(..)` directly.
-    #[cfg(test)]
     pub(crate) fn from_inner(constraints: AstMulticenterBondConstraintsAst) -> Self {
         MulticenterBondConstraintsAst(constraints)
     }

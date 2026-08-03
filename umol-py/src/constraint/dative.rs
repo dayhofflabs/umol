@@ -412,7 +412,6 @@ impl DativeBondConstraintsAst {
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
     /// in-crate construction wraps `DativeBondConstraintsAst(..)` directly.
-    #[cfg(test)]
     pub(crate) fn from_inner(constraints: AstDativeBondConstraintsAst) -> Self {
         DativeBondConstraintsAst(constraints)
     }

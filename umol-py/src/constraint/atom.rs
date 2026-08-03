@@ -1015,9 +1015,7 @@ impl AtomConstraintsAst {
         &mut self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
-    /// in-crate construction wraps `AtomConstraintsAst(..)` directly.
-    #[cfg(test)]
+    /// Wrap owned AST constraints.
     pub(crate) fn from_inner(constraints: AstAtomConstraintsAst) -> Self {
         AtomConstraintsAst(constraints)
     }

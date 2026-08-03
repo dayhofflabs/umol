@@ -371,7 +371,6 @@ impl NoncovalentBondConstraintsAst {
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
     /// in-crate construction wraps `NoncovalentBondConstraintsAst(..)` directly.
-    #[cfg(test)]
     pub(crate) fn from_inner(constraints: AstNoncovalentBondConstraintsAst) -> Self {
         NoncovalentBondConstraintsAst(constraints)
     }

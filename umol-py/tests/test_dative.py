@@ -7,6 +7,7 @@ from umol import (
     DativeBondConstraintAst,
     DativeBondConstraintKey,
     DativeBondConstraintsAst,
+    DativeBondUpdate,
     Element,
     MoleculeAst,
     ParseError,
@@ -14,6 +15,30 @@ from umol import (
     RingScope,
     ValueAst,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (DativeBondUpdate(), (None, DativeBondConstraintsAst([]))),
+        (DativeBondUpdate(order=2), (ValueAst.Lit(2), DativeBondConstraintsAst([]))),
+        (
+            DativeBondUpdate(
+                constraints=DativeBondConstraintsAst(
+                    [DativeBondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+                )
+            ),
+            (
+                None,
+                DativeBondConstraintsAst(
+                    [DativeBondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+                ),
+            ),
+        ),
+    ],
+)
+def test_dative_bond_update(update, expected):
+    assert (update.order, update.constraints) == expected
 
 
 def ammonia_borane():

@@ -9,10 +9,72 @@ from umol import (
     MulticenterBondConstraintAst,
     MulticenterBondConstraintKey,
     MulticenterBondConstraintsAst,
+    MulticenterBondUpdate,
     ParseError,
     UnpairedElectronsAst,
+    UnpairedElectronsUpdate,
     ValueAst,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (
+            MulticenterBondUpdate(),
+            (None, None, UnpairedElectronsUpdate(), MulticenterBondConstraintsAst([])),
+        ),
+        (
+            MulticenterBondUpdate(
+                electrons=[1, 1, 1],
+                charge=1,
+                unpaired_electrons=UnpairedElectronsUpdate(count=1),
+                constraints=MulticenterBondConstraintsAst(
+                    [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(3))]
+                ),
+            ),
+            (
+                ElectronCountsAst.Lit([1, 1, 1]),
+                ValueAst.Lit(1),
+                UnpairedElectronsUpdate(count=1),
+                MulticenterBondConstraintsAst(
+                    [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(3))]
+                ),
+            ),
+        ),
+        (
+            MulticenterBondUpdate(
+                unpaired_electrons=UnpairedElectronsUpdate(multiplicity=2),
+                constraints=MulticenterBondConstraintsAst(
+                    [
+                        MulticenterBondConstraintAst.ElectronCount(
+                            ValueAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+            (
+                None,
+                None,
+                UnpairedElectronsUpdate(multiplicity=2),
+                MulticenterBondConstraintsAst(
+                    [
+                        MulticenterBondConstraintAst.ElectronCount(
+                            ValueAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_multicenter_bond_update(update, expected):
+    assert (
+        update.electrons,
+        update.charge,
+        update.unpaired_electrons,
+        update.constraints,
+    ) == expected
 
 
 def three_center_bond():

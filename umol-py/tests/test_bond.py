@@ -6,6 +6,7 @@ from umol import (
     BondConstraintAst,
     BondConstraintKey,
     BondConstraintsAst,
+    BondUpdate,
     BooleanAst,
     CisTransConfiguration,
     CisTransStereoAst,
@@ -16,8 +17,52 @@ from umol import (
     RingScope,
     StereoCoset,
     UnpairedElectronsAst,
+    UnpairedElectronsUpdate,
     ValueAst,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (
+            BondUpdate(),
+            (None, None, UnpairedElectronsUpdate(), BondConstraintsAst([])),
+        ),
+        (
+            BondUpdate(order=2, charge=-1, unpaired_electrons=UnpairedElectronsUpdate(count=2)),
+            (
+                ValueAst.Lit(2),
+                ValueAst.Lit(-1),
+                UnpairedElectronsUpdate(count=2),
+                BondConstraintsAst([]),
+            ),
+        ),
+        (
+            BondUpdate(
+                unpaired_electrons=UnpairedElectronsUpdate(multiplicity=1),
+                constraints=BondConstraintsAst(
+                    [BondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+                ),
+            ),
+            (
+                None,
+                None,
+                UnpairedElectronsUpdate(multiplicity=1),
+                BondConstraintsAst(
+                    [BondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+                ),
+            ),
+        ),
+    ],
+)
+def test_bond_update(update, expected):
+    assert (
+        update.order,
+        update.charge,
+        update.unpaired_electrons,
+        update.constraints,
+    ) == expected
 
 
 def ethene():

@@ -3,7 +3,10 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use umol_ast::ast::{AsLit, UnpairedElectronsAst as AstUnpairedElectronsAst};
+use umol_ast::ast::{
+    AsLit, UnpairedElectronsAst as AstUnpairedElectronsAst,
+    UnpairedElectronsUpdate as AstUnpairedElectronsUpdate,
+};
 use umol_chem::spin::{SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons};
 
 use crate::convert::{hash_rust, into_py_variant};
@@ -177,10 +180,108 @@ impl_py_lattice!(
     }
 );
 
+/// Independent updates to the unpaired-electron count and multiplicity.
+///
+/// `None` leaves a component unchanged. A `ValueAst`, including
+/// `ValueAst.Undetermined()`, sets that component exactly.
+#[pyclass]
+pub struct UnpairedElectronsUpdate {
+    count: Option<Py<ValueAst>>,
+    multiplicity: Option<Py<ValueAst>>,
+}
+
+#[pymethods]
+impl UnpairedElectronsUpdate {
+    #[new]
+    #[pyo3(signature = (*, count=None, multiplicity=None))]
+    fn new(
+        py: Python<'_>,
+        count: Option<ValueArg>,
+        multiplicity: Option<ValueArg>,
+    ) -> PyResult<Self> {
+        Self::from_rust(
+            py,
+            &AstUnpairedElectronsUpdate {
+                count: count.map(|value| value.to_rust(py)),
+                multiplicity: multiplicity.map(|value| value.to_rust(py)),
+            },
+        )
+    }
+
+    #[getter]
+    fn count(&self, py: Python<'_>) -> Option<Py<ValueAst>> {
+        self.count.as_ref().map(|value| value.clone_ref(py))
+    }
+
+    #[getter]
+    fn multiplicity(&self, py: Python<'_>) -> Option<Py<ValueAst>> {
+        self.multiplicity.as_ref().map(|value| value.clone_ref(py))
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_rust(&self.to_rust(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = match &self.count {
+            Some(value) => value.bind(py).as_any().repr()?.extract::<String>()?,
+            None => "None".to_string(),
+        };
+        let multiplicity = match &self.multiplicity {
+            Some(value) => value.bind(py).as_any().repr()?.extract::<String>()?,
+            None => "None".to_string(),
+        };
+        Ok(format!(
+            "UnpairedElectronsUpdate(count={count}, multiplicity={multiplicity})"
+        ))
+    }
+}
+
+impl UnpairedElectronsUpdate {
+    pub(crate) fn from_rust(py: Python<'_>, update: &AstUnpairedElectronsUpdate) -> PyResult<Self> {
+        Ok(Self {
+            count: update
+                .count
+                .as_ref()
+                .map(|value| {
+                    ValueAst::from_rust(py, value).and_then(|value| into_py_variant(py, value))
+                })
+                .transpose()?,
+            multiplicity: update
+                .multiplicity
+                .as_ref()
+                .map(|value| {
+                    ValueAst::from_rust(py, value).and_then(|value| into_py_variant(py, value))
+                })
+                .transpose()?,
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstUnpairedElectronsUpdate {
+        AstUnpairedElectronsUpdate {
+            count: self
+                .count
+                .as_ref()
+                .map(|value| value.bind(py).borrow().to_rust(py)),
+            multiplicity: self
+                .multiplicity
+                .as_ref()
+                .map(|value| value.bind(py).borrow().to_rust(py)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst};
+    use umol_ast::ast::{
+        UnpairedElectronsAst as AstUnpairedElectronsAst,
+        UnpairedElectronsUpdate as AstUnpairedElectronsUpdate, ValueAst as AstValueAst,
+    };
     use umol_chem::spin::{
         SpinMultiplicity, SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons,
     };
@@ -266,6 +367,31 @@ mod tests {
                     .unwrap()
                     .to_rust(py),
                 ast
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::empty(AstUnpairedElectronsUpdate::default())]
+    #[case::single(AstUnpairedElectronsUpdate {
+        count: Some(AstValueAst::Lit(2)),
+        multiplicity: None,
+    })]
+    #[case::both(AstUnpairedElectronsUpdate {
+        count: Some(AstValueAst::Lit(2)),
+        multiplicity: Some(AstValueAst::Lit(3)),
+    })]
+    #[case::explicit_undetermined(AstUnpairedElectronsUpdate {
+        count: Some(AstValueAst::Undetermined),
+        multiplicity: Some(AstValueAst::Undetermined),
+    })]
+    fn test_unpaired_electrons_update_roundtrip(#[case] update: AstUnpairedElectronsUpdate) {
+        Python::attach(|py| {
+            assert_eq!(
+                UnpairedElectronsUpdate::from_rust(py, &update)
+                    .unwrap()
+                    .to_rust(py),
+                update,
             );
         });
     }

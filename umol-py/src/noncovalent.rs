@@ -12,6 +12,7 @@ use umol_ast::ast::{
     NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
     NoncovalentBondKind as AstNoncovalentBondKind,
     NoncovalentBondKindAst as AstNoncovalentBondKindAst,
+    NoncovalentBondUpdate as AstNoncovalentBondUpdate,
     NoncovalentBondView as AstNoncovalentBondView,
 };
 
@@ -142,6 +143,57 @@ impl NoncovalentBondKindArg {
             NoncovalentBondKindArg::Kind(k) => AstNoncovalentBondKindAst::Lit(k.to_rust()),
             NoncovalentBondKindArg::Ast(a) => a.bind(py).borrow().to_rust(),
         }
+    }
+}
+
+/// Attribute updates for a noncovalent bond.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct NoncovalentBondUpdate(AstNoncovalentBondUpdate);
+
+#[pymethods]
+impl NoncovalentBondUpdate {
+    #[new]
+    #[pyo3(signature = (*, kind=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        kind: Option<NoncovalentBondKindArg>,
+        constraints: Option<Py<NoncovalentBondConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstNoncovalentBondUpdate {
+            kind: kind.map(|value| value.to_rust(py)),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn kind(&self) -> Option<NoncovalentBondKindAst> {
+        self.0.kind.as_ref().map(NoncovalentBondKindAst::from_rust)
+    }
+
+    #[getter]
+    fn constraints(&self) -> NoncovalentBondConstraintsAst {
+        NoncovalentBondConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl NoncovalentBondUpdate {
+    pub(crate) fn from_rust(update: &AstNoncovalentBondUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstNoncovalentBondUpdate {
+        self.0.clone()
     }
 }
 

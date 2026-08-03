@@ -8,7 +8,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_ast::ast::{
     AtomId as AstAtomId, DativeBondAst as AstDativeBondAst, DativeBondId as AstDativeBondId,
-    DativeBondView as AstDativeBondView, MoleculeAst as AstMoleculeAst,
+    DativeBondUpdate as AstDativeBondUpdate, DativeBondView as AstDativeBondView,
+    MoleculeAst as AstMoleculeAst,
 };
 
 use crate::constraint::dative::{
@@ -19,10 +20,66 @@ use crate::constraint::dative::{
 use crate::constraint::dative::{
     DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsUpdate,
 };
+use crate::convert::hash_rust;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::value::{ValueArg, ValueAst};
+
+/// Attribute updates for a dative bond.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct DativeBondUpdate(AstDativeBondUpdate);
+
+#[pymethods]
+impl DativeBondUpdate {
+    #[new]
+    #[pyo3(signature = (*, order=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        order: Option<ValueArg>,
+        constraints: Option<Py<DativeBondConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstDativeBondUpdate {
+            order: order.map(|value| value.to_rust(py)),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn order(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .order
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn constraints(&self) -> DativeBondConstraintsAst {
+        DativeBondConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl DativeBondUpdate {
+    pub(crate) fn from_rust(update: &AstDativeBondUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstDativeBondUpdate {
+        self.0.clone()
+    }
+}
 
 /// A dative bond: order and bond-scope constraints.
 #[pyclass(eq)]

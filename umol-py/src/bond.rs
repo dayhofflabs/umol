@@ -7,18 +7,95 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
-    AtomId as AstAtomId, BondAst as AstBondAst, BondId as AstBondId, MoleculeAst as AstMoleculeAst,
+    AtomId as AstAtomId, BondAst as AstBondAst, BondId as AstBondId, BondUpdate as AstBondUpdate,
+    MoleculeAst as AstMoleculeAst,
 };
 
 use crate::constraint::bond::{
     bond_constraints_asdict, BondConstraintsArg, BondConstraintsAst, BondConstraintsBacking,
     BondConstraintsView,
 };
+use crate::convert::hash_rust;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::UnpairedElectronsAst;
+use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
 use crate::value::{ValueArg, ValueAst};
+
+/// Attribute updates for a localized bond.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct BondUpdate(AstBondUpdate);
+
+#[pymethods]
+impl BondUpdate {
+    #[new]
+    #[pyo3(signature = (*, order=None, charge=None, unpaired_electrons=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        order: Option<ValueArg>,
+        charge: Option<ValueArg>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
+        constraints: Option<Py<BondConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstBondUpdate {
+            order: order.map(|value| value.to_rust(py)),
+            charge: charge.map(|value| value.to_rust(py)),
+            unpaired_electrons: unpaired_electrons
+                .map(|value| value.to_rust(py))
+                .unwrap_or_default(),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn order(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .order
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .charge
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsUpdate> {
+        UnpairedElectronsUpdate::from_rust(py, &self.0.unpaired_electrons)
+    }
+
+    #[getter]
+    fn constraints(&self) -> BondConstraintsAst {
+        BondConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl BondUpdate {
+    pub(crate) fn from_rust(update: &AstBondUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstBondUpdate {
+        self.0.clone()
+    }
+}
 
 /// A bond: order, charge, unpaired electrons, and bond-scope constraints.
 #[pyclass(eq)]

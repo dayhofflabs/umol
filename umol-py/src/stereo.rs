@@ -18,9 +18,11 @@ use umol_ast::ast::{
     CisTransStereoAst as AstCisTransStereoAst, LigandPermutation as AstLigandPermutation,
     MoleculeAst as AstMoleculeAst, OrientedLigandPermutation as AstOrientedLigandPermutation,
     StereoAtomAst as AstStereoAtomAst, StereoAtomId as AstStereoAtomId,
-    StereoAtomView as AstStereoAtomView, StereoBondAst as AstStereoBondAst,
-    StereoBondId as AstStereoBondId, StereoBondView as AstStereoBondView,
-    StereoConfigurationAst as AstStereoConfigurationAst, StereoCoset as AstStereoCoset,
+    StereoAtomUpdate as AstStereoAtomUpdate, StereoAtomView as AstStereoAtomView,
+    StereoBondAst as AstStereoBondAst, StereoBondId as AstStereoBondId,
+    StereoBondUpdate as AstStereoBondUpdate, StereoBondView as AstStereoBondView,
+    StereoConfigurationAst as AstStereoConfigurationAst,
+    StereoConfigurationUpdate as AstStereoConfigurationUpdate, StereoCoset as AstStereoCoset,
     StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
     StereoLigandKind as AstStereoLigandKind, StereoLigandPair as AstStereoLigandPair,
     StereoLigandPosition as AstStereoLigandPosition, StereoTerm as AstStereoTerm,
@@ -709,6 +711,183 @@ impl StereoConfigurationAst {
             variant,
             arity,
         )
+    }
+}
+
+/// An update to a stereo configuration.
+///
+/// `Unchanged` omits the field, `Undetermined` clears it, and `Kinded` sets the
+/// geometry while optionally leaving its coset unchanged.
+#[pyclass]
+pub enum StereoConfigurationUpdate {
+    Unchanged(),
+    Undetermined(),
+    Kinded(StereoKind, Option<Py<StereoCoset>>),
+}
+
+#[pymethods]
+impl StereoConfigurationUpdate {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_rust(&self.to_rust(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::Unchanged() => ("Unchanged", 0),
+            Self::Undetermined() => ("Undetermined", 0),
+            Self::Kinded(_, _) => ("Kinded", 2),
+        };
+        variant_repr(
+            slf.bind(py).as_any(),
+            "StereoConfigurationUpdate",
+            variant,
+            arity,
+        )
+    }
+}
+
+/// Attribute updates for a stereo atom.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct StereoAtomUpdate(AstStereoAtomUpdate);
+
+#[pymethods]
+impl StereoAtomUpdate {
+    #[new]
+    #[pyo3(signature = (*, configuration=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        configuration: Option<PyRef<'_, StereoConfigurationUpdate>>,
+        constraints: Option<Py<StereoAtomConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstStereoAtomUpdate {
+            configuration: configuration
+                .map(|value| value.to_rust(py))
+                .unwrap_or_default(),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationUpdate> {
+        StereoConfigurationUpdate::from_rust(py, &self.0.configuration)
+    }
+
+    #[getter]
+    fn constraints(&self) -> StereoAtomConstraintsAst {
+        StereoAtomConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl StereoAtomUpdate {
+    pub(crate) fn from_rust(update: &AstStereoAtomUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstStereoAtomUpdate {
+        self.0.clone()
+    }
+}
+
+/// Attribute updates for a stereo bond.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct StereoBondUpdate(AstStereoBondUpdate);
+
+#[pymethods]
+impl StereoBondUpdate {
+    #[new]
+    #[pyo3(signature = (*, configuration=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        configuration: Option<PyRef<'_, StereoConfigurationUpdate>>,
+        constraints: Option<Py<StereoBondConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstStereoBondUpdate {
+            configuration: configuration
+                .map(|value| value.to_rust(py))
+                .unwrap_or_default(),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationUpdate> {
+        StereoConfigurationUpdate::from_rust(py, &self.0.configuration)
+    }
+
+    #[getter]
+    fn constraints(&self) -> StereoBondConstraintsAst {
+        StereoBondConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl StereoBondUpdate {
+    pub(crate) fn from_rust(update: &AstStereoBondUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstStereoBondUpdate {
+        self.0.clone()
+    }
+}
+
+impl StereoConfigurationUpdate {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        update: &AstStereoConfigurationUpdate,
+    ) -> PyResult<Self> {
+        Ok(match update {
+            AstStereoConfigurationUpdate::Unchanged => Self::Unchanged(),
+            AstStereoConfigurationUpdate::Undetermined => Self::Undetermined(),
+            AstStereoConfigurationUpdate::Kinded { kind, coset } => Self::Kinded(
+                StereoKind::from_rust(*kind),
+                coset
+                    .as_ref()
+                    .map(|coset| {
+                        StereoCoset::from_rust(py, coset)
+                            .and_then(|coset| into_py_variant(py, coset))
+                    })
+                    .transpose()?,
+            ),
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationUpdate {
+        match self {
+            Self::Unchanged() => AstStereoConfigurationUpdate::Unchanged,
+            Self::Undetermined() => AstStereoConfigurationUpdate::Undetermined,
+            Self::Kinded(kind, coset) => AstStereoConfigurationUpdate::Kinded {
+                kind: kind.to_rust(),
+                coset: coset
+                    .as_ref()
+                    .map(|coset| coset.bind(py).borrow().to_rust(py)),
+            },
+        }
     }
 }
 
@@ -1629,6 +1808,32 @@ mod tests {
                     ast
                 );
             }
+        });
+    }
+
+    #[rstest]
+    #[case::unchanged(AstStereoConfigurationUpdate::Unchanged)]
+    #[case::undetermined(AstStereoConfigurationUpdate::Undetermined)]
+    #[case::kind_only(AstStereoConfigurationUpdate::Kinded {
+        kind: AstStereoKind::Tetrahedral,
+        coset: None,
+    })]
+    #[case::undetermined_coset(AstStereoConfigurationUpdate::Kinded {
+        kind: AstStereoKind::Tetrahedral,
+        coset: Some(AstStereoCoset::Undetermined),
+    })]
+    #[case::absolute(AstStereoConfigurationUpdate::Kinded {
+        kind: AstStereoKind::CisTrans,
+        coset: Some(AstStereoCoset::Lit(1)),
+    })]
+    fn test_stereo_configuration_update_roundtrip(#[case] update: AstStereoConfigurationUpdate) {
+        Python::attach(|py| {
+            assert_eq!(
+                StereoConfigurationUpdate::from_rust(py, &update)
+                    .unwrap()
+                    .to_rust(py),
+                update
+            );
         });
     }
 

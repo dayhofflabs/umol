@@ -897,7 +897,6 @@ macro_rules! stereo_constraints {
                 &self.0
             }
 
-            #[cfg(test)]
             pub(crate) fn from_inner(constraints: $ast_constraints) -> Self {
                 $constraints(constraints)
             }

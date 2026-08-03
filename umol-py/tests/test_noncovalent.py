@@ -11,8 +11,51 @@ from umol import (
     NoncovalentBondConstraintsAst,
     NoncovalentBondKind,
     NoncovalentBondKindAst,
+    NoncovalentBondUpdate,
     ParseError,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (NoncovalentBondUpdate(), (None, NoncovalentBondConstraintsAst([]))),
+        (
+            NoncovalentBondUpdate(kind=NoncovalentBondKind.Ionic),
+            (
+                NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic),
+                NoncovalentBondConstraintsAst([]),
+            ),
+        ),
+        (
+            NoncovalentBondUpdate(kind=NoncovalentBondKindAst.Undetermined()),
+            (NoncovalentBondKindAst.Undetermined(), NoncovalentBondConstraintsAst([])),
+        ),
+        (
+            NoncovalentBondUpdate(
+                constraints=NoncovalentBondConstraintsAst(
+                    [
+                        NoncovalentBondConstraintAst.Intramolecular(
+                            BooleanAst.Undetermined()
+                        )
+                    ]
+                )
+            ),
+            (
+                None,
+                NoncovalentBondConstraintsAst(
+                    [
+                        NoncovalentBondConstraintAst.Intramolecular(
+                            BooleanAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_noncovalent_bond_update(update, expected):
+    assert (update.kind, update.constraints) == expected
 
 
 def hbond_molecule():

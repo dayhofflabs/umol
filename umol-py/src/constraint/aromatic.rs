@@ -386,9 +386,7 @@ impl AromaticSystemConstraintsAst {
         &self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
-    /// in-crate construction wraps `AromaticSystemConstraintsAst(..)` directly.
-    #[cfg(test)]
+    /// Wrap owned AST constraints.
     pub(crate) fn from_inner(constraints: AstAromaticSystemConstraintsAst) -> Self {
         AromaticSystemConstraintsAst(constraints)
     }

@@ -583,33 +583,43 @@ the section ships.
   optional count and multiplicity updates with complete `from_rust`/`to_rust` conversion. Test empty,
   single-component, two-component, and explicit-undetermined values. **Additive (green).**
   [dep: S1i]
+  **Done.**
 - **S3b — Bind `StereoConfigurationUpdate`.** In `umol-py/src/stereo.rs`, expose `Unchanged`,
   `Undetermined`, and `Kinded { kind, coset }`, preserving the distinction between an omitted coset
   and an undetermined coset. Test every variant and its Rust round trip. **Additive (green).**
   [dep: S1i]
+  **Done.**
 - **S3c — Bind `AtomUpdate`.** In `umol-py/src/atom.rs`, expose every optional atom field, the
   nested unpaired-electron update, and `AtomConstraintsAst`. Test the empty value, a mixed field and
   constraint update, and explicit constraint removal. **Additive (green).** [dep: S3a]
+  **Done.**
 - **S3d — Bind `BondUpdate`.** In `umol-py/src/bond.rs`, expose order, charge, unpaired-electron,
   and constraint updates. Test independent spin-component preservation and constraint removal.
   **Additive (green).** [dep: S3a]
+  **Done.**
 - **S3e — Bind `DativeBondUpdate`.** In `umol-py/src/dative.rs`, expose order and constraint
   updates and test empty, field, and constraint-removal values. **Additive (green).** [dep: S1i]
+  **Done.**
 - **S3f — Bind `AromaticSystemUpdate`.** In `umol-py/src/aromatic.rs`, expose electron-count,
   charge, unpaired-electron, and constraint updates. Test mixed updates and independent spin
   components. **Additive (green).** [dep: S3a]
+  **Done.**
 - **S3g — Bind `MulticenterBondUpdate`.** In `umol-py/src/multicenter.rs`, expose electron-count,
   charge, unpaired-electron, and constraint updates with the same exact-value tests as the Rust
   surface. **Additive (green).** [dep: S3a]
+  **Done.**
 - **S3h — Bind `NoncovalentBondUpdate`.** In `umol-py/src/noncovalent.rs`, expose kind and
   constraint updates and test explicit undetermined values separately from omitted fields.
   **Additive (green).** [dep: S1i]
+  **Done.**
 - **S3i — Bind `StereoAtomUpdate`.** In `umol-py/src/stereo.rs`, expose configuration and
   stereo-atom constraint updates, with cases for unchanged, kind-only, absolute, cleared, and
   constraint-removal behavior. **Additive (green).** [dep: S3b]
+  **Done.**
 - **S3j — Bind `StereoBondUpdate`.** In `umol-py/src/stereo.rs`, expose configuration and
   stereo-bond constraint updates with the same variant inventory and exact conversion checks.
   **Additive (green).** [dep: S3b]
+  **Done.**
 
 ### S4 — Python `Edit` and `Edits` values
 

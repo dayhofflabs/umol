@@ -5,6 +5,7 @@ from umol import (
     AtomConstraintAst,
     AtomConstraintKey,
     AtomConstraintsAst,
+    AtomUpdate,
     Element,
     ElementAst,
     IsotopeMass,
@@ -13,9 +14,71 @@ from umol import (
     MoleculeAst,
     ParseError,
     UnpairedElectronsAst,
+    UnpairedElectronsUpdate,
     ValueAst,
     ValueTerm,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (
+            AtomUpdate(),
+            (None, None, None, None, None, UnpairedElectronsUpdate(), AtomConstraintsAst([])),
+        ),
+        (
+            AtomUpdate(
+                element=Element("N"),
+                isotope_mass=15,
+                charge=1,
+                implicit_hydrogens=2,
+                lone_pairs=1,
+                unpaired_electrons=UnpairedElectronsUpdate(count=1),
+                constraints=AtomConstraintsAst(
+                    [AtomConstraintAst.Valence(ValueAst.Lit(3))]
+                ),
+            ),
+            (
+                ElementAst.Lit(Element("N")),
+                IsotopeMassAst.Lit(15),
+                ValueAst.Lit(1),
+                ValueAst.Lit(2),
+                ValueAst.Lit(1),
+                UnpairedElectronsUpdate(count=1),
+                AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(3))]),
+            ),
+        ),
+        (
+            AtomUpdate(
+                constraints=AtomConstraintsAst(
+                    [AtomConstraintAst.Valence(ValueAst.Undetermined())]
+                )
+            ),
+            (
+                None,
+                None,
+                None,
+                None,
+                None,
+                UnpairedElectronsUpdate(),
+                AtomConstraintsAst(
+                    [AtomConstraintAst.Valence(ValueAst.Undetermined())]
+                ),
+            ),
+        ),
+    ],
+)
+def test_atom_update(update, expected):
+    assert (
+        update.element,
+        update.isotope_mass,
+        update.charge,
+        update.implicit_hydrogens,
+        update.lone_pairs,
+        update.unpaired_electrons,
+        update.constraints,
+    ) == expected
 
 
 def carbon_oxygen():

@@ -11,8 +11,13 @@ from umol import (
     StereoAtomAst,
     StereoAtomConstraintAst,
     StereoAtomConstraintsAst,
+    StereoAtomUpdate,
     StereoBondAst,
+    StereoBondConstraintAst,
+    StereoBondConstraintsAst,
+    StereoBondUpdate,
     StereoConfigurationAst,
+    StereoConfigurationUpdate,
     StereoCoset,
     StereoKind,
     StereoLigand,
@@ -24,6 +29,161 @@ from umol import (
     TetrahedralStereo,
     TetrahedralStereoAst,
 )
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (StereoConfigurationUpdate.Unchanged(), StereoConfigurationUpdate.Unchanged()),
+        (StereoConfigurationUpdate.Undetermined(), StereoConfigurationUpdate.Undetermined()),
+        (
+            StereoConfigurationUpdate.Kinded(StereoKind.Tetrahedral, None),
+            StereoConfigurationUpdate.Kinded(StereoKind.Tetrahedral, None),
+        ),
+        (
+            StereoConfigurationUpdate.Kinded(
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
+            ),
+            StereoConfigurationUpdate.Kinded(
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
+            ),
+        ),
+        (
+            StereoConfigurationUpdate.Kinded(
+                StereoKind.CisTrans, StereoCoset.Lit(1)
+            ),
+            StereoConfigurationUpdate.Kinded(
+                StereoKind.CisTrans, StereoCoset.Lit(1)
+            ),
+        ),
+    ],
+)
+def test_stereo_configuration_update(update, expected):
+    assert update == expected
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (
+            StereoAtomUpdate(),
+            (StereoConfigurationUpdate.Unchanged(), StereoAtomConstraintsAst([])),
+        ),
+        (
+            StereoAtomUpdate(
+                configuration=StereoConfigurationUpdate.Kinded(
+                    StereoKind.Tetrahedral, None
+                )
+            ),
+            (
+                StereoConfigurationUpdate.Kinded(StereoKind.Tetrahedral, None),
+                StereoAtomConstraintsAst([]),
+            ),
+        ),
+        (
+            StereoAtomUpdate(
+                configuration=StereoConfigurationUpdate.Kinded(
+                    StereoKind.Tetrahedral, StereoCoset.Lit(1)
+                )
+            ),
+            (
+                StereoConfigurationUpdate.Kinded(
+                    StereoKind.Tetrahedral, StereoCoset.Lit(1)
+                ),
+                StereoAtomConstraintsAst([]),
+            ),
+        ),
+        (
+            StereoAtomUpdate(configuration=StereoConfigurationUpdate.Undetermined()),
+            (StereoConfigurationUpdate.Undetermined(), StereoAtomConstraintsAst([])),
+        ),
+        (
+            StereoAtomUpdate(
+                constraints=StereoAtomConstraintsAst(
+                    [
+                        StereoAtomConstraintAst.Stereogenicity(
+                            StereogenicityAst.Undetermined()
+                        )
+                    ]
+                )
+            ),
+            (
+                StereoConfigurationUpdate.Unchanged(),
+                StereoAtomConstraintsAst(
+                    [
+                        StereoAtomConstraintAst.Stereogenicity(
+                            StereogenicityAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_stereo_atom_update(update, expected):
+    assert (update.configuration, update.constraints) == expected
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        (
+            StereoBondUpdate(),
+            (StereoConfigurationUpdate.Unchanged(), StereoBondConstraintsAst([])),
+        ),
+        (
+            StereoBondUpdate(
+                configuration=StereoConfigurationUpdate.Kinded(
+                    StereoKind.CisTrans, None
+                )
+            ),
+            (
+                StereoConfigurationUpdate.Kinded(StereoKind.CisTrans, None),
+                StereoBondConstraintsAst([]),
+            ),
+        ),
+        (
+            StereoBondUpdate(
+                configuration=StereoConfigurationUpdate.Kinded(
+                    StereoKind.CisTrans, StereoCoset.Lit(0)
+                )
+            ),
+            (
+                StereoConfigurationUpdate.Kinded(
+                    StereoKind.CisTrans, StereoCoset.Lit(0)
+                ),
+                StereoBondConstraintsAst([]),
+            ),
+        ),
+        (
+            StereoBondUpdate(configuration=StereoConfigurationUpdate.Undetermined()),
+            (StereoConfigurationUpdate.Undetermined(), StereoBondConstraintsAst([])),
+        ),
+        (
+            StereoBondUpdate(
+                constraints=StereoBondConstraintsAst(
+                    [
+                        StereoBondConstraintAst.Stereogenicity(
+                            StereogenicityAst.Undetermined()
+                        )
+                    ]
+                )
+            ),
+            (
+                StereoConfigurationUpdate.Unchanged(),
+                StereoBondConstraintsAst(
+                    [
+                        StereoBondConstraintAst.Stereogenicity(
+                            StereogenicityAst.Undetermined()
+                        )
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_stereo_bond_update(update, expected):
+    assert (update.configuration, update.constraints) == expected
 
 
 def test_permutation_image_degree():

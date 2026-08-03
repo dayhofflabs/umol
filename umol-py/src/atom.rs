@@ -9,9 +9,9 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
-    AsLit, AtomAst as AstAtomAst, AtomId as AstAtomId, ElementAst as AstElementAst,
-    IsotopeMass as AstIsotopeMass, IsotopeMassAst as AstIsotopeMassAst,
-    MoleculeAst as AstMoleculeAst,
+    AsLit, AtomAst as AstAtomAst, AtomId as AstAtomId, AtomUpdate as AstAtomUpdate,
+    ElementAst as AstElementAst, IsotopeMass as AstIsotopeMass,
+    IsotopeMassAst as AstIsotopeMassAst, MoleculeAst as AstMoleculeAst,
 };
 use umol_chem::element::Element as ChemElement;
 
@@ -24,7 +24,7 @@ use crate::element::Element;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::UnpairedElectronsAst;
+use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
 use crate::value::{MemOp, ValueArg, ValueAst};
 
 /// Element expression: undetermined, a single element, a finite element set, a
@@ -242,6 +242,108 @@ impl_py_lattice!(
         Ok(IsotopeMassAst::from_rust(&value))
     }
 );
+
+/// Attribute updates for an atom. Omitted scalar fields remain unchanged;
+/// constraints form a keyed update where undetermined values remove their key.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct AtomUpdate(AstAtomUpdate);
+
+#[pymethods]
+impl AtomUpdate {
+    #[new]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, element=None, isotope_mass=None, charge=None, implicit_hydrogens=None, lone_pairs=None, unpaired_electrons=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        element: Option<ElementArg>,
+        isotope_mass: Option<IsotopeMassArg>,
+        charge: Option<ValueArg>,
+        implicit_hydrogens: Option<ValueArg>,
+        lone_pairs: Option<ValueArg>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
+        constraints: Option<Py<AtomConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstAtomUpdate {
+            element: element.map(|value| value.to_rust(py)),
+            isotope_mass: isotope_mass.map(|value| value.to_rust(py)),
+            charge: charge.map(|value| value.to_rust(py)),
+            implicit_hydrogens: implicit_hydrogens.map(|value| value.to_rust(py)),
+            lone_pairs: lone_pairs.map(|value| value.to_rust(py)),
+            unpaired_electrons: unpaired_electrons
+                .map(|value| value.to_rust(py))
+                .unwrap_or_default(),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn element(&self) -> Option<ElementAst> {
+        self.0.element.as_ref().map(ElementAst::from_rust)
+    }
+
+    #[getter]
+    fn isotope_mass(&self) -> Option<IsotopeMassAst> {
+        self.0.isotope_mass.as_ref().map(IsotopeMassAst::from_rust)
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .charge
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .implicit_hydrogens
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn lone_pairs(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .lone_pairs
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsUpdate> {
+        UnpairedElectronsUpdate::from_rust(py, &self.0.unpaired_electrons)
+    }
+
+    #[getter]
+    fn constraints(&self) -> AtomConstraintsAst {
+        AtomConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl AtomUpdate {
+    pub(crate) fn from_rust(update: &AstAtomUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstAtomUpdate {
+        self.0.clone()
+    }
+}
 
 /// An atom: element, isotope, charge, implicit hydrogens, lone pairs, unpaired
 /// electrons, and atom-scope constraints.

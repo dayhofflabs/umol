@@ -9,6 +9,7 @@ PUBLIC_EXPORTS = frozenset(
     """
     AromaticBondConstraintMismatchPolicy
     AromaticSystemAst
+    AromaticSystemUpdate
     AromaticSystemConstraintAst
     AromaticSystemConstraintKey
     AromaticSystemConstraintsAst
@@ -25,6 +26,7 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityModel
     AromaticityResolveConfig
     AtomAst
+    AtomUpdate
     AtomConstraintAst
     AtomConstraintKey
     AtomConstraintsAst
@@ -38,6 +40,7 @@ PUBLIC_EXPORTS = frozenset(
     AutomorphismAlgorithm
     BitFp
     BondAst
+    BondUpdate
     BondConstraintAst
     BondConstraintKey
     BondConstraintsAst
@@ -62,6 +65,7 @@ PUBLIC_EXPORTS = frozenset(
     Correspondence
     CountedHashedFeatureSet
     DativeBondAst
+    DativeBondUpdate
     DativeBondConstraintAst
     DativeBondConstraintKey
     DativeBondConstraintsAst
@@ -98,6 +102,7 @@ PUBLIC_EXPORTS = frozenset(
     MoleculeDefaults
     MoleculeMetadata
     MulticenterBondAst
+    MulticenterBondUpdate
     MulticenterBondConstraintAst
     MulticenterBondConstraintKey
     MulticenterBondConstraintsAst
@@ -117,6 +122,7 @@ PUBLIC_EXPORTS = frozenset(
     NoncovalentBondFieldChange
     NoncovalentBondKind
     NoncovalentBondKindAst
+    NoncovalentBondUpdate
     NoncovalentBondView
     NoncovalentBondViews
     Orientation
@@ -149,6 +155,7 @@ PUBLIC_EXPORTS = frozenset(
     SmilesSyntaxFlags
     SpinState
     StereoAtomAst
+    StereoAtomUpdate
     StereoAtomConstraintAst
     StereoAtomConstraintKey
     StereoAtomConstraintsAst
@@ -158,6 +165,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoAtomView
     StereoAtomViews
     StereoBondAst
+    StereoBondUpdate
     StereoBondConstraintAst
     StereoBondConstraintKey
     StereoBondConstraintsAst
@@ -167,6 +175,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoBondView
     StereoBondViews
     StereoConfigurationAst
+    StereoConfigurationUpdate
     StereoCoset
     StereoFailurePolicy
     StereoKind
@@ -195,6 +204,7 @@ PUBLIC_EXPORTS = frozenset(
     TopicityRelationAst
     UnpairedElectrons
     UnpairedElectronsAst
+    UnpairedElectronsUpdate
     UnderdeterminedError
     ValenceEntry
     ValenceModel

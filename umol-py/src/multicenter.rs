@@ -9,6 +9,7 @@ use pyo3::types::{PyDict, PyTuple};
 use umol_ast::ast::{
     AtomId as AstAtomId, MoleculeAst as AstMoleculeAst,
     MulticenterBondAst as AstMulticenterBondAst, MulticenterBondId as AstMulticenterBondId,
+    MulticenterBondUpdate as AstMulticenterBondUpdate,
     MulticenterBondView as AstMulticenterBondView,
 };
 
@@ -21,12 +22,84 @@ use crate::constraint::multicenter::{
 use crate::constraint::multicenter::{
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsUpdate,
 };
+use crate::convert::hash_rust;
 use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::UnpairedElectronsAst;
+use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
 use crate::value::{ValueArg, ValueAst};
+
+/// Attribute updates for a multicenter bond.
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+pub struct MulticenterBondUpdate(AstMulticenterBondUpdate);
+
+#[pymethods]
+impl MulticenterBondUpdate {
+    #[new]
+    #[pyo3(signature = (*, electrons=None, charge=None, unpaired_electrons=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        electrons: Option<ElectronCountsArg>,
+        charge: Option<ValueArg>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
+        constraints: Option<Py<MulticenterBondConstraintsAst>>,
+    ) -> Self {
+        Self::from_rust(&AstMulticenterBondUpdate {
+            electrons: electrons.map(|value| value.to_rust(py)),
+            charge: charge.map(|value| value.to_rust(py)),
+            unpaired_electrons: unpaired_electrons
+                .map(|value| value.to_rust(py))
+                .unwrap_or_default(),
+            constraints: constraints
+                .map(|value| value.bind(py).borrow().inner().clone())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    #[getter]
+    fn electrons(&self) -> Option<ElectronCountsAst> {
+        self.0.electrons.as_ref().map(ElectronCountsAst::from_rust)
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .charge
+            .as_ref()
+            .map(|value| ValueAst::from_rust(py, value))
+            .transpose()
+    }
+
+    #[getter]
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsUpdate> {
+        UnpairedElectronsUpdate::from_rust(py, &self.0.unpaired_electrons)
+    }
+
+    #[getter]
+    fn constraints(&self) -> MulticenterBondConstraintsAst {
+        MulticenterBondConstraintsAst::from_inner(self.0.constraints.clone())
+    }
+}
+
+impl MulticenterBondUpdate {
+    pub(crate) fn from_rust(update: &AstMulticenterBondUpdate) -> Self {
+        Self(update.clone())
+    }
+
+    pub(crate) fn to_rust(&self) -> AstMulticenterBondUpdate {
+        self.0.clone()
+    }
+}
 
 /// A multicenter bond: a positional per-member-atom `electrons` vector, charge,
 /// unpaired electrons, and multicenter-bond-scope constraints. The member atoms are
