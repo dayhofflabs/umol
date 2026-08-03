@@ -575,6 +575,7 @@ the section ships.
   in `umol-ast/spec/umol-dsl-spec.md`, including vector ordering, handles inside constraints,
   defaults, checked updates, removal preconditions, and batching. **Additive (green).**
   [dep: S2b, S2c, S2d, S2g]
+  **Done.**
 
 ### S3 — Python update values
 

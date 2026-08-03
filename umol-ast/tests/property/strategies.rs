@@ -4158,7 +4158,7 @@ pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst
 pub(crate) fn edits_dsl_strategy() -> impl Strategy<Value = Edits> {
     prop_oneof![
         transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
-        prop::sample::select(complete_transaction_cases(false)),
+        prop::sample::select(complete_transaction_cases(true)),
         overlay_transaction_strategy(),
         stable_atom_handle_trace_strategy(false).prop_map(|trace| (trace.base(), trace.edits())),
     ]

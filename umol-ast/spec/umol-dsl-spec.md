@@ -1148,7 +1148,170 @@ Combinator subtrees, relational leaves, and molecule-scope leaves are never move
 
 ---
 
-## 8. Reaction map
+## 8. Edit and reaction documents
+
+### 8.1 Standalone edit document
+
+A standalone edit document is a bare ordered vector of host-specific edits. It carries no molecule
+or molecule metadata: positional handles identify entities in the initial host, while **`{:new n}`**
+identifies the **`n`**th entity of the corresponding kind created by an earlier edit in the same
+vector. Creation ordinals are independent for all eight entity kinds.
+
+```
+edits-document ::= [ edit* ]
+
+edit ::=
+    { :atom                atom-edit }
+  | { :bond                bond-edit }
+  | { :dative-bond         dative-bond-edit }
+  | { :dative-bonds        dative-bonds-edit }
+  | { :aromatic-system     aromatic-system-edit }
+  | { :aromatic-systems    aromatic-systems-edit }
+  | { :multicenter-bond    multicenter-bond-edit }
+  | { :multicenter-bonds   multicenter-bonds-edit }
+  | { :noncovalent-bond    noncovalent-bond-edit }
+  | { :noncovalent-bonds   noncovalent-bonds-edit }
+  | { :stereo-atom         stereo-atom-edit }
+  | { :stereo-atoms        stereo-atoms-edit }
+  | { :stereo-bond         stereo-bond-edit }
+  | { :stereo-bonds        stereo-bonds-edit }
+  | { :topology            topology-edit }
+  | { :constraint          edit-constraint }
+
+atom-handle                ::= nat | { :new nat }
+bond-handle                ::= nat | { :new nat }
+dative-bond-handle         ::= nat | { :new nat }
+aromatic-system-handle     ::= nat | { :new nat }
+multicenter-bond-handle    ::= nat | { :new nat }
+noncovalent-bond-handle    ::= nat | { :new nat }
+stereo-atom-handle         ::= nat | { :new nat }
+stereo-bond-handle         ::= nat | { :new nat }
+
+atom-edit ::=
+    { :add    atom-spec }
+  | { :remove atom-handle }
+  | { :modify [ atom-handle checked-atom-update ] }
+
+bond-edit ::=
+    { :add    [ atom-handle atom-handle bond-spec ] }
+  | { :remove bond-handle }
+  | { :modify [ bond-handle checked-bond-update ] }
+
+checked-atom-update ::= { :expect partial-atom-string :update partial-atom-string }
+checked-bond-update ::= { :expect partial-bond-string :update partial-bond-string }
+
+dative-bond-edit ::=
+    { :add    dative-bond-addition }
+  | { :modify [ dative-bond-handle checked-dative-update ] }
+dative-bonds-edit ::= { :remove [ dative-bond-removal* ] }
+
+dative-bond-addition ::= { :donors [ atom-handle* ] :acceptor atom-handle
+                            :type dative-bond-spec }
+dative-bond-removal  ::= { :id dative-bond-handle :donors [ atom-handle* ]
+                            :acceptor atom-handle :type dative-bond-spec }
+checked-dative-update ::= { :expect partial-dative-string :update partial-dative-string }
+
+aromatic-system-edit ::=
+    { :add    aromatic-system-addition }
+  | { :modify [ aromatic-system-handle checked-aromatic-update ] }
+aromatic-systems-edit ::= { :remove [ aromatic-system-removal* ] }
+
+aromatic-system-addition ::= { :atoms [ atom-handle* ] :type "aromatic-string" }
+aromatic-system-removal  ::= { :id aromatic-system-handle :atoms [ atom-handle* ]
+                               :type "aromatic-string" }
+checked-aromatic-update ::= { :expect partial-aromatic-string
+                              :update partial-aromatic-string }
+
+multicenter-bond-edit ::=
+    { :add    multicenter-bond-addition }
+  | { :modify [ multicenter-bond-handle checked-multicenter-update ] }
+multicenter-bonds-edit ::= { :remove [ multicenter-bond-removal* ] }
+
+multicenter-bond-addition ::= { :atoms [ atom-handle* ] :type "multicenter-string" }
+multicenter-bond-removal  ::= { :id multicenter-bond-handle :atoms [ atom-handle* ]
+                                :type "multicenter-string" }
+checked-multicenter-update ::= { :expect partial-multicenter-string
+                                 :update partial-multicenter-string }
+
+noncovalent-bond-edit ::=
+    { :add    noncovalent-bond-addition }
+  | { :modify [ noncovalent-bond-handle checked-noncovalent-update ] }
+noncovalent-bonds-edit ::= { :remove [ noncovalent-bond-removal* ] }
+
+noncovalent-bond-addition ::= { :atoms [ atom-handle atom-handle ]
+                                 :type noncovalent-bond-spec }
+noncovalent-bond-removal  ::= { :id noncovalent-bond-handle
+                                 :atoms [ atom-handle atom-handle ]
+                                 :type noncovalent-bond-spec }
+checked-noncovalent-update ::= { :expect partial-noncovalent-string
+                                 :update partial-noncovalent-string }
+
+edit-ligand ::= atom-handle | [ :h atom-handle ] | [ :lp atom-handle ]
+
+stereo-atom-edit ::=
+    { :add    stereo-atom-addition }
+  | { :modify [ stereo-atom-handle checked-stereo-update ] }
+stereo-atoms-edit ::= { :remove [ stereo-atom-removal* ] }
+stereo-atom-addition ::= { :site atom-handle :ligands [ edit-ligand* ] :type stereo-spec }
+stereo-atom-removal  ::= { :id stereo-atom-handle :site atom-handle
+                            :ligands [ edit-ligand* ] :type stereo-spec }
+
+stereo-bond-edit ::=
+    { :add    stereo-bond-addition }
+  | { :modify [ stereo-bond-handle checked-stereo-update ] }
+stereo-bonds-edit ::= { :remove [ stereo-bond-removal* ] }
+stereo-bond-addition ::= { :site bond-handle :ligands [ edit-ligand* ] :type stereo-spec }
+stereo-bond-removal  ::= { :id stereo-bond-handle :site bond-handle
+                            :ligands [ edit-ligand* ] :type stereo-spec }
+checked-stereo-update ::= { :expect partial-stereo-string :update partial-stereo-string }
+
+topology-edit ::= { :remove { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
+
+edit-constraint ::=
+    { :add    edit-constraint-entry }
+  | { :remove edit-constraint-entry }
+```
+
+**Constraint handles.** An **`edit-constraint-entry`** has the complete **`constraint-entry`** shape
+from **§7.12**, except that every reference into the target molecule is the corresponding typed
+handle above. This includes references nested under **`:and`**, **`:or`**, and **`:not`**, relational
+constraints, subset-valued molecule constraints, and the target side of a **`:sub-pattern`** anchor.
+The nested pattern and the pattern side of each anchor pair retain the ordinary pattern-local refs of
+**§7.12**. Keyword ids and structural refs are not accepted in standalone edits because the document
+does not carry the host's metadata or structure. Normalized internal constraint slots never appear in
+the surface form.
+
+**Ordering and handle allocation.** Edit order and duplicate entries are semantic and **MUST** be
+preserved. A **`{:new n}`** handle may refer only to an earlier same-kind creation; forward,
+out-of-range, and removed handles are rejected during application. Parsing and collection rebuild
+the next creation ordinal for every kind in one pass over the ordered entries. Atom and bond
+additions are singleton surface entries; rendering a batched internal addition emits one entry per
+created entity without changing its position relative to surrounding edits.
+
+**Checked updates.** Every **`:modify`** carries both the expected partial value and the replacement
+partial value. The two partials **MUST** address the same field or constraint keys. An undetermined
+constraint denotes absence, so **`:expect "#v*"`** followed by **`:update "#v4"`** adds a valence
+constraint, and the reverse removes it. Parsing reconstructs checked field and entity-constraint
+edits; it does not validate chemical semantics against a host molecule.
+
+**Removal preconditions and batching.** Atom-only and bond-only singleton removals use their
+singular entity forms. **`:topology :remove`** is the inseparable operation for simultaneous atom and
+bond removal, allowing one pre-removal snapshot and one compaction after cascading removal.
+Overlay removals use the plural family key and retain a vector of complete removal records: the
+entity handle, its participants, and its full AST value. The recorded values are checked during
+application and retained for exact rollback. These semantic batches **MUST NOT** be lowered to a
+sequence of independent removals.
+
+**Defaults.** The same **`MoleculeDefaults`** value governs parsing and rendering. Defaults apply to
+full definitions in additions and recorded overlay removals. They never apply to the partial
+**`:expect`** or **`:update`** values. A semantic render/parse round trip therefore uses the same
+defaults in both directions.
+
+**Serialization.** Canonical serialization is the bare vector in stored order. It preserves
+duplicates and semantic removal batches. Each **`Id(n)`** renders as **`n`** and each **`New(n)`** as
+**`{:new n}`**, including handles nested inside constraints.
+
+### 8.2 Reaction map
 
 A reaction has two interchangeable surface forms, denoting the same transformation: the **operational** form (a left-hand side plus an edit list) and the **span** form (the superimposed `L ∪_K R` graph). The operational form is defined first; the span form follows.
 
