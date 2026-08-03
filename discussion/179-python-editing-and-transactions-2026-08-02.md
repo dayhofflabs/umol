@@ -350,6 +350,7 @@ the section ships.
   `Deltas::canonicalize` alone. Test reaction-span recovery and the generated reaction invariants
   against exact `Deltas` values, then verify that no production or property-generation accumulator
   representing a delta collection uses `Vec<Delta>`. **Breaking (red→green).** [dep: none]
+  **Done.**
 - **S0b — Add the `Edits` container and structural construction surface.** In
   `umol-ast/src/ast/edit.rs`, add `Edits` with private ordered `Vec<Edit>` storage and eight private
   creation counters. Provide `new`, immutable slice/length/iteration access, consuming iteration,
@@ -365,6 +366,7 @@ the section ships.
   Add a property over arbitrary interleavings of the eight addition families: collecting or pushing
   the same entries must recover the same next per-kind `New(n)` values as uninterrupted construction.
   **Additive (green).** [dep: none]
+  **Done.**
 
 ### S1 — Migrate every Rust edit producer and transaction boundary
 
@@ -377,6 +379,7 @@ the section ships.
   empty update and that applying its output reproduces `current.update(update)`. Callers elsewhere in
   the workspace remain red until the rest of S1 completes; no permanent compatibility API is added.
   **Breaking (red within S1).** [dep: S0b]
+  **Done.**
 - **S1b — Move the transaction boundary to `Edits`.** Change `MoleculeEditor::transact` and
   `transact_unchecked` to accept concrete `Edits`, then migrate the transaction unit tests, edit
   property strategies, fixtures, examples, and benchmarks from vector batches and removed `Edit`

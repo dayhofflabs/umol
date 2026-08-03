@@ -721,40 +721,12 @@ impl IntoIterator for Edits {
     }
 }
 
-impl Edit {
-    pub fn add_atom(ast: AtomAst) -> Self {
-        Self::AddAtoms { atoms: vec![ast] }
-    }
-
-    pub fn add_bond(first: AtomHandle, second: AtomHandle, ast: BondAst) -> Self {
-        Self::AddBonds {
-            bonds: vec![AddBond {
-                endpoints: [first, second],
-                ast,
-            }],
-        }
-    }
-
-    pub fn remove_atom(id: AtomHandle) -> Self {
-        Self::RemoveTopology {
-            atoms: vec![id],
-            bonds: Vec::new(),
-        }
-    }
-
-    pub fn remove_bond(id: BondHandle) -> Self {
-        Self::RemoveTopology {
-            atoms: Vec::new(),
-            bonds: vec![id],
-        }
-    }
-
+impl Edits {
     /// Project an atom update into checked host-relative edits.
-    pub fn for_atom_update(id: AtomHandle, current: &AtomAst, update: &AtomUpdate) -> Vec<Self> {
-        let mut edits = Vec::new();
+    pub fn update_atom(&mut self, id: AtomHandle, current: &AtomAst, update: &AtomUpdate) {
         if let Some(new) = &update.element {
             if !current.element.canonical_eq(new) {
-                edits.push(Self::ModifyAtomField {
+                self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::Element {
                         old: current.element.clone(),
@@ -765,7 +737,7 @@ impl Edit {
         }
         if let Some(new) = &update.isotope_mass {
             if !current.isotope_mass.canonical_eq(new) {
-                edits.push(Self::ModifyAtomField {
+                self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::IsotopeMass {
                         old: current.isotope_mass.clone(),
@@ -776,7 +748,7 @@ impl Edit {
         }
         if let Some(new) = &update.charge {
             if !current.charge.canonical_eq(new) {
-                edits.push(Self::ModifyAtomField {
+                self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::Charge {
                         old: current.charge.clone(),
@@ -787,7 +759,7 @@ impl Edit {
         }
         if let Some(new) = &update.implicit_hydrogens {
             if !current.implicit_hydrogens.canonical_eq(new) {
-                edits.push(Self::ModifyAtomField {
+                self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::ImplicitHydrogens {
                         old: current.implicit_hydrogens.clone(),
@@ -798,7 +770,7 @@ impl Edit {
         }
         if let Some(new) = &update.lone_pairs {
             if !current.lone_pairs.canonical_eq(new) {
-                edits.push(Self::ModifyAtomField {
+                self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::LonePairs {
                         old: current.lone_pairs.clone(),
@@ -814,7 +786,7 @@ impl Edit {
             .unpaired_electrons
             .canonical_eq(&new_unpaired_electrons)
         {
-            edits.push(Self::ModifyAtomField {
+            self.push(Edit::ModifyAtomField {
                 id: id.clone(),
                 change: AtomFieldChange::UnpairedElectrons {
                     old: current.unpaired_electrons.clone(),
@@ -831,22 +803,20 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyAtomConstraint {
+                self.push(Edit::ModifyAtomConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project a localized-bond update into checked host-relative edits.
-    pub fn for_bond_update(id: BondHandle, current: &BondAst, update: &BondUpdate) -> Vec<Self> {
-        let mut edits = Vec::new();
+    pub fn update_bond(&mut self, id: BondHandle, current: &BondAst, update: &BondUpdate) {
         if let Some(new) = &update.order {
             if !current.order.canonical_eq(new) {
-                edits.push(Self::ModifyBondField {
+                self.push(Edit::ModifyBondField {
                     id: id.clone(),
                     change: BondFieldChange::Order {
                         old: current.order.clone(),
@@ -857,7 +827,7 @@ impl Edit {
         }
         if let Some(new) = &update.charge {
             if !current.charge.canonical_eq(new) {
-                edits.push(Self::ModifyBondField {
+                self.push(Edit::ModifyBondField {
                     id: id.clone(),
                     change: BondFieldChange::Charge {
                         old: current.charge.clone(),
@@ -873,7 +843,7 @@ impl Edit {
             .unpaired_electrons
             .canonical_eq(&new_unpaired_electrons)
         {
-            edits.push(Self::ModifyBondField {
+            self.push(Edit::ModifyBondField {
                 id: id.clone(),
                 change: BondFieldChange::UnpairedElectrons {
                     old: current.unpaired_electrons.clone(),
@@ -890,26 +860,25 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyBondConstraint {
+                self.push(Edit::ModifyBondConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project a dative-bond update into checked host-relative edits.
-    pub fn for_dative_bond_update(
+    pub fn update_dative_bond(
+        &mut self,
         id: DativeBondHandle,
         current: &DativeBondAst,
         update: &DativeBondUpdate,
-    ) -> Vec<Self> {
-        let mut edits = Vec::new();
+    ) {
         if let Some(new) = &update.order {
             if !current.order.canonical_eq(new) {
-                edits.push(Self::ModifyDativeBondField {
+                self.push(Edit::ModifyDativeBondField {
                     id: id.clone(),
                     change: DativeBondFieldChange::Order {
                         old: current.order.clone(),
@@ -927,26 +896,25 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyDativeBondConstraint {
+                self.push(Edit::ModifyDativeBondConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project an aromatic-system update into checked host-relative edits.
-    pub fn for_aromatic_system_update(
+    pub fn update_aromatic_system(
+        &mut self,
         id: AromaticSystemHandle,
         current: &AromaticSystemAst,
         update: &AromaticSystemUpdate,
-    ) -> Vec<Self> {
-        let mut edits = Vec::new();
+    ) {
         if let Some(new) = &update.electrons {
             if !current.electrons.canonical_eq(new) {
-                edits.push(Self::ModifyAromaticSystemField {
+                self.push(Edit::ModifyAromaticSystemField {
                     id: id.clone(),
                     change: AromaticSystemFieldChange::Electrons {
                         old: current.electrons.clone(),
@@ -957,7 +925,7 @@ impl Edit {
         }
         if let Some(new) = &update.charge {
             if !current.charge.canonical_eq(new) {
-                edits.push(Self::ModifyAromaticSystemField {
+                self.push(Edit::ModifyAromaticSystemField {
                     id: id.clone(),
                     change: AromaticSystemFieldChange::Charge {
                         old: current.charge.clone(),
@@ -973,7 +941,7 @@ impl Edit {
             .unpaired_electrons
             .canonical_eq(&new_unpaired_electrons)
         {
-            edits.push(Self::ModifyAromaticSystemField {
+            self.push(Edit::ModifyAromaticSystemField {
                 id: id.clone(),
                 change: AromaticSystemFieldChange::UnpairedElectrons {
                     old: current.unpaired_electrons.clone(),
@@ -990,26 +958,25 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyAromaticSystemConstraint {
+                self.push(Edit::ModifyAromaticSystemConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project a multicenter-bond update into checked host-relative edits.
-    pub fn for_multicenter_bond_update(
+    pub fn update_multicenter_bond(
+        &mut self,
         id: MulticenterBondHandle,
         current: &MulticenterBondAst,
         update: &MulticenterBondUpdate,
-    ) -> Vec<Self> {
-        let mut edits = Vec::new();
+    ) {
         if let Some(new) = &update.electrons {
             if !current.electrons.canonical_eq(new) {
-                edits.push(Self::ModifyMulticenterBondField {
+                self.push(Edit::ModifyMulticenterBondField {
                     id: id.clone(),
                     change: MulticenterBondFieldChange::Electrons {
                         old: current.electrons.clone(),
@@ -1020,7 +987,7 @@ impl Edit {
         }
         if let Some(new) = &update.charge {
             if !current.charge.canonical_eq(new) {
-                edits.push(Self::ModifyMulticenterBondField {
+                self.push(Edit::ModifyMulticenterBondField {
                     id: id.clone(),
                     change: MulticenterBondFieldChange::Charge {
                         old: current.charge.clone(),
@@ -1036,7 +1003,7 @@ impl Edit {
             .unpaired_electrons
             .canonical_eq(&new_unpaired_electrons)
         {
-            edits.push(Self::ModifyMulticenterBondField {
+            self.push(Edit::ModifyMulticenterBondField {
                 id: id.clone(),
                 change: MulticenterBondFieldChange::UnpairedElectrons {
                     old: current.unpaired_electrons.clone(),
@@ -1053,26 +1020,25 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyMulticenterBondConstraint {
+                self.push(Edit::ModifyMulticenterBondConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project a noncovalent-bond update into checked host-relative edits.
-    pub fn for_noncovalent_bond_update(
+    pub fn update_noncovalent_bond(
+        &mut self,
         id: NoncovalentBondHandle,
         current: &NoncovalentBondAst,
         update: &NoncovalentBondUpdate,
-    ) -> Vec<Self> {
-        let mut edits = Vec::new();
+    ) {
         if let Some(new) = &update.kind {
             if !current.kind.canonical_eq(new) {
-                edits.push(Self::ModifyNoncovalentBondField {
+                self.push(Edit::ModifyNoncovalentBondField {
                     id: id.clone(),
                     change: NoncovalentBondFieldChange::Kind {
                         old: current.kind.clone(),
@@ -1090,26 +1056,25 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyNoncovalentBondConstraint {
+                self.push(Edit::ModifyNoncovalentBondConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project a stereo-atom update into checked host-relative edits.
-    pub fn for_stereo_atom_update(
+    pub fn update_stereo_atom(
+        &mut self,
         id: StereoAtomHandle,
         current: &StereoAtomAst,
         update: &StereoAtomUpdate,
-    ) -> Vec<Self> {
-        let mut edits = Vec::new();
+    ) {
         let updated = current.update(update);
         if !current.configuration.canonical_eq(&updated.configuration) {
-            edits.push(Self::ModifyStereoAtomField {
+            self.push(Edit::ModifyStereoAtomField {
                 id: id.clone(),
                 change: StereoAtomFieldChange::Configuration {
                     old: current.configuration.clone(),
@@ -1126,26 +1091,25 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyStereoAtomConstraint {
+                self.push(Edit::ModifyStereoAtomConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 
     /// Project a stereo-bond update into checked host-relative edits.
-    pub fn for_stereo_bond_update(
+    pub fn update_stereo_bond(
+        &mut self,
         id: StereoBondHandle,
         current: &StereoBondAst,
         update: &StereoBondUpdate,
-    ) -> Vec<Self> {
-        let mut edits = Vec::new();
+    ) {
         let updated = current.update(update);
         if !current.configuration.canonical_eq(&updated.configuration) {
-            edits.push(Self::ModifyStereoBondField {
+            self.push(Edit::ModifyStereoBondField {
                 id: id.clone(),
                 change: StereoBondFieldChange::Configuration {
                     old: current.configuration.clone(),
@@ -1162,14 +1126,13 @@ impl Edit {
                 _ => false,
             };
             if !unchanged {
-                edits.push(Self::ModifyStereoBondConstraint {
+                self.push(Edit::ModifyStereoBondConstraint {
                     id: id.clone(),
                     old,
                     new,
                 });
             }
         }
-        edits
     }
 }
 
@@ -1485,25 +1448,13 @@ mod tests {
         NoncovalentBondConstraintsAst, RingScope, StereoAtomConstraintsAst,
         StereoBondConstraintsAst, StereogenicityAst,
     };
+    use super::super::molecule::{MoleculeAst, MoleculeParts};
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::spin::UnpairedElectronsUpdate;
     use super::super::stereo::{
         StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, Stereogenicity,
     };
     use super::*;
-
-    #[fixture]
-    fn carbon_atom() -> AtomAst {
-        AtomAst::from_element(Element::C)
-    }
-
-    #[fixture]
-    fn single_bond() -> BondAst {
-        BondAst {
-            order: ValueAst::Lit(1),
-            ..BondAst::default()
-        }
-    }
 
     #[rstest]
     #[case::id(AtomHandle::Id(AtomId(3)))]
@@ -2173,56 +2124,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_edit_add_atom(carbon_atom: AtomAst) {
-        assert_eq!(
-            Edit::add_atom(carbon_atom.clone()),
-            Edit::AddAtoms {
-                atoms: vec![carbon_atom],
-            },
-        );
-    }
-
-    #[rstest]
-    fn test_edit_add_bond(single_bond: BondAst) {
-        assert_eq!(
-            Edit::add_bond(
-                AtomHandle::Id(AtomId(0)),
-                AtomHandle::Id(AtomId(1)),
-                single_bond.clone()
-            ),
-            Edit::AddBonds {
-                bonds: vec![AddBond {
-                    endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    ast: single_bond,
-                }],
-            },
-        );
-    }
-
-    #[rstest]
-    fn test_edit_remove_atom() {
-        assert_eq!(
-            Edit::remove_atom(AtomHandle::Id(AtomId(2))),
-            Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(2))],
-                bonds: Vec::new(),
-            },
-        );
-    }
-
-    #[rstest]
-    fn test_edit_remove_bond() {
-        assert_eq!(
-            Edit::remove_bond(BondHandle::Id(BondId(4))),
-            Edit::RemoveTopology {
-                atoms: Vec::new(),
-                bonds: vec![BondHandle::Id(BondId(4))],
-            },
-        );
-    }
-
-    #[rstest]
-    fn test_edit_for_atom_update() {
+    fn test_edits_update_atom() {
         let current = AtomAst::from_element(Element::C)
             .with_isotope_mass(12_u32)
             .with_charge(0_i64)
@@ -2245,9 +2147,12 @@ mod tests {
                 AtomConstraintAst::degree(2_i64),
             ]),
         };
+        let mut edits = Edits::new();
+        edits.update_atom(AtomHandle::Id(AtomId(7)), &current, &update);
+
         assert_eq!(
-            Edit::for_atom_update(AtomHandle::Id(AtomId(7)), &current, &update),
-            vec![
+            edits.as_slice(),
+            [
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(7)),
                     change: AtomFieldChange::Element {
@@ -2302,6 +2207,20 @@ mod tests {
                 },
             ]
         );
+
+        let expected = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![current.clone()],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("atom update edits should apply");
+
+        assert_eq!(editor.atom(AtomId(0)).ast, &expected);
     }
 
     #[rustfmt::skip]
@@ -2309,15 +2228,15 @@ mod tests {
     #[case::empty(AtomAst::from_element(Element::C), AtomUpdate::default())]
     #[case::canonical_field(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_atom_update_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
-        assert_eq!(
-            Edit::for_atom_update(AtomHandle::Id(AtomId(0)), &current, &update),
-            Vec::new()
-        );
+    fn test_edits_update_atom_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
+        let mut edits = Edits::new();
+        edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rstest]
-    fn test_edit_for_bond_update() {
+    fn test_edits_update_bond() {
         let current = BondAst::from_order(1)
             .with_charge(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
@@ -2337,9 +2256,12 @@ mod tests {
                 BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             ]),
         };
+        let mut edits = Edits::new();
+        edits.update_bond(BondHandle::Id(BondId(7)), &current, &update);
+
         assert_eq!(
-            Edit::for_bond_update(BondHandle::Id(BondId(7)), &current, &update),
-            vec![
+            edits.as_slice(),
+            [
                 Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(7)),
                     change: BondFieldChange::Order {
@@ -2376,6 +2298,21 @@ mod tests {
                 },
             ]
         );
+
+        let expected = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::default(), AtomAst::default()],
+            bonds: vec![(AtomId(0), AtomId(1), current.clone())],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("bond update edits should apply");
+
+        assert_eq!(editor.bond(BondId(0)).ast, &expected);
     }
 
     #[rustfmt::skip]
@@ -2383,11 +2320,11 @@ mod tests {
     #[case::empty(BondAst::from_order(1), BondUpdate::default())]
     #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_bond_update_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
-        assert_eq!(
-            Edit::for_bond_update(BondHandle::Id(BondId(0)), &current, &update),
-            Vec::new()
-        );
+    fn test_edits_update_bond_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
+        let mut edits = Edits::new();
+        edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rustfmt::skip]
@@ -2418,15 +2355,38 @@ mod tests {
             },
         ],
     )]
-    fn test_edit_for_dative_bond_update(
+    fn test_edits_update_dative_bond(
         #[case] current: DativeBondAst,
         #[case] update: DativeBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
-        assert_eq!(
-            Edit::for_dative_bond_update(DativeBondHandle::Id(DativeBondId(7)), &current, &update),
-            expected,
+        let mut edits = Edits::new();
+        edits.update_dative_bond(
+            DativeBondHandle::Id(DativeBondId(7)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits.as_slice(), expected);
+
+        let expected_ast = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::default(), AtomAst::default()],
+            dative: vec![(vec![AtomId(0)], AtomId(1), current.clone())],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_dative_bond(
+            DativeBondHandle::Id(DativeBondId(0)),
+            &current,
+            &update,
+        );
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("dative-bond update edits should apply");
+
+        assert_eq!(editor.dative_bond(DativeBondId(0)).ast, &expected_ast);
     }
 
     #[rustfmt::skip]
@@ -2434,14 +2394,18 @@ mod tests {
     #[case::empty(DativeBondAst::from_order(1), DativeBondUpdate::default())]
     #[case::canonical_field(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(ValueAst::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(DativeBondAst::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_dative_bond_update_identity(
+    fn test_edits_update_dative_bond_identity(
         #[case] current: DativeBondAst,
         #[case] update: DativeBondUpdate,
     ) {
-        assert_eq!(
-            Edit::for_dative_bond_update(DativeBondHandle::Id(DativeBondId(0)), &current, &update),
-            Vec::new(),
+        let mut edits = Edits::new();
+        edits.update_dative_bond(
+            DativeBondHandle::Id(DativeBondId(0)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rustfmt::skip]
@@ -2474,18 +2438,44 @@ mod tests {
             },
         ],
     )]
-    fn test_edit_for_aromatic_system_update(
+    fn test_edits_update_aromatic_system(
         #[case] current: AromaticSystemAst,
         #[case] update: AromaticSystemUpdate,
         #[case] expected: Vec<Edit>,
     ) {
+        let mut edits = Edits::new();
+        edits.update_aromatic_system(
+            AromaticSystemHandle::Id(AromaticSystemId(7)),
+            &current,
+            &update,
+        );
+
+        assert_eq!(edits.as_slice(), expected);
+
+        let expected_ast = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::default(),
+                AtomAst::default(),
+                AtomAst::default(),
+            ],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], current.clone())],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_aromatic_system(
+            AromaticSystemHandle::Id(AromaticSystemId(0)),
+            &current,
+            &update,
+        );
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("aromatic-system update edits should apply");
+
         assert_eq!(
-            Edit::for_aromatic_system_update(
-                AromaticSystemHandle::Id(AromaticSystemId(7)),
-                &current,
-                &update,
-            ),
-            expected,
+            editor.aromatic_system(AromaticSystemId(0)).ast,
+            &expected_ast,
         );
     }
 
@@ -2494,18 +2484,18 @@ mod tests {
     #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
     #[case::canonical_field(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_aromatic_system_update_identity(
+    fn test_edits_update_aromatic_system_identity(
         #[case] current: AromaticSystemAst,
         #[case] update: AromaticSystemUpdate,
     ) {
-        assert_eq!(
-            Edit::for_aromatic_system_update(
-                AromaticSystemHandle::Id(AromaticSystemId(0)),
-                &current,
-                &update,
-            ),
-            Vec::new(),
+        let mut edits = Edits::new();
+        edits.update_aromatic_system(
+            AromaticSystemHandle::Id(AromaticSystemId(0)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rustfmt::skip]
@@ -2538,18 +2528,44 @@ mod tests {
             },
         ],
     )]
-    fn test_edit_for_multicenter_bond_update(
+    fn test_edits_update_multicenter_bond(
         #[case] current: MulticenterBondAst,
         #[case] update: MulticenterBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
+        let mut edits = Edits::new();
+        edits.update_multicenter_bond(
+            MulticenterBondHandle::Id(MulticenterBondId(7)),
+            &current,
+            &update,
+        );
+
+        assert_eq!(edits.as_slice(), expected);
+
+        let expected_ast = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::default(),
+                AtomAst::default(),
+                AtomAst::default(),
+            ],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], current.clone())],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_multicenter_bond(
+            MulticenterBondHandle::Id(MulticenterBondId(0)),
+            &current,
+            &update,
+        );
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("multicenter-bond update edits should apply");
+
         assert_eq!(
-            Edit::for_multicenter_bond_update(
-                MulticenterBondHandle::Id(MulticenterBondId(7)),
-                &current,
-                &update,
-            ),
-            expected,
+            editor.multicenter_bond(MulticenterBondId(0)).ast,
+            &expected_ast,
         );
     }
 
@@ -2558,18 +2574,18 @@ mod tests {
     #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
     #[case::canonical_field(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_multicenter_bond_update_identity(
+    fn test_edits_update_multicenter_bond_identity(
         #[case] current: MulticenterBondAst,
         #[case] update: MulticenterBondUpdate,
     ) {
-        assert_eq!(
-            Edit::for_multicenter_bond_update(
-                MulticenterBondHandle::Id(MulticenterBondId(0)),
-                &current,
-                &update,
-            ),
-            Vec::new(),
+        let mut edits = Edits::new();
+        edits.update_multicenter_bond(
+            MulticenterBondHandle::Id(MulticenterBondId(0)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rustfmt::skip]
@@ -2592,18 +2608,40 @@ mod tests {
             },
         ],
     )]
-    fn test_edit_for_noncovalent_bond_update(
+    fn test_edits_update_noncovalent_bond(
         #[case] current: NoncovalentBondAst,
         #[case] update: NoncovalentBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
+        let mut edits = Edits::new();
+        edits.update_noncovalent_bond(
+            NoncovalentBondHandle::Id(NoncovalentBondId(7)),
+            &current,
+            &update,
+        );
+
+        assert_eq!(edits.as_slice(), expected);
+
+        let expected_ast = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::default(), AtomAst::default()],
+            noncovalent: vec![(AtomId(0), AtomId(1), current.clone())],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_noncovalent_bond(
+            NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            &current,
+            &update,
+        );
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("noncovalent-bond update edits should apply");
+
         assert_eq!(
-            Edit::for_noncovalent_bond_update(
-                NoncovalentBondHandle::Id(NoncovalentBondId(7)),
-                &current,
-                &update,
-            ),
-            expected,
+            editor.noncovalent_bond(NoncovalentBondId(0)).ast,
+            &expected_ast,
         );
     }
 
@@ -2612,18 +2650,18 @@ mod tests {
     #[case::empty(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
     #[case::same_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
     #[case::absent_constraint_removal(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_noncovalent_bond_update_identity(
+    fn test_edits_update_noncovalent_bond_identity(
         #[case] current: NoncovalentBondAst,
         #[case] update: NoncovalentBondUpdate,
     ) {
-        assert_eq!(
-            Edit::for_noncovalent_bond_update(
-                NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                &current,
-                &update,
-            ),
-            Vec::new(),
+        let mut edits = Edits::new();
+        edits.update_noncovalent_bond(
+            NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rustfmt::skip]
@@ -2646,19 +2684,44 @@ mod tests {
             },
         ],
     )]
-    fn test_edit_for_stereo_atom_update(
+    fn test_edits_update_stereo_atom(
         #[case] current: StereoAtomAst,
         #[case] update: StereoAtomUpdate,
         #[case] expected: Vec<Edit>,
     ) {
-        assert_eq!(
-            Edit::for_stereo_atom_update(
-                StereoAtomHandle::Id(StereoAtomId(7)),
-                &current,
-                &update,
-            ),
-            expected,
+        let mut edits = Edits::new();
+        edits.update_stereo_atom(
+            StereoAtomHandle::Id(StereoAtomId(7)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits.as_slice(), expected);
+
+        let expected_ast = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::default(); 5],
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|index| StereoLigand::new(AtomId(index), StereoLigandKind::Atom))
+                    .collect(),
+                current.clone(),
+            )],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_stereo_atom(
+            StereoAtomHandle::Id(StereoAtomId(0)),
+            &current,
+            &update,
+        );
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("stereo-atom update edits should apply");
+
+        assert_eq!(editor.stereo_atom(StereoAtomId(0)).ast, &expected_ast);
     }
 
     #[rustfmt::skip]
@@ -2666,18 +2729,18 @@ mod tests {
     #[case::empty(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
     #[case::relative(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
     #[case::absent_constraint_removal(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_stereo_atom_update_identity(
+    fn test_edits_update_stereo_atom_identity(
         #[case] current: StereoAtomAst,
         #[case] update: StereoAtomUpdate,
     ) {
-        assert_eq!(
-            Edit::for_stereo_atom_update(
-                StereoAtomHandle::Id(StereoAtomId(0)),
-                &current,
-                &update,
-            ),
-            Vec::new(),
+        let mut edits = Edits::new();
+        edits.update_stereo_atom(
+            StereoAtomHandle::Id(StereoAtomId(0)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rustfmt::skip]
@@ -2700,19 +2763,45 @@ mod tests {
             },
         ],
     )]
-    fn test_edit_for_stereo_bond_update(
+    fn test_edits_update_stereo_bond(
         #[case] current: StereoBondAst,
         #[case] update: StereoBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
-        assert_eq!(
-            Edit::for_stereo_bond_update(
-                StereoBondHandle::Id(StereoBondId(7)),
-                &current,
-                &update,
-            ),
-            expected,
+        let mut edits = Edits::new();
+        edits.update_stereo_bond(
+            StereoBondHandle::Id(StereoBondId(7)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits.as_slice(), expected);
+
+        let expected_ast = current.update(&update);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::default(); 6],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            stereo_bonds: vec![(
+                BondId(0),
+                (2..=5)
+                    .map(|index| StereoLigand::new(AtomId(index), StereoLigandKind::Atom))
+                    .collect(),
+                current.clone(),
+            )],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let mut applied_edits = Edits::new();
+        applied_edits.update_stereo_bond(
+            StereoBondHandle::Id(StereoBondId(0)),
+            &current,
+            &update,
+        );
+        editor
+            .transact(applied_edits.into_iter().collect())
+            .expect("stereo-bond update edits should apply");
+
+        assert_eq!(editor.stereo_bond(StereoBondId(0)).ast, &expected_ast);
     }
 
     #[rustfmt::skip]
@@ -2720,18 +2809,18 @@ mod tests {
     #[case::empty(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
     #[case::relative(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
     #[case::absent_constraint_removal(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
-    fn test_edit_for_stereo_bond_update_identity(
+    fn test_edits_update_stereo_bond_identity(
         #[case] current: StereoBondAst,
         #[case] update: StereoBondUpdate,
     ) {
-        assert_eq!(
-            Edit::for_stereo_bond_update(
-                StereoBondHandle::Id(StereoBondId(0)),
-                &current,
-                &update,
-            ),
-            Vec::new(),
+        let mut edits = Edits::new();
+        edits.update_stereo_bond(
+            StereoBondHandle::Id(StereoBondId(0)),
+            &current,
+            &update,
         );
+
+        assert_eq!(edits, Edits::new());
     }
 
     #[rstest]
