@@ -324,6 +324,8 @@ def test_deferred_member(owner, name):
             umol.MoleculeAst.from_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
+        (umol.MoleculeAst.edit, "(self, /)"),
+        (umol.MoleculeAst.apply, "(self, /, edits)"),
         (umol.MoleculeAst.combine, "(self, /, other)"),
         (umol.MoleculeAst.combine_from, "(self, /, other)"),
         (umol.MoleculeAst.combine_all, "(molecules)"),

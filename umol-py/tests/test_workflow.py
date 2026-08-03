@@ -7,9 +7,15 @@ from umol import (
     AromaticityFailurePolicy,
     AromaticityMismatchPolicy,
     AromaticityResolveConfig,
+    AtomAst,
+    AtomFieldChange,
+    AtomUpdate,
     AutomorphismAlgorithm,
+    BondAst,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
+    Edit,
+    Edits,
     HashedFingerprintConfig,
     InvalidStructureError,
     MaximumIndependentSetAlgorithm,
@@ -32,6 +38,7 @@ from umol import (
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
     SubstructureSearchConfig,
+    TransactionError,
     UnderdeterminedError,
     ValueAst,
 )
@@ -117,6 +124,68 @@ def test_resolved_smiles_workflow():
             chemistry_model=chemistry_model,
             resolve_config=resolve_config,
         )
+
+
+def test_molecule_editing_workflow():
+    molecule = MoleculeAst.parse('{:atoms ["N#h3"]}')
+    original = MoleculeAst.parse('{:atoms ["N#h3"]}')
+    expected = MoleculeAst.parse(
+        '{:atoms ["N#h2" "C#h3"] :bonds [[0 1 "1"]]}'
+    )
+    edits = Edits()
+    edits.update_atom(
+        0,
+        AtomAst.parse("N#h3"),
+        AtomUpdate(implicit_hydrogens=2),
+    )
+    methyl = edits.add_atom(AtomAst.parse("C#h3"))
+    edits.add_bond(0, methyl, BondAst(1))
+
+    rendered = edits.render()
+    parsed = Edits.parse(rendered)
+    applied = molecule.apply(parsed)
+
+    assert rendered == (
+        '[{:atom {:modify [0 {:expect "#h3" :update "#h2"}]}} '
+        '{:atom {:add "C#h3"}} '
+        '{:bond {:add [0 {:new 0} :single]}}]'
+    )
+    assert parsed == edits
+    assert parsed.render() == rendered
+    assert applied == expected
+    assert molecule == original
+
+    editor = molecule.edit()
+    transaction = editor.transact(parsed)
+
+    assert editor.snapshot() == expected
+    assert molecule == original
+
+    transaction.rollback(editor)
+
+    assert editor.snapshot() == original
+    assert editor.build() == original
+    assert molecule == original
+
+    failing = Edits()
+    failing.add_atom(AtomAst.parse("O"))
+    failing.append(
+        Edit.ModifyAtomField(
+            id=7,
+            change=AtomFieldChange.Charge(
+                old=ValueAst.Lit(0),
+                new=ValueAst.Lit(1),
+            ),
+        )
+    )
+
+    with pytest.raises(
+        TransactionError,
+        match="^atom handle 7 is out of range for 1 entries$",
+    ):
+        molecule.apply(failing)
+
+    assert molecule == original
 
 
 def test_fingerprint_workflow():

@@ -1,6 +1,6 @@
 # 179 — Expose editing and transactions on the Python surface
 
-Status: Proposed
+Status: Completed
 Date: 2026-08-02
 Relates: [178](178-python-lattice-ops-2026-08-01.md), [043](043-mutative-undoable-mutation-2025-12-23.md)
 
@@ -708,6 +708,7 @@ the section ships.
   `umol-ast` unit/property suites, the `umol-py` Rust tests, rebuild the extension under the Python
   3.13 virtual environment, and run the complete Python suite. **Additive (green).**
   [dep: S4e, S5d]
+  **Done.**
 
 **Critical path:** S0b → S1a → S1b → S1c → S1d → S1e → S1f → S1g → S1h → S1i →
 S2a → S2b/S2c/S2d → S2e → S2f → S2g → S2h → S4a → S4b → S4c → S4d → S4e → S5a → S5b →
