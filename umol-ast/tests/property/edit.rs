@@ -4,6 +4,218 @@ use umol_ast::ast::Transaction;
 use crate::strategies::*;
 
 proptest! {
+    /// Creation ordinals are reconstructed solely from the ordered entries: uninterrupted
+    /// construction, raw pushes, and `FromIterator` agree for arbitrary interleavings, with one
+    /// independent namespace per entity kind.
+    #[test]
+    fn test_edits_creation_ordinals(
+        kinds in prop::collection::vec(
+            prop::sample::select(vec![
+                EntityKind::Atom,
+                EntityKind::Bond,
+                EntityKind::DativeBond,
+                EntityKind::AromaticSystem,
+                EntityKind::MulticenterBond,
+                EntityKind::NoncovalentBond,
+                EntityKind::StereoAtom,
+                EntityKind::StereoBond,
+            ]),
+            0..64,
+        ),
+    ) {
+        let mut direct = Edits::new();
+        let mut entries = Vec::with_capacity(kinds.len());
+        let mut counts = [0usize; 8];
+        for kind in kinds {
+            match kind {
+                EntityKind::Atom => {
+                    counts[0] += 1;
+                    direct.add_atom(AtomAst::default());
+                    entries.push(Edit::AddAtoms { atoms: vec![AtomAst::default()] });
+                }
+                EntityKind::Bond => {
+                    counts[1] += 1;
+                    direct.add_bond(
+                        AtomHandle::Id(AtomId(0)),
+                        AtomHandle::Id(AtomId(1)),
+                        BondAst::default(),
+                    );
+                    entries.push(Edit::AddBonds {
+                        bonds: vec![AddBond {
+                            endpoints: [
+                                AtomHandle::Id(AtomId(0)),
+                                AtomHandle::Id(AtomId(1)),
+                            ],
+                            ast: BondAst::default(),
+                        }],
+                    });
+                }
+                EntityKind::DativeBond => {
+                    counts[2] += 1;
+                    direct.add_dative_bond(Vec::new(), DativeBondAst::default());
+                    entries.push(Edit::AddDativeBond {
+                        atoms: Vec::new(),
+                        ast: DativeBondAst::default(),
+                    });
+                }
+                EntityKind::AromaticSystem => {
+                    counts[3] += 1;
+                    direct.add_aromatic_system(Vec::new(), AromaticSystemAst::default());
+                    entries.push(Edit::AddAromaticSystem {
+                        atoms: Vec::new(),
+                        ast: AromaticSystemAst::default(),
+                    });
+                }
+                EntityKind::MulticenterBond => {
+                    counts[4] += 1;
+                    direct.add_multicenter_bond(Vec::new(), MulticenterBondAst::default());
+                    entries.push(Edit::AddMulticenterBond {
+                        atoms: Vec::new(),
+                        ast: MulticenterBondAst::default(),
+                    });
+                }
+                EntityKind::NoncovalentBond => {
+                    counts[5] += 1;
+                    direct.add_noncovalent_bond(
+                        [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        NoncovalentBondAst::default(),
+                    );
+                    entries.push(Edit::AddNoncovalentBond {
+                        atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        ast: NoncovalentBondAst::default(),
+                    });
+                }
+                EntityKind::StereoAtom => {
+                    counts[6] += 1;
+                    direct.add_stereo_atom(
+                        AtomHandle::Id(AtomId(0)),
+                        Vec::new(),
+                        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    );
+                    entries.push(Edit::AddStereoAtom {
+                        site: AtomHandle::Id(AtomId(0)),
+                        ligands: Vec::new(),
+                        ast: StereoAtomAst::new(
+                            StereoKind::Tetrahedral,
+                            StereoCoset::Lit(0),
+                        ),
+                    });
+                }
+                EntityKind::StereoBond => {
+                    counts[7] += 1;
+                    direct.add_stereo_bond(
+                        BondHandle::Id(BondId(0)),
+                        Vec::new(),
+                        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    );
+                    entries.push(Edit::AddStereoBond {
+                        site: BondHandle::Id(BondId(0)),
+                        ligands: Vec::new(),
+                        ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    });
+                }
+            }
+        }
+
+        let mut pushed = Edits::new();
+        for entry in entries.clone() {
+            pushed.push(entry);
+        }
+        let mut collected: Edits = entries.clone().into_iter().collect();
+        prop_assert_eq!(direct.as_slice(), entries.as_slice());
+        prop_assert_eq!(pushed.as_slice(), entries.as_slice());
+        prop_assert_eq!(collected.as_slice(), entries.as_slice());
+
+        let expected = (
+            AtomHandle::New(counts[0]),
+            BondHandle::New(counts[1]),
+            DativeBondHandle::New(counts[2]),
+            AromaticSystemHandle::New(counts[3]),
+            MulticenterBondHandle::New(counts[4]),
+            NoncovalentBondHandle::New(counts[5]),
+            StereoAtomHandle::New(counts[6]),
+            StereoBondHandle::New(counts[7]),
+        );
+        let direct_next = (
+            direct.add_atom(AtomAst::default()),
+            direct.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+                BondAst::default(),
+            ),
+            direct.add_dative_bond(Vec::new(), DativeBondAst::default()),
+            direct.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
+            direct.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            direct.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                NoncovalentBondAst::default(),
+            ),
+            direct.add_stereo_atom(
+                AtomHandle::Id(AtomId(0)),
+                Vec::new(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            direct.add_stereo_bond(
+                BondHandle::Id(BondId(0)),
+                Vec::new(),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            ),
+        );
+        let pushed_next = (
+            pushed.add_atom(AtomAst::default()),
+            pushed.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+                BondAst::default(),
+            ),
+            pushed.add_dative_bond(Vec::new(), DativeBondAst::default()),
+            pushed.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
+            pushed.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            pushed.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                NoncovalentBondAst::default(),
+            ),
+            pushed.add_stereo_atom(
+                AtomHandle::Id(AtomId(0)),
+                Vec::new(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            pushed.add_stereo_bond(
+                BondHandle::Id(BondId(0)),
+                Vec::new(),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            ),
+        );
+        let collected_next = (
+            collected.add_atom(AtomAst::default()),
+            collected.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+                BondAst::default(),
+            ),
+            collected.add_dative_bond(Vec::new(), DativeBondAst::default()),
+            collected.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
+            collected.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            collected.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                NoncovalentBondAst::default(),
+            ),
+            collected.add_stereo_atom(
+                AtomHandle::Id(AtomId(0)),
+                Vec::new(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            collected.add_stereo_bond(
+                BondHandle::Id(BondId(0)),
+                Vec::new(),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            ),
+        );
+        prop_assert_eq!(&direct_next, &expected);
+        prop_assert_eq!(&pushed_next, &expected);
+        prop_assert_eq!(&collected_next, &expected);
+    }
+
     /// `lift_constraints` followed by `inline_constraints` is idempotent:
     /// running the pair twice yields the same `MoleculeAst` as running it
     /// once. This holds even if the original AST has duplicate (entity, kind)

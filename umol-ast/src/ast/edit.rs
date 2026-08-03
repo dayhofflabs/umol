@@ -1,12 +1,14 @@
 //! Edit vocabulary for transactional molecule mutation.
 //!
-//! The `Edit` enum is the data-form vocabulary for `MoleculeEditor::transact`
-//! `Edit` is caller-facing mutation data; realized rollback data belongs to
-//! the `Undo` journal.
+//! The `Edit` enum is the caller-facing data-form mutation vocabulary; realized
+//! rollback data belongs to the `Undo` journal.
 //!
-//! Refs (`AtomHandle`, `BondHandle`, ...) are symbolic and appear only inside
-//! `Edit`. `Id(_)` references an existing entity; `New(N)` references the
-//! entity created by the Nth Edit earlier in the same batch.
+//! Handles (`AtomHandle`, `BondHandle`, ...) are symbolic. `Id(_)` references an
+//! existing entity; `New(N)` references the Nth same-kind entity created earlier
+//! in the same [`Edits`] sequence.
+
+use std::slice::Iter;
+use std::vec::IntoIter;
 
 use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 use super::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
@@ -257,9 +259,8 @@ pub struct AddBond {
     pub ast: BondAst,
 }
 
-/// Single mutation operation. Compose `Vec<Edit>` into a transaction batch
-/// Topology edits are bulk primitives; single-item helpers are constructors on
-/// `Edit`.
+/// One raw mutation entry in an [`Edits`] transaction batch. Topology and
+/// removal entries retain their semantic batching.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
     // Atoms / bonds
@@ -413,6 +414,311 @@ pub enum Edit {
     RemoveMoleculeConstraint {
         constraint: Constraint,
     },
+}
+
+/// An ordered batch of host-specific molecule edits.
+///
+/// Order is semantic: later entries may refer to entities created by earlier entries. For every
+/// entity kind, `Id(n)` names entity `n` in the transaction's initial host and `New(n)` names the
+/// `n`th same-kind creation in this sequence. Creation ordinals are independent between kinds,
+/// never reused, and are not changed by removals. `Edits` issues these symbolic handles only;
+/// transaction application owns their concrete ids, liveness, and compaction in a particular host.
+///
+/// The public mutation surface is append-only. Mutable iteration, insertion, removal, reordering,
+/// and concatenation are deliberately absent because they could invalidate issued `New(n)` handles.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Edits {
+    edits: Vec<Edit>,
+    created_atoms: usize,
+    created_bonds: usize,
+    created_dative_bonds: usize,
+    created_aromatic_systems: usize,
+    created_multicenter_bonds: usize,
+    created_noncovalent_bonds: usize,
+    created_stereo_atoms: usize,
+    created_stereo_bonds: usize,
+}
+
+impl Edits {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn as_slice(&self) -> &[Edit] {
+        &self.edits
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.edits.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.edits.len()
+    }
+
+    pub fn iter(&self) -> Iter<'_, Edit> {
+        self.edits.iter()
+    }
+
+    /// Append one raw entry and account for every entity it creates.
+    pub fn push(&mut self, edit: Edit) {
+        match &edit {
+            Edit::AddAtoms { atoms } => self.created_atoms += atoms.len(),
+            Edit::AddBonds { bonds } => self.created_bonds += bonds.len(),
+            Edit::AddDativeBond { .. } => self.created_dative_bonds += 1,
+            Edit::AddAromaticSystem { .. } => self.created_aromatic_systems += 1,
+            Edit::AddMulticenterBond { .. } => self.created_multicenter_bonds += 1,
+            Edit::AddNoncovalentBond { .. } => self.created_noncovalent_bonds += 1,
+            Edit::AddStereoAtom { .. } => self.created_stereo_atoms += 1,
+            Edit::AddStereoBond { .. } => self.created_stereo_bonds += 1,
+            _ => {}
+        }
+        self.edits.push(edit);
+    }
+
+    pub fn add_atom(&mut self, ast: AtomAst) -> AtomHandle {
+        let handle = AtomHandle::New(self.created_atoms);
+        self.push(Edit::AddAtoms { atoms: vec![ast] });
+        handle
+    }
+
+    pub fn add_atoms(&mut self, atoms: impl IntoIterator<Item = AtomAst>) -> Vec<AtomHandle> {
+        let atoms: Vec<_> = atoms.into_iter().collect();
+        let handles = (self.created_atoms..self.created_atoms + atoms.len())
+            .map(AtomHandle::New)
+            .collect();
+        self.push(Edit::AddAtoms { atoms });
+        handles
+    }
+
+    pub fn add_bond(&mut self, first: AtomHandle, second: AtomHandle, ast: BondAst) -> BondHandle {
+        let handle = BondHandle::New(self.created_bonds);
+        self.push(Edit::AddBonds {
+            bonds: vec![AddBond {
+                endpoints: [first, second],
+                ast,
+            }],
+        });
+        handle
+    }
+
+    pub fn add_bonds(&mut self, bonds: impl IntoIterator<Item = AddBond>) -> Vec<BondHandle> {
+        let bonds: Vec<_> = bonds.into_iter().collect();
+        let handles = (self.created_bonds..self.created_bonds + bonds.len())
+            .map(BondHandle::New)
+            .collect();
+        self.push(Edit::AddBonds { bonds });
+        handles
+    }
+
+    pub fn add_dative_bond(
+        &mut self,
+        atoms: Vec<AtomHandle>,
+        ast: DativeBondAst,
+    ) -> DativeBondHandle {
+        let handle = DativeBondHandle::New(self.created_dative_bonds);
+        self.push(Edit::AddDativeBond { atoms, ast });
+        handle
+    }
+
+    pub fn add_dative_bonds(
+        &mut self,
+        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, DativeBondAst)>,
+    ) -> Vec<DativeBondHandle> {
+        bonds
+            .into_iter()
+            .map(|(atoms, ast)| self.add_dative_bond(atoms, ast))
+            .collect()
+    }
+
+    pub fn add_aromatic_system(
+        &mut self,
+        atoms: Vec<AtomHandle>,
+        ast: AromaticSystemAst,
+    ) -> AromaticSystemHandle {
+        let handle = AromaticSystemHandle::New(self.created_aromatic_systems);
+        self.push(Edit::AddAromaticSystem { atoms, ast });
+        handle
+    }
+
+    pub fn add_aromatic_systems(
+        &mut self,
+        systems: impl IntoIterator<Item = (Vec<AtomHandle>, AromaticSystemAst)>,
+    ) -> Vec<AromaticSystemHandle> {
+        systems
+            .into_iter()
+            .map(|(atoms, ast)| self.add_aromatic_system(atoms, ast))
+            .collect()
+    }
+
+    pub fn add_multicenter_bond(
+        &mut self,
+        atoms: Vec<AtomHandle>,
+        ast: MulticenterBondAst,
+    ) -> MulticenterBondHandle {
+        let handle = MulticenterBondHandle::New(self.created_multicenter_bonds);
+        self.push(Edit::AddMulticenterBond { atoms, ast });
+        handle
+    }
+
+    pub fn add_multicenter_bonds(
+        &mut self,
+        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, MulticenterBondAst)>,
+    ) -> Vec<MulticenterBondHandle> {
+        bonds
+            .into_iter()
+            .map(|(atoms, ast)| self.add_multicenter_bond(atoms, ast))
+            .collect()
+    }
+
+    pub fn add_noncovalent_bond(
+        &mut self,
+        atoms: [AtomHandle; 2],
+        ast: NoncovalentBondAst,
+    ) -> NoncovalentBondHandle {
+        let handle = NoncovalentBondHandle::New(self.created_noncovalent_bonds);
+        self.push(Edit::AddNoncovalentBond { atoms, ast });
+        handle
+    }
+
+    pub fn add_noncovalent_bonds(
+        &mut self,
+        bonds: impl IntoIterator<Item = ([AtomHandle; 2], NoncovalentBondAst)>,
+    ) -> Vec<NoncovalentBondHandle> {
+        bonds
+            .into_iter()
+            .map(|(atoms, ast)| self.add_noncovalent_bond(atoms, ast))
+            .collect()
+    }
+
+    pub fn add_stereo_atom(
+        &mut self,
+        site: AtomHandle,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
+        ast: StereoAtomAst,
+    ) -> StereoAtomHandle {
+        let handle = StereoAtomHandle::New(self.created_stereo_atoms);
+        self.push(Edit::AddStereoAtom { site, ligands, ast });
+        handle
+    }
+
+    pub fn add_stereo_atoms(
+        &mut self,
+        atoms: impl IntoIterator<
+            Item = (
+                AtomHandle,
+                Vec<(AtomHandle, StereoLigandKind)>,
+                StereoAtomAst,
+            ),
+        >,
+    ) -> Vec<StereoAtomHandle> {
+        atoms
+            .into_iter()
+            .map(|(site, ligands, ast)| self.add_stereo_atom(site, ligands, ast))
+            .collect()
+    }
+
+    pub fn add_stereo_bond(
+        &mut self,
+        site: BondHandle,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
+        ast: StereoBondAst,
+    ) -> StereoBondHandle {
+        let handle = StereoBondHandle::New(self.created_stereo_bonds);
+        self.push(Edit::AddStereoBond { site, ligands, ast });
+        handle
+    }
+
+    pub fn add_stereo_bonds(
+        &mut self,
+        bonds: impl IntoIterator<
+            Item = (
+                BondHandle,
+                Vec<(AtomHandle, StereoLigandKind)>,
+                StereoBondAst,
+            ),
+        >,
+    ) -> Vec<StereoBondHandle> {
+        bonds
+            .into_iter()
+            .map(|(site, ligands, ast)| self.add_stereo_bond(site, ligands, ast))
+            .collect()
+    }
+
+    pub fn remove_atom(&mut self, id: AtomHandle) {
+        self.remove_topology(vec![id], Vec::new());
+    }
+
+    pub fn remove_bond(&mut self, id: BondHandle) {
+        self.remove_topology(Vec::new(), vec![id]);
+    }
+
+    pub fn remove_topology(&mut self, atoms: Vec<AtomHandle>, bonds: Vec<BondHandle>) {
+        self.push(Edit::RemoveTopology { atoms, bonds });
+    }
+
+    pub fn remove_dative_bonds(
+        &mut self,
+        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondAst)>,
+    ) {
+        self.push(Edit::RemoveDativeBonds { removes });
+    }
+
+    pub fn remove_aromatic_systems(
+        &mut self,
+        removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemAst)>,
+    ) {
+        self.push(Edit::RemoveAromaticSystems { removes });
+    }
+
+    pub fn remove_multicenter_bonds(
+        &mut self,
+        removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondAst)>,
+    ) {
+        self.push(Edit::RemoveMulticenterBonds { removes });
+    }
+
+    pub fn remove_noncovalent_bonds(
+        &mut self,
+        removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondAst)>,
+    ) {
+        self.push(Edit::RemoveNoncovalentBonds { removes });
+    }
+
+    pub fn remove_stereo_atoms(&mut self, removes: Vec<StereoAtomRemoval>) {
+        self.push(Edit::RemoveStereoAtoms { removes });
+    }
+
+    pub fn remove_stereo_bonds(&mut self, removes: Vec<StereoBondRemoval>) {
+        self.push(Edit::RemoveStereoBonds { removes });
+    }
+
+    pub fn add_molecule_constraint(&mut self, constraint: Constraint) {
+        self.push(Edit::AddMoleculeConstraint { constraint });
+    }
+
+    pub fn remove_molecule_constraint(&mut self, constraint: Constraint) {
+        self.push(Edit::RemoveMoleculeConstraint { constraint });
+    }
+}
+
+impl FromIterator<Edit> for Edits {
+    fn from_iter<I: IntoIterator<Item = Edit>>(iter: I) -> Self {
+        let mut edits = Self::new();
+        for edit in iter {
+            edits.push(edit);
+        }
+        edits
+    }
+}
+
+impl IntoIterator for Edits {
+    type Item = Edit;
+    type IntoIter = IntoIter<Edit>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.edits.into_iter()
+    }
 }
 
 impl Edit {
@@ -1175,8 +1481,9 @@ mod tests {
     use super::super::boolean::BooleanAst;
     use super::super::constraint::{
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst,
-        DativeBondConstraintsAst, MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst,
-        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereogenicityAst,
+        DativeBondConstraintsAst, MoleculeConstraint, MulticenterBondConstraintsAst,
+        NoncovalentBondConstraintsAst, RingScope, StereoAtomConstraintsAst,
+        StereoBondConstraintsAst, StereogenicityAst,
     };
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::spin::UnpairedElectronsUpdate;
@@ -1277,6 +1584,592 @@ mod tests {
     ) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    fn test_edits_new() {
+        let edits = Edits::new();
+        assert!(edits.is_empty());
+        assert_eq!(
+            edits,
+            Edits {
+                edits: Vec::new(),
+                created_atoms: 0,
+                created_bonds: 0,
+                created_dative_bonds: 0,
+                created_aromatic_systems: 0,
+                created_multicenter_bonds: 0,
+                created_noncovalent_bonds: 0,
+                created_stereo_atoms: 0,
+                created_stereo_bonds: 0,
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_edits_add_methods() {
+        let atom = AtomAst::from_element(Element::C);
+        let bond = BondAst::from_order(1);
+        let dative = DativeBondAst::default();
+        let aromatic = AromaticSystemAst::default();
+        let multicenter = MulticenterBondAst::default();
+        let noncovalent = NoncovalentBondAst::default();
+        let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0));
+        let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0));
+        let mut edits = Edits::new();
+
+        assert_eq!(edits.add_atom(atom.clone()), AtomHandle::New(0));
+        assert_eq!(
+            edits.add_dative_bond(vec![AtomHandle::Id(AtomId(0))], dative.clone()),
+            DativeBondHandle::New(0),
+        );
+        assert_eq!(
+            edits.add_bond(AtomHandle::Id(AtomId(0)), AtomHandle::New(0), bond.clone(),),
+            BondHandle::New(0),
+        );
+        assert_eq!(
+            edits.add_aromatic_system(vec![AtomHandle::New(0)], aromatic.clone()),
+            AromaticSystemHandle::New(0),
+        );
+        assert_eq!(
+            edits.add_multicenter_bond(vec![AtomHandle::New(0)], multicenter.clone()),
+            MulticenterBondHandle::New(0),
+        );
+        assert_eq!(
+            edits.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                noncovalent.clone(),
+            ),
+            NoncovalentBondHandle::New(0),
+        );
+        assert_eq!(
+            edits.add_stereo_atom(
+                AtomHandle::New(0),
+                vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
+                stereo_atom.clone(),
+            ),
+            StereoAtomHandle::New(0),
+        );
+        assert_eq!(
+            edits.add_stereo_bond(
+                BondHandle::New(0),
+                vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
+                stereo_bond.clone(),
+            ),
+            StereoBondHandle::New(0),
+        );
+        assert_eq!(
+            edits.as_slice(),
+            [
+                Edit::AddAtoms { atoms: vec![atom] },
+                Edit::AddDativeBond {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    ast: dative,
+                },
+                Edit::AddBonds {
+                    bonds: vec![AddBond {
+                        endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                        ast: bond,
+                    }],
+                },
+                Edit::AddAromaticSystem {
+                    atoms: vec![AtomHandle::New(0)],
+                    ast: aromatic,
+                },
+                Edit::AddMulticenterBond {
+                    atoms: vec![AtomHandle::New(0)],
+                    ast: multicenter,
+                },
+                Edit::AddNoncovalentBond {
+                    atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                    ast: noncovalent,
+                },
+                Edit::AddStereoAtom {
+                    site: AtomHandle::New(0),
+                    ligands: vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
+                    ast: stereo_atom,
+                },
+                Edit::AddStereoBond {
+                    site: BondHandle::New(0),
+                    ligands: vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
+                    ast: stereo_bond,
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_add_atoms() {
+        let carbon = AtomAst::from_element(Element::C);
+        let nitrogen = AtomAst::from_element(Element::N);
+        let oxygen = AtomAst::from_element(Element::O);
+        let mut edits = Edits::new();
+
+        assert_eq!(
+            edits.add_atoms([carbon.clone(), nitrogen.clone()]),
+            vec![AtomHandle::New(0), AtomHandle::New(1)],
+        );
+        assert_eq!(edits.add_atom(oxygen.clone()), AtomHandle::New(2));
+        assert_eq!(
+            edits.as_slice(),
+            [
+                Edit::AddAtoms {
+                    atoms: vec![carbon, nitrogen],
+                },
+                Edit::AddAtoms {
+                    atoms: vec![oxygen],
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_add_bonds() {
+        let single = BondAst::from_order(1);
+        let double = BondAst::from_order(2);
+        let triple = BondAst::from_order(3);
+        let mut edits = Edits::new();
+        let bonds = vec![
+            AddBond {
+                endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                ast: single.clone(),
+            },
+            AddBond {
+                endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+                ast: double.clone(),
+            },
+        ];
+
+        assert_eq!(
+            edits.add_bonds(bonds.clone()),
+            vec![BondHandle::New(0), BondHandle::New(1)],
+        );
+        assert_eq!(
+            edits.add_bond(
+                AtomHandle::Id(AtomId(2)),
+                AtomHandle::Id(AtomId(3)),
+                triple.clone(),
+            ),
+            BondHandle::New(2),
+        );
+        assert_eq!(
+            edits.as_slice(),
+            [
+                Edit::AddBonds { bonds },
+                Edit::AddBonds {
+                    bonds: vec![AddBond {
+                        endpoints: [AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(3)),],
+                        ast: triple,
+                    }],
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_add_overlay_batches() {
+        let mut edits = Edits::new();
+
+        assert_eq!(
+            edits.add_dative_bonds([
+                (vec![AtomHandle::Id(AtomId(0))], DativeBondAst::default()),
+                (vec![AtomHandle::Id(AtomId(1))], DativeBondAst::default()),
+            ]),
+            vec![DativeBondHandle::New(0), DativeBondHandle::New(1)],
+        );
+        assert_eq!(
+            edits.add_aromatic_systems([
+                (
+                    vec![AtomHandle::Id(AtomId(0))],
+                    AromaticSystemAst::default(),
+                ),
+                (
+                    vec![AtomHandle::Id(AtomId(1))],
+                    AromaticSystemAst::default(),
+                ),
+            ]),
+            vec![AromaticSystemHandle::New(0), AromaticSystemHandle::New(1)],
+        );
+        assert_eq!(
+            edits.add_multicenter_bonds([
+                (
+                    vec![AtomHandle::Id(AtomId(0))],
+                    MulticenterBondAst::default(),
+                ),
+                (
+                    vec![AtomHandle::Id(AtomId(1))],
+                    MulticenterBondAst::default(),
+                ),
+            ]),
+            vec![MulticenterBondHandle::New(0), MulticenterBondHandle::New(1)],
+        );
+        assert_eq!(
+            edits.add_noncovalent_bonds([
+                (
+                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    NoncovalentBondAst::default(),
+                ),
+                (
+                    [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+                    NoncovalentBondAst::default(),
+                ),
+            ]),
+            vec![NoncovalentBondHandle::New(0), NoncovalentBondHandle::New(1),],
+        );
+        assert_eq!(
+            edits.add_stereo_atoms([
+                (
+                    AtomHandle::Id(AtomId(0)),
+                    Vec::new(),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                ),
+                (
+                    AtomHandle::Id(AtomId(1)),
+                    Vec::new(),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                ),
+            ]),
+            vec![StereoAtomHandle::New(0), StereoAtomHandle::New(1)],
+        );
+        assert_eq!(
+            edits.add_stereo_bonds([
+                (
+                    BondHandle::Id(BondId(0)),
+                    Vec::new(),
+                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                ),
+                (
+                    BondHandle::Id(BondId(1)),
+                    Vec::new(),
+                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                ),
+            ]),
+            vec![StereoBondHandle::New(0), StereoBondHandle::New(1)],
+        );
+        assert_eq!(edits.len(), 12);
+        assert_eq!(
+            edits.iter().cloned().collect::<Vec<_>>(),
+            vec![
+                Edit::AddDativeBond {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    ast: DativeBondAst::default(),
+                },
+                Edit::AddDativeBond {
+                    atoms: vec![AtomHandle::Id(AtomId(1))],
+                    ast: DativeBondAst::default(),
+                },
+                Edit::AddAromaticSystem {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    ast: AromaticSystemAst::default(),
+                },
+                Edit::AddAromaticSystem {
+                    atoms: vec![AtomHandle::Id(AtomId(1))],
+                    ast: AromaticSystemAst::default(),
+                },
+                Edit::AddMulticenterBond {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    ast: MulticenterBondAst::default(),
+                },
+                Edit::AddMulticenterBond {
+                    atoms: vec![AtomHandle::Id(AtomId(1))],
+                    ast: MulticenterBondAst::default(),
+                },
+                Edit::AddNoncovalentBond {
+                    atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    ast: NoncovalentBondAst::default(),
+                },
+                Edit::AddNoncovalentBond {
+                    atoms: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+                    ast: NoncovalentBondAst::default(),
+                },
+                Edit::AddStereoAtom {
+                    site: AtomHandle::Id(AtomId(0)),
+                    ligands: Vec::new(),
+                    ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                },
+                Edit::AddStereoAtom {
+                    site: AtomHandle::Id(AtomId(1)),
+                    ligands: Vec::new(),
+                    ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                },
+                Edit::AddStereoBond {
+                    site: BondHandle::Id(BondId(0)),
+                    ligands: Vec::new(),
+                    ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                },
+                Edit::AddStereoBond {
+                    site: BondHandle::Id(BondId(1)),
+                    ligands: Vec::new(),
+                    ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_remove_topology() {
+        let mut edits = Edits::new();
+        edits.remove_atom(AtomHandle::Id(AtomId(0)));
+        edits.remove_bond(BondHandle::New(0));
+        edits.remove_topology(vec![AtomHandle::New(1)], vec![BondHandle::Id(BondId(2))]);
+
+        assert_eq!(
+            edits.as_slice(),
+            [
+                Edit::RemoveTopology {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    bonds: Vec::new(),
+                },
+                Edit::RemoveTopology {
+                    atoms: Vec::new(),
+                    bonds: vec![BondHandle::New(0)],
+                },
+                Edit::RemoveTopology {
+                    atoms: vec![AtomHandle::New(1)],
+                    bonds: vec![BondHandle::Id(BondId(2))],
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_remove_overlays() {
+        let mut edits = Edits::new();
+        edits.remove_dative_bonds(vec![(
+            DativeBondHandle::Id(DativeBondId(0)),
+            vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+            DativeBondAst::default(),
+        )]);
+        edits.remove_aromatic_systems(vec![(
+            AromaticSystemHandle::New(0),
+            vec![AtomHandle::Id(AtomId(0))],
+            AromaticSystemAst::default(),
+        )]);
+        edits.remove_multicenter_bonds(vec![(
+            MulticenterBondHandle::Id(MulticenterBondId(0)),
+            vec![AtomHandle::Id(AtomId(0))],
+            MulticenterBondAst::default(),
+        )]);
+        edits.remove_noncovalent_bonds(vec![(
+            NoncovalentBondHandle::New(0),
+            [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+            NoncovalentBondAst::default(),
+        )]);
+        edits.remove_stereo_atoms(vec![(
+            StereoAtomHandle::Id(StereoAtomId(0)),
+            AtomHandle::Id(AtomId(0)),
+            vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        )]);
+        edits.remove_stereo_bonds(vec![(
+            StereoBondHandle::New(0),
+            BondHandle::Id(BondId(0)),
+            vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+        )]);
+
+        assert_eq!(
+            edits.into_iter().collect::<Vec<_>>(),
+            vec![
+                Edit::RemoveDativeBonds {
+                    removes: vec![(
+                        DativeBondHandle::Id(DativeBondId(0)),
+                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                        DativeBondAst::default(),
+                    )],
+                },
+                Edit::RemoveAromaticSystems {
+                    removes: vec![(
+                        AromaticSystemHandle::New(0),
+                        vec![AtomHandle::Id(AtomId(0))],
+                        AromaticSystemAst::default(),
+                    )],
+                },
+                Edit::RemoveMulticenterBonds {
+                    removes: vec![(
+                        MulticenterBondHandle::Id(MulticenterBondId(0)),
+                        vec![AtomHandle::Id(AtomId(0))],
+                        MulticenterBondAst::default(),
+                    )],
+                },
+                Edit::RemoveNoncovalentBonds {
+                    removes: vec![(
+                        NoncovalentBondHandle::New(0),
+                        [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                        NoncovalentBondAst::default(),
+                    )],
+                },
+                Edit::RemoveStereoAtoms {
+                    removes: vec![(
+                        StereoAtomHandle::Id(StereoAtomId(0)),
+                        AtomHandle::Id(AtomId(0)),
+                        vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
+                        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    )],
+                },
+                Edit::RemoveStereoBonds {
+                    removes: vec![(
+                        StereoBondHandle::New(0),
+                        BondHandle::Id(BondId(0)),
+                        vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
+                        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    )],
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_molecule_constraint() {
+        let constraint = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
+        let mut edits = Edits::new();
+        edits.add_molecule_constraint(constraint.clone());
+        edits.remove_molecule_constraint(constraint.clone());
+
+        assert_eq!(
+            edits.as_slice(),
+            [
+                Edit::AddMoleculeConstraint {
+                    constraint: constraint.clone(),
+                },
+                Edit::RemoveMoleculeConstraint { constraint },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_edits_push() {
+        let entry = Edit::AddAtoms {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+            ],
+        };
+        let mut edits = Edits::new();
+        edits.push(entry.clone());
+
+        assert_eq!(
+            edits.add_atom(AtomAst::from_element(Element::O)),
+            AtomHandle::New(2)
+        );
+        assert_eq!(edits.as_slice()[0], entry);
+    }
+
+    #[rstest]
+    fn test_edits_from_iter() {
+        let entries = vec![
+            Edit::AddAtoms {
+                atoms: vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::N),
+                ],
+            },
+            Edit::AddBonds {
+                bonds: vec![
+                    AddBond {
+                        endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        ast: BondAst::from_order(1),
+                    },
+                    AddBond {
+                        endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+                        ast: BondAst::from_order(1),
+                    },
+                ],
+            },
+            Edit::AddDativeBond {
+                atoms: Vec::new(),
+                ast: DativeBondAst::default(),
+            },
+            Edit::AddAromaticSystem {
+                atoms: Vec::new(),
+                ast: AromaticSystemAst::default(),
+            },
+            Edit::AddMulticenterBond {
+                atoms: Vec::new(),
+                ast: MulticenterBondAst::default(),
+            },
+            Edit::AddNoncovalentBond {
+                atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                ast: NoncovalentBondAst::default(),
+            },
+            Edit::AddStereoAtom {
+                site: AtomHandle::Id(AtomId(0)),
+                ligands: Vec::new(),
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            },
+            Edit::AddStereoBond {
+                site: BondHandle::Id(BondId(0)),
+                ligands: Vec::new(),
+                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            },
+        ];
+        let mut edits: Edits = entries.clone().into_iter().collect();
+
+        assert_eq!(edits.as_slice(), entries);
+        assert_eq!(edits.add_atom(AtomAst::default()), AtomHandle::New(2));
+        assert_eq!(
+            edits.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+                BondAst::default(),
+            ),
+            BondHandle::New(2),
+        );
+        assert_eq!(
+            edits.add_dative_bond(Vec::new(), DativeBondAst::default()),
+            DativeBondHandle::New(1),
+        );
+        assert_eq!(
+            edits.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
+            AromaticSystemHandle::New(1),
+        );
+        assert_eq!(
+            edits.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            MulticenterBondHandle::New(1),
+        );
+        assert_eq!(
+            edits.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                NoncovalentBondAst::default(),
+            ),
+            NoncovalentBondHandle::New(1),
+        );
+        assert_eq!(
+            edits.add_stereo_atom(
+                AtomHandle::Id(AtomId(0)),
+                Vec::new(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            StereoAtomHandle::New(1),
+        );
+        assert_eq!(
+            edits.add_stereo_bond(
+                BondHandle::Id(BondId(0)),
+                Vec::new(),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            ),
+            StereoBondHandle::New(1),
+        );
+    }
+
+    #[rstest]
+    fn test_edits_iter() {
+        let entries = vec![
+            Edit::RemoveTopology {
+                atoms: vec![AtomHandle::Id(AtomId(0))],
+                bonds: Vec::new(),
+            },
+            Edit::AddMoleculeConstraint {
+                constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            },
+        ];
+        let edits: Edits = entries.clone().into_iter().collect();
+
+        assert!(!edits.is_empty());
+        assert_eq!(edits.len(), 2);
+        assert_eq!(edits.as_slice(), entries);
+        assert_eq!(edits.iter().cloned().collect::<Vec<_>>(), entries);
+        assert_eq!(edits.into_iter().collect::<Vec<_>>(), entries);
     }
 
     #[rstest]

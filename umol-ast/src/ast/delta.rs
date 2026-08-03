@@ -9,6 +9,7 @@ use std::hash::Hash;
 use std::iter;
 use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
+use std::vec::IntoIter;
 
 use umol_graph_core::{
     BiRelationData, FactorOrdering, ParticipantPosition, RelationData, Unordered,
@@ -2926,6 +2927,15 @@ impl FromIterator<Delta> for Deltas {
     }
 }
 
+impl IntoIterator for Deltas {
+    type Item = Delta;
+    type IntoIter = IntoIter<Delta>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 impl Canonicalize for Deltas {
     /// Per-entity fold to the normal form, then a stable sort. Different entities are
     /// independent and each entity's fold is deterministic over input order, so the result is
@@ -4103,6 +4113,29 @@ mod tests {
                 new: ValueAst::Lit(new),
             },
         })
+    }
+
+    #[rstest]
+    fn test_deltas_into_iter() {
+        let entries = vec![
+            Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::Lit(0),
+                    new: ValueAst::Lit(1),
+                },
+            }),
+            Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(1),
+                    new: ValueAst::Lit(2),
+                },
+            }),
+        ];
+        let deltas = Deltas::from_iter(entries.clone());
+
+        assert_eq!(deltas.into_iter().collect::<Vec<_>>(), entries);
     }
 
     #[rstest]
