@@ -1542,6 +1542,13 @@ impl MoleculeEditor {
             FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
+    /// Materialize the editor's current state without consuming it.
+    ///
+    /// Subsequent editor changes are independent of the returned immutable snapshot.
+    pub fn snapshot(&self) -> MoleculeAst {
+        self.clone().build()
+    }
+
     pub fn build(self) -> MoleculeAst {
         MoleculeAst::from_arcs(
             self.graph,
@@ -1746,6 +1753,21 @@ mod tests {
         b.restore_dative_bonds(vec![removed], &undo);
 
         assert_eq!(b.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_snapshot(mut triatomic: MoleculeEditor) {
+        let snapshot = triatomic.snapshot();
+        triatomic.add_atom(AtomAst::from_element(Element::F));
+
+        assert_eq!(
+            snapshot,
+            mol_dsl!(r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
+        );
+        assert_eq!(
+            triatomic.build(),
+            mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
+        );
     }
 
     // `edit()` → `build()` reproduces the AST including both stereo overlays.

@@ -23,7 +23,7 @@ use super::super::constraint::{
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondAst;
-use super::super::edit::{AtomHandle, BondHandle, Edit, Edits};
+use super::super::edit::{AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -35,7 +35,7 @@ use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
 use super::super::value::ValueAst;
-use super::{MoleculeAst, MoleculeParts};
+use super::{MoleculeAst, MoleculeParts, TransactionError};
 use crate::{mol_dsl, mol_dsl_ground};
 
 fn ground_atom() -> AtomAst {
@@ -1675,6 +1675,53 @@ fn test_molecule_ast_edits_identity(#[from(rich_molecule)] ast: MoleculeAst) {
     let atom_ids: Vec<AtomId> = ast.atoms().iter().map(|v| v.id).collect();
     let sub = ast.induced_subgraph(&atom_ids);
     assert_eq!(ast.edits(&sub), Edits::new());
+}
+
+#[rstest]
+#[case::add_atom(
+    mol_dsl!(r#"{:atoms ["C"]}"#),
+    Edits::from_iter([Edit::AddAtoms {
+        atoms: vec![AtomAst::from_element(Element::N)],
+    }]),
+    mol_dsl!(r#"{:atoms ["C" "N"]}"#),
+)]
+fn test_molecule_ast_apply(
+    #[case] molecule: MoleculeAst,
+    #[case] edits: Edits,
+    #[case] expected: MoleculeAst,
+) {
+    let original = molecule.clone();
+
+    assert_eq!(molecule.apply(edits), Ok(expected));
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::stale_after_add(
+    mol_dsl!(r#"{:atoms ["C"]}"#),
+    Edits::from_iter([
+        Edit::AddAtoms {
+            atoms: vec![AtomAst::from_element(Element::N)],
+        },
+        Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge {
+                old: ValueAst::Lit(1),
+                new: ValueAst::Lit(2),
+            },
+        },
+    ]),
+    TransactionError::OldStateMismatch,
+)]
+fn test_molecule_ast_apply_error(
+    #[case] molecule: MoleculeAst,
+    #[case] edits: Edits,
+    #[case] expected: TransactionError,
+) {
+    let original = molecule.clone();
+
+    assert_eq!(molecule.apply(edits), Err(expected));
+    assert_eq!(molecule, original);
 }
 
 #[rstest]

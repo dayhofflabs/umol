@@ -14,6 +14,7 @@ use umol_graph_core::{
     RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
 };
 
+use self::transact::TransactionError;
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
@@ -1280,6 +1281,14 @@ impl MoleculeAst {
             Arc::clone(&self.stereo_bonds),
             self.constraints.clone(),
         )
+    }
+
+    /// Apply a checked edit batch to an immutable molecule, returning the modified molecule while
+    /// leaving `self` unchanged.
+    pub fn apply(&self, edits: Edits) -> Result<MoleculeAst, TransactionError> {
+        let mut editor = self.edit();
+        editor.transact(edits)?;
+        Ok(editor.build())
     }
 
     /// Combine molecules by disjoint concatenation. Input order determines each entity family's

@@ -479,6 +479,7 @@ the section ships.
   detach subsequent editor changes, successful apply leaves the source unchanged, and failed apply
   returns the transaction error while leaving the source unchanged. **Additive (green).**
   [dep: S1i]
+  **Done.**
 
 ### S2 — Standalone edit DSL and normative grammar
 
