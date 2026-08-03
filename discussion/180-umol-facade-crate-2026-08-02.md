@@ -318,6 +318,31 @@ Roughly a dozen items: the traits from `umol-ast/src/ast/traits.rs` that a calle
 `ReactionAst`, `AtomAst`, `BondAst`, `Element`), `ChemistryModel`, and the error types. A prelude
 that imports 189 names is a glob with extra steps.
 
+## The feature matrix must be built in CI
+
+**The feature matrix is the untyped part of a Rust API.** Everything else in the facade is
+type-checked, but `#[cfg(all(feature = "graph", feature = "geometric"))]` code is compiled only when
+something actually builds that combination. A configuration nobody builds is a configuration nobody
+type-checks, and it fails the way an untyped API fails: silently, in the combination no one tried.
+
+Two features give four combinations, and each is a real claim this document makes:
+
+| features | what it must prove |
+| --- | --- |
+| default (`graph`) | the ordinary path; every whitepaper listing compiles |
+| `--no-default-features --features geometric` | **the peer claim.** If this does not build, model classes are not peers whatever the manifest says |
+| `--no-default-features --features graph` | `graph` is genuinely optional rather than merely listed |
+| `--all-features` | the bridge — the only place `cfg(all(...))` code is reachable |
+
+The second row is the one that matters most and the one most likely to be skipped, because nobody
+uses it day to day. It is the executable form of the argument in this document that peerhood is a
+property of the feature graph rather than of the default set. If it is not in CI, that argument is
+an assertion.
+
+Add all four to the CI matrix set up under
+[163](163-package-release-preparations-2026-07-26.md), and add `--no-default-features` alone if a
+model-class-free build is meant to be coherent.
+
 ## The completeness test
 
 `umol-py` depends on six member crates directly — `umol-ast`, `umol-chem`, `umol-graph`,

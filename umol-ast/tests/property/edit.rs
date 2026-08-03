@@ -1,3 +1,5 @@
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
 use proptest::prelude::*;
 use umol_ast::ast::Transaction;
 
@@ -533,6 +535,59 @@ proptest! {
         prop_assert_eq!(builder.build(), before);
     }
 
+    /// A valid prefix followed by a rejected edit reports the primary failure and restores the
+    /// exact initial state; rollback of the valid prefix must not replace it with `RollbackFailed`.
+    #[test]
+    fn test_molecule_editor_transact_error(
+        (base, prefix) in transaction_edits_strategy(),
+    ) {
+        let atom_count = base.atoms().count();
+        let edits = prefix
+            .into_iter()
+            .chain([Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(atom_count as u32)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::default(),
+                    new: ValueAst::Lit(1),
+                },
+            }])
+            .collect();
+        let expected = TransactionError::HandleOutOfRange {
+            kind: EntityKind::Atom,
+            index: atom_count,
+            count: atom_count,
+        };
+        let mut editor = base.clone().edit();
+
+        let error = editor.transact(edits).unwrap_err();
+        let rollback_failed = matches!(error, TransactionError::RollbackFailed { .. });
+
+        prop_assert!(!rollback_failed);
+        prop_assert_eq!(error, expected);
+        prop_assert_eq!(editor.build(), base);
+    }
+
+    /// Removing the first entity of any kind drops constraints on that entity, compacts every
+    /// surviving reference, and preserves the exact order and multiplicity of duplicate entries.
+    #[test]
+    fn test_molecule_editor_transact_constraint_compaction(
+        case in constraint_compaction_case_strategy(),
+    ) {
+        let base = case.base();
+        let mut editor = base.clone().edit();
+        let transaction = editor
+            .transact(case.edits())
+            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
+        let constraints = editor.constraints().iter().cloned().collect::<Vec<_>>();
+
+        prop_assert_eq!(constraints.as_slice(), case.expected());
+
+        transaction
+            .rollback(&mut editor)
+            .map_err(|error| TestCaseError::fail(format!("rollback failed: {error}")))?;
+        prop_assert_eq!(editor.build(), base);
+    }
+
     #[test]
     fn test_molecule_editor_transact_rollback_unpaired_electrons(
         atom_components in partial_unpaired_electrons_update_strategy(),
@@ -607,35 +662,38 @@ proptest! {
     }
 
     #[test]
-    fn test_transaction_append_materialization(
-        (base, edits) in overlay_transaction_strategy(),
+    fn test_transaction_append(
+        (base, first_edits, second_edits) in consecutive_transaction_strategy(),
     ) {
-        prop_assume!(!edits.is_empty());
+        let mut editor = base.clone().edit();
+        let first = editor
+            .transact(first_edits)
+            .map_err(|error| TestCaseError::fail(format!("first transact failed: {error}")))?;
+        let second = editor
+            .transact(second_edits)
+            .map_err(|error| TestCaseError::fail(format!("second transact failed: {error}")))?;
+        let expected_undos = first
+            .undos()
+            .iter()
+            .chain(second.undos())
+            .cloned()
+            .collect::<Vec<_>>();
 
-        let mut single = base.edit();
-        single
-            .transact(edits.clone())
-            .map_err(|e| TestCaseError::fail(format!("single transact failed: {e}")))?;
-        let expected = single.build();
+        let mut combined = first.clone();
+        combined.append(second);
+        prop_assert_eq!(combined.undos(), expected_undos.as_slice());
 
-        let mut staged = base.edit();
-        let mut combined = Transaction::default();
-        for edit in edits {
-            let transaction = staged
-                .transact(Edits::from_iter([edit]))
-                .map_err(|e| TestCaseError::fail(format!("staged transact failed: {e}")))?;
-            combined.append(transaction);
-            let state = staged.build();
-            staged = state.edit();
-        }
-        let materialized = staged.build();
-        prop_assert_eq!(&materialized, &expected);
+        let mut empty_then_first = Transaction::default();
+        empty_then_first.append(first.clone());
+        prop_assert_eq!(&empty_then_first, &first);
+        let mut first_then_empty = first;
+        first_then_empty.append(Transaction::default());
+        prop_assert_eq!(first_then_empty, empty_then_first);
 
-        let mut staged = materialized.edit();
         combined
-            .rollback(&mut staged)
+            .rollback(&mut editor)
             .map_err(|e| TestCaseError::fail(format!("combined rollback failed: {e}")))?;
-        prop_assert_eq!(staged.build(), base);
+        prop_assert_eq!(editor.build(), base);
     }
 
     #[test]
@@ -649,6 +707,29 @@ proptest! {
         unchecked.transact_unchecked(edits);
 
         prop_assert_eq!(unchecked.build(), checked.build());
+    }
+
+    /// A valid journal applied to an independently generated valid post-transaction state may
+    /// succeed or return an error, but every undo path must return normally rather than panic.
+    #[test]
+    fn test_transaction_rollback_unrelated(
+        (journal_base, journal_edits) in transaction_edits_strategy(),
+        (editor_base, editor_edits) in transaction_edits_strategy(),
+    ) {
+        let mut journal_editor = journal_base.edit();
+        let transaction = journal_editor
+            .transact(journal_edits)
+            .map_err(|error| TestCaseError::fail(format!("journal transact failed: {error}")))?;
+        let mut unrelated = editor_base.edit();
+        unrelated
+            .transact(editor_edits)
+            .map_err(|error| TestCaseError::fail(format!("editor transact failed: {error}")))?;
+
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let _ = transaction.rollback(&mut unrelated);
+        }));
+
+        prop_assert!(outcome.is_ok());
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow

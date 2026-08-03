@@ -450,6 +450,7 @@ the section ships.
   and undo in reverse order, with the empty journal as identity. Cross-apply independently generated
   valid journals and editor states to verify that mismatched rollback never panics, without inspecting
   the result or resulting state. **Additive tests (red within S1).** [dep: S1e]
+  **Done.**
 - **S1g — Migrate molecule and reaction producers.** Change `MoleculeAst::edits` and every
   `ReactionAst` executable-batch accumulator to `Edits`. Reaction application must emit its globally
   scheduled additions, updates, removals, and constraints through the complete container surface

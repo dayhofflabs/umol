@@ -3230,6 +3230,635 @@ pub(crate) fn transaction_case_strategy() -> impl Strategy<Value = TransactionCa
     ]
 }
 
+fn transaction_all_entities_molecule() -> MoleculeAst {
+    let ligands = (0..4)
+        .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+        .collect::<Vec<_>>();
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(2), AtomId(3), BondAst::from_order(1)),
+        ],
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemAst::default(),
+        )],
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondAst::default(),
+        )],
+        noncovalent: vec![(
+            AtomId(0),
+            AtomId(3),
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        stereo_atoms: vec![(
+            AtomId(0),
+            ligands.clone(),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        )],
+        stereo_bonds: vec![(
+            BondId(0),
+            ligands,
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+        )],
+        ..Default::default()
+    })
+}
+
+fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
+    let base = transaction_all_entities_molecule();
+    let value = |change| (base.clone(), Edits::from_iter([change]));
+    vec![
+        value(Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Element {
+                old: ElementAst::Lit(Element::C),
+                new: ElementAst::Lit(Element::N),
+            },
+        }),
+        value(Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::IsotopeMass {
+                old: IsotopeMassAst::default(),
+                new: IsotopeMassAst::Lit(13),
+            },
+        }),
+        value(Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(1),
+            },
+        }),
+        value(Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::ImplicitHydrogens {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(3),
+            },
+        }),
+        value(Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::LonePairs {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(1),
+            },
+        }),
+        value(Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsAst::default(),
+                new: UnpairedElectronsAst::from((2_u8, 1_u8)),
+            },
+        }),
+        value(Edit::ModifyBondField {
+            id: BondHandle::Id(BondId(0)),
+            change: BondFieldChange::Order {
+                old: ValueAst::Lit(1),
+                new: ValueAst::Lit(2),
+            },
+        }),
+        value(Edit::ModifyBondField {
+            id: BondHandle::Id(BondId(0)),
+            change: BondFieldChange::Charge {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(-1),
+            },
+        }),
+        value(Edit::ModifyBondField {
+            id: BondHandle::Id(BondId(0)),
+            change: BondFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsAst::default(),
+                new: UnpairedElectronsAst::from((2_u8, 3_u8)),
+            },
+        }),
+        value(Edit::ModifyDativeBondField {
+            id: DativeBondHandle::Id(DativeBondId(0)),
+            change: DativeBondFieldChange::Order {
+                old: ValueAst::Lit(1),
+                new: ValueAst::Lit(2),
+            },
+        }),
+        value(Edit::ModifyAromaticSystemField {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsAst::default(),
+                new: ElectronCountsAst::Lit(vec![1, 1, 1]),
+            },
+        }),
+        value(Edit::ModifyAromaticSystemField {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            change: AromaticSystemFieldChange::Charge {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(1),
+            },
+        }),
+        value(Edit::ModifyAromaticSystemField {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            change: AromaticSystemFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsAst::default(),
+                new: UnpairedElectronsAst::from((1_u8, 2_u8)),
+            },
+        }),
+        value(Edit::ModifyMulticenterBondField {
+            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
+            change: MulticenterBondFieldChange::Electrons {
+                old: ElectronCountsAst::default(),
+                new: ElectronCountsAst::Lit(vec![1, 1, 1]),
+            },
+        }),
+        value(Edit::ModifyMulticenterBondField {
+            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
+            change: MulticenterBondFieldChange::Charge {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(-1),
+            },
+        }),
+        value(Edit::ModifyMulticenterBondField {
+            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
+            change: MulticenterBondFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsAst::default(),
+                new: UnpairedElectronsAst::from((1_u8, 2_u8)),
+            },
+        }),
+        value(Edit::ModifyNoncovalentBondField {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            change: NoncovalentBondFieldChange::Kind {
+                old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+                new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+            },
+        }),
+        value(Edit::ModifyStereoAtomField {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            },
+        }),
+        value(Edit::ModifyStereoBondField {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            },
+        }),
+    ]
+}
+
+fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
+    let base = transaction_all_entities_molecule();
+    vec![
+        Edit::ModifyAtomConstraint {
+            id: AtomHandle::Id(AtomId(0)),
+            old: None,
+            new: Some(AtomConstraintAst::degree(3)),
+        },
+        Edit::ModifyBondConstraint {
+            id: BondHandle::Id(BondId(0)),
+            old: None,
+            new: Some(BondConstraintAst::aromatic(true)),
+        },
+        Edit::ModifyDativeBondConstraint {
+            id: DativeBondHandle::Id(DativeBondId(0)),
+            old: None,
+            new: Some(DativeBondConstraintAst::aromatic(true)),
+        },
+        Edit::ModifyAromaticSystemConstraint {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            old: None,
+            new: Some(AromaticSystemConstraintAst::electron_count(6)),
+        },
+        Edit::ModifyMulticenterBondConstraint {
+            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
+            old: None,
+            new: Some(MulticenterBondConstraintAst::electron_count(2)),
+        },
+        Edit::ModifyNoncovalentBondConstraint {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            old: None,
+            new: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+        },
+        Edit::ModifyStereoAtomConstraint {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            old: None,
+            new: Some(StereoAtomConstraintAst::Stereogenicity(
+                StereogenicityAst::Lit(Stereogenicity::Stereogenic),
+            )),
+        },
+        Edit::ModifyStereoBondConstraint {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            old: None,
+            new: Some(StereoBondConstraintAst::Stereogenicity(
+                StereogenicityAst::Lit(Stereogenicity::Stereogenic),
+            )),
+        },
+    ]
+    .into_iter()
+    .map(|edit| (base.clone(), Edits::from_iter([edit])))
+    .collect()
+}
+
+fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
+    let base = transaction_all_entities_molecule();
+    let atom_handles = |ids: &[u32]| {
+        ids.iter()
+            .map(|&id| AtomHandle::Id(AtomId(id)))
+            .collect::<Vec<_>>()
+    };
+    vec![
+        Edit::RemoveTopology {
+            atoms: vec![AtomHandle::Id(AtomId(0))],
+            bonds: Vec::new(),
+        },
+        Edit::RemoveTopology {
+            atoms: vec![AtomHandle::Id(AtomId(3))],
+            bonds: Vec::new(),
+        },
+        Edit::RemoveTopology {
+            atoms: Vec::new(),
+            bonds: vec![BondHandle::Id(BondId(1))],
+        },
+        Edit::RemoveDativeBonds {
+            removes: vec![(
+                DativeBondHandle::Id(DativeBondId(0)),
+                atom_handles(&[0, 1]),
+                DativeBondAst::from_order(1),
+            )],
+        },
+        Edit::RemoveAromaticSystems {
+            removes: vec![(
+                AromaticSystemHandle::Id(AromaticSystemId(0)),
+                atom_handles(&[0, 1, 2]),
+                AromaticSystemAst::default(),
+            )],
+        },
+        Edit::RemoveMulticenterBonds {
+            removes: vec![(
+                MulticenterBondHandle::Id(MulticenterBondId(0)),
+                atom_handles(&[0, 1, 2]),
+                MulticenterBondAst::default(),
+            )],
+        },
+        Edit::RemoveNoncovalentBonds {
+            removes: vec![(
+                NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(3))],
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+        },
+        Edit::RemoveStereoAtoms {
+            removes: vec![(
+                StereoAtomHandle::Id(StereoAtomId(0)),
+                AtomHandle::Id(AtomId(0)),
+                atom_handles(&[0, 1, 2, 3])
+                    .into_iter()
+                    .map(|atom| (atom, StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+        },
+        Edit::RemoveStereoBonds {
+            removes: vec![(
+                StereoBondHandle::Id(StereoBondId(0)),
+                BondHandle::Id(BondId(0)),
+                atom_handles(&[0, 1, 2, 3])
+                    .into_iter()
+                    .map(|atom| (atom, StereoLigandKind::Atom))
+                    .collect(),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            )],
+        },
+    ]
+    .into_iter()
+    .map(|edit| (base.clone(), Edits::from_iter([edit])))
+    .collect()
+}
+
+fn transaction_creation_case() -> (MoleculeAst, Edits) {
+    let base = transaction_all_entities_molecule();
+    let mut edits = Edits::new();
+    edits.add_atom(AtomAst::from_element(Element::N));
+    edits.add_bond(
+        AtomHandle::Id(AtomId(1)),
+        AtomHandle::Id(AtomId(2)),
+        BondAst::from_order(2),
+    );
+    edits.add_dative_bond(
+        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+        DativeBondAst::from_order(1),
+    );
+    edits.add_aromatic_system(
+        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+        AromaticSystemAst::default(),
+    );
+    edits.add_multicenter_bond(
+        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+        MulticenterBondAst::default(),
+    );
+    edits.add_noncovalent_bond(
+        [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
+    );
+    let ligands = (0..4)
+        .map(|id| (AtomHandle::Id(AtomId(id)), StereoLigandKind::Atom))
+        .collect::<Vec<_>>();
+    edits.add_stereo_atom(
+        AtomHandle::Id(AtomId(1)),
+        ligands.clone(),
+        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+    );
+    edits.add_stereo_bond(
+        BondHandle::Id(BondId(1)),
+        ligands,
+        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+    );
+    (base, edits)
+}
+
+pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
+    let mut cases = transaction_field_cases();
+    cases.extend(transaction_constraint_cases());
+    cases.extend(transaction_removal_cases());
+    cases.push(transaction_creation_case());
+    let constraint = Constraint::Atom(AtomId(0), AtomConstraintAst::degree(3));
+    cases.push((
+        transaction_all_entities_molecule(),
+        Edits::from_iter([Edit::AddMoleculeConstraint {
+            constraint: constraint.clone(),
+        }]),
+    ));
+    cases.push((
+        transaction_compaction_molecule(Constraints::from_iter([
+            constraint.clone(),
+            constraint.clone(),
+        ])),
+        Edits::from_iter([Edit::RemoveMoleculeConstraint { constraint }]),
+    ));
+    prop::sample::select(cases)
+}
+
+fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
+    let atoms = (0..6).map(|_| AtomAst::from_element(Element::C)).collect();
+    let bonds = (0..3)
+        .map(|index| {
+            (
+                AtomId(index * 2),
+                AtomId(index * 2 + 1),
+                BondAst::from_order(1),
+            )
+        })
+        .collect();
+    let pairs = [[0_u32, 1_u32], [2, 3], [4, 5]];
+    let dative = pairs
+        .iter()
+        .map(|[a, b]| (vec![AtomId(*a)], AtomId(*b), DativeBondAst::from_order(1)))
+        .collect();
+    let aromatic = pairs
+        .iter()
+        .map(|[a, b]| (vec![AtomId(*a), AtomId(*b)], AromaticSystemAst::default()))
+        .collect();
+    let multicenter = pairs
+        .iter()
+        .map(|[a, b]| (vec![AtomId(*a), AtomId(*b)], MulticenterBondAst::default()))
+        .collect();
+    let noncovalent = pairs
+        .iter()
+        .map(|[a, b]| {
+            (
+                AtomId(*a),
+                AtomId(*b),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )
+        })
+        .collect();
+    let stereo_atoms = pairs
+        .iter()
+        .map(|[a, b]| {
+            (
+                AtomId(*a),
+                vec![StereoLigand::new(AtomId(*b), StereoLigandKind::Atom)],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )
+        })
+        .collect();
+    let stereo_bonds = pairs
+        .iter()
+        .enumerate()
+        .map(|(index, [a, b])| {
+            (
+                BondId(index as u32),
+                vec![
+                    StereoLigand::new(AtomId(*a), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(*b), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            )
+        })
+        .collect();
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        dative,
+        aromatic,
+        multicenter,
+        noncovalent,
+        stereo_atoms,
+        stereo_bonds,
+        constraints,
+    })
+}
+
+fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
+    match kind {
+        EntityKind::Atom => Constraint::Atom(AtomId(id), AtomConstraintAst::degree(value)),
+        EntityKind::Bond => Constraint::Bond(
+            BondId(id),
+            BondConstraintAst::ring_membership(RingScope::All, value),
+        ),
+        EntityKind::DativeBond => Constraint::DativeBond(
+            DativeBondId(id),
+            DativeBondConstraintAst::aromatic(value % 2 == 0),
+        ),
+        EntityKind::AromaticSystem => Constraint::AromaticSystem(
+            AromaticSystemId(id),
+            AromaticSystemConstraintAst::electron_count(value),
+        ),
+        EntityKind::MulticenterBond => Constraint::MulticenterBond(
+            MulticenterBondId(id),
+            MulticenterBondConstraintAst::electron_count(value),
+        ),
+        EntityKind::NoncovalentBond => Constraint::NoncovalentBond(
+            NoncovalentBondId(id),
+            NoncovalentBondConstraintAst::intramolecular(value % 2 == 0),
+        ),
+        EntityKind::StereoAtom => Constraint::StereoAtom(
+            StereoAtomId(id),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(match value % 3 {
+                0 => Stereogenicity::Symmetric,
+                1 => Stereogenicity::Prochiral,
+                _ => Stereogenicity::Stereogenic,
+            })),
+        ),
+        EntityKind::StereoBond => Constraint::StereoBond(
+            StereoBondId(id),
+            StereoKind::CisTrans,
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(match value % 3 {
+                0 => Stereogenicity::Symmetric,
+                1 => Stereogenicity::Prochiral,
+                _ => Stereogenicity::Stereogenic,
+            })),
+        ),
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ConstraintCompactionCase {
+    kind: EntityKind,
+    base: MoleculeAst,
+    expected: Vec<Constraint>,
+}
+
+impl ConstraintCompactionCase {
+    pub(crate) fn base(&self) -> MoleculeAst {
+        self.base.clone()
+    }
+
+    pub(crate) fn edits(&self) -> Edits {
+        let edit = match self.kind {
+            EntityKind::Atom => Edit::RemoveTopology {
+                atoms: vec![AtomHandle::Id(AtomId(0))],
+                bonds: Vec::new(),
+            },
+            EntityKind::Bond => Edit::RemoveTopology {
+                atoms: Vec::new(),
+                bonds: vec![BondHandle::Id(BondId(0))],
+            },
+            EntityKind::DativeBond => Edit::RemoveDativeBonds {
+                removes: vec![(
+                    DativeBondHandle::Id(DativeBondId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    DativeBondAst::from_order(1),
+                )],
+            },
+            EntityKind::AromaticSystem => Edit::RemoveAromaticSystems {
+                removes: vec![(
+                    AromaticSystemHandle::Id(AromaticSystemId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    AromaticSystemAst::default(),
+                )],
+            },
+            EntityKind::MulticenterBond => Edit::RemoveMulticenterBonds {
+                removes: vec![(
+                    MulticenterBondHandle::Id(MulticenterBondId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    MulticenterBondAst::default(),
+                )],
+            },
+            EntityKind::NoncovalentBond => Edit::RemoveNoncovalentBonds {
+                removes: vec![(
+                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                )],
+            },
+            EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
+                removes: vec![(
+                    StereoAtomHandle::Id(StereoAtomId(0)),
+                    AtomHandle::Id(AtomId(0)),
+                    vec![(AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom)],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                )],
+            },
+            EntityKind::StereoBond => Edit::RemoveStereoBonds {
+                removes: vec![(
+                    StereoBondHandle::Id(StereoBondId(0)),
+                    BondHandle::Id(BondId(0)),
+                    vec![
+                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                    ],
+                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                )],
+            },
+        };
+        Edits::from_iter([edit])
+    }
+
+    pub(crate) fn expected(&self) -> &[Constraint] {
+        &self.expected
+    }
+}
+
+pub(crate) fn constraint_compaction_case_strategy(
+) -> impl Strategy<Value = ConstraintCompactionCase> {
+    let cases = [
+        EntityKind::Atom,
+        EntityKind::Bond,
+        EntityKind::DativeBond,
+        EntityKind::AromaticSystem,
+        EntityKind::MulticenterBond,
+        EntityKind::NoncovalentBond,
+        EntityKind::StereoAtom,
+        EntityKind::StereoBond,
+    ]
+    .into_iter()
+    .map(|kind| {
+        let constraints = vec![
+            transaction_constraint(kind, 2, 30),
+            transaction_constraint(kind, 0, 10),
+            transaction_constraint(kind, 1, 20),
+            transaction_constraint(kind, 1, 20),
+            transaction_constraint(kind, 2, 31),
+        ];
+        let expected = vec![
+            transaction_constraint(kind, 1, 30),
+            transaction_constraint(kind, 0, 20),
+            transaction_constraint(kind, 0, 20),
+            transaction_constraint(kind, 1, 31),
+        ];
+        ConstraintCompactionCase {
+            kind,
+            base: transaction_compaction_molecule(Constraints::from_iter(constraints)),
+            expected,
+        }
+    })
+    .collect::<Vec<_>>();
+    prop::sample::select(cases)
+}
+
+pub(crate) fn consecutive_transaction_strategy(
+) -> impl Strategy<Value = (MoleculeAst, Edits, Edits)> {
+    (-4_i64..=4, -4_i64..=4)
+        .prop_filter("successive charges must differ", |(first, second)| {
+            first != second
+        })
+        .prop_map(|(first, second)| {
+            let base = MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C)],
+                ..Default::default()
+            });
+            let first_edits = Edits::from_iter([Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::default(),
+                    new: ValueAst::Lit(first),
+                },
+            }]);
+            let second_edits = Edits::from_iter([Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::Lit(first),
+                    new: ValueAst::Lit(second),
+                },
+            }]);
+            (base, first_edits, second_edits)
+        })
+}
+
 // Overlay-transaction fixture: a fixed 6-carbon path carrying two overlays of each DAMN kind, so
 // the edit generator can remove ≥2 of one kind (the batched-remove path) and mix overlay removes
 // with atom appends and a topology removal in one transaction. Atom sets are the single source of
@@ -3444,6 +4073,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
 pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
     prop_oneof![
         transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
+        complete_transaction_strategy(),
         overlay_transaction_strategy(),
         stable_atom_handle_trace_strategy(false).prop_map(|trace| (trace.base(), trace.edits())),
     ]
