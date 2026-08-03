@@ -652,6 +652,7 @@ the section ships.
   negative indexing, counter recovery from constructor entries, batched results, and independent
   per-kind `New(0)` values. Do not expose `extend`, mutable iteration, insertion, removal,
   reordering, or a list-returning conversion. **Additive (green).** [dep: S4a, S4b]
+  **Done.**
 - **S4d — Bind `Edits` updates, removals, constraints, and DSL.** Expose all eight mutating
   `update_*` methods, simultaneous topology removal, the six plural overlay-removal methods,
   molecule-constraint add/remove, and `parse(text, *, defaults=None)`/`render(*, defaults=None)`.

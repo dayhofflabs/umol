@@ -82,6 +82,7 @@ PUBLIC_EXPORTS = frozenset(
     EcfpHashScheme
     ElectronCountsAst
     Edit
+    Edits
     Element
     ElementAst
     ElementScope

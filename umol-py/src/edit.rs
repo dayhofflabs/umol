@@ -1,15 +1,16 @@
 //! Python edit values and symbolic creation handles.
 
 use std::collections::HashMap;
+use std::vec::IntoIter;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AddBond as AstAddBond, AromaticSystemHandle as AstAromaticSystemHandle,
     AromaticSystemId as AstAromaticSystemId, AtomHandle as AstAtomHandle, AtomId as AstAtomId,
     BondHandle as AstBondHandle, BondId as AstBondId, ConstraintEdit as AstConstraintEdit,
     DativeBondHandle as AstDativeBondHandle, DativeBondId as AstDativeBondId, Edit as AstEdit,
-    Entity as AstEntity, EntityHandle as AstEntityHandle,
+    Edits as AstEdits, Entity as AstEntity, EntityHandle as AstEntityHandle,
     MulticenterBondHandle as AstMulticenterBondHandle, MulticenterBondId as AstMulticenterBondId,
     NoncovalentBondHandle as AstNoncovalentBondHandle, NoncovalentBondId as AstNoncovalentBondId,
     StereoAtomHandle as AstStereoAtomHandle, StereoAtomId as AstStereoAtomId,
@@ -61,6 +62,23 @@ impl New {
 
     fn __repr__(&self) -> String {
         format!("New({})", self.index)
+    }
+}
+
+impl New {
+    fn from_rust(handle: AstEntityHandle) -> Self {
+        let index = match handle {
+            AstEntityHandle::Atom(AstAtomHandle::New(index))
+            | AstEntityHandle::Bond(AstBondHandle::New(index))
+            | AstEntityHandle::DativeBond(AstDativeBondHandle::New(index))
+            | AstEntityHandle::AromaticSystem(AstAromaticSystemHandle::New(index))
+            | AstEntityHandle::MulticenterBond(AstMulticenterBondHandle::New(index))
+            | AstEntityHandle::NoncovalentBond(AstNoncovalentBondHandle::New(index))
+            | AstEntityHandle::StereoAtom(AstStereoAtomHandle::New(index))
+            | AstEntityHandle::StereoBond(AstStereoBondHandle::New(index)) => index,
+            _ => unreachable!("Edits addition methods always return creation handles"),
+        };
+        Self { index }
     }
 }
 
@@ -282,6 +300,12 @@ impl ConstraintEdit {
 }
 
 type BondAddition = ((HandleLike, HandleLike), Py<BondAst>);
+type DativeBondAddition = (Vec<HandleLike>, Py<DativeBondAst>);
+type AromaticSystemAddition = (Vec<HandleLike>, Py<AromaticSystemAst>);
+type MulticenterBondAddition = (Vec<HandleLike>, Py<MulticenterBondAst>);
+type NoncovalentBondAddition = ((HandleLike, HandleLike), Py<NoncovalentBondAst>);
+type StereoAtomAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoAtomAst>);
+type StereoBondAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoBondAst>);
 type DativeBondRemoval = (HandleLike, Vec<HandleLike>, Py<DativeBondAst>);
 type AromaticSystemRemoval = (HandleLike, Vec<HandleLike>, Py<AromaticSystemAst>);
 type MulticenterBondRemoval = (HandleLike, Vec<HandleLike>, Py<MulticenterBondAst>);
@@ -1189,6 +1213,320 @@ impl Edit {
                 constraint: constraint.bind(py).borrow().to_rust(),
             },
         }
+    }
+}
+
+fn resolve_edit_index(len: usize, index: isize) -> PyResult<usize> {
+    let resolved = if index < 0 {
+        index + len as isize
+    } else {
+        index
+    };
+    if resolved < 0 || resolved as usize >= len {
+        Err(PyIndexError::new_err("edit index out of range"))
+    } else {
+        Ok(resolved as usize)
+    }
+}
+
+fn edit_iter(py: Python<'_>, edits: &AstEdits) -> PyResult<EditIter> {
+    let entries = edits
+        .iter()
+        .map(|edit| into_py_variant(py, Edit::from_rust(py, edit)?))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(EditIter {
+        entries: entries.into_iter(),
+    })
+}
+
+/// A snapshot iterator over host-specific edits.
+#[pyclass]
+pub(crate) struct EditIter {
+    entries: IntoIter<Py<Edit>>,
+}
+
+#[pymethods]
+impl EditIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<Py<Edit>> {
+        self.entries.next()
+    }
+}
+
+/// An ordered, append-only batch of host-specific molecule edits.
+#[pyclass(eq)]
+#[derive(Debug, PartialEq)]
+pub struct Edits(AstEdits);
+
+#[pymethods]
+impl Edits {
+    #[new]
+    #[pyo3(signature = (entries=Vec::new()))]
+    fn new(py: Python<'_>, entries: Vec<Py<Edit>>) -> Self {
+        Self::from_rust(
+            entries
+                .into_iter()
+                .map(|entry| entry.bind(py).borrow().to_rust(py))
+                .collect(),
+        )
+    }
+
+    /// Append one detached raw edit and account for every entity it creates.
+    fn append(&mut self, py: Python<'_>, edit: Py<Edit>) {
+        self.0.push(edit.bind(py).borrow().to_rust(py));
+    }
+
+    fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Edit> {
+        let index = resolve_edit_index(self.0.len(), index)?;
+        Edit::from_rust(py, &self.0.as_slice()[index])
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> PyResult<EditIter> {
+        edit_iter(py, &self.0)
+    }
+
+    fn add_atom(&mut self, py: Python<'_>, ast: Py<AtomAst>) -> New {
+        New::from_rust(AstEntityHandle::Atom(
+            self.0.add_atom(ast.bind(py).borrow().inner().clone()),
+        ))
+    }
+
+    fn add_atoms(&mut self, py: Python<'_>, atoms: Vec<Py<AtomAst>>) -> Vec<New> {
+        self.0
+            .add_atoms(
+                atoms
+                    .into_iter()
+                    .map(|ast| ast.bind(py).borrow().inner().clone()),
+            )
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::Atom(handle)))
+            .collect()
+    }
+
+    fn add_bond(
+        &mut self,
+        py: Python<'_>,
+        first: HandleLike,
+        second: HandleLike,
+        ast: Py<BondAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::Bond(self.0.add_bond(
+            first.to_atom_handle(),
+            second.to_atom_handle(),
+            ast.bind(py).borrow().inner().clone(),
+        )))
+    }
+
+    fn add_bonds(&mut self, py: Python<'_>, bonds: Vec<BondAddition>) -> Vec<New> {
+        self.0
+            .add_bonds(bonds.into_iter().map(|((first, second), ast)| AstAddBond {
+                endpoints: [first.to_atom_handle(), second.to_atom_handle()],
+                ast: ast.bind(py).borrow().inner().clone(),
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::Bond(handle)))
+            .collect()
+    }
+
+    fn add_dative_bond(
+        &mut self,
+        py: Python<'_>,
+        atoms: Vec<HandleLike>,
+        ast: Py<DativeBondAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::DativeBond(self.0.add_dative_bond(
+            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            ast.bind(py).borrow().inner().clone(),
+        )))
+    }
+
+    fn add_dative_bonds(&mut self, py: Python<'_>, bonds: Vec<DativeBondAddition>) -> Vec<New> {
+        self.0
+            .add_dative_bonds(bonds.into_iter().map(|(atoms, ast)| {
+                (
+                    atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                    ast.bind(py).borrow().inner().clone(),
+                )
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::DativeBond(handle)))
+            .collect()
+    }
+
+    fn add_aromatic_system(
+        &mut self,
+        py: Python<'_>,
+        atoms: Vec<HandleLike>,
+        ast: Py<AromaticSystemAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::AromaticSystem(self.0.add_aromatic_system(
+            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            ast.bind(py).borrow().inner().clone(),
+        )))
+    }
+
+    fn add_aromatic_systems(
+        &mut self,
+        py: Python<'_>,
+        systems: Vec<AromaticSystemAddition>,
+    ) -> Vec<New> {
+        self.0
+            .add_aromatic_systems(systems.into_iter().map(|(atoms, ast)| {
+                (
+                    atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                    ast.bind(py).borrow().inner().clone(),
+                )
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::AromaticSystem(handle)))
+            .collect()
+    }
+
+    fn add_multicenter_bond(
+        &mut self,
+        py: Python<'_>,
+        atoms: Vec<HandleLike>,
+        ast: Py<MulticenterBondAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::MulticenterBond(
+            self.0.add_multicenter_bond(
+                atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                ast.bind(py).borrow().inner().clone(),
+            ),
+        ))
+    }
+
+    fn add_multicenter_bonds(
+        &mut self,
+        py: Python<'_>,
+        bonds: Vec<MulticenterBondAddition>,
+    ) -> Vec<New> {
+        self.0
+            .add_multicenter_bonds(bonds.into_iter().map(|(atoms, ast)| {
+                (
+                    atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                    ast.bind(py).borrow().inner().clone(),
+                )
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::MulticenterBond(handle)))
+            .collect()
+    }
+
+    fn add_noncovalent_bond(
+        &mut self,
+        py: Python<'_>,
+        atoms: (HandleLike, HandleLike),
+        ast: Py<NoncovalentBondAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::NoncovalentBond(
+            self.0.add_noncovalent_bond(
+                [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
+                ast.bind(py).borrow().inner().clone(),
+            ),
+        ))
+    }
+
+    fn add_noncovalent_bonds(
+        &mut self,
+        py: Python<'_>,
+        bonds: Vec<NoncovalentBondAddition>,
+    ) -> Vec<New> {
+        self.0
+            .add_noncovalent_bonds(bonds.into_iter().map(|(atoms, ast)| {
+                (
+                    [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
+                    ast.bind(py).borrow().inner().clone(),
+                )
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::NoncovalentBond(handle)))
+            .collect()
+    }
+
+    fn add_stereo_atom(
+        &mut self,
+        py: Python<'_>,
+        site: HandleLike,
+        ligands: Vec<StereoLigandInput>,
+        ast: Py<StereoAtomAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::StereoAtom(
+            self.0.add_stereo_atom(
+                site.to_atom_handle(),
+                ligands
+                    .iter()
+                    .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                    .collect(),
+                ast.bind(py).borrow().inner().clone(),
+            ),
+        ))
+    }
+
+    fn add_stereo_atoms(&mut self, py: Python<'_>, atoms: Vec<StereoAtomAddition>) -> Vec<New> {
+        self.0
+            .add_stereo_atoms(atoms.into_iter().map(|(site, ligands, ast)| {
+                (
+                    site.to_atom_handle(),
+                    ligands
+                        .iter()
+                        .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                        .collect(),
+                    ast.bind(py).borrow().inner().clone(),
+                )
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::StereoAtom(handle)))
+            .collect()
+    }
+
+    fn add_stereo_bond(
+        &mut self,
+        py: Python<'_>,
+        site: HandleLike,
+        ligands: Vec<StereoLigandInput>,
+        ast: Py<StereoBondAst>,
+    ) -> New {
+        New::from_rust(AstEntityHandle::StereoBond(
+            self.0.add_stereo_bond(
+                site.to_bond_handle(),
+                ligands
+                    .iter()
+                    .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                    .collect(),
+                ast.bind(py).borrow().inner().clone(),
+            ),
+        ))
+    }
+
+    fn add_stereo_bonds(&mut self, py: Python<'_>, bonds: Vec<StereoBondAddition>) -> Vec<New> {
+        self.0
+            .add_stereo_bonds(bonds.into_iter().map(|(site, ligands, ast)| {
+                (
+                    site.to_bond_handle(),
+                    ligands
+                        .iter()
+                        .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                        .collect(),
+                    ast.bind(py).borrow().inner().clone(),
+                )
+            }))
+            .into_iter()
+            .map(|handle| New::from_rust(AstEntityHandle::StereoBond(handle)))
+            .collect()
+    }
+}
+
+impl Edits {
+    pub(crate) fn from_rust(edits: AstEdits) -> Self {
+        Self(edits)
     }
 }
 
