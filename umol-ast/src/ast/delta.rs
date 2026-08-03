@@ -2883,7 +2883,10 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 kind,
             },
         }),
-        Delta::Constraint(c) => Delta::Constraint(c),
+        Delta::Constraint(c) => Delta::Constraint(match c {
+            ConstraintDelta::Add(constraint) => ConstraintDelta::Add(constraint.remap(map)),
+            ConstraintDelta::Remove(constraint) => ConstraintDelta::Remove(constraint.remap(map)),
+        }),
     }
 }
 
@@ -3098,7 +3101,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
-    use super::super::constraint::MoleculeConstraint;
+    use super::super::constraint::{MoleculeConstraint, RelationalConstraint};
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::value::ValueAst;
     use super::*;
@@ -4093,12 +4096,28 @@ mod tests {
             },
         })
     )]
-    #[case::constraint(
-        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
-            MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+    #[case::constraint_add(
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Relational(
+            RelationalConstraint::DativeBondParallels {
+                dative: DativeBondId(0),
+                parallel: BondId(0),
+            },
         ))),
-        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
-            MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Relational(
+            RelationalConstraint::DativeBondParallels {
+                dative: DativeBondId(1),
+                parallel: BondId(1),
+            },
+        )))
+    )]
+    #[case::constraint_remove(
+        Delta::Constraint(ConstraintDelta::Remove(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintAst::valence(3_i64),
+        ))),
+        Delta::Constraint(ConstraintDelta::Remove(Constraint::Atom(
+            AtomId(2),
+            AtomConstraintAst::valence(3_i64),
         )))
     )]
     fn test_remap_delta(remapping: IdRemapping, #[case] input: Delta, #[case] expected: Delta) {

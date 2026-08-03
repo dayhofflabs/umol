@@ -2,8 +2,8 @@
 //! are re-exported (`pub(crate) use`) so the per-area test modules need only
 //! `use proptest::prelude::*; use crate::strategies::*;`.
 
-use std::collections::BTreeSet;
 pub(crate) use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap};
 pub(crate) use std::fmt::Debug;
 use std::hash::Hash;
 pub(crate) use std::iter::repeat_with;
@@ -19,15 +19,15 @@ pub(crate) use umol_ast::ast::{
     AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomHandle, AtomId, AtomUpdate, BondAst,
     BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta, BondFieldChange,
     BondHandle, BondId, BondUpdate, BooleanAst, Canonicalize, CisTransStereoAst, Constraint,
-    Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
+    ConstraintEdit, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange, DativeBondHandle,
     DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsAst,
-    ElementAst, Entity, EntityKind, FluxionalityAst, FromAst, IntoAst, IsotopeMassAst, Lattice,
-    LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
-    MoleculeCorrespondence, MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst,
-    MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondDelta,
-    MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
-    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
+    ElementAst, Entity, EntityHandle, EntityKind, FluxionalityAst, FromAst, IntoAst,
+    IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
+    MoleculeConstraint, MoleculeCorrespondence, MoleculeParts, MulticenterBondAst,
+    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
+    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
+    MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
     NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
     NoncovalentBondUpdate, OrientedLigandPermutation, ReactionAst, ReactionSpanAst, RelOp,
@@ -3540,57 +3540,117 @@ fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
     .collect()
 }
 
-fn transaction_creation_case() -> (MoleculeAst, Edits) {
+fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, Edits) {
     let base = transaction_all_entities_molecule();
     let mut edits = Edits::new();
-    edits.add_atom(AtomAst::from_element(Element::N));
-    edits.add_bond(
+    let atom = edits.add_atom(AtomAst::from_element(Element::N));
+    let bond = edits.add_bond(
         AtomHandle::Id(AtomId(1)),
         AtomHandle::Id(AtomId(2)),
         BondAst::from_order(2),
     );
-    edits.add_dative_bond(
+    let dative = edits.add_dative_bond(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
         DativeBondAst::from_order(1),
     );
-    edits.add_aromatic_system(
+    let aromatic = edits.add_aromatic_system(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
         AromaticSystemAst::default(),
     );
-    edits.add_multicenter_bond(
+    let multicenter = edits.add_multicenter_bond(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
         MulticenterBondAst::default(),
     );
-    edits.add_noncovalent_bond(
+    let noncovalent = edits.add_noncovalent_bond(
         [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
         NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
     );
     let ligands = (0..4)
         .map(|id| (AtomHandle::Id(AtomId(id)), StereoLigandKind::Atom))
         .collect::<Vec<_>>();
-    edits.add_stereo_atom(
+    let stereo_atom = edits.add_stereo_atom(
         AtomHandle::Id(AtomId(1)),
         ligands.clone(),
         StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
     );
-    edits.add_stereo_bond(
+    let stereo_bond = edits.add_stereo_bond(
         BondHandle::Id(BondId(1)),
         ligands,
         StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
     );
+    let source = Constraint::And(vec![
+        Constraint::Atom(AtomId(7), AtomConstraintAst::degree(3)),
+        Constraint::Bond(BondId(7), BondConstraintAst::aromatic(true)),
+        Constraint::DativeBond(DativeBondId(7), DativeBondConstraintAst::aromatic(true)),
+        Constraint::AromaticSystem(
+            AromaticSystemId(7),
+            AromaticSystemConstraintAst::electron_count(6),
+        ),
+        Constraint::MulticenterBond(
+            MulticenterBondId(7),
+            MulticenterBondConstraintAst::electron_count(2),
+        ),
+        Constraint::NoncovalentBond(
+            NoncovalentBondId(7),
+            NoncovalentBondConstraintAst::intramolecular(true),
+        ),
+        Constraint::StereoAtom(
+            StereoAtomId(7),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        ),
+        Constraint::StereoBond(
+            StereoBondId(7),
+            StereoKind::CisTrans,
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        ),
+    ]);
+    let mappings = HashMap::from([
+        (Entity::Atom(AtomId(7)), EntityHandle::Atom(atom)),
+        (Entity::Bond(BondId(7)), EntityHandle::Bond(bond)),
+        (
+            Entity::DativeBond(DativeBondId(7)),
+            EntityHandle::DativeBond(dative),
+        ),
+        (
+            Entity::AromaticSystem(AromaticSystemId(7)),
+            EntityHandle::AromaticSystem(aromatic),
+        ),
+        (
+            Entity::MulticenterBond(MulticenterBondId(7)),
+            EntityHandle::MulticenterBond(multicenter),
+        ),
+        (
+            Entity::NoncovalentBond(NoncovalentBondId(7)),
+            EntityHandle::NoncovalentBond(noncovalent),
+        ),
+        (
+            Entity::StereoAtom(StereoAtomId(7)),
+            EntityHandle::StereoAtom(stereo_atom),
+        ),
+        (
+            Entity::StereoBond(StereoBondId(7)),
+            EntityHandle::StereoBond(stereo_bond),
+        ),
+    ]);
+    if include_created_constraint {
+        edits.add_molecule_constraint(
+            ConstraintEdit::new(source, |entity| mappings.get(&entity).cloned()).unwrap(),
+        );
+    }
     (base, edits)
 }
 
-pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
+fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(MoleculeAst, Edits)> {
     let mut cases = transaction_field_cases();
     cases.extend(transaction_constraint_cases());
     cases.extend(transaction_removal_cases());
-    cases.push(transaction_creation_case());
+    cases.push(transaction_creation_case(include_created_constraint));
     let constraint = Constraint::Atom(AtomId(0), AtomConstraintAst::degree(3));
     cases.push((
         transaction_all_entities_molecule(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: constraint.clone(),
+            constraint: constraint.clone().into(),
         }]),
     ));
     cases.push((
@@ -3598,9 +3658,15 @@ pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (Molecule
             constraint.clone(),
             constraint.clone(),
         ])),
-        Edits::from_iter([Edit::RemoveMoleculeConstraint { constraint }]),
+        Edits::from_iter([Edit::RemoveMoleculeConstraint {
+            constraint: constraint.into(),
+        }]),
     ));
-    prop::sample::select(cases)
+    cases
+}
+
+pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
+    prop::sample::select(complete_transaction_cases(true))
 }
 
 fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
@@ -3973,7 +4039,8 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                         constraint: Constraint::AromaticSystem(
                             AromaticSystemId(i as u32),
                             AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6)),
-                        ),
+                        )
+                        .into(),
                     });
                 }
                 for i in (0..2).filter(|&i| con_mc[i]) {
@@ -3981,7 +4048,8 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                         constraint: Constraint::MulticenterBond(
                             MulticenterBondId(i as u32),
                             MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(4)),
-                        ),
+                        )
+                        .into(),
                     });
                 }
                 let dative: Vec<_> = (0..2)
@@ -4088,7 +4156,13 @@ pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst
 /// each addition as one entry. Keep those batches in `transaction_edits_strategy` for transaction
 /// coverage and split only the inputs to the syntax round-trip property.
 pub(crate) fn edits_dsl_strategy() -> impl Strategy<Value = Edits> {
-    transaction_edits_strategy().prop_map(|(_, edits)| {
+    prop_oneof![
+        transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
+        prop::sample::select(complete_transaction_cases(false)),
+        overlay_transaction_strategy(),
+        stable_atom_handle_trace_strategy(false).prop_map(|trace| (trace.base(), trace.edits())),
+    ]
+    .prop_map(|(_, edits)| {
         edits
             .into_iter()
             .flat_map(|edit| match edit {

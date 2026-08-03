@@ -420,10 +420,10 @@ pub enum Edit {
     // Molecule-list constraints — a true multiset, so add/remove by value
     // (remove takes the last matching entry; its position is captured for undo).
     AddMoleculeConstraint {
-        constraint: Constraint,
+        constraint: ConstraintEdit,
     },
     RemoveMoleculeConstraint {
-        constraint: Constraint,
+        constraint: ConstraintEdit,
     },
 }
 
@@ -704,11 +704,11 @@ impl Edits {
         self.push(Edit::RemoveStereoBonds { removes });
     }
 
-    pub fn add_molecule_constraint(&mut self, constraint: Constraint) {
+    pub fn add_molecule_constraint(&mut self, constraint: ConstraintEdit) {
         self.push(Edit::AddMoleculeConstraint { constraint });
     }
 
-    pub fn remove_molecule_constraint(&mut self, constraint: Constraint) {
+    pub fn remove_molecule_constraint(&mut self, constraint: ConstraintEdit) {
         self.push(Edit::RemoveMoleculeConstraint { constraint });
     }
 }
@@ -1241,6 +1241,9 @@ impl From<Entity> for EntityHandle {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum ConstraintEditError {
+    #[error("missing handle for {entity}")]
+    MissingHandle { entity: Entity },
+
     #[error("handle kind mismatch for {entity}: found {actual}")]
     HandleKindMismatch { entity: Entity, actual: EntityKind },
 }
@@ -1269,7 +1272,7 @@ impl ConstraintEdit {
     /// share one normalized slot within their entity kind.
     pub fn new(
         constraint: Constraint,
-        mut handle_for: impl FnMut(Entity) -> EntityHandle,
+        mut handle_for: impl FnMut(Entity) -> Option<EntityHandle>,
     ) -> Result<Self, ConstraintEditError> {
         let mut atom_map = HashMap::new();
         let mut bond_map = HashMap::new();
@@ -1291,7 +1294,7 @@ impl ConstraintEdit {
         let mut entities = BTreeSet::new();
         collect_constraint_entities(&constraint, &mut entities);
         for entity in entities {
-            let handle = handle_for(entity);
+            let handle = handle_for(entity).ok_or(ConstraintEditError::MissingHandle { entity })?;
             match (entity, handle) {
                 (Entity::Atom(id), EntityHandle::Atom(handle)) => {
                     intern_handle(id, handle, &mut atoms, &mut atom_map);
@@ -1348,11 +1351,74 @@ impl ConstraintEdit {
             stereo_bonds,
         })
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve<E>(
+        self,
+        mut atom: impl FnMut(AtomHandle) -> Result<AtomId, E>,
+        mut bond: impl FnMut(BondHandle) -> Result<BondId, E>,
+        mut dative_bond: impl FnMut(DativeBondHandle) -> Result<DativeBondId, E>,
+        mut aromatic_system: impl FnMut(AromaticSystemHandle) -> Result<AromaticSystemId, E>,
+        mut multicenter_bond: impl FnMut(MulticenterBondHandle) -> Result<MulticenterBondId, E>,
+        mut noncovalent_bond: impl FnMut(NoncovalentBondHandle) -> Result<NoncovalentBondId, E>,
+        mut stereo_atom: impl FnMut(StereoAtomHandle) -> Result<StereoAtomId, E>,
+        mut stereo_bond: impl FnMut(StereoBondHandle) -> Result<StereoBondId, E>,
+    ) -> Result<Constraint, E> {
+        let remapping = IdRemapping::new(
+            self.atoms
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| atom(handle).map(|id| (AtomId::from(slot), id)))
+                .collect::<Result<_, _>>()?,
+            self.bonds
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| bond(handle).map(|id| (BondId::from(slot), id)))
+                .collect::<Result<_, _>>()?,
+            self.dative_bonds
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| dative_bond(handle).map(|id| (DativeBondId::from(slot), id)))
+                .collect::<Result<_, _>>()?,
+            self.aromatic_systems
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| {
+                    aromatic_system(handle).map(|id| (AromaticSystemId::from(slot), id))
+                })
+                .collect::<Result<_, _>>()?,
+            self.multicenter_bonds
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| {
+                    multicenter_bond(handle).map(|id| (MulticenterBondId::from(slot), id))
+                })
+                .collect::<Result<_, _>>()?,
+            self.noncovalent_bonds
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| {
+                    noncovalent_bond(handle).map(|id| (NoncovalentBondId::from(slot), id))
+                })
+                .collect::<Result<_, _>>()?,
+            self.stereo_atoms
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| stereo_atom(handle).map(|id| (StereoAtomId::from(slot), id)))
+                .collect::<Result<_, _>>()?,
+            self.stereo_bonds
+                .into_iter()
+                .enumerate()
+                .map(|(slot, handle)| stereo_bond(handle).map(|id| (StereoBondId::from(slot), id)))
+                .collect::<Result<_, _>>()?,
+        );
+        Ok(self.constraint.remap(&remapping))
+    }
 }
 
 impl From<Constraint> for ConstraintEdit {
     fn from(constraint: Constraint) -> Self {
-        ConstraintEdit::new(constraint, EntityHandle::from)
+        ConstraintEdit::new(constraint, |entity| Some(EntityHandle::from(entity)))
             .expect("an entity's identity handle has the same kind")
     }
 }
@@ -2351,16 +2417,18 @@ mod tests {
     fn test_edits_molecule_constraint() {
         let constraint = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
         let mut edits = Edits::new();
-        edits.add_molecule_constraint(constraint.clone());
-        edits.remove_molecule_constraint(constraint.clone());
+        edits.add_molecule_constraint(constraint.clone().into());
+        edits.remove_molecule_constraint(constraint.clone().into());
 
         assert_eq!(
             edits.as_slice(),
             [
                 Edit::AddMoleculeConstraint {
-                    constraint: constraint.clone(),
+                    constraint: constraint.clone().into(),
                 },
-                Edit::RemoveMoleculeConstraint { constraint },
+                Edit::RemoveMoleculeConstraint {
+                    constraint: constraint.into(),
+                },
             ],
         );
     }
@@ -2488,7 +2556,8 @@ mod tests {
                 bonds: Vec::new(),
             },
             Edit::AddMoleculeConstraint {
-                constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })
+                    .into(),
             },
         ];
         let edits: Edits = entries.clone().into_iter().collect();
@@ -3391,7 +3460,7 @@ mod tests {
         let mappings: HashMap<_, _> = mappings.into_iter().collect();
 
         assert_eq!(
-            ConstraintEdit::new(input, |entity| mappings[&entity].clone()),
+            ConstraintEdit::new(input, |entity| Some(mappings[&entity].clone())),
             Ok(expected),
         );
     }
@@ -3441,7 +3510,7 @@ mod tests {
         let mappings: HashMap<_, _> = mappings.into_iter().collect();
 
         assert_eq!(
-            ConstraintEdit::new(input, |entity| mappings[&entity].clone()),
+            ConstraintEdit::new(input, |entity| Some(mappings[&entity].clone())),
             Ok(expected),
         );
     }
@@ -3449,15 +3518,22 @@ mod tests {
     #[rstest]
     #[case::atom_as_bond(
         Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
-        EntityHandle::Bond(BondHandle::New(0)),
+        Some(EntityHandle::Bond(BondHandle::New(0))),
         ConstraintEditError::HandleKindMismatch {
             entity: Entity::Atom(AtomId(7)),
             actual: EntityKind::Bond,
         },
     )]
+    #[case::missing(
+        Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+        None,
+        ConstraintEditError::MissingHandle {
+            entity: Entity::Atom(AtomId(7)),
+        },
+    )]
     fn test_constraint_edit_new_error(
         #[case] input: Constraint,
-        #[case] handle: EntityHandle,
+        #[case] handle: Option<EntityHandle>,
         #[case] expected: ConstraintEditError,
     ) {
         assert_eq!(

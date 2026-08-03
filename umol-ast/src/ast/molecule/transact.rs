@@ -14,12 +14,12 @@ use std::hash::Hash;
 
 use thiserror::Error;
 
-use super::super::constraint::Constraints;
+use super::super::constraint::{Constraint, Constraints};
 use super::super::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
     AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
-    CascadedConstraints, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
+    CascadedConstraints, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
     MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
     NoncovalentBondHandle, RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedConstraint,
     RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays,
@@ -329,6 +329,19 @@ impl ApplicationState {
             .into_iter()
             .map(|(atom, kind)| Ok(StereoLigand::new(self.atom(atom)?, kind)))
             .collect()
+    }
+
+    fn resolve_constraint(&self, edit: ConstraintEdit) -> Result<Constraint, TransactionError> {
+        edit.resolve(
+            |handle| self.atom(handle),
+            |handle| self.bond(handle),
+            |handle| self.dative_bond(handle),
+            |handle| self.aromatic_system(handle),
+            |handle| self.multicenter_bond(handle),
+            |handle| self.noncovalent_bond(handle),
+            |handle| self.stereo_atom(handle),
+            |handle| self.stereo_bond(handle),
+        )
     }
 
     fn compact(&mut self, compaction: &IdCompaction) {
@@ -731,10 +744,12 @@ impl MoleculeEditor {
                 self.apply_modify_stereo_bond_constraint(id, old, new)
             }
             Edit::AddMoleculeConstraint { constraint } => {
+                let constraint = state.resolve_constraint(constraint)?;
                 self.push_constraint(constraint);
                 Ok(())
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
+                let constraint = state.resolve_constraint(constraint)?;
                 let list = self.constraints_mut();
                 let position = list
                     .as_slice()
@@ -1308,12 +1323,14 @@ impl MoleculeEditor {
                 Ok(undo)
             }
             Edit::AddMoleculeConstraint { constraint } => {
+                let constraint = state.resolve_constraint(constraint)?;
                 self.push_constraint(constraint.clone());
                 Ok(Undo::ApplyEdit(Box::new(Edit::RemoveMoleculeConstraint {
-                    constraint,
+                    constraint: constraint.into(),
                 })))
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
+                let constraint = state.resolve_constraint(constraint)?;
                 let list = self.constraints_mut();
                 let position = list
                     .as_slice()
@@ -2295,6 +2312,8 @@ impl MoleculeEditor {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use rstest::*;
     use umol_chem::element::Element;
 
@@ -2303,9 +2322,13 @@ mod tests {
     use super::super::super::bond::BondAst;
     use super::super::super::constraint::{
         AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
-        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst, RingScope,
+        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
+        NoncovalentBondConstraintAst, RelationalConstraint, RingScope, StereoAtomConstraintAst,
+        StereoBondConstraintAst, StereogenicityAst, SubPatternAnchor,
     };
     use super::super::super::dative::DativeBondAst;
+    use super::super::super::edit::EntityHandle;
+    use super::super::super::entity::Entity;
     use super::super::super::ligand::StereoLigandKind;
     use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::noncovalent::{
@@ -2316,7 +2339,7 @@ mod tests {
         StereoKind,
     };
     use super::super::super::value::ValueAst;
-    use super::super::MoleculeAst;
+    use super::super::{MoleculeAst, MoleculeParts};
     use super::*;
     use crate::ast::BooleanAst;
 
@@ -2988,7 +3011,7 @@ mod tests {
         let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
         empty
             .transact(Edits::from_iter([Edit::AddMoleculeConstraint {
-                constraint: c.clone(),
+                constraint: c.clone().into(),
             }]))
             .unwrap();
         assert_eq!(empty.constraints_mut().as_slice(), &[c]);
@@ -3000,7 +3023,7 @@ mod tests {
         empty.push_constraint(c.clone());
         empty
             .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                constraint: c.clone(),
+                constraint: c.clone().into(),
             }]))
             .unwrap();
         assert!(empty.constraints_mut().as_slice().is_empty());
@@ -3014,13 +3037,307 @@ mod tests {
         empty.push_constraint(c.clone());
         let err = empty
             .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                constraint: Constraint::Molecule(MoleculeConstraint::Connected {
-                    atoms: Some(vec![AtomId(0)]),
-                }),
+                constraint: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: None,
+                    sum: ValueAst::Lit(0),
+                })
+                .into(),
             }]))
             .unwrap_err();
         assert_eq!(err, TransactionError::MissingEntry);
         assert_eq!(empty.constraints_mut().as_slice(), &[c]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_transact_molecule_constraint_initial(
+        mut batched_overlays: MoleculeEditor,
+    ) {
+        let constraint = Constraint::And(vec![
+            Constraint::Atom(AtomId(1), AtomConstraintAst::valence(3_i64)),
+            Constraint::Bond(BondId(1), BondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::aromatic(true)),
+            Constraint::AromaticSystem(
+                AromaticSystemId(1),
+                AromaticSystemConstraintAst::electron_count(6_i64),
+            ),
+            Constraint::MulticenterBond(
+                MulticenterBondId(1),
+                MulticenterBondConstraintAst::electron_count(2_i64),
+            ),
+            Constraint::NoncovalentBond(
+                NoncovalentBondId(1),
+                NoncovalentBondConstraintAst::intramolecular(true),
+            ),
+            Constraint::StereoAtom(
+                StereoAtomId(1),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(1),
+                StereoKind::CisTrans,
+                StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            ),
+        ]);
+        let before = batched_overlays.clone().build();
+        let mut edits = Edits::new();
+        edits.add_molecule_constraint(constraint.clone().into());
+
+        let transaction = batched_overlays.transact(edits).unwrap();
+        assert_eq!(batched_overlays.constraints().as_slice(), &[constraint]);
+
+        transaction.rollback(&mut batched_overlays).unwrap();
+        assert_eq!(batched_overlays.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_transact_molecule_constraint_created(mut empty: MoleculeEditor) {
+        let before = empty.clone().build();
+        let mut edits = Edits::new();
+        let atoms = edits.add_atoms([
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::N),
+        ]);
+        let bond = edits.add_bond(atoms[0].clone(), atoms[1].clone(), BondAst::from_order(1));
+        let dative = edits.add_dative_bond(
+            vec![atoms[0].clone(), atoms[1].clone()],
+            DativeBondAst::from_order(1),
+        );
+        let aromatic = edits.add_aromatic_system(atoms.clone(), AromaticSystemAst::default());
+        let multicenter = edits.add_multicenter_bond(atoms.clone(), MulticenterBondAst::default());
+        let noncovalent = edits.add_noncovalent_bond(
+            [atoms[0].clone(), atoms[1].clone()],
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        );
+        let stereo_atom = edits.add_stereo_atom(
+            atoms[0].clone(),
+            vec![(atoms[1].clone(), StereoLigandKind::Atom)],
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        );
+        let stereo_bond = edits.add_stereo_bond(
+            bond.clone(),
+            vec![
+                (atoms[0].clone(), StereoLigandKind::Atom),
+                (atoms[1].clone(), StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+        );
+        let source = Constraint::And(vec![
+            Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+            Constraint::Bond(BondId(7), BondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(7), DativeBondConstraintAst::aromatic(true)),
+            Constraint::AromaticSystem(
+                AromaticSystemId(7),
+                AromaticSystemConstraintAst::electron_count(6_i64),
+            ),
+            Constraint::MulticenterBond(
+                MulticenterBondId(7),
+                MulticenterBondConstraintAst::electron_count(2_i64),
+            ),
+            Constraint::NoncovalentBond(
+                NoncovalentBondId(7),
+                NoncovalentBondConstraintAst::intramolecular(true),
+            ),
+            Constraint::StereoAtom(
+                StereoAtomId(7),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(7),
+                StereoKind::CisTrans,
+                StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            ),
+            Constraint::Relational(RelationalConstraint::DativeBondParallels {
+                dative: DativeBondId(7),
+                parallel: BondId(7),
+            }),
+        ]);
+        let mappings = HashMap::from([
+            (
+                Entity::Atom(AtomId(7)),
+                EntityHandle::Atom(atoms[0].clone()),
+            ),
+            (Entity::Bond(BondId(7)), EntityHandle::Bond(bond)),
+            (
+                Entity::DativeBond(DativeBondId(7)),
+                EntityHandle::DativeBond(dative),
+            ),
+            (
+                Entity::AromaticSystem(AromaticSystemId(7)),
+                EntityHandle::AromaticSystem(aromatic),
+            ),
+            (
+                Entity::MulticenterBond(MulticenterBondId(7)),
+                EntityHandle::MulticenterBond(multicenter),
+            ),
+            (
+                Entity::NoncovalentBond(NoncovalentBondId(7)),
+                EntityHandle::NoncovalentBond(noncovalent),
+            ),
+            (
+                Entity::StereoAtom(StereoAtomId(7)),
+                EntityHandle::StereoAtom(stereo_atom),
+            ),
+            (
+                Entity::StereoBond(StereoBondId(7)),
+                EntityHandle::StereoBond(stereo_bond),
+            ),
+        ]);
+        edits.add_molecule_constraint(
+            ConstraintEdit::new(source, |entity| mappings.get(&entity).cloned()).unwrap(),
+        );
+        let expected = Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
+            Constraint::Bond(BondId(0), BondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
+            Constraint::AromaticSystem(
+                AromaticSystemId(0),
+                AromaticSystemConstraintAst::electron_count(6_i64),
+            ),
+            Constraint::MulticenterBond(
+                MulticenterBondId(0),
+                MulticenterBondConstraintAst::electron_count(2_i64),
+            ),
+            Constraint::NoncovalentBond(
+                NoncovalentBondId(0),
+                NoncovalentBondConstraintAst::intramolecular(true),
+            ),
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(0),
+                StereoKind::CisTrans,
+                StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            ),
+            Constraint::Relational(RelationalConstraint::DativeBondParallels {
+                dative: DativeBondId(0),
+                parallel: BondId(0),
+            }),
+        ]);
+
+        let transaction = empty.transact(edits).unwrap();
+        assert_eq!(empty.constraints().as_slice(), &[expected]);
+
+        transaction.rollback(&mut empty).unwrap();
+        assert_eq!(empty.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_transact_molecule_constraint_compaction(
+        mut batched_overlays: MoleculeEditor,
+    ) {
+        let removed = Constraint::AromaticSystem(
+            AromaticSystemId(1),
+            AromaticSystemConstraintAst::electron_count(6_i64),
+        );
+        let added = Constraint::AromaticSystem(
+            AromaticSystemId(1),
+            AromaticSystemConstraintAst::electron_count(4_i64),
+        );
+        batched_overlays.push_constraint(removed.clone());
+        let before = batched_overlays.clone().build();
+        let mut edits = Edits::from_iter([Edit::RemoveAromaticSystems {
+            removes: vec![(
+                AromaticSystemHandle::Id(AromaticSystemId(0)),
+                vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                AromaticSystemAst::default(),
+            )],
+        }]);
+        edits.add_molecule_constraint(added.into());
+        edits.remove_molecule_constraint(removed.into());
+
+        let transaction = batched_overlays.transact(edits).unwrap();
+        assert_eq!(
+            batched_overlays.constraints().as_slice(),
+            &[Constraint::AromaticSystem(
+                AromaticSystemId(0),
+                AromaticSystemConstraintAst::electron_count(4_i64),
+            )],
+        );
+
+        transaction.rollback(&mut batched_overlays).unwrap();
+        assert_eq!(batched_overlays.build(), before);
+    }
+
+    #[rstest]
+    #[case::forward(
+        0,
+        Edits::from_iter([Edit::AddMoleculeConstraint {
+            constraint: ConstraintEdit::new(
+                Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+                |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
+            ).unwrap(),
+        }]),
+        TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 0, count: 0 },
+    )]
+    #[case::removed(
+        1,
+        Edits::from_iter([
+            Edit::RemoveTopology {
+                atoms: vec![AtomHandle::Id(AtomId(0))],
+                bonds: Vec::new(),
+            },
+            Edit::AddMoleculeConstraint {
+                constraint: ConstraintEdit::new(
+                    Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+                    |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
+                ).unwrap(),
+            },
+        ]),
+        TransactionError::HandleRemoved { kind: EntityKind::Atom, index: 0 },
+    )]
+    fn test_molecule_editor_transact_molecule_constraint_error(
+        #[case] initial_atom_count: usize,
+        #[case] edits: Edits,
+        #[case] expected: TransactionError,
+    ) {
+        let mut editor = MoleculeAst::default().edit();
+        for _ in 0..initial_atom_count {
+            editor.add_atom(AtomAst::from_element(Element::C));
+        }
+        let before = editor.clone().build();
+
+        assert_eq!(editor.transact(edits), Err(expected));
+        assert_eq!(editor.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_transact_molecule_constraint_subpattern(mut one_atom: MoleculeEditor) {
+        let pattern = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 4],
+            ..Default::default()
+        });
+        let mut source_anchor = SubPatternAnchor::new();
+        source_anchor.push_atom(AtomId(7), AtomId(3));
+        let edit = ConstraintEdit::new(
+            Constraint::Molecule(MoleculeConstraint::SubPattern {
+                anchor: source_anchor,
+                pattern: Box::new(pattern.clone()),
+            }),
+            |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
+        )
+        .unwrap();
+        let mut expected_anchor = SubPatternAnchor::new();
+        expected_anchor.push_atom(AtomId(0), AtomId(3));
+        let expected = Constraint::Molecule(MoleculeConstraint::SubPattern {
+            anchor: expected_anchor,
+            pattern: Box::new(pattern),
+        });
+        let before = one_atom.clone().build();
+
+        let transaction = one_atom
+            .transact(Edits::from_iter([Edit::AddMoleculeConstraint {
+                constraint: edit,
+            }]))
+            .unwrap();
+        assert_eq!(one_atom.constraints().as_slice(), &[expected]);
+
+        transaction.rollback(&mut one_atom).unwrap();
+        assert_eq!(one_atom.build(), before);
     }
 
     #[rstest]
@@ -4108,7 +4425,8 @@ mod tests {
             constraint: Constraint::AromaticSystem(
                 constrained,
                 AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6)),
-            ),
+            )
+            .into(),
         }]))
         .unwrap();
         let before = b.clone().build();
@@ -4773,7 +5091,7 @@ mod tests {
 
         let transaction = one_atom
             .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                constraint: repeated.clone(),
+                constraint: repeated.clone().into(),
             }]))
             .unwrap();
         assert_eq!(one_atom.constraints().as_slice(), &[repeated, middle]);

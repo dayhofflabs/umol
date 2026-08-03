@@ -532,8 +532,9 @@ the section ships.
   **Done.**
 - **S2f — Make constraint edits handle-aware end to end.** Change
   `Edit::{AddMoleculeConstraint, RemoveMoleculeConstraint}` to carry `ConstraintEdit`, and change
-  `Edits::add_molecule_constraint` / `remove_molecule_constraint` to append that value while keeping
-  the ordinary concrete-`Constraint` path available through its infallible conversion. In
+  `Edits::add_molecule_constraint` / `remove_molecule_constraint` to accept and append that concrete
+  value. Keep the ordinary concrete-`Constraint` path available through an explicit infallible
+  conversion at the call site. In
   `ast/molecule/transact.rs`, resolve all eight handle vectors through `ApplicationState` before
   mutation, construct the total `IdRemapping` required by the normalized tree, and materialize an
   ordinary concrete `Constraint` through `Constraint::remap`; a forward, out-of-range, or removed
@@ -550,6 +551,7 @@ the section ships.
   compaction before later constraint addition/removal; duplicate-value last-match removal; removed
   and forward handles; target-only subpattern-anchor remapping; constraint deltas over created atoms
   and overlays; and direct `remap_delta` coverage. **Breaking (red→green).** [dep: S2e]
+  **Done.**
 - **S2g — Extend molecule-constraint edit parsing to handles.** In `dsl/edit.rs`, parse every
   target-molecule reference inside a molecule-level constraint as an edit handle and build
   `ConstraintEdit` directly: integers become `Id`, `{:new n}` becomes `New`, repeated handles share

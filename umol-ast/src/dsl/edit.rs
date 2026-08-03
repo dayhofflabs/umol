@@ -29,9 +29,10 @@ use crate::ast::constraint::{
 use crate::ast::dative::DativeBondUpdate;
 use crate::ast::edit::{
     AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange,
-    BondHandle, DativeBondFieldChange, DativeBondHandle, Edit, Edits, MulticenterBondFieldChange,
-    MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
-    StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle,
+    BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
+    MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
+    NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange,
+    StereoBondHandle,
 };
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -684,8 +685,10 @@ impl EditInput {
                 append_stereo_bond_modify(edits, id, expect, update)?;
             }
             Self::TopologyRemove { atoms, bonds } => edits.remove_topology(atoms, bonds),
-            Self::ConstraintAdd(constraint) => edits.add_molecule_constraint(constraint),
-            Self::ConstraintRemove(constraint) => edits.remove_molecule_constraint(constraint),
+            Self::ConstraintAdd(constraint) => edits.add_molecule_constraint(constraint.into()),
+            Self::ConstraintRemove(constraint) => {
+                edits.remove_molecule_constraint(constraint.into())
+            }
         }
         Ok(())
     }
@@ -953,14 +956,60 @@ impl EditInput {
                 }]
             }
             Edit::AddMoleculeConstraint { constraint } => {
-                vec![Self::ConstraintAdd(constraint.clone())]
+                vec![Self::ConstraintAdd(concrete_constraint(
+                    constraint.clone(),
+                )?)]
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
-                vec![Self::ConstraintRemove(constraint.clone())]
+                vec![Self::ConstraintRemove(concrete_constraint(
+                    constraint.clone(),
+                )?)]
             }
         };
         Ok(inputs)
     }
+}
+
+fn concrete_constraint(edit: ConstraintEdit) -> Result<Constraint, DeError> {
+    let unsupported = || {
+        DeError::Custom(
+            "created-entity handles inside constraints are not supported by this DSL".to_string(),
+        )
+    };
+    edit.resolve(
+        |handle| match handle {
+            AtomHandle::Id(id) => Ok(id),
+            AtomHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            BondHandle::Id(id) => Ok(id),
+            BondHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            DativeBondHandle::Id(id) => Ok(id),
+            DativeBondHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            AromaticSystemHandle::Id(id) => Ok(id),
+            AromaticSystemHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            MulticenterBondHandle::Id(id) => Ok(id),
+            MulticenterBondHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            NoncovalentBondHandle::Id(id) => Ok(id),
+            NoncovalentBondHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            StereoAtomHandle::Id(id) => Ok(id),
+            StereoAtomHandle::New(_) => Err(unsupported()),
+        },
+        |handle| match handle {
+            StereoBondHandle::Id(id) => Ok(id),
+            StereoBondHandle::New(_) => Err(unsupported()),
+        },
+    )
 }
 
 fn parse_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
@@ -3591,21 +3640,21 @@ mod tests {
         "{:constraint {:add {:connected {}}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
         }]),
     )]
     #[case::constraint_remove(
         "{:constraint {:remove {:connected {}}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::RemoveMoleculeConstraint {
-            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
         }]),
     )]
     #[case::constraint_positional(
         "{:constraint {:add {:atom [2 {:valence 4}]}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::Atom(AtomId(2), AtomConstraintAst::valence(4_i64)),
+            constraint: Constraint::Atom(AtomId(2), AtomConstraintAst::valence(4_i64)).into(),
         }]),
     )]
     fn test_edit_input_append_to(
@@ -3685,7 +3734,7 @@ mod tests {
     )]
     #[case::constraint_add(
         Edit::AddMoleculeConstraint {
-            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
         },
         MoleculeDefaults::new(),
         "{:constraint {:add {:connected {}}}}",
