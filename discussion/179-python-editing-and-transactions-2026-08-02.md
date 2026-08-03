@@ -504,6 +504,7 @@ the section ships.
   preconditions, checked field updates, and constraint updates. Test every operation for each family
   with both existing and `New` participant/entity handles and exact parse/render output. **Additive
   (green).** [dep: S1i, S2a]
+  **Done.**
 - **S2d — Encode stereo overlay edits.** Add stereo-atom and stereo-bond additions, batched
   removals, checked field updates, and constraint updates. Preserve the distinction between atom and
   bond sites and render each ligand as an atom handle plus `StereoLigandKind`. Test both site kinds,
