@@ -471,6 +471,7 @@ the section ships.
   batch uses `Vec<Edit>`, then run the complete workspace tests to restore green. Direct `Edit`
   construction may remain only inside `Edits` and representation-oriented matching/rendering.
   **Breaking (red→green).** [dep: S1h]
+  **Done.**
 - **S1j — Add snapshot and immutable apply.** In `ast/molecule/editor.rs`, add
   `MoleculeEditor::snapshot(&self) -> MoleculeAst` without changing the consuming `build`. In
   `ast/molecule.rs`, add `MoleculeAst::apply(&self, edits: Edits) -> Result<MoleculeAst,

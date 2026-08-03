@@ -355,13 +355,14 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
-        AtomConstraintAst, AtomId, IncidenceConstraintContradiction, MulticenterValenceAst,
+        AtomConstraintAst, AtomId, EntityKind, IncidenceConstraintContradiction,
+        MulticenterValenceAst,
     };
     use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ops::aromaticity::AromaticityInconsistency;
+    use crate::ops::aromaticity::{AromaticityError, AromaticityInconsistency};
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
@@ -430,11 +431,15 @@ mod tests {
     #[case::execution(
         ResolverError::RollbackFailed {
             cause: ResolverRollbackCause::Error(Box::new(ResolverError::Bonds(
-                BondsError::Transaction(TransactionError::IdOutOfRange("bond")),
+                BondsError::Transaction(TransactionError::HandleOutOfRange {
+                    kind: EntityKind::Bond,
+                    index: 3,
+                    count: 2,
+                }),
             ))),
             rollback: TransactionError::OldStateMismatch,
         },
-        "rollback failed after resolver error: id out of range: bond: precondition failed: old state does not match current"
+        "rollback failed after resolver error: bond handle 3 is out of range for 2 entries: precondition failed: old state does not match current"
     )]
     #[case::underdetermined(
         ResolverError::RollbackFailed {
@@ -643,6 +648,49 @@ mod tests {
             Resolver::new(&chemistry_model).resolve(&mut molecule),
             Ok(Solution::Underdetermined(()))
         );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::aromaticity_setup(
+        ChemistryModel {
+            valence: ValenceModel::AtomTyping {
+                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+                    "C#i=#c0#h0#n0#u0#s#v2#a2"
+                )])),
+            },
+            aromaticity: AromaticityModel::Hmo {
+                scope: ElementScope::Any,
+                stabilization_threshold: 0.5,
+            },
+            ..ChemistryModel::default()
+        },
+        mol_dsl!(r#"{
+            :atoms ["C#i*#v2#a2" "C#v2#a2" "C#v2#a2"
+                    "C#v2#a2" "C#v2#a2" "C#v2#a2"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        ResolverError::Aromaticity(AromaticityError::HmoMissingParameters(
+            String::from("no Van-Catledge parameters for C with 2 pi-electrons"),
+        )),
+    )]
+    fn test_resolver_resolve_error(
+        #[case] model: ChemistryModel,
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: ResolverError,
+    ) {
+        let original = molecule.clone();
+        let resolver = Resolver::new(&model);
+        let Solution::Determined(valence_edits) = resolver.valence.plan(&molecule) else {
+            panic!("fixture must produce a determined valence plan");
+        };
+        assert!(
+            !valence_edits.is_empty(),
+            "fixture must commit valence edits before aromaticity fails"
+        );
+
+        assert_eq!(resolver.resolve(&mut molecule), Err(expected));
         assert_eq!(molecule, original);
     }
 

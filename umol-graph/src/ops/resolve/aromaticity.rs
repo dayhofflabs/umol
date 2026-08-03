@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use umol_ast::ast::{
     AromaticSystemAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
     AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
-    BooleanAst, Edit, MoleculeAst,
+    BooleanAst, Edits, MoleculeAst,
 };
 use umol_utils::solution::Solution;
 
@@ -88,7 +88,7 @@ impl AromaticityResolver {
     pub fn plan(
         &self,
         ast: &MoleculeAst,
-    ) -> Result<Solution<Vec<Edit>, AromaticityContradiction>, AromaticityError> {
+    ) -> Result<Solution<Edits, AromaticityContradiction>, AromaticityError> {
         let outcome = self.perception.derive(ast, self.config.perception)?;
 
         match outcome {
@@ -125,7 +125,7 @@ impl AromaticityResolver {
                     })
                     .collect();
 
-                let mut edits = Vec::new();
+                let mut edits = Edits::new();
                 let mut remove_constraints = BTreeSet::new();
                 let mut remove_bond_constraints = BTreeSet::new();
                 let mut replacements = BTreeSet::new();
@@ -185,7 +185,7 @@ impl AromaticityResolver {
                             )
                         })
                         .collect();
-                    edits.push(Edit::RemoveAromaticSystems { removes });
+                    edits.remove_aromatic_systems(removes);
                 }
 
                 for atom in remove_constraints {
@@ -193,22 +193,14 @@ impl AromaticityResolver {
                     update.constraints.set(AtomConstraintAst::AromaticValence(
                         AromaticValenceAst::Undetermined,
                     ));
-                    edits.extend(Edit::for_atom_update(
-                        AtomHandle::Id(atom),
-                        ast.atom(atom).ast,
-                        &update,
-                    ));
+                    edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).ast, &update);
                 }
                 for bond in remove_bond_constraints {
                     let mut update = BondUpdate::default();
                     update
                         .constraints
                         .set(BondConstraintAst::Aromatic(BooleanAst::Undetermined));
-                    edits.extend(Edit::for_bond_update(
-                        BondHandle::Id(bond),
-                        ast.bond(bond).ast,
-                        &update,
-                    ));
+                    edits.update_bond(BondHandle::Id(bond), ast.bond(bond).ast, &update);
                 }
 
                 let replaced_candidates: BTreeSet<usize> = replacements
@@ -236,12 +228,14 @@ impl AromaticityResolver {
                             && !existing.contains(&key)
                             && !retained_existing.contains(&key))
                     {
-                        edits.extend(self.plan_system(ast, atoms, system));
+                        for edit in self.plan_system(ast, atoms, system) {
+                            edits.push(edit);
+                        }
                     }
                 }
                 Ok(Solution::Determined(edits))
             }
-            Solution::Underdetermined(_) => Ok(Solution::Underdetermined(Vec::new())),
+            Solution::Underdetermined(_) => Ok(Solution::Underdetermined(Edits::new())),
             Solution::Contradictory(contradiction) => Ok(Solution::Contradictory(contradiction)),
         }
     }
@@ -269,7 +263,7 @@ impl AromaticityResolver {
         ast: &MoleculeAst,
         atoms: Vec<AtomId>,
         system: AromaticSystemAst,
-    ) -> Vec<Edit> {
+    ) -> Edits {
         let mut atom_updates = Vec::new();
         if self.config.reset_aromatic_valence {
             for &atom_id in &atoms {
@@ -281,16 +275,10 @@ impl AromaticityResolver {
             }
         }
 
-        let mut edits = vec![Edit::AddAromaticSystem {
-            atoms: atoms.iter().copied().map(AtomHandle::Id).collect(),
-            ast: system,
-        }];
+        let mut edits = Edits::new();
+        edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), system);
         for (atom_id, update) in atom_updates {
-            edits.extend(Edit::for_atom_update(
-                AtomHandle::Id(atom_id),
-                ast.atom(atom_id).ast,
-                &update,
-            ));
+            edits.update_atom(AtomHandle::Id(atom_id), ast.atom(atom_id).ast, &update);
         }
 
         let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
@@ -313,11 +301,7 @@ impl AromaticityResolver {
             update
                 .constraints
                 .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
-            edits.extend(Edit::for_bond_update(
-                BondHandle::Id(bond_id),
-                ast.bond(bond_id).ast,
-                &update,
-            ));
+            edits.update_bond(BondHandle::Id(bond_id), ast.bond(bond_id).ast, &update);
         }
         edits
     }
@@ -327,7 +311,8 @@ impl AromaticityResolver {
 mod tests {
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
-        AromaticSystemId, BondConstraintKey, BondId, RingConfig, UnpairedElectronsAst, ValueAst,
+        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, RingConfig, UnpairedElectronsAst,
+        ValueAst,
     };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_graph_core::{
@@ -417,7 +402,7 @@ mod tests {
                 },
             )
             .plan(&benzene),
-            Ok(Solution::Determined(vec![
+            Ok(Solution::Determined(Edits::from_iter([
                 Edit::AddAromaticSystem {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
                     ast: AromaticSystemAst::from_electrons(vec![1; 6])
@@ -454,7 +439,7 @@ mod tests {
                     old: None,
                     new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
                 },
-            ]))
+            ])))
         );
     }
 
@@ -470,7 +455,7 @@ mod tests {
 
         assert_eq!(
             AromaticityResolver::new(&aromaticity_model).plan(&molecule),
-            Ok(Solution::Underdetermined(Vec::new()))
+            Ok(Solution::Underdetermined(Edits::new()))
         );
     }
 
@@ -484,10 +469,10 @@ mod tests {
             }
         ))
     )]
-    #[case::keep(AromaticityMismatchPolicy::Keep, Solution::Determined(Vec::new()))]
+    #[case::keep(AromaticityMismatchPolicy::Keep, Solution::Determined(Edits::new()))]
     #[case::remove_constraint(
         AromaticityMismatchPolicy::RemoveConstraint,
-        Solution::Determined(vec![
+        Solution::Determined(Edits::from_iter([
             Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
                 old: Some(AtomConstraintAst::AromaticValence(
@@ -502,11 +487,11 @@ mod tests {
                 )),
                 new: None,
             },
-        ])
+        ]))
     )]
     #[case::replace_entity(
         AromaticityMismatchPolicy::ReplaceEntity,
-        Solution::Determined(vec![
+        Solution::Determined(Edits::from_iter([
             Edit::RemoveAromaticSystems {
                 removes: vec![(
                     AromaticSystemHandle::Id(AromaticSystemId(0)),
@@ -520,13 +505,13 @@ mod tests {
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
             },
-        ])
+        ]))
     )]
     fn test_aromaticity_resolver_plan_aromatic_valence_mismatch(
         aromaticity_model: AromaticityModel,
         aromatic_valence_mismatch: MoleculeAst,
         #[case] policy: AromaticityMismatchPolicy,
-        #[case] expected: Solution<Vec<Edit>, AromaticityContradiction>,
+        #[case] expected: Solution<Edits, AromaticityContradiction>,
     ) {
         let resolver = AromaticityResolver::with_config(
             &aromaticity_model,
@@ -583,21 +568,21 @@ mod tests {
     )]
     #[case::keep(
         AromaticBondConstraintMismatchPolicy::Keep,
-        Solution::Determined(Vec::new())
+        Solution::Determined(Edits::new())
     )]
     #[case::remove_constraint(
         AromaticBondConstraintMismatchPolicy::RemoveConstraint,
-        Solution::Determined(vec![Edit::ModifyBondConstraint {
+        Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(0)),
             old: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(false))),
             new: None,
-        }])
+        }]))
     )]
     fn test_aromaticity_resolver_plan_aromatic_bond_constraint_mismatch(
         aromaticity_model: AromaticityModel,
         aromatic_bond_constraint_mismatch: MoleculeAst,
         #[case] policy: AromaticBondConstraintMismatchPolicy,
-        #[case] expected: Solution<Vec<Edit>, AromaticityContradiction>,
+        #[case] expected: Solution<Edits, AromaticityContradiction>,
     ) {
         let resolver = AromaticityResolver::with_config(
             &aromaticity_model,
@@ -657,7 +642,7 @@ mod tests {
     ) {
         assert_eq!(
             AromaticityResolver::with_config(&model, config).plan(&molecule),
-            Ok(Solution::Determined(Vec::new()))
+            Ok(Solution::Determined(Edits::new()))
         );
     }
 
