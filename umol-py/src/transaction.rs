@@ -14,6 +14,14 @@ pub struct MoleculeEditor {
     inner: Option<AstMoleculeEditor>,
 }
 
+impl MoleculeEditor {
+    pub(crate) fn from_rust(editor: AstMoleculeEditor) -> Self {
+        Self {
+            inner: Some(editor),
+        }
+    }
+}
+
 #[pymethods]
 impl MoleculeEditor {
     /// Materialize the editor's current state without consuming it.

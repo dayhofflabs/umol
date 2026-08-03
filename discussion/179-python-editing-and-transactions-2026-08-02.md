@@ -696,6 +696,7 @@ the section ships.
   `MoleculeAst.apply(edits)` in `umol-py/src/molecule.rs`. Test that `apply` returns the expected
   molecule without changing its receiver, surfaces `TransactionError` on failure, and covers the
   methyl-to-ammonia construction that motivates the work. **Additive (green).** [dep: S5c]
+  **Done.**
 
 ### S6 — Cross-boundary and reader-facing verification
 

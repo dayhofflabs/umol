@@ -22,7 +22,10 @@ use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
-use crate::error::{fingerprint_error, metadata_error, parse_error, smiles_input_error};
+use crate::edit::Edits;
+use crate::error::{
+    fingerprint_error, metadata_error, parse_error, smiles_input_error, transaction_error,
+};
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
 };
@@ -37,6 +40,7 @@ use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{StereoAtomAst, StereoAtomViews, StereoBondAst, StereoBondViews, StereoLigand};
 use crate::substructure::SubstructureSearchConfig;
+use crate::transaction::MoleculeEditor;
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -239,6 +243,19 @@ impl MoleculeAst {
         ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
             .map(Self::from_inner)
             .map_err(smiles_input_error)
+    }
+
+    /// Create a mutable editor initialized from this molecule.
+    fn edit(&self) -> MoleculeEditor {
+        MoleculeEditor::from_rust(self.0.edit())
+    }
+
+    /// Apply a checked edit batch without modifying this molecule.
+    fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
+        self.0
+            .apply(edits.bind(py).borrow().to_rust())
+            .map(Self::from_inner)
+            .map_err(transaction_error)
     }
 
     /// Combine this molecule and `other` by disjoint concatenation without modifying either input.
@@ -477,16 +494,17 @@ mod tests {
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
-        AtomAst as AstAtomAst, BondAst as AstBondAst, Constraint as AstConstraint,
+        AtomAst as AstAtomAst, AtomFieldChange as AstAtomFieldChange, AtomHandle as AstAtomHandle,
+        AtomUpdate as AstAtomUpdate, BondAst as AstBondAst, Constraint as AstConstraint,
         Constraints as AstConstraints, DativeBondAst as AstDativeBondAst,
-        DativeBondId as AstDativeBondId, Entity as AstEntity,
+        DativeBondId as AstDativeBondId, Edit as AstEdit, Edits as AstEdits, Entity as AstEntity,
         MoleculeConstraint as AstMoleculeConstraint,
         MoleculeCorrespondence as AstMoleculeCorrespondence,
         MulticenterBondAst as AstMulticenterBondAst, MulticenterBondId as AstMulticenterBondId,
         NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
         NoncovalentBondKind as AstNoncovalentBondKind,
         SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
-        SubstructureMatchConfig as AstSubstructureMatchConfig,
+        SubstructureMatchConfig as AstSubstructureMatchConfig, ValueAst as AstValueAst,
     };
     use umol_ast::dsl::{AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata};
     use umol_ast::mol_dsl;
@@ -506,7 +524,7 @@ mod tests {
     use crate::atom::AtomAst as PyAtomAst;
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
-    use crate::error::{MetadataError, ParseError, UnderdeterminedError};
+    use crate::error::{MetadataError, ParseError, TransactionError, UnderdeterminedError};
     use crate::fingerprint::config::{
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
         WlHashScheme,
@@ -821,6 +839,84 @@ mod tests {
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 expected_message
             );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_edit() {
+        Python::attach(|py| {
+            let expected = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
+            let editor = Py::new(py, MoleculeAst::from_inner(expected.clone()).edit()).unwrap();
+            let snapshot = editor
+                .bind(py)
+                .call_method0("snapshot")
+                .unwrap()
+                .extract::<Py<MoleculeAst>>()
+                .unwrap();
+
+            assert_eq!(snapshot.bind(py).borrow().inner(), &expected);
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_apply() {
+        let initial = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
+        let mut rust_edits = AstEdits::new();
+        rust_edits.update_atom(
+            AstAtomHandle::Id(AstAtomId(0)),
+            initial.atom(AstAtomId(0)).ast,
+            &AstAtomUpdate {
+                implicit_hydrogens: Some(AstValueAst::Lit(2)),
+                ..Default::default()
+            },
+        );
+        let methyl = rust_edits
+            .add_atom(AstAtomAst::from_element(ChemElement::C).with_implicit_hydrogens(3_i64));
+        rust_edits.add_bond(
+            AstAtomHandle::Id(AstAtomId(0)),
+            methyl,
+            AstBondAst::from_order(1),
+        );
+        let molecule = MoleculeAst::from_inner(initial.clone());
+
+        Python::attach(|py| {
+            let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
+
+            let result = molecule.apply(py, edits).unwrap();
+
+            assert_eq!(
+                result.inner(),
+                &mol_dsl!(r#"{:atoms ["N#h2" "C#h3"] :bonds [[0 1 "1"]]}"#)
+            );
+            assert_eq!(molecule.inner(), &initial);
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_apply_error() {
+        let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+        let molecule = MoleculeAst::from_inner(initial.clone());
+        let mut rust_edits = AstEdits::new();
+        rust_edits.add_atom(AstAtomAst::from_element(ChemElement::N));
+        rust_edits.push(AstEdit::ModifyAtomField {
+            id: AstAtomHandle::Id(AstAtomId(7)),
+            change: AstAtomFieldChange::Charge {
+                old: AstValueAst::Lit(0),
+                new: AstValueAst::Lit(1),
+            },
+        });
+
+        Python::attach(|py| {
+            let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
+
+            let error = molecule.apply(py, edits).unwrap_err();
+
+            assert!(error.is_instance_of::<TransactionError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "atom handle 7 is out of range for 1 entries"
+            );
+            assert_eq!(molecule.inner(), &initial);
         });
     }
 
