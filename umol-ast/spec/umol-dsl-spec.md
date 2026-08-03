@@ -381,7 +381,7 @@ Optional ASCII whitespace inside **`element-var`** around **`::`** and around co
 **`#i` isotope subgrammar.** The isotope-mass slot uses its own subgrammar, not **`value-expr`**, because isotope mass numbers are tagged enum-like and have no arithmetic operations. Empty payload (bare **`#i`**) denotes mass **1** (per §5.1.3 decimal-tail).
 
 ```
-isotope-payload ::= '='                           (* Natural — naturally most abundant *)
+isotope-payload ::= '='                           (* Natural — naturally-occurring ratios *)
                   | '*'                            (* Undetermined — wildcard           *)
                   | signed-int                     (* Lit                                *)
                   | nat-set                        (* Set — finite mass disjunction      *)
@@ -667,7 +667,7 @@ tag ::= [A-Za-z_]
 
 | Form | Tag | Meaning |
 |------|-----|---------|
-| **`=`** | **`#i`** | **Natural isotope**: mass number of the **naturally most abundant** isotope of **`element`**. This is the default / expected isotope for each element. |
+| **`=`** | **`#i`** | **Natural isotope**: the **naturally-occurring isotopic ratios** of **`element`**, following OpenSMILES. This is the default / expected state for each element. It is **not** a mass number: `Natural` is its own channel and is disjoint from every `Lit(n)` (**§5.3**). |
 | **`+`** | **`#a`** | Aromatic, **unspecified** aromatic valence. Note that **`#a0`** is a valid aromatic valence (aromatic boron, tropylium). |
 | **`!`** | **`#a`** | Not aromatic is **not** a member of any aromatic system. |
 | **`+`** | **`#m`** | Multicenter, **unspecified** multicenter valence. Note that **`#m0`** is valid multicenter valence (B2H6). |
