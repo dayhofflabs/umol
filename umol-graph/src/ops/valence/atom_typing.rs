@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, AtomAst, AtomHandle, AtomId, Edit, Lattice, MoleculeAst, TransactionError,
+    AsLit, AtomAst, AtomHandle, AtomId, Edits, Lattice, MoleculeAst, TransactionError,
 };
 use umol_chem::element::Element;
 use umol_utils::solution::Solution;
@@ -43,14 +43,14 @@ impl<'a> AtomTypingValence<'a> {
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, AtomTypingError> {
+    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Edits, AtomTypingError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
-                return Solution::Underdetermined(Vec::new());
+                return Solution::Underdetermined(Edits::new());
             }
         }
 
-        let mut edits = Vec::new();
+        let mut edits = Edits::new();
         for id in ast.atoms().ids() {
             let selected = match self.resolve_molecule_atom(ast, id) {
                 Ok(Some(selected)) => selected,
@@ -59,7 +59,7 @@ impl<'a> AtomTypingValence<'a> {
             };
             let current = ast.atom(id).ast;
             let update = current.difference_to(&selected);
-            edits.extend(Edit::for_atom_update(AtomHandle::Id(id), current, &update));
+            edits.update_atom(AtomHandle::Id(id), current, &update);
         }
         Solution::Determined(edits)
     }
@@ -154,7 +154,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{AtomConstraintAst, AtomFieldChange, MoleculeParts, ValueAst};
+    use umol_ast::ast::{AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeParts, ValueAst};
     use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
@@ -171,7 +171,7 @@ mod tests {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
         assert_eq!(
             resolver.plan(&molecule),
-            Solution::Determined(vec![
+            Solution::Determined(Edits::from_iter([
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::ImplicitHydrogens {
@@ -184,7 +184,7 @@ mod tests {
                     old: None,
                     new: Some(AtomConstraintAst::valence(0_i64)),
                 },
-            ])
+            ]))
         );
     }
 
@@ -195,7 +195,7 @@ mod tests {
         let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         assert_eq!(
             AtomTypingValence::new(registry.as_ref()).plan(&molecule),
-            Solution::Determined(Vec::new())
+            Solution::Determined(Edits::new())
         );
     }
 
@@ -207,7 +207,7 @@ mod tests {
     ) {
         assert_eq!(
             AtomTypingValence::new(&atom_type_registry).plan(&molecule),
-            Solution::Underdetermined(Vec::new())
+            Solution::Underdetermined(Edits::new())
         );
     }
 

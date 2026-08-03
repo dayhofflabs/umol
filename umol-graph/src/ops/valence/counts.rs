@@ -8,7 +8,7 @@ use thiserror::Error;
 use umol_ast::ast::MoleculeParts;
 use umol_ast::ast::{
     aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
-    AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edit, IsotopeMassAst, Lattice,
+    AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edits, IsotopeMassAst, Lattice,
     MoleculeAst, TransactionError, UnpairedElectronsAst, ValueAst,
 };
 use umol_chem::element::Element;
@@ -95,14 +95,14 @@ impl<'a> CountsValence<'a> {
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, CountsError> {
+    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Edits, CountsError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
-                return Solution::Underdetermined(Vec::new());
+                return Solution::Underdetermined(Edits::new());
             }
         }
 
-        let mut edits = Vec::new();
+        let mut edits = Edits::new();
         for id in ast.atoms().ids() {
             let selected = match self.resolve_molecule_atom(ast, id) {
                 Ok(Some(selected)) => selected,
@@ -111,7 +111,7 @@ impl<'a> CountsValence<'a> {
             };
             let current = ast.atom(id).ast;
             let update = current.difference_to(&selected);
-            edits.extend(Edit::for_atom_update(AtomHandle::Id(id), current, &update));
+            edits.update_atom(AtomHandle::Id(id), current, &update);
         }
         Solution::Determined(edits)
     }
@@ -435,7 +435,7 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) ->
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::AtomFieldChange;
+    use umol_ast::ast::{AtomFieldChange, Edit};
     use umol_ast::{atom_dsl, mol_dsl};
 
     use super::*;
@@ -497,7 +497,7 @@ mod tests {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0"]}"#);
         assert_eq!(
             resolver.plan(&molecule),
-            Solution::Determined(vec![
+            Solution::Determined(Edits::from_iter([
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::IsotopeMass {
@@ -538,7 +538,7 @@ mod tests {
                         AromaticValenceAst::NotAromatic,
                     )),
                 },
-            ])
+            ]))
         );
     }
 
@@ -546,7 +546,7 @@ mod tests {
     fn test_counts_valence_plan_identity() {
         let resolver = CountsValence::new(ValenceTable::default_table());
         let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#);
-        assert_eq!(resolver.plan(&molecule), Solution::Determined(Vec::new()));
+        assert_eq!(resolver.plan(&molecule), Solution::Determined(Edits::new()));
     }
 
     #[rstest]
@@ -554,7 +554,7 @@ mod tests {
     fn test_counts_valence_plan_partial(#[case] molecule: MoleculeAst) {
         assert_eq!(
             CountsValence::new(ValenceTable::default_table()).plan(&molecule),
-            Solution::Underdetermined(Vec::new())
+            Solution::Underdetermined(Edits::new())
         );
     }
 

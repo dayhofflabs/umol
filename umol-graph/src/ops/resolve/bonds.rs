@@ -4,7 +4,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    BondHandle, BondUpdate, Edit, Lattice, MoleculeAst, TransactionError, UnpairedElectronsAst,
+    BondHandle, BondUpdate, Edits, Lattice, MoleculeAst, TransactionError, UnpairedElectronsAst,
     ValueAst,
 };
 use umol_utils::solution::Solution;
@@ -27,8 +27,8 @@ impl BondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `ast`.
-    pub fn plan(&self, ast: &MoleculeAst) -> Vec<Edit> {
-        let mut edits = Vec::new();
+    pub fn plan(&self, ast: &MoleculeAst) -> Edits {
+        let mut edits = Edits::new();
         for bond_id in ast.bonds().ids() {
             let bond = ast.bond(bond_id).ast;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
@@ -44,11 +44,7 @@ impl BondsResolver {
             update.unpaired_electrons = bond
                 .unpaired_electrons
                 .difference_to(&selected_unpaired_electrons);
-            edits.extend(Edit::for_bond_update(
-                BondHandle::Id(bond_id),
-                bond,
-                &update,
-            ));
+            edits.update_bond(BondHandle::Id(bond_id), bond, &update);
         }
         edits
     }
@@ -69,7 +65,7 @@ impl BondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{BondFieldChange, BondId};
+    use umol_ast::ast::{BondFieldChange, BondId, Edit, Edits};
     use umol_ast::mol_dsl;
 
     use super::*;
@@ -77,7 +73,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
-        vec![
+        Edits::from_iter([
             Edit::ModifyBondField {
                 id: BondHandle::Id(BondId(0)),
                 change: BondFieldChange::Charge {
@@ -92,11 +88,11 @@ mod tests {
                     new: UnpairedElectronsAst::closed_shell(),
                 },
             },
-        ]
+        ])
     )]
     #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c+#s3"]]}"#),
-        vec![Edit::ModifyBondField {
+        Edits::from_iter([Edit::ModifyBondField {
             id: BondHandle::Id(BondId(0)),
             change: BondFieldChange::UnpairedElectrons {
                 old: UnpairedElectronsAst {
@@ -105,16 +101,16 @@ mod tests {
                 },
                 new: UnpairedElectronsAst::from((2_u8, 3_u8)),
             },
-        }]
+        }])
     )]
-    fn test_bonds_resolver_plan(#[case] molecule: MoleculeAst, #[case] expected: Vec<Edit>) {
+    fn test_bonds_resolver_plan(#[case] molecule: MoleculeAst, #[case] expected: Edits) {
         assert_eq!(BondsResolver::new().plan(&molecule), expected);
     }
 
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c+#u2#s1"]]}"#))]
     fn test_bonds_resolver_plan_identity(#[case] molecule: MoleculeAst) {
-        assert_eq!(BondsResolver::new().plan(&molecule), Vec::new());
+        assert_eq!(BondsResolver::new().plan(&molecule), Edits::new());
     }
 
     #[rstest]

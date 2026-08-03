@@ -461,6 +461,7 @@ the section ships.
   bond, and multicenter resolver/planner results from `Vec<Edit>`/`Solution<Vec<Edit>, _>` to
   `Edits`/`Solution<Edits, _>`, construct their batches through `Edits`, and migrate their tests and
   fixtures. **Breaking (red within S1).** [dep: S1g]
+  **Done.**
 - **S1i — Migrate aromaticity and stereo plans and close the inventory.** Change the aromaticity and
   stereo planner results and the top-level resolution coordinators to `Edits`, migrate their tests
   and fixtures, and remove any temporary migration adapters. At the top-level resolver boundary,
