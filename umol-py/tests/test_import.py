@@ -221,6 +221,38 @@ PUBLIC_EXPORTS = frozenset(
     """.split()
 )
 
+EDITING_EXPORTS = frozenset(
+    {
+        "AromaticSystemUpdate",
+        "AtomUpdate",
+        "BondUpdate",
+        "ConstraintEdit",
+        "DativeBondUpdate",
+        "Edit",
+        "Edits",
+        "MulticenterBondUpdate",
+        "New",
+        "NoncovalentBondUpdate",
+        "StereoAtomUpdate",
+        "StereoBondUpdate",
+        "StereoConfigurationUpdate",
+        "UnpairedElectronsUpdate",
+    }
+)
+
+TYPED_EDIT_HANDLE_EXPORTS = frozenset(
+    {
+        "AromaticSystemHandle",
+        "AtomHandle",
+        "BondHandle",
+        "DativeBondHandle",
+        "MulticenterBondHandle",
+        "NoncovalentBondHandle",
+        "StereoAtomHandle",
+        "StereoBondHandle",
+    }
+)
+
 
 def test_package_metadata():
     assert isinstance(umol.__version__, str)
@@ -240,6 +272,33 @@ def test_public_exports():
     assert {name: getattr(umol, name) for name in native_package_exports} == {
         name: getattr(native, name) for name in native_package_exports
     }
+
+
+def test_editing_exports():
+    package_exports = frozenset(name for name in EDITING_EXPORTS if name in umol.__all__)
+    native_exports = frozenset(name for name in EDITING_EXPORTS if hasattr(native, name))
+
+    assert package_exports == EDITING_EXPORTS
+    assert native_exports == EDITING_EXPORTS
+    assert {name: getattr(umol, name) for name in EDITING_EXPORTS} == {
+        name: getattr(native, name) for name in EDITING_EXPORTS
+    }
+
+
+def test_typed_edit_handles_are_not_exported():
+    package_exports = frozenset(
+        name for name in TYPED_EDIT_HANDLE_EXPORTS if name in umol.__all__
+    )
+    native_exports = frozenset(
+        name for name in TYPED_EDIT_HANDLE_EXPORTS if hasattr(native, name)
+    )
+    package_attributes = frozenset(
+        name for name in TYPED_EDIT_HANDLE_EXPORTS if hasattr(umol, name)
+    )
+
+    assert package_exports == frozenset()
+    assert native_exports == frozenset()
+    assert package_attributes == frozenset()
 
 
 @pytest.mark.parametrize(

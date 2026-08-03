@@ -664,6 +664,7 @@ the section ships.
   `Edit`, `Edits`, both leaf updates, and all eight entity updates in `umol-py/src/lib.rs`; add
   import-surface assertions for the complete inventory and for the deliberate absence of typed
   handle classes. **Additive (green).** [dep: S4d]
+  **Done.**
 
 ### S5 — Python editor and transaction lifecycle
 
