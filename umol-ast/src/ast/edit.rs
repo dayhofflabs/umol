@@ -3,9 +3,9 @@
 //! The `Edit` enum is the caller-facing data-form mutation vocabulary; realized
 //! rollback data belongs to the `Undo` journal.
 //!
-//! Handles (`AtomHandle`, `BondHandle`, ...) are symbolic. `Id(_)` references an
-//! existing entity; `New(N)` references the Nth same-kind entity created earlier
-//! in the same [`Edits`] sequence.
+//! Handles (`AtomHandle`, `BondHandle`, ...) are symbolic. `Id(n)` names entity
+//! `n` in the transaction's initial host; `New(n)` names the `n`th same-kind
+//! entity created in the same [`Edits`] sequence.
 
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -50,16 +50,16 @@ pub type StereoBondRemoval = (
     StereoBondAst,
 );
 
-/// Handle to an atom within an edit batch: either an existing `AtomId` or the
-/// Nth atom-creating Edit earlier in the same transaction batch.
+/// Handle to an atom within an edit batch: either an initial-host `AtomId` or a
+/// same-kind creation ordinal in the enclosing [`Edits`] sequence.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AtomHandle {
     Id(AtomId),
     New(usize),
 }
 
-/// Handle to a bond within an edit batch (an existing `BondId` or the Nth
-/// bond-creating Edit earlier in the batch).
+/// Handle to a bond within an edit batch: either an initial-host `BondId` or a
+/// same-kind creation ordinal in the enclosing [`Edits`] sequence.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BondHandle {
     Id(BondId),
@@ -1136,7 +1136,7 @@ impl Edits {
     }
 }
 
-// Handles for overlay relations (an existing id or the Nth created earlier in the batch).
+// Handles for overlay relations: an initial-host id or a same-kind creation ordinal.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DativeBondHandle {
     Id(DativeBondId),
@@ -1455,20 +1455,6 @@ mod tests {
         StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, Stereogenicity,
     };
     use super::*;
-
-    #[rstest]
-    #[case::id(AtomHandle::Id(AtomId(3)))]
-    #[case::new(AtomHandle::New(2))]
-    fn test_atom_ref_variants(#[case] r: AtomHandle) {
-        assert_eq!(r.clone(), r);
-    }
-
-    #[rstest]
-    #[case::id(BondHandle::Id(BondId(5)))]
-    #[case::new(BondHandle::New(0))]
-    fn test_bond_ref_variants(#[case] r: BondHandle) {
-        assert_eq!(r.clone(), r);
-    }
 
     #[rstest]
     #[case::element(

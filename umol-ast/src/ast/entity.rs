@@ -40,6 +40,21 @@ impl fmt::Display for Entity {
     }
 }
 
+impl fmt::Display for EntityKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EntityKind::Atom => f.write_str("atom"),
+            EntityKind::Bond => f.write_str("bond"),
+            EntityKind::DativeBond => f.write_str("dative bond"),
+            EntityKind::AromaticSystem => f.write_str("aromatic system"),
+            EntityKind::MulticenterBond => f.write_str("multicenter bond"),
+            EntityKind::NoncovalentBond => f.write_str("noncovalent bond"),
+            EntityKind::StereoAtom => f.write_str("stereo atom"),
+            EntityKind::StereoBond => f.write_str("stereo bond"),
+        }
+    }
+}
+
 impl Entity {
     pub fn kind(self) -> EntityKind {
         EntityKind::from(self)
@@ -111,6 +126,19 @@ mod tests {
     #[case::stereo_bond(Entity::StereoBond(StereoBondId(8)), "stereo bond 8")]
     fn test_entity_display(#[case] entity: Entity, #[case] expected: &str) {
         assert_eq!(entity.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::atom(EntityKind::Atom, "atom")]
+    #[case::bond(EntityKind::Bond, "bond")]
+    #[case::dative_bond(EntityKind::DativeBond, "dative bond")]
+    #[case::aromatic_system(EntityKind::AromaticSystem, "aromatic system")]
+    #[case::multicenter_bond(EntityKind::MulticenterBond, "multicenter bond")]
+    #[case::noncovalent_bond(EntityKind::NoncovalentBond, "noncovalent bond")]
+    #[case::stereo_atom(EntityKind::StereoAtom, "stereo atom")]
+    #[case::stereo_bond(EntityKind::StereoBond, "stereo bond")]
+    fn test_entity_kind_display(#[case] kind: EntityKind, #[case] expected: &str) {
+        assert_eq!(kind.to_string(), expected);
     }
 
     #[rstest]

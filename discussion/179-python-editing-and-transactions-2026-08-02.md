@@ -412,6 +412,7 @@ the section ships.
   entries in `AddBonds` and every batched overlay removal. Every failure case must compare the whole
   editor state with its pre-transaction value.
   **Breaking (red within S1).** [dep: S1b]
+  **Done.**
 - **S1d — Add stable-handle transaction properties.** In
   `umol-ast/tests/property/strategies.rs`, add constrained trace strategies over small fixtures whose
   entities carry independently distinguishable values. Generate entity kind, initial and created
