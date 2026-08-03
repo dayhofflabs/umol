@@ -488,6 +488,7 @@ the section ships.
   `{:new n}` handles. Reject negative indices, keywords, structural references, and malformed
   `:new` maps at this boundary. Add direct parse/render cases for both forms in every typed handle
   position and exact parse-error cases for the rejected forms. **Additive (green).** [dep: S1i]
+  **Done.**
 - **S2b — Encode atom, bond, topology, and molecule-constraint edits.** In `dsl/edit.rs`, implement
   the singular atom/bond add and remove forms, simultaneous `:topology` removal, checked
   `:expect`/`:update` modifications, entity-constraint changes, and molecule-constraint add/remove.

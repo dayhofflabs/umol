@@ -13,6 +13,7 @@ pub(crate) mod boolean;
 pub(crate) mod config;
 pub(crate) mod constraint;
 pub(crate) mod dative;
+pub(crate) mod edit;
 pub(crate) mod edn_utils;
 pub(crate) mod electrons;
 pub(crate) mod error;
