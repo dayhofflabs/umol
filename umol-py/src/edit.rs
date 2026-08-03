@@ -1,6 +1,7 @@
 //! Python edit values and symbolic creation handles.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyIndexError, PyValueError};
@@ -10,16 +11,17 @@ use umol_ast::ast::{
     AromaticSystemId as AstAromaticSystemId, AtomHandle as AstAtomHandle, AtomId as AstAtomId,
     BondHandle as AstBondHandle, BondId as AstBondId, ConstraintEdit as AstConstraintEdit,
     DativeBondHandle as AstDativeBondHandle, DativeBondId as AstDativeBondId, Edit as AstEdit,
-    Edits as AstEdits, Entity as AstEntity, EntityHandle as AstEntityHandle,
+    Edits as AstEdits, Entity as AstEntity, EntityHandle as AstEntityHandle, FromAst, IntoAst,
     MulticenterBondHandle as AstMulticenterBondHandle, MulticenterBondId as AstMulticenterBondId,
     NoncovalentBondHandle as AstNoncovalentBondHandle, NoncovalentBondId as AstNoncovalentBondId,
     StereoAtomHandle as AstStereoAtomHandle, StereoAtomId as AstStereoAtomId,
     StereoBondHandle as AstStereoBondHandle, StereoBondId as AstStereoBondId,
 };
+use umol_ast::dsl::EditsDsl as AstEditsDsl;
 
-use crate::aromatic::AromaticSystemAst;
-use crate::atom::AtomAst;
-use crate::bond::BondAst;
+use crate::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
+use crate::atom::{AtomAst, AtomUpdate};
+use crate::bond::{BondAst, BondUpdate};
 use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
@@ -29,16 +31,20 @@ use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::into_py_variant;
-use crate::dative::DativeBondAst;
+use crate::dative::{DativeBondAst, DativeBondUpdate};
+use crate::defaults::MoleculeDefaults;
 use crate::delta::{
     AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
+use crate::error::parse_error;
 use crate::metadata::Entity;
-use crate::multicenter::MulticenterBondAst;
-use crate::noncovalent::NoncovalentBondAst;
-use crate::stereo::{StereoAtomAst, StereoBondAst, StereoKind, StereoLigandKind};
+use crate::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
+use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
+use crate::stereo::{
+    StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate, StereoKind, StereoLigandKind,
+};
 
 /// A same-kind creation ordinal in an edit sequence.
 #[pyclass(eq, frozen, from_py_object)]
@@ -1274,6 +1280,22 @@ impl Edits {
         )
     }
 
+    #[staticmethod]
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let edits = AstEditsDsl::from_str(text)
+            .map_err(parse_error)?
+            .into_ast(&defaults);
+        Ok(Self::from_rust(edits))
+    }
+
+    #[pyo3(signature = (*, defaults=None))]
+    fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        AstEditsDsl::from_ast(&self.0, &defaults).to_string()
+    }
+
     /// Append one detached raw edit and account for every entity it creates.
     fn append(&mut self, py: Python<'_>, edit: Py<Edit>) {
         self.0.push(edit.bind(py).borrow().to_rust(py));
@@ -1521,6 +1543,227 @@ impl Edits {
             .into_iter()
             .map(|handle| New::from_rust(AstEntityHandle::StereoBond(handle)))
             .collect()
+    }
+
+    fn remove_topology(&mut self, atoms: Vec<HandleLike>, bonds: Vec<HandleLike>) {
+        self.0.remove_topology(
+            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            bonds.iter().map(HandleLike::to_bond_handle).collect(),
+        );
+    }
+
+    fn remove_dative_bonds(&mut self, py: Python<'_>, removes: Vec<DativeBondRemoval>) {
+        self.0.remove_dative_bonds(
+            removes
+                .into_iter()
+                .map(|(id, atoms, ast)| {
+                    (
+                        id.to_dative_bond_handle(),
+                        atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                        ast.bind(py).borrow().inner().clone(),
+                    )
+                })
+                .collect(),
+        );
+    }
+
+    fn remove_aromatic_systems(&mut self, py: Python<'_>, removes: Vec<AromaticSystemRemoval>) {
+        self.0.remove_aromatic_systems(
+            removes
+                .into_iter()
+                .map(|(id, atoms, ast)| {
+                    (
+                        id.to_aromatic_system_handle(),
+                        atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                        ast.bind(py).borrow().inner().clone(),
+                    )
+                })
+                .collect(),
+        );
+    }
+
+    fn remove_multicenter_bonds(&mut self, py: Python<'_>, removes: Vec<MulticenterBondRemoval>) {
+        self.0.remove_multicenter_bonds(
+            removes
+                .into_iter()
+                .map(|(id, atoms, ast)| {
+                    (
+                        id.to_multicenter_bond_handle(),
+                        atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                        ast.bind(py).borrow().inner().clone(),
+                    )
+                })
+                .collect(),
+        );
+    }
+
+    fn remove_noncovalent_bonds(&mut self, py: Python<'_>, removes: Vec<NoncovalentBondRemoval>) {
+        self.0.remove_noncovalent_bonds(
+            removes
+                .into_iter()
+                .map(|(id, atoms, ast)| {
+                    (
+                        id.to_noncovalent_bond_handle(),
+                        [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
+                        ast.bind(py).borrow().inner().clone(),
+                    )
+                })
+                .collect(),
+        );
+    }
+
+    fn remove_stereo_atoms(&mut self, py: Python<'_>, removes: StereoAtomRemovals) {
+        self.0.remove_stereo_atoms(
+            removes
+                .0
+                .into_iter()
+                .map(|(id, site, ligands, ast)| {
+                    (
+                        id.to_stereo_atom_handle(),
+                        site.to_atom_handle(),
+                        ligands
+                            .iter()
+                            .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                            .collect(),
+                        ast.bind(py).borrow().inner().clone(),
+                    )
+                })
+                .collect(),
+        );
+    }
+
+    fn remove_stereo_bonds(&mut self, py: Python<'_>, removes: StereoBondRemovals) {
+        self.0.remove_stereo_bonds(
+            removes
+                .0
+                .into_iter()
+                .map(|(id, site, ligands, ast)| {
+                    (
+                        id.to_stereo_bond_handle(),
+                        site.to_bond_handle(),
+                        ligands
+                            .iter()
+                            .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                            .collect(),
+                        ast.bind(py).borrow().inner().clone(),
+                    )
+                })
+                .collect(),
+        );
+    }
+
+    fn add_molecule_constraint(&mut self, py: Python<'_>, constraint: Py<ConstraintEdit>) {
+        self.0
+            .add_molecule_constraint(constraint.bind(py).borrow().to_rust());
+    }
+
+    fn remove_molecule_constraint(&mut self, py: Python<'_>, constraint: Py<ConstraintEdit>) {
+        self.0
+            .remove_molecule_constraint(constraint.bind(py).borrow().to_rust());
+    }
+
+    fn update_atom(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<AtomAst>,
+        update: Py<AtomUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_atom(id.to_atom_handle(), current.inner(), &update);
+    }
+
+    fn update_bond(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<BondAst>,
+        update: Py<BondUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_bond(id.to_bond_handle(), current.inner(), &update);
+    }
+
+    fn update_dative_bond(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<DativeBondAst>,
+        update: Py<DativeBondUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_dative_bond(id.to_dative_bond_handle(), current.inner(), &update);
+    }
+
+    fn update_aromatic_system(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<AromaticSystemAst>,
+        update: Py<AromaticSystemUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_aromatic_system(id.to_aromatic_system_handle(), current.inner(), &update);
+    }
+
+    fn update_multicenter_bond(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<MulticenterBondAst>,
+        update: Py<MulticenterBondUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_multicenter_bond(id.to_multicenter_bond_handle(), current.inner(), &update);
+    }
+
+    fn update_noncovalent_bond(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<NoncovalentBondAst>,
+        update: Py<NoncovalentBondUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_noncovalent_bond(id.to_noncovalent_bond_handle(), current.inner(), &update);
+    }
+
+    fn update_stereo_atom(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<StereoAtomAst>,
+        update: Py<StereoAtomUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_stereo_atom(id.to_stereo_atom_handle(), current.inner(), &update);
+    }
+
+    fn update_stereo_bond(
+        &mut self,
+        py: Python<'_>,
+        id: HandleLike,
+        current: Py<StereoBondAst>,
+        update: Py<StereoBondUpdate>,
+    ) {
+        let current = current.bind(py).borrow();
+        let update = update.bind(py).borrow().to_rust();
+        self.0
+            .update_stereo_bond(id.to_stereo_bond_handle(), current.inner(), &update);
     }
 }
 

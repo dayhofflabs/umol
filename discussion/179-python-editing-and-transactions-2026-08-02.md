@@ -659,6 +659,7 @@ the section ships.
   Test zero- and multi-entry updates, exact old-state capture, complete removal preconditions,
   all-family DSL round trips, defaults, and parse-error classification. **Additive (green).**
   [dep: S2h, S3c, S3d, S3e, S3f, S3g, S3h, S3i, S3j, S4c]
+  **Done.**
 - **S4e — Register and inventory the editing data surface.** Register `New`, `ConstraintEdit`,
   `Edit`, `Edits`, both leaf updates, and all eight entity updates in `umol-py/src/lib.rs`; add
   import-surface assertions for the complete inventory and for the deliberate absence of typed
