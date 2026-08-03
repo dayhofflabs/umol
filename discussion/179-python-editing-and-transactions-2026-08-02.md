@@ -423,6 +423,7 @@ the section ships.
   per-kind namespaces, and failed-batch atomicity. Extend the existing valid transaction strategy so
   apply-rollback identity and checked-unchecked agreement include compaction followed by later handle
   use. **Additive tests (red within S1).** [dep: S1c]
+  **Done.**
 - **S1e — Make rollback structurally fallible.** Remove `Transaction::new(Vec<Undo>)` entirely and
   construct the transaction fields directly inside checked application; retain `Clone` and the valid
   empty transaction used for accumulation. Remove the

@@ -10,6 +10,7 @@
 //! against a host and tracks their liveness across compaction.
 
 use std::collections::HashSet;
+use std::hash::Hash;
 
 use thiserror::Error;
 
@@ -341,7 +342,7 @@ impl ApplicationState {
 
 fn ensure_unique<I>(ids: &[I], kind: EntityKind) -> Result<(), TransactionError>
 where
-    I: Copy + Eq + std::hash::Hash,
+    I: Copy + Eq + Hash,
 {
     let mut seen = HashSet::with_capacity(ids.len());
     if ids.iter().copied().all(|id| seen.insert(id)) {

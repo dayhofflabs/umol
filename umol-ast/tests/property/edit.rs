@@ -216,6 +216,263 @@ proptest! {
         prop_assert_eq!(&collected_next, &expected);
     }
 
+    /// Stable initial-host and created handles retain their labeled entity across arbitrary removal
+    /// subsets. A later creation uses the next creation ordinal even when compaction reuses a
+    /// concrete id; the expected molecule is obtained by filtering the original label sequences.
+    #[test]
+    fn test_molecule_editor_transact_handle_identity(
+        trace in stable_atom_handle_trace_strategy(false),
+    ) {
+        let expected = trace.expected();
+        let mut editor = trace.base().edit();
+
+        editor
+            .transact(trace.edits())
+            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
+
+        prop_assert_eq!(editor.build(), expected);
+    }
+
+    /// Removing either an initial-host or created target leaves a tombstone in its own handle table.
+    /// Failure after additional compaction and creation rolls the complete transaction back.
+    #[test]
+    fn test_molecule_editor_transact_handle_error(
+        trace in stable_atom_handle_trace_strategy(true),
+    ) {
+        let mut editor = trace.base().edit();
+        let before = editor.clone().build();
+
+        prop_assert_eq!(
+            editor.transact(trace.edits()).unwrap_err(),
+            trace.expected_removed_error(),
+        );
+        prop_assert_eq!(editor.build(), before);
+    }
+
+    /// A shuffled subset of entity creations can use `New(0)` independently for every kind; later
+    /// field edits resolve each handle in its same-kind namespace regardless of creation order.
+    #[test]
+    fn test_molecule_editor_transact_handle_namespaces(
+        kinds in transaction_entity_kind_order_strategy(),
+    ) {
+        let base = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+                AtomAst::from_element(Element::F),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let mut edits = Edits::new();
+        for kind in &kinds {
+            match kind {
+                EntityKind::Atom => {
+                    edits.add_atom(AtomAst::from_element(Element::P));
+                }
+                EntityKind::Bond => {
+                    edits.add_bond(
+                        AtomHandle::Id(AtomId(2)),
+                        AtomHandle::Id(AtomId(3)),
+                        BondAst::from_order(1),
+                    );
+                }
+                EntityKind::DativeBond => {
+                    edits.add_dative_bond(
+                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        DativeBondAst::from_order(1),
+                    );
+                }
+                EntityKind::AromaticSystem => {
+                    edits.add_aromatic_system(
+                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        AromaticSystemAst::default(),
+                    );
+                }
+                EntityKind::MulticenterBond => {
+                    edits.add_multicenter_bond(
+                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        MulticenterBondAst::default(),
+                    );
+                }
+                EntityKind::NoncovalentBond => {
+                    edits.add_noncovalent_bond(
+                        [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                    );
+                }
+                EntityKind::StereoAtom => {
+                    edits.add_stereo_atom(
+                        AtomHandle::Id(AtomId(0)),
+                        (0..4_u32)
+                            .map(|index| {
+                                (AtomHandle::Id(AtomId(index)), StereoLigandKind::Atom)
+                            })
+                            .collect(),
+                        StereoAtomAst::new(
+                            StereoKind::Tetrahedral,
+                            StereoCoset::Lit(1),
+                        ),
+                    );
+                }
+                EntityKind::StereoBond => {
+                    edits.add_stereo_bond(
+                        BondHandle::Id(BondId(0)),
+                        (0..4_u32)
+                            .map(|index| {
+                                (AtomHandle::Id(AtomId(index)), StereoLigandKind::Atom)
+                            })
+                            .collect(),
+                        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    );
+                }
+            }
+        }
+        for kind in &kinds {
+            edits.push(match kind {
+                EntityKind::Atom => Edit::ModifyAtomField {
+                    id: AtomHandle::New(0),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::default(),
+                        new: ValueAst::Lit(1),
+                    },
+                },
+                EntityKind::Bond => Edit::ModifyBondField {
+                    id: BondHandle::New(0),
+                    change: BondFieldChange::Order {
+                        old: ValueAst::Lit(1),
+                        new: ValueAst::Lit(2),
+                    },
+                },
+                EntityKind::DativeBond => Edit::ModifyDativeBondField {
+                    id: DativeBondHandle::New(0),
+                    change: DativeBondFieldChange::Order {
+                        old: ValueAst::Lit(1),
+                        new: ValueAst::Lit(2),
+                    },
+                },
+                EntityKind::AromaticSystem => Edit::ModifyAromaticSystemField {
+                    id: AromaticSystemHandle::New(0),
+                    change: AromaticSystemFieldChange::Charge {
+                        old: ValueAst::default(),
+                        new: ValueAst::Lit(1),
+                    },
+                },
+                EntityKind::MulticenterBond => Edit::ModifyMulticenterBondField {
+                    id: MulticenterBondHandle::New(0),
+                    change: MulticenterBondFieldChange::Charge {
+                        old: ValueAst::default(),
+                        new: ValueAst::Lit(-1),
+                    },
+                },
+                EntityKind::NoncovalentBond => Edit::ModifyNoncovalentBondField {
+                    id: NoncovalentBondHandle::New(0),
+                    change: NoncovalentBondFieldChange::Kind {
+                        old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+                        new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                    },
+                },
+                EntityKind::StereoAtom => Edit::ModifyStereoAtomField {
+                    id: StereoAtomHandle::New(0),
+                    change: StereoAtomFieldChange::Configuration {
+                        old: StereoConfigurationAst::kinded(
+                            StereoKind::Tetrahedral,
+                            StereoCoset::Lit(1),
+                        ),
+                        new: StereoConfigurationAst::kinded(
+                            StereoKind::Tetrahedral,
+                            StereoCoset::Lit(0),
+                        ),
+                    },
+                },
+                EntityKind::StereoBond => Edit::ModifyStereoBondField {
+                    id: StereoBondHandle::New(0),
+                    change: StereoBondFieldChange::Configuration {
+                        old: StereoConfigurationAst::kinded(
+                            StereoKind::CisTrans,
+                            StereoCoset::Lit(1),
+                        ),
+                        new: StereoConfigurationAst::kinded(
+                            StereoKind::CisTrans,
+                            StereoCoset::Lit(0),
+                        ),
+                    },
+                },
+            });
+        }
+
+        let mut editor = base.edit();
+        editor
+            .transact(edits)
+            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
+
+        if kinds.contains(&EntityKind::Atom) {
+            prop_assert_eq!(&editor.atom(AtomId(4)).ast.charge, &ValueAst::Lit(1));
+        }
+        if kinds.contains(&EntityKind::Bond) {
+            prop_assert_eq!(&editor.bond(BondId(1)).ast.order, &ValueAst::Lit(2));
+        }
+        if kinds.contains(&EntityKind::DativeBond) {
+            prop_assert_eq!(
+                &editor.dative_bond(DativeBondId(0)).ast.order,
+                &ValueAst::Lit(2),
+            );
+        }
+        if kinds.contains(&EntityKind::AromaticSystem) {
+            prop_assert_eq!(
+                &editor.aromatic_system(AromaticSystemId(0)).ast.charge,
+                &ValueAst::Lit(1),
+            );
+        }
+        if kinds.contains(&EntityKind::MulticenterBond) {
+            prop_assert_eq!(
+                &editor.multicenter_bond(MulticenterBondId(0)).ast.charge,
+                &ValueAst::Lit(-1),
+            );
+        }
+        if kinds.contains(&EntityKind::NoncovalentBond) {
+            prop_assert_eq!(
+                &editor.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
+                &NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+            );
+        }
+        if kinds.contains(&EntityKind::StereoAtom) {
+            prop_assert_eq!(
+                &editor.stereo_atom(StereoAtomId(0)).ast.configuration,
+                &StereoConfigurationAst::kinded(
+                    StereoKind::Tetrahedral,
+                    StereoCoset::Lit(0),
+                ),
+            );
+        }
+        if kinds.contains(&EntityKind::StereoBond) {
+            prop_assert_eq!(
+                &editor.stereo_bond(StereoBondId(0)).ast.configuration,
+                &StereoConfigurationAst::kinded(
+                    StereoKind::CisTrans,
+                    StereoCoset::Lit(0),
+                ),
+            );
+        }
+    }
+
+    /// Every batched operation resolves all entries before mutation: an invalid handle at any
+    /// generated position leaves the complete editor equal to its pre-transaction state.
+    #[test]
+    fn test_molecule_editor_transact_batch_error(
+        batch in invalid_transaction_batch_strategy(),
+    ) {
+        let mut editor = batch.base().edit();
+        let before = editor.clone().build();
+
+        prop_assert_eq!(
+            editor.transact(batch.edits()).unwrap_err(),
+            batch.expected_error(),
+        );
+        prop_assert_eq!(editor.build(), before);
+    }
+
     /// `lift_constraints` followed by `inline_constraints` is idempotent:
     /// running the pair twice yields the same `MoleculeAst` as running it
     /// once. This holds even if the original AST has duplicate (entity, kind)

@@ -28,16 +28,17 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondDelta,
     MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
-    NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondHandle, NoncovalentBondId,
-    NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate, OrientedLigandPermutation,
-    ReactionAst, ReactionSpanAst, RelOp, RelationalConstraint, RingMembershipAst, RingScope,
-    StereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomDelta,
-    StereoAtomFieldChange, StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondAst,
-    StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange,
-    StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationAst,
-    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
-    TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, UnpairedElectronsAst,
+    NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
+    NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
+    NoncovalentBondUpdate, OrientedLigandPermutation, ReactionAst, ReactionSpanAst, RelOp,
+    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst, StereoAtomConstraintAst,
+    StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomHandle,
+    StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
+    StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondHandle,
+    StereoBondId, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition,
+    Stereogenicity, StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity,
+    TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsAst,
     UnpairedElectronsUpdate, ValueAst, ValuePredicate, ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
@@ -2619,6 +2620,479 @@ pub(crate) fn transaction_add_path_edits(count: usize) -> Edits {
     edits
 }
 
+const INITIAL_HANDLE_ELEMENTS: [Element; 4] = [Element::H, Element::C, Element::N, Element::O];
+const CREATED_HANDLE_ELEMENTS: [Element; 4] = [Element::F, Element::P, Element::S, Element::Cl];
+const SENTINEL_HANDLE_ELEMENT: Element = Element::Br;
+
+/// A compacting atom transaction with independently labeled initial and created entities.
+///
+/// Removal masks and the target origin/index are generated independently, then the target's mask is
+/// fixed to the requested liveness. Expected states filter these labels directly rather than using
+/// transaction compaction machinery.
+#[derive(Clone, Debug)]
+pub(crate) struct StableAtomHandleTrace {
+    pub(crate) initial_count: usize,
+    pub(crate) created_count: usize,
+    pub(crate) remove_initial: Vec<bool>,
+    pub(crate) remove_created: Vec<bool>,
+    pub(crate) target_created: bool,
+    pub(crate) target_index: usize,
+}
+
+impl StableAtomHandleTrace {
+    pub(crate) fn base(&self) -> MoleculeAst {
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: INITIAL_HANDLE_ELEMENTS[..self.initial_count]
+                .iter()
+                .copied()
+                .map(AtomAst::from_element)
+                .collect(),
+            ..Default::default()
+        })
+    }
+
+    pub(crate) fn edits(&self) -> Edits {
+        let mut edits = Edits::new();
+        let created = edits.add_atoms(
+            CREATED_HANDLE_ELEMENTS[..self.created_count]
+                .iter()
+                .copied()
+                .map(AtomAst::from_element),
+        );
+        edits.remove_topology(
+            self.remove_initial
+                .iter()
+                .enumerate()
+                .filter(|&(_, remove)| *remove)
+                .map(|(index, _)| AtomHandle::Id(AtomId(index as u32)))
+                .chain(
+                    self.remove_created
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, remove)| *remove)
+                        .map(|(index, _)| created[index].clone()),
+                )
+                .collect(),
+            Vec::new(),
+        );
+        let sentinel = edits.add_atom(AtomAst::from_element(SENTINEL_HANDLE_ELEMENT));
+        edits.push(Edit::ModifyAtomField {
+            id: if self.target_created {
+                created[self.target_index].clone()
+            } else {
+                AtomHandle::Id(AtomId(self.target_index as u32))
+            },
+            change: AtomFieldChange::Charge {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(7),
+            },
+        });
+        edits.push(Edit::ModifyAtomField {
+            id: sentinel,
+            change: AtomFieldChange::Charge {
+                old: ValueAst::default(),
+                new: ValueAst::Lit(9),
+            },
+        });
+        edits
+    }
+
+    pub(crate) fn expected(&self) -> MoleculeAst {
+        let initial = INITIAL_HANDLE_ELEMENTS[..self.initial_count]
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(index, _)| !self.remove_initial[*index])
+            .map(|(index, element)| {
+                if !self.target_created && index == self.target_index {
+                    AtomAst::from_element(element).with_charge(7_i64)
+                } else {
+                    AtomAst::from_element(element)
+                }
+            });
+        let created = CREATED_HANDLE_ELEMENTS[..self.created_count]
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(index, _)| !self.remove_created[*index])
+            .map(|(index, element)| {
+                if self.target_created && index == self.target_index {
+                    AtomAst::from_element(element).with_charge(7_i64)
+                } else {
+                    AtomAst::from_element(element)
+                }
+            });
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: initial
+                .chain(created)
+                .chain([AtomAst::from_element(SENTINEL_HANDLE_ELEMENT).with_charge(9_i64)])
+                .collect(),
+            ..Default::default()
+        })
+    }
+
+    pub(crate) fn expected_removed_error(&self) -> TransactionError {
+        TransactionError::HandleRemoved {
+            kind: EntityKind::Atom,
+            index: self.target_index,
+        }
+    }
+}
+
+pub(crate) fn stable_atom_handle_trace_strategy(
+    target_removed: bool,
+) -> impl Strategy<Value = StableAtomHandleTrace> {
+    (1usize..=4, 1usize..=4, any::<bool>())
+        .prop_flat_map(|(initial_count, created_count, target_created)| {
+            let target_count = if target_created {
+                created_count
+            } else {
+                initial_count
+            };
+            (
+                Just((initial_count, created_count, target_created)),
+                prop::collection::vec(any::<bool>(), initial_count),
+                prop::collection::vec(any::<bool>(), created_count),
+                0usize..target_count,
+            )
+        })
+        .prop_map(
+            move |(
+                (initial_count, created_count, target_created),
+                mut remove_initial,
+                mut remove_created,
+                target_index,
+            )| {
+                if target_created {
+                    remove_created[target_index] = target_removed;
+                } else {
+                    remove_initial[target_index] = target_removed;
+                }
+                StableAtomHandleTrace {
+                    initial_count,
+                    created_count,
+                    remove_initial,
+                    remove_created,
+                    target_created,
+                    target_index,
+                }
+            },
+        )
+        .prop_filter("trace must compact at least one atom", |trace| {
+            trace
+                .remove_initial
+                .iter()
+                .chain(&trace.remove_created)
+                .any(|remove| *remove)
+        })
+}
+
+pub(crate) fn transaction_entity_kind_order_strategy() -> impl Strategy<Value = Vec<EntityKind>> {
+    (
+        1usize..=8,
+        Just(vec![
+            EntityKind::Atom,
+            EntityKind::Bond,
+            EntityKind::DativeBond,
+            EntityKind::AromaticSystem,
+            EntityKind::MulticenterBond,
+            EntityKind::NoncovalentBond,
+            EntityKind::StereoAtom,
+            EntityKind::StereoBond,
+        ])
+        .prop_shuffle(),
+    )
+        .prop_map(|(count, mut kinds)| {
+            kinds.truncate(count);
+            kinds
+        })
+}
+
+/// One generated batched edit with exactly one invalid handle at an arbitrary position.
+#[derive(Clone, Debug)]
+pub(crate) struct InvalidTransactionBatch {
+    pub(crate) kind: EntityKind,
+    pub(crate) count: usize,
+    pub(crate) invalid_position: usize,
+}
+
+impl InvalidTransactionBatch {
+    pub(crate) fn base(&self) -> MoleculeAst {
+        let atoms = (0..self.count * 2)
+            .map(|index| AtomAst::from_element(INITIAL_HANDLE_ELEMENTS[index % 4]))
+            .collect();
+        let bonds = (0..self.count)
+            .map(|index| {
+                (
+                    AtomId((index * 2) as u32),
+                    AtomId((index * 2 + 1) as u32),
+                    BondAst::from_order(1),
+                )
+            })
+            .collect();
+        let dative = (0..self.count)
+            .map(|index| {
+                (
+                    vec![AtomId((index * 2) as u32)],
+                    AtomId((index * 2 + 1) as u32),
+                    DativeBondAst::from_order(1),
+                )
+            })
+            .collect();
+        let aromatic = (0..self.count)
+            .map(|index| {
+                (
+                    vec![AtomId((index * 2) as u32), AtomId((index * 2 + 1) as u32)],
+                    AromaticSystemAst::default(),
+                )
+            })
+            .collect();
+        let multicenter = (0..self.count)
+            .map(|index| {
+                (
+                    vec![AtomId((index * 2) as u32), AtomId((index * 2 + 1) as u32)],
+                    MulticenterBondAst::default(),
+                )
+            })
+            .collect();
+        let noncovalent = (0..self.count)
+            .map(|index| {
+                (
+                    AtomId((index * 2) as u32),
+                    AtomId((index * 2 + 1) as u32),
+                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                )
+            })
+            .collect();
+        let stereo_atoms = (0..self.count)
+            .map(|index| {
+                (
+                    AtomId((index * 2) as u32),
+                    vec![StereoLigand::new(
+                        AtomId((index * 2 + 1) as u32),
+                        StereoLigandKind::Atom,
+                    )],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                )
+            })
+            .collect();
+        let stereo_bonds = (0..self.count)
+            .map(|index| {
+                (
+                    BondId(index as u32),
+                    vec![
+                        StereoLigand::new(AtomId((index * 2) as u32), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId((index * 2 + 1) as u32), StereoLigandKind::Atom),
+                    ],
+                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                )
+            })
+            .collect();
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            dative,
+            aromatic,
+            multicenter,
+            noncovalent,
+            stereo_atoms,
+            stereo_bonds,
+            constraints: Constraints::new(),
+        })
+    }
+
+    pub(crate) fn edits(&self) -> Edits {
+        let invalid = self.count as u32;
+        let edit = match self.kind {
+            EntityKind::Bond => Edit::AddBonds {
+                bonds: (0..self.count)
+                    .map(|position| AddBond {
+                        endpoints: [
+                            AtomHandle::Id(AtomId(0)),
+                            AtomHandle::Id(AtomId(if position == self.invalid_position {
+                                invalid * 2
+                            } else {
+                                1
+                            })),
+                        ],
+                        ast: BondAst::from_order(1),
+                    })
+                    .collect(),
+            },
+            EntityKind::DativeBond => Edit::RemoveDativeBonds {
+                removes: (0..self.count)
+                    .map(|position| {
+                        (
+                            DativeBondHandle::Id(DativeBondId(
+                                if position == self.invalid_position {
+                                    invalid
+                                } else {
+                                    position as u32
+                                },
+                            )),
+                            vec![
+                                AtomHandle::Id(AtomId((position * 2) as u32)),
+                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
+                            ],
+                            DativeBondAst::from_order(1),
+                        )
+                    })
+                    .collect(),
+            },
+            EntityKind::AromaticSystem => Edit::RemoveAromaticSystems {
+                removes: (0..self.count)
+                    .map(|position| {
+                        (
+                            AromaticSystemHandle::Id(AromaticSystemId(
+                                if position == self.invalid_position {
+                                    invalid
+                                } else {
+                                    position as u32
+                                },
+                            )),
+                            vec![
+                                AtomHandle::Id(AtomId((position * 2) as u32)),
+                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
+                            ],
+                            AromaticSystemAst::default(),
+                        )
+                    })
+                    .collect(),
+            },
+            EntityKind::MulticenterBond => Edit::RemoveMulticenterBonds {
+                removes: (0..self.count)
+                    .map(|position| {
+                        (
+                            MulticenterBondHandle::Id(MulticenterBondId(
+                                if position == self.invalid_position {
+                                    invalid
+                                } else {
+                                    position as u32
+                                },
+                            )),
+                            vec![
+                                AtomHandle::Id(AtomId((position * 2) as u32)),
+                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
+                            ],
+                            MulticenterBondAst::default(),
+                        )
+                    })
+                    .collect(),
+            },
+            EntityKind::NoncovalentBond => Edit::RemoveNoncovalentBonds {
+                removes: (0..self.count)
+                    .map(|position| {
+                        (
+                            NoncovalentBondHandle::Id(NoncovalentBondId(
+                                if position == self.invalid_position {
+                                    invalid
+                                } else {
+                                    position as u32
+                                },
+                            )),
+                            [
+                                AtomHandle::Id(AtomId((position * 2) as u32)),
+                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
+                            ],
+                            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                        )
+                    })
+                    .collect(),
+            },
+            EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
+                removes: (0..self.count)
+                    .map(|position| {
+                        (
+                            StereoAtomHandle::Id(StereoAtomId(
+                                if position == self.invalid_position {
+                                    invalid
+                                } else {
+                                    position as u32
+                                },
+                            )),
+                            AtomHandle::Id(AtomId((position * 2) as u32)),
+                            vec![(
+                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
+                                StereoLigandKind::Atom,
+                            )],
+                            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                        )
+                    })
+                    .collect(),
+            },
+            EntityKind::StereoBond => Edit::RemoveStereoBonds {
+                removes: (0..self.count)
+                    .map(|position| {
+                        (
+                            StereoBondHandle::Id(StereoBondId(
+                                if position == self.invalid_position {
+                                    invalid
+                                } else {
+                                    position as u32
+                                },
+                            )),
+                            BondHandle::Id(BondId(position as u32)),
+                            vec![
+                                (
+                                    AtomHandle::Id(AtomId((position * 2) as u32)),
+                                    StereoLigandKind::Atom,
+                                ),
+                                (
+                                    AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
+                                    StereoLigandKind::Atom,
+                                ),
+                            ],
+                            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                        )
+                    })
+                    .collect(),
+            },
+            EntityKind::Atom => unreachable!(),
+        };
+        Edits::from_iter([edit])
+    }
+
+    pub(crate) fn expected_error(&self) -> TransactionError {
+        if self.kind == EntityKind::Bond {
+            TransactionError::HandleOutOfRange {
+                kind: EntityKind::Atom,
+                index: self.count * 2,
+                count: self.count * 2,
+            }
+        } else {
+            TransactionError::HandleOutOfRange {
+                kind: self.kind,
+                index: self.count,
+                count: self.count,
+            }
+        }
+    }
+}
+
+pub(crate) fn invalid_transaction_batch_strategy() -> impl Strategy<Value = InvalidTransactionBatch>
+{
+    (
+        prop::sample::select(vec![
+            EntityKind::Bond,
+            EntityKind::DativeBond,
+            EntityKind::AromaticSystem,
+            EntityKind::MulticenterBond,
+            EntityKind::NoncovalentBond,
+            EntityKind::StereoAtom,
+            EntityKind::StereoBond,
+        ]),
+        1usize..=5,
+    )
+        .prop_flat_map(|(kind, count)| (Just((kind, count)), 0usize..count))
+        .prop_map(
+            |((kind, count), invalid_position)| InvalidTransactionBatch {
+                kind,
+                count,
+                invalid_position,
+            },
+        )
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum TransactionCase {
     AddPath {
@@ -2971,6 +3445,7 @@ pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst
     prop_oneof![
         transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
         overlay_transaction_strategy(),
+        stable_atom_handle_trace_strategy(false).prop_map(|trace| (trace.base(), trace.edits())),
     ]
 }
 
