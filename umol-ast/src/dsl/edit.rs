@@ -18,28 +18,34 @@ use super::metadata::MoleculeMetadata;
 use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
 use super::namespace::Namespace;
 use super::noncovalent::{NoncovalentBondDsl, NoncovalentBondUpdateDsl};
+use super::stereo::{StereoAtomDsl, StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl};
 use crate::ast::aromatic::AromaticSystemUpdate;
 use crate::ast::atom::AtomUpdate;
 use crate::ast::bond::BondUpdate;
 use crate::ast::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
     DativeBondConstraintAst, MulticenterBondConstraintAst, NoncovalentBondConstraintAst,
+    StereoAtomConstraintAst, StereoBondConstraintAst,
 };
 use crate::ast::dative::DativeBondUpdate;
 use crate::ast::edit::{
     AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange,
     BondHandle, DativeBondFieldChange, DativeBondHandle, Edit, Edits, MulticenterBondFieldChange,
-    MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle, StereoAtomHandle,
-    StereoBondHandle,
+    MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
+    StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle,
 };
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::StereoLigand;
+use crate::ast::ligand::{StereoLigand, StereoLigandKind};
 use crate::ast::multicenter::MulticenterBondUpdate;
 use crate::ast::noncovalent::NoncovalentBondUpdate;
 use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+use crate::ast::stereo::{
+    StereoAtomUpdate, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate,
+    StereoKind,
+};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 
 /// Surface form shared by every typed handle in a standalone edit document.
@@ -128,6 +134,22 @@ impl_typed_handle_conversion!(NoncovalentBondHandle, NoncovalentBondId);
 impl_typed_handle_conversion!(StereoAtomHandle, StereoAtomId);
 impl_typed_handle_conversion!(StereoBondHandle, StereoBondId);
 
+type StereoLigandInput = (AtomHandle, StereoLigandKind);
+type StereoAtomAdditionInput = (AtomHandle, Vec<StereoLigandInput>, StereoAtomDsl);
+type StereoAtomRemovalInput = (
+    StereoAtomHandle,
+    AtomHandle,
+    Vec<StereoLigandInput>,
+    StereoAtomDsl,
+);
+type StereoBondAdditionInput = (BondHandle, Vec<StereoLigandInput>, StereoBondDsl);
+type StereoBondRemovalInput = (
+    StereoBondHandle,
+    BondHandle,
+    Vec<StereoLigandInput>,
+    StereoBondDsl,
+);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EditInput {
     AtomAdd(AtomDsl),
@@ -188,6 +210,28 @@ enum EditInput {
         expect: NoncovalentBondUpdate,
         update: NoncovalentBondUpdate,
     },
+    StereoAtomAdd {
+        site: AtomHandle,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
+        ast: StereoAtomDsl,
+    },
+    StereoAtomsRemove(Vec<StereoAtomRemovalInput>),
+    StereoAtomModify {
+        id: StereoAtomHandle,
+        expect: StereoAtomUpdate,
+        update: StereoAtomUpdate,
+    },
+    StereoBondAdd {
+        site: BondHandle,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
+        ast: StereoBondDsl,
+    },
+    StereoBondsRemove(Vec<StereoBondRemovalInput>),
+    StereoBondModify {
+        id: StereoBondHandle,
+        expect: StereoBondUpdate,
+        update: StereoBondUpdate,
+    },
     TopologyRemove {
         atoms: Vec<AtomHandle>,
         bonds: Vec<BondHandle>,
@@ -210,6 +254,10 @@ impl<'de> FromEdn<'de> for EditInput {
             "multicenter-bonds" => parse_multicenter_bonds_edit(body),
             "noncovalent-bond" => parse_noncovalent_bond_edit(body),
             "noncovalent-bonds" => parse_noncovalent_bonds_edit(body),
+            "stereo-atom" => parse_stereo_atom_edit(body),
+            "stereo-atoms" => parse_stereo_atoms_edit(body),
+            "stereo-bond" => parse_stereo_bond_edit(body),
+            "stereo-bonds" => parse_stereo_bonds_edit(body),
             "topology" => parse_topology_edit(body),
             "constraint" => parse_constraint_edit(body),
             other => Err(DeError::Custom(format!("unknown edit :{other}"))),
@@ -364,6 +412,70 @@ impl ToEdn for EditInput {
                     NoncovalentBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
+            Self::StereoAtomAdd { site, ligands, ast } => edit_map(
+                "stereo-atom",
+                "add",
+                stereo_entry_edn(None, site.to_edn(), ligands, ast.to_edn()),
+            ),
+            Self::StereoAtomsRemove(removes) => edit_map(
+                "stereo-atoms",
+                "remove",
+                Edn::Vector(
+                    removes
+                        .iter()
+                        .map(|(id, site, ligands, ast)| {
+                            stereo_entry_edn(
+                                Some(id.to_edn()),
+                                site.to_edn(),
+                                ligands,
+                                ast.to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::StereoAtomModify { id, expect, update } => edit_map(
+                "stereo-atom",
+                "modify",
+                checked_update_edn(
+                    id.to_edn(),
+                    StereoAtomUpdateDsl(expect.clone()).to_edn(),
+                    StereoAtomUpdateDsl(update.clone()).to_edn(),
+                ),
+            ),
+            Self::StereoBondAdd { site, ligands, ast } => edit_map(
+                "stereo-bond",
+                "add",
+                stereo_entry_edn(None, site.to_edn(), ligands, ast.to_edn()),
+            ),
+            Self::StereoBondsRemove(removes) => edit_map(
+                "stereo-bonds",
+                "remove",
+                Edn::Vector(
+                    removes
+                        .iter()
+                        .map(|(id, site, ligands, ast)| {
+                            stereo_entry_edn(
+                                Some(id.to_edn()),
+                                site.to_edn(),
+                                ligands,
+                                ast.to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::StereoBondModify { id, expect, update } => edit_map(
+                "stereo-bond",
+                "modify",
+                checked_update_edn(
+                    id.to_edn(),
+                    StereoBondUpdateDsl(expect.clone()).to_edn(),
+                    StereoBondUpdateDsl(update.clone()).to_edn(),
+                ),
+            ),
             Self::TopologyRemove { atoms, bonds } => {
                 let mut removal = EdnMap::with_capacity(2);
                 removal.insert(
@@ -460,6 +572,34 @@ impl EditInput {
             ),
             Self::NoncovalentBondModify { id, expect, update } => {
                 append_noncovalent_bond_modify(edits, id, expect, update)?;
+            }
+            Self::StereoAtomAdd { site, ligands, ast } => {
+                edits.add_stereo_atom(site, ligands, ast.into_ast(&defaults.stereo_atom));
+            }
+            Self::StereoAtomsRemove(removes) => edits.remove_stereo_atoms(
+                removes
+                    .into_iter()
+                    .map(|(id, site, ligands, ast)| {
+                        (id, site, ligands, ast.into_ast(&defaults.stereo_atom))
+                    })
+                    .collect(),
+            ),
+            Self::StereoAtomModify { id, expect, update } => {
+                append_stereo_atom_modify(edits, id, expect, update)?;
+            }
+            Self::StereoBondAdd { site, ligands, ast } => {
+                edits.add_stereo_bond(site, ligands, ast.into_ast(&defaults.stereo_bond));
+            }
+            Self::StereoBondsRemove(removes) => edits.remove_stereo_bonds(
+                removes
+                    .into_iter()
+                    .map(|(id, site, ligands, ast)| {
+                        (id, site, ligands, ast.into_ast(&defaults.stereo_bond))
+                    })
+                    .collect(),
+            ),
+            Self::StereoBondModify { id, expect, update } => {
+                append_stereo_bond_modify(edits, id, expect, update)?;
             }
             Self::TopologyRemove { atoms, bonds } => edits.remove_topology(atoms, bonds),
             Self::ConstraintAdd(constraint) => edits.add_molecule_constraint(constraint),
@@ -662,13 +802,80 @@ impl EditInput {
                     update,
                 }]
             }
+            Edit::AddStereoAtom { site, ligands, ast } => vec![Self::StereoAtomAdd {
+                site: site.clone(),
+                ligands: ligands.clone(),
+                ast: StereoAtomDsl::from_ast(ast, &defaults.stereo_atom),
+            }],
+            Edit::RemoveStereoAtoms { removes } => vec![Self::StereoAtomsRemove(
+                removes
+                    .iter()
+                    .map(|(id, site, ligands, ast)| {
+                        (
+                            id.clone(),
+                            site.clone(),
+                            ligands.clone(),
+                            StereoAtomDsl::from_ast(ast, &defaults.stereo_atom),
+                        )
+                    })
+                    .collect(),
+            )],
+            Edit::ModifyStereoAtomField { id, change } => {
+                let (expect, update) = stereo_atom_field_updates(change);
+                vec![Self::StereoAtomModify {
+                    id: id.clone(),
+                    expect,
+                    update,
+                }]
+            }
+            Edit::ModifyStereoAtomConstraint { id, kind, old, new } => {
+                let (expect, update) = stereo_atom_constraint_updates(*kind, old, new)?;
+                vec![Self::StereoAtomModify {
+                    id: id.clone(),
+                    expect,
+                    update,
+                }]
+            }
+            Edit::AddStereoBond { site, ligands, ast } => vec![Self::StereoBondAdd {
+                site: site.clone(),
+                ligands: ligands.clone(),
+                ast: StereoBondDsl::from_ast(ast, &defaults.stereo_bond),
+            }],
+            Edit::RemoveStereoBonds { removes } => vec![Self::StereoBondsRemove(
+                removes
+                    .iter()
+                    .map(|(id, site, ligands, ast)| {
+                        (
+                            id.clone(),
+                            site.clone(),
+                            ligands.clone(),
+                            StereoBondDsl::from_ast(ast, &defaults.stereo_bond),
+                        )
+                    })
+                    .collect(),
+            )],
+            Edit::ModifyStereoBondField { id, change } => {
+                let (expect, update) = stereo_bond_field_updates(change);
+                vec![Self::StereoBondModify {
+                    id: id.clone(),
+                    expect,
+                    update,
+                }]
+            }
+            Edit::ModifyStereoBondConstraint { id, kind, old, new } => {
+                let (expect, update) = stereo_bond_constraint_updates(*kind, old, new)?;
+                vec![Self::StereoBondModify {
+                    id: id.clone(),
+                    expect,
+                    update,
+                }]
+            }
             Edit::AddMoleculeConstraint { constraint } => {
                 vec![Self::ConstraintAdd(constraint.clone())]
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
                 vec![Self::ConstraintRemove(constraint.clone())]
             }
-            _ => return Ok(None),
         };
         Ok(Some(inputs))
     }
@@ -1026,6 +1233,182 @@ fn parse_noncovalent_bond_removal(
     Ok((id, atoms, ast))
 }
 
+fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let (op, payload) = parse_single_key_map(edn, "stereo-atom edit")?;
+    match op {
+        "add" => {
+            let (site, ligands, ast) = parse_stereo_atom_addition(payload)?;
+            Ok(EditInput::StereoAtomAdd { site, ligands, ast })
+        }
+        "modify" => {
+            let (id, expect, update) = parse_stereo_atom_checked_update(payload)?;
+            validate_stereo_atom_update_pair(&expect, &update)?;
+            Ok(EditInput::StereoAtomModify { id, expect, update })
+        }
+        other => Err(DeError::Custom(format!(
+            "unknown stereo-atom edit op :{other}"
+        ))),
+    }
+}
+
+fn parse_stereo_atoms_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let (op, payload) = parse_single_key_map(edn, "stereo-atoms edit")?;
+    if op != "remove" {
+        return Err(DeError::Custom(format!(
+            "unknown stereo-atoms edit op :{op}"
+        )));
+    }
+    let Edn::Vector(entries) = payload else {
+        return Err(DeError::TypeMismatch {
+            expected: "vector of stereo-atom removals",
+            got: payload.kind(),
+            path: vec!["stereo-atoms edit".to_string()],
+        });
+    };
+    let removes = entries
+        .iter()
+        .map(parse_stereo_atom_removal)
+        .collect::<Result<_, _>>()?;
+    Ok(EditInput::StereoAtomsRemove(removes))
+}
+
+fn parse_stereo_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let (op, payload) = parse_single_key_map(edn, "stereo-bond edit")?;
+    match op {
+        "add" => {
+            let (site, ligands, ast) = parse_stereo_bond_addition(payload)?;
+            Ok(EditInput::StereoBondAdd { site, ligands, ast })
+        }
+        "modify" => {
+            let (id, expect, update) = parse_stereo_bond_checked_update(payload)?;
+            validate_stereo_bond_update_pair(&expect, &update)?;
+            Ok(EditInput::StereoBondModify { id, expect, update })
+        }
+        other => Err(DeError::Custom(format!(
+            "unknown stereo-bond edit op :{other}"
+        ))),
+    }
+}
+
+fn parse_stereo_bonds_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let (op, payload) = parse_single_key_map(edn, "stereo-bonds edit")?;
+    if op != "remove" {
+        return Err(DeError::Custom(format!(
+            "unknown stereo-bonds edit op :{op}"
+        )));
+    }
+    let Edn::Vector(entries) = payload else {
+        return Err(DeError::TypeMismatch {
+            expected: "vector of stereo-bond removals",
+            got: payload.kind(),
+            path: vec!["stereo-bonds edit".to_string()],
+        });
+    };
+    let removes = entries
+        .iter()
+        .map(parse_stereo_bond_removal)
+        .collect::<Result<_, _>>()?;
+    Ok(EditInput::StereoBondsRemove(removes))
+}
+
+fn parse_stereo_atom_addition(edn: &Edn<'_>) -> Result<StereoAtomAdditionInput, DeError> {
+    let Edn::Map(map) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-atom addition map",
+            got: edn.kind(),
+            path: vec!["stereo-atom edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(map);
+    let site = helper.required("site")?;
+    let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
+    let ast = helper.required("type")?;
+    helper.finalize()?;
+    Ok((site, parse_stereo_ligands(&ligands)?, ast))
+}
+
+fn parse_stereo_atom_removal(edn: &Edn<'_>) -> Result<StereoAtomRemovalInput, DeError> {
+    let Edn::Map(map) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-atom removal map",
+            got: edn.kind(),
+            path: vec!["stereo-atoms edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(map);
+    let id = helper.required("id")?;
+    let site = helper.required("site")?;
+    let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
+    let ast = helper.required("type")?;
+    helper.finalize()?;
+    Ok((id, site, parse_stereo_ligands(&ligands)?, ast))
+}
+
+fn parse_stereo_bond_addition(edn: &Edn<'_>) -> Result<StereoBondAdditionInput, DeError> {
+    let Edn::Map(map) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-bond addition map",
+            got: edn.kind(),
+            path: vec!["stereo-bond edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(map);
+    let site = helper.required("site")?;
+    let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
+    let ast = helper.required("type")?;
+    helper.finalize()?;
+    Ok((site, parse_stereo_ligands(&ligands)?, ast))
+}
+
+fn parse_stereo_bond_removal(edn: &Edn<'_>) -> Result<StereoBondRemovalInput, DeError> {
+    let Edn::Map(map) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-bond removal map",
+            got: edn.kind(),
+            path: vec!["stereo-bonds edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(map);
+    let id = helper.required("id")?;
+    let site = helper.required("site")?;
+    let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
+    let ast = helper.required("type")?;
+    helper.finalize()?;
+    Ok((id, site, parse_stereo_ligands(&ligands)?, ast))
+}
+
+fn parse_stereo_ligands(ligands: &[Edn<'_>]) -> Result<Vec<StereoLigandInput>, DeError> {
+    ligands.iter().map(parse_stereo_ligand).collect()
+}
+
+fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
+    match edn {
+        Edn::Vector(parts) if parts.len() == 2 => {
+            let Edn::Keyword(tag) = &parts[0] else {
+                return Err(DeError::TypeMismatch {
+                    expected: "stereo ligand kind keyword",
+                    got: parts[0].kind(),
+                    path: vec!["stereo ligand".to_string()],
+                });
+            };
+            let kind = match tag.name() {
+                "h" => StereoLigandKind::ImplicitHydrogen,
+                "lp" => StereoLigandKind::LonePair,
+                other => {
+                    return Err(DeError::Custom(format!(
+                        "unknown stereo ligand kind :{other}"
+                    )));
+                }
+            };
+            Ok((AtomHandle::from_edn(&parts[1])?, kind))
+        }
+        Edn::Vector(_) => Err(DeError::Custom(
+            "stereo ligand vector expects [kind atom-handle]".to_string(),
+        )),
+        _ => Ok((AtomHandle::from_edn(edn)?, StereoLigandKind::Atom)),
+    }
+}
+
 fn parse_topology_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "topology edit")?;
     if op != "remove" {
@@ -1272,6 +1655,66 @@ fn parse_noncovalent_bond_checked_update(
     ))
 }
 
+fn parse_stereo_atom_checked_update(
+    edn: &Edn<'_>,
+) -> Result<(StereoAtomHandle, StereoAtomUpdate, StereoAtomUpdate), DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-atom :modify [handle {:expect dsl :update dsl}]",
+            got: edn.kind(),
+            path: vec!["stereo-atom edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "stereo-atom :modify expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-atom :modify changes map",
+            got: parts[1].kind(),
+            path: vec!["stereo-atom edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let expect: StereoAtomUpdateDsl = helper.required("expect")?;
+    let update: StereoAtomUpdateDsl = helper.required("update")?;
+    helper.finalize()?;
+    Ok((StereoAtomHandle::from_edn(&parts[0])?, expect.0, update.0))
+}
+
+fn parse_stereo_bond_checked_update(
+    edn: &Edn<'_>,
+) -> Result<(StereoBondHandle, StereoBondUpdate, StereoBondUpdate), DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-bond :modify [handle {:expect dsl :update dsl}]",
+            got: edn.kind(),
+            path: vec!["stereo-bond edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "stereo-bond :modify expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-bond :modify changes map",
+            got: parts[1].kind(),
+            path: vec!["stereo-bond edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let expect: StereoBondUpdateDsl = helper.required("expect")?;
+    let update: StereoBondUpdateDsl = helper.required("update")?;
+    helper.finalize()?;
+    Ok((StereoBondHandle::from_edn(&parts[0])?, expect.0, update.0))
+}
+
 fn validate_atom_update_pair(expect: &AtomUpdate, update: &AtomUpdate) -> Result<(), DeError> {
     let fields_match = expect.element.is_some() == update.element.is_some()
         && expect.isotope_mass.is_some() == update.isotope_mass.is_some()
@@ -1422,6 +1865,94 @@ fn validate_noncovalent_bond_update_pair(
             "noncovalent-bond :modify :expect and :update must address the same fields and constraints"
                 .to_string(),
         ));
+    }
+    Ok(())
+}
+
+fn validate_stereo_atom_update_pair(
+    expect: &StereoAtomUpdate,
+    update: &StereoAtomUpdate,
+) -> Result<(), DeError> {
+    let expect_changes_configuration = !matches!(
+        expect.configuration,
+        StereoConfigurationUpdate::Unchanged
+            | StereoConfigurationUpdate::Kinded { coset: None, .. }
+    );
+    let update_changes_configuration = !matches!(
+        update.configuration,
+        StereoConfigurationUpdate::Unchanged
+            | StereoConfigurationUpdate::Kinded { coset: None, .. }
+    );
+    let constraints_match = expect
+        .constraints
+        .iter()
+        .map(StereoAtomConstraintAst::key)
+        .eq(update.constraints.iter().map(StereoAtomConstraintAst::key));
+    if expect_changes_configuration != update_changes_configuration || !constraints_match {
+        return Err(DeError::Custom(
+            "stereo-atom :modify :expect and :update must address the same field and constraints"
+                .to_string(),
+        ));
+    }
+    if !expect.constraints.is_empty() {
+        let (Some(expect_kind), Some(update_kind)) =
+            (expect.configuration.kind(), update.configuration.kind())
+        else {
+            return Err(DeError::Custom(
+                "stereo-atom constraint changes require a stereo kind in both :expect and :update"
+                    .to_string(),
+            ));
+        };
+        if expect_kind != update_kind {
+            return Err(DeError::Custom(
+                "stereo-atom constraint changes require the same stereo kind in :expect and :update"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_stereo_bond_update_pair(
+    expect: &StereoBondUpdate,
+    update: &StereoBondUpdate,
+) -> Result<(), DeError> {
+    let expect_changes_configuration = !matches!(
+        expect.configuration,
+        StereoConfigurationUpdate::Unchanged
+            | StereoConfigurationUpdate::Kinded { coset: None, .. }
+    );
+    let update_changes_configuration = !matches!(
+        update.configuration,
+        StereoConfigurationUpdate::Unchanged
+            | StereoConfigurationUpdate::Kinded { coset: None, .. }
+    );
+    let constraints_match = expect
+        .constraints
+        .iter()
+        .map(StereoBondConstraintAst::key)
+        .eq(update.constraints.iter().map(StereoBondConstraintAst::key));
+    if expect_changes_configuration != update_changes_configuration || !constraints_match {
+        return Err(DeError::Custom(
+            "stereo-bond :modify :expect and :update must address the same field and constraints"
+                .to_string(),
+        ));
+    }
+    if !expect.constraints.is_empty() {
+        let (Some(expect_kind), Some(update_kind)) =
+            (expect.configuration.kind(), update.configuration.kind())
+        else {
+            return Err(DeError::Custom(
+                "stereo-bond constraint changes require a stereo kind in both :expect and :update"
+                    .to_string(),
+            ));
+        };
+        if expect_kind != update_kind {
+            return Err(DeError::Custom(
+                "stereo-bond constraint changes require the same stereo kind in :expect and :update"
+                    .to_string(),
+            ));
+        }
     }
     Ok(())
 }
@@ -1633,6 +2164,92 @@ fn append_noncovalent_bond_modify(
     for (old, new) in expect.constraints.iter().zip(update.constraints.iter()) {
         edits.push(Edit::ModifyNoncovalentBondConstraint {
             id: id.clone(),
+            old: (!old.is_undetermined()).then(|| old.clone()),
+            new: (!new.is_undetermined()).then(|| new.clone()),
+        });
+    }
+    Ok(())
+}
+
+fn append_stereo_atom_modify(
+    edits: &mut Edits,
+    id: StereoAtomHandle,
+    expect: StereoAtomUpdate,
+    update: StereoAtomUpdate,
+) -> Result<(), DeError> {
+    validate_stereo_atom_update_pair(&expect, &update)?;
+    let kind = expect.configuration.kind();
+    let old_configuration = match expect.configuration {
+        StereoConfigurationUpdate::Unchanged
+        | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Kinded {
+            kind,
+            coset: Some(coset),
+        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+    };
+    let new_configuration = match update.configuration {
+        StereoConfigurationUpdate::Unchanged
+        | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Kinded {
+            kind,
+            coset: Some(coset),
+        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+    };
+    if let (Some(old), Some(new)) = (old_configuration, new_configuration) {
+        edits.push(Edit::ModifyStereoAtomField {
+            id: id.clone(),
+            change: StereoAtomFieldChange::Configuration { old, new },
+        });
+    }
+    for (old, new) in expect.constraints.iter().zip(update.constraints.iter()) {
+        edits.push(Edit::ModifyStereoAtomConstraint {
+            id: id.clone(),
+            kind,
+            old: (!old.is_undetermined()).then(|| old.clone()),
+            new: (!new.is_undetermined()).then(|| new.clone()),
+        });
+    }
+    Ok(())
+}
+
+fn append_stereo_bond_modify(
+    edits: &mut Edits,
+    id: StereoBondHandle,
+    expect: StereoBondUpdate,
+    update: StereoBondUpdate,
+) -> Result<(), DeError> {
+    validate_stereo_bond_update_pair(&expect, &update)?;
+    let kind = expect.configuration.kind();
+    let old_configuration = match expect.configuration {
+        StereoConfigurationUpdate::Unchanged
+        | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Kinded {
+            kind,
+            coset: Some(coset),
+        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+    };
+    let new_configuration = match update.configuration {
+        StereoConfigurationUpdate::Unchanged
+        | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Kinded {
+            kind,
+            coset: Some(coset),
+        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+    };
+    if let (Some(old), Some(new)) = (old_configuration, new_configuration) {
+        edits.push(Edit::ModifyStereoBondField {
+            id: id.clone(),
+            change: StereoBondFieldChange::Configuration { old, new },
+        });
+    }
+    for (old, new) in expect.constraints.iter().zip(update.constraints.iter()) {
+        edits.push(Edit::ModifyStereoBondConstraint {
+            id: id.clone(),
+            kind,
             old: (!old.is_undetermined()).then(|| old.clone()),
             new: (!new.is_undetermined()).then(|| new.clone()),
         });
@@ -1900,6 +2517,60 @@ fn noncovalent_bond_field_updates(
     (expect, update)
 }
 
+fn stereo_atom_field_updates(
+    change: &StereoAtomFieldChange,
+) -> (StereoAtomUpdate, StereoAtomUpdate) {
+    let StereoAtomFieldChange::Configuration { old, new } = change;
+    let expect = StereoAtomUpdate {
+        configuration: match old {
+            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind: *kind,
+                coset: Some(coset.clone()),
+            },
+        },
+        ..Default::default()
+    };
+    let update = StereoAtomUpdate {
+        configuration: match new {
+            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind: *kind,
+                coset: Some(coset.clone()),
+            },
+        },
+        ..Default::default()
+    };
+    (expect, update)
+}
+
+fn stereo_bond_field_updates(
+    change: &StereoBondFieldChange,
+) -> (StereoBondUpdate, StereoBondUpdate) {
+    let StereoBondFieldChange::Configuration { old, new } = change;
+    let expect = StereoBondUpdate {
+        configuration: match old {
+            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind: *kind,
+                coset: Some(coset.clone()),
+            },
+        },
+        ..Default::default()
+    };
+    let update = StereoBondUpdate {
+        configuration: match new {
+            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind: *kind,
+                coset: Some(coset.clone()),
+            },
+        },
+        ..Default::default()
+    };
+    (expect, update)
+}
+
 fn atom_constraint_updates(
     old: &Option<AtomConstraintAst>,
     new: &Option<AtomConstraintAst>,
@@ -2104,6 +2775,98 @@ fn noncovalent_bond_constraint_updates(
     Ok((expect, update))
 }
 
+fn stereo_atom_constraint_updates(
+    kind: Option<StereoKind>,
+    old: &Option<StereoAtomConstraintAst>,
+    new: &Option<StereoAtomConstraintAst>,
+) -> Result<(StereoAtomUpdate, StereoAtomUpdate), DeError> {
+    let Some(kind) = kind else {
+        return Err(DeError::Custom(
+            "stereo-atom constraint edit requires a stereo kind".to_string(),
+        ));
+    };
+    let key_matches = match (old, new) {
+        (Some(old), Some(new)) => old.key() == new.key(),
+        (Some(_), None) | (None, Some(_)) => true,
+        (None, None) => false,
+    };
+    if !key_matches {
+        return Err(DeError::Custom(
+            "stereo-atom constraint edit must address one constraint key".to_string(),
+        ));
+    }
+    let mut expect = StereoAtomUpdate {
+        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
+        ..Default::default()
+    };
+    let mut update = StereoAtomUpdate {
+        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
+        ..Default::default()
+    };
+    match (old, new) {
+        (Some(old), Some(new)) => {
+            expect.constraints.set(old.clone());
+            update.constraints.set(new.clone());
+        }
+        (Some(old), None) => {
+            expect.constraints.set(old.clone());
+            update.constraints.set(old.as_undetermined());
+        }
+        (None, Some(new)) => {
+            expect.constraints.set(new.as_undetermined());
+            update.constraints.set(new.clone());
+        }
+        (None, None) => unreachable!(),
+    }
+    Ok((expect, update))
+}
+
+fn stereo_bond_constraint_updates(
+    kind: Option<StereoKind>,
+    old: &Option<StereoBondConstraintAst>,
+    new: &Option<StereoBondConstraintAst>,
+) -> Result<(StereoBondUpdate, StereoBondUpdate), DeError> {
+    let Some(kind) = kind else {
+        return Err(DeError::Custom(
+            "stereo-bond constraint edit requires a stereo kind".to_string(),
+        ));
+    };
+    let key_matches = match (old, new) {
+        (Some(old), Some(new)) => old.key() == new.key(),
+        (Some(_), None) | (None, Some(_)) => true,
+        (None, None) => false,
+    };
+    if !key_matches {
+        return Err(DeError::Custom(
+            "stereo-bond constraint edit must address one constraint key".to_string(),
+        ));
+    }
+    let mut expect = StereoBondUpdate {
+        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
+        ..Default::default()
+    };
+    let mut update = StereoBondUpdate {
+        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
+        ..Default::default()
+    };
+    match (old, new) {
+        (Some(old), Some(new)) => {
+            expect.constraints.set(old.clone());
+            update.constraints.set(new.clone());
+        }
+        (Some(old), None) => {
+            expect.constraints.set(old.clone());
+            update.constraints.set(old.as_undetermined());
+        }
+        (None, Some(new)) => {
+            expect.constraints.set(new.as_undetermined());
+            update.constraints.set(new.clone());
+        }
+        (None, None) => unreachable!(),
+    }
+    Ok((expect, update))
+}
+
 fn checked_update_edn(
     handle: Edn<'static>,
     expect: Edn<'static>,
@@ -2149,6 +2912,42 @@ fn relation_entry_edn(
     );
     entry.insert(Edn::keyword("type"), type_edn);
     Edn::Map(entry)
+}
+
+fn stereo_entry_edn(
+    id: Option<Edn<'static>>,
+    site: Edn<'static>,
+    ligands: &[(AtomHandle, StereoLigandKind)],
+    type_edn: Edn<'static>,
+) -> Edn<'static> {
+    let mut entry = EdnMap::with_capacity(4);
+    if let Some(id) = id {
+        entry.insert(Edn::keyword("id"), id);
+    }
+    entry.insert(Edn::keyword("site"), site);
+    entry.insert(
+        Edn::keyword("ligands"),
+        Edn::Vector(
+            ligands
+                .iter()
+                .map(stereo_ligand_edn)
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+    );
+    entry.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(entry)
+}
+
+fn stereo_ligand_edn(ligand: &(AtomHandle, StereoLigandKind)) -> Edn<'static> {
+    let (atom, kind) = ligand;
+    match kind {
+        StereoLigandKind::Atom => atom.to_edn(),
+        StereoLigandKind::ImplicitHydrogen => {
+            Edn::Vector(vec![Edn::keyword("h"), atom.to_edn()].into())
+        }
+        StereoLigandKind::LonePair => Edn::Vector(vec![Edn::keyword("lp"), atom.to_edn()].into()),
+    }
 }
 
 fn edit_map(entity: &str, operation: &str, payload: Edn<'static>) -> Edn<'static> {
@@ -2304,7 +3103,8 @@ mod tests {
     use crate::ast::constraint::{
         AromaticSystemConstraintAst, AtomConstraintsAst, BondConstraintsAst,
         DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst, RingMembershipAst, RingScope,
+        NoncovalentBondConstraintAst, RingMembershipAst, RingScope, StereoAtomConstraintAst,
+        StereoBondConstraintAst, StereogenicityAst,
     };
     use crate::ast::dative::DativeBondAst;
     use crate::ast::edit::AddBond;
@@ -2313,6 +3113,9 @@ mod tests {
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
+    };
+    use crate::ast::stereo::{
+        StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind, Stereogenicity,
     };
     use crate::ast::value::ValueAst;
     use crate::mol_dsl;
@@ -2943,6 +3746,151 @@ mod tests {
             new: None,
         },
     )]
+    #[case::stereo_atom_add(
+        r#"{:stereo-atom {:add {:site {:new 0} :ligands [0 [:h {:new 1}] [:lp 2] {:new 3}] :type :ccw}}}"#,
+        Edit::AddStereoAtom {
+            site: AtomHandle::New(0),
+            ligands: vec![
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                (AtomHandle::New(1), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::LonePair),
+                (AtomHandle::New(3), StereoLigandKind::Atom),
+            ],
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0_u32),
+        },
+    )]
+    #[case::stereo_atom_remove(
+        r#"{:stereo-atoms {:remove [{:id 0 :site 1 :ligands [2 [:h 3] [:lp {:new 0}] 4] :type :cw} {:id {:new 1} :site {:new 2} :ligands [5 6 7 8] :type :ccw}]}}"#,
+        Edit::RemoveStereoAtoms { removes: vec![
+            (
+                StereoAtomHandle::Id(StereoAtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+                vec![
+                    (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::ImplicitHydrogen),
+                    (AtomHandle::New(0), StereoLigandKind::LonePair),
+                    (AtomHandle::Id(AtomId(4)), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+            ),
+            (
+                StereoAtomHandle::New(1),
+                AtomHandle::New(2),
+                vec![
+                    (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(6)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(7)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(8)), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, 0_u32),
+            ),
+        ] },
+    )]
+    #[case::stereo_atom_field(
+        r#"{:stereo-atom {:modify [{:new 0} {:expect "Th0" :update "Th1"}]}}"#,
+        Edit::ModifyStereoAtomField {
+            id: StereoAtomHandle::New(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32),
+                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32),
+            },
+        },
+    )]
+    #[case::stereo_atom_constraint_add(
+        r##"{:stereo-atom {:modify [0 {:expect "Th#g*" :update "Th#g/"}]}}"##,
+        Edit::ModifyStereoAtomConstraint {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            kind: Some(StereoKind::Tetrahedral),
+            old: None,
+            new: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        },
+    )]
+    #[case::stereo_atom_constraint_remove(
+        r##"{:stereo-atom {:modify [{:new 1} {:expect "Th#g/" :update "Th#g*"}]}}"##,
+        Edit::ModifyStereoAtomConstraint {
+            id: StereoAtomHandle::New(1),
+            kind: Some(StereoKind::Tetrahedral),
+            old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            new: None,
+        },
+    )]
+    #[case::stereo_bond_add(
+        r#"{:stereo-bond {:add {:site {:new 0} :ligands [0 [:h {:new 1}] [:lp 2] {:new 3}] :type :z}}}"#,
+        Edit::AddStereoBond {
+            site: BondHandle::New(0),
+            ligands: vec![
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                (AtomHandle::New(1), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::LonePair),
+                (AtomHandle::New(3), StereoLigandKind::Atom),
+            ],
+            ast: StereoBondAst::new(StereoKind::CisTrans, 0_u32),
+        },
+    )]
+    #[case::stereo_bond_remove(
+        r#"{:stereo-bonds {:remove [{:id 0 :site 1 :ligands [2 3 4 5] :type :e} {:id {:new 1} :site {:new 2} :ligands [[:h 6] 7 [:lp {:new 0}] 8] :type :z}]}}"#,
+        Edit::RemoveStereoBonds { removes: vec![
+            (
+                StereoBondHandle::Id(StereoBondId(0)),
+                BondHandle::Id(BondId(1)),
+                vec![
+                    (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(4)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+            ),
+            (
+                StereoBondHandle::New(1),
+                BondHandle::New(2),
+                vec![
+                    (AtomHandle::Id(AtomId(6)), StereoLigandKind::ImplicitHydrogen),
+                    (AtomHandle::Id(AtomId(7)), StereoLigandKind::Atom),
+                    (AtomHandle::New(0), StereoLigandKind::LonePair),
+                    (AtomHandle::Id(AtomId(8)), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, 0_u32),
+            ),
+        ] },
+    )]
+    #[case::stereo_bond_field_clear(
+        r#"{:stereo-bond {:modify [0 {:expect "Ct1" :update "*"}]}}"#,
+        Edit::ModifyStereoBondField {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32),
+                new: StereoConfigurationAst::Undetermined,
+            },
+        },
+    )]
+    #[case::stereo_bond_constraint_replace(
+        r##"{:stereo-bond {:modify [{:new 0} {:expect "Ct#g/" :update "Ct#g="}]}}"##,
+        Edit::ModifyStereoBondConstraint {
+            id: StereoBondHandle::New(0),
+            kind: Some(StereoKind::CisTrans),
+            old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            new: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
+        },
+    )]
+    #[case::stereo_bond_constraint_add(
+        r##"{:stereo-bond {:modify [0 {:expect "Ct#g*" :update "Ct#g/"}]}}"##,
+        Edit::ModifyStereoBondConstraint {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            kind: Some(StereoKind::CisTrans),
+            old: None,
+            new: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        },
+    )]
+    #[case::stereo_bond_constraint_remove(
+        r##"{:stereo-bond {:modify [{:new 1} {:expect "Ct#g/" :update "Ct#g*"}]}}"##,
+        Edit::ModifyStereoBondConstraint {
+            id: StereoBondHandle::New(1),
+            kind: Some(StereoKind::CisTrans),
+            old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            new: None,
+        },
+    )]
     fn test_overlay_edit_input_roundtrip(#[case] input: &str, #[case] expected: Edit) {
         let parsed = EditInput::from_edn_str(input).unwrap();
         let mut edits = Edits::new();
@@ -3080,6 +4028,26 @@ mod tests {
                 .to_string(),
         )),
     )]
+    #[case::stereo_atom_field(
+        r#"{:stereo-atom {:modify [0 {:expect "Th0" :update "Th"}]}}"#,
+        EdnError::De(DeError::Custom(
+            "stereo-atom :modify :expect and :update must address the same field and constraints"
+                .to_string(),
+        )),
+    )]
+    #[case::stereo_atom_constraint_kind(
+        r##"{:stereo-atom {:modify [0 {:expect "Th#g/" :update "Ct#g="}]}}"##,
+        EdnError::De(DeError::Custom(
+            "stereo-atom constraint changes require the same stereo kind in :expect and :update"
+                .to_string(),
+        )),
+    )]
+    #[case::stereo_bond_ligand_kind(
+        r#"{:stereo-bond {:add {:site 0 :ligands [[:x 1]] :type :z}}}"#,
+        EdnError::De(DeError::Custom(
+            "unknown stereo ligand kind :x".to_string(),
+        )),
+    )]
     #[case::constraint_keyword(
         "{:constraint {:add {:atom [:carbon {:valence 4}]}}}",
         EdnError::De(DeError::Subgrammar {
@@ -3090,6 +4058,39 @@ mod tests {
     )]
     fn test_edit_input_from_edn_error(#[case] input: &str, #[case] expected: EdnError) {
         assert_eq!(EditInput::from_edn_str(input), Err(expected));
+    }
+
+    #[rstest]
+    #[case::stereo_atom(
+        Edit::ModifyStereoAtomConstraint {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            kind: None,
+            old: None,
+            new: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(
+                Stereogenicity::Stereogenic,
+            ))),
+        },
+        DeError::Custom("stereo-atom constraint edit requires a stereo kind".to_string()),
+    )]
+    #[case::stereo_bond(
+        Edit::ModifyStereoBondConstraint {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            kind: None,
+            old: None,
+            new: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(
+                Stereogenicity::Stereogenic,
+            ))),
+        },
+        DeError::Custom("stereo-bond constraint edit requires a stereo kind".to_string()),
+    )]
+    fn test_edit_input_from_edit_requires_stereo_kind(
+        #[case] edit: Edit,
+        #[case] expected: DeError,
+    ) {
+        assert_eq!(
+            EditInput::from_edit(&edit, &MoleculeDefaults::new()),
+            Err(expected)
+        );
     }
 
     #[rstest]

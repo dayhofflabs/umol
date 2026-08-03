@@ -712,11 +712,21 @@ impl MoleculeEditor {
                 let id = state.noncovalent_bond(id)?;
                 self.apply_modify_noncovalent_bond_constraint(id, old, new)
             }
-            Edit::ModifyStereoAtomConstraint { id, old, new } => {
+            Edit::ModifyStereoAtomConstraint {
+                id,
+                kind: _,
+                old,
+                new,
+            } => {
                 let id = state.stereo_atom(id)?;
                 self.apply_modify_stereo_atom_constraint(id, old, new)
             }
-            Edit::ModifyStereoBondConstraint { id, old, new } => {
+            Edit::ModifyStereoBondConstraint {
+                id,
+                kind: _,
+                old,
+                new,
+            } => {
                 let id = state.stereo_bond(id)?;
                 self.apply_modify_stereo_bond_constraint(id, old, new)
             }
@@ -1275,20 +1285,22 @@ impl MoleculeEditor {
                 self.apply_modify_noncovalent_bond_constraint(id, old, new)?;
                 Ok(undo)
             }
-            Edit::ModifyStereoAtomConstraint { id, old, new } => {
+            Edit::ModifyStereoAtomConstraint { id, kind, old, new } => {
                 let id = state.stereo_atom(id.clone())?;
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoAtomConstraint {
                     id: StereoAtomHandle::Id(id),
+                    kind,
                     old: new.clone(),
                     new: old.clone(),
                 }));
                 self.apply_modify_stereo_atom_constraint(id, old, new)?;
                 Ok(undo)
             }
-            Edit::ModifyStereoBondConstraint { id, old, new } => {
+            Edit::ModifyStereoBondConstraint { id, kind, old, new } => {
                 let id = state.stereo_bond(id.clone())?;
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoBondConstraint {
                     id: StereoBondHandle::Id(id),
+                    kind,
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -3256,6 +3268,36 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_editor_transact_remove_stereo_bond_error(
+        mut stereo_bond_skeleton: MoleculeEditor,
+    ) {
+        stereo_bond_skeleton.add_stereo_bond(
+            BondId(1),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+        );
+        let error = stereo_bond_skeleton
+            .transact(Edits::from_iter([Edit::RemoveStereoBonds {
+                removes: vec![(
+                    StereoBondHandle::Id(StereoBondId(0)),
+                    BondHandle::Id(BondId(1)),
+                    vec![
+                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    ],
+                    // Wrong recorded coset (Ct0 vs the stored Ct1).
+                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                )],
+            }]))
+            .unwrap_err();
+
+        assert_eq!(error, TransactionError::OldStateMismatch);
+    }
+
+    #[rstest]
     fn test_molecule_editor_transact_set_stereo_atom_field(
         mut stereo_atom_skeleton: MoleculeEditor,
     ) {
@@ -4635,11 +4677,13 @@ mod tests {
             },
             EntityKind::StereoAtom => Edit::ModifyStereoAtomConstraint {
                 id: StereoAtomHandle::Id(StereoAtomId(0)),
+                kind: None,
                 old: None,
                 new: None,
             },
             EntityKind::StereoBond => Edit::ModifyStereoBondConstraint {
                 id: StereoBondHandle::Id(StereoBondId(0)),
+                kind: None,
                 old: None,
                 new: None,
             },

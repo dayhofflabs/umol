@@ -3443,6 +3443,7 @@ fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
         },
         Edit::ModifyStereoAtomConstraint {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
+            kind: Some(StereoKind::Tetrahedral),
             old: None,
             new: Some(StereoAtomConstraintAst::Stereogenicity(
                 StereogenicityAst::Lit(Stereogenicity::Stereogenic),
@@ -3450,6 +3451,7 @@ fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
         },
         Edit::ModifyStereoBondConstraint {
             id: StereoBondHandle::Id(StereoBondId(0)),
+            kind: Some(StereoKind::CisTrans),
             old: None,
             new: Some(StereoBondConstraintAst::Stereogenicity(
                 StereogenicityAst::Lit(Stereogenicity::Stereogenic),

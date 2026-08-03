@@ -31,6 +31,7 @@ use super::remap::{IdCompaction, UndoCompaction};
 use super::spin::UnpairedElectronsAst;
 use super::stereo::{
     StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate, StereoConfigurationAst,
+    StereoKind,
 };
 use super::traits::{Canonicalize, Lattice};
 use super::value::ValueAst;
@@ -397,11 +398,15 @@ pub enum Edit {
     },
     ModifyStereoAtomConstraint {
         id: StereoAtomHandle,
+        /// Geometry context required to parse and render the constraint DSL.
+        kind: Option<StereoKind>,
         old: Option<StereoAtomConstraintAst>,
         new: Option<StereoAtomConstraintAst>,
     },
     ModifyStereoBondConstraint {
         id: StereoBondHandle,
+        /// Geometry context required to parse and render the constraint DSL.
+        kind: Option<StereoKind>,
         old: Option<StereoBondConstraintAst>,
         new: Option<StereoBondConstraintAst>,
     },
@@ -1073,6 +1078,11 @@ impl Edits {
         update: &StereoAtomUpdate,
     ) {
         let updated = current.update(update);
+        let kind = update
+            .configuration
+            .kind()
+            .or_else(|| current.configuration.kind())
+            .or_else(|| updated.configuration.kind());
         if !current.configuration.canonical_eq(&updated.configuration) {
             self.push(Edit::ModifyStereoAtomField {
                 id: id.clone(),
@@ -1093,6 +1103,7 @@ impl Edits {
             if !unchanged {
                 self.push(Edit::ModifyStereoAtomConstraint {
                     id: id.clone(),
+                    kind,
                     old,
                     new,
                 });
@@ -1108,6 +1119,11 @@ impl Edits {
         update: &StereoBondUpdate,
     ) {
         let updated = current.update(update);
+        let kind = update
+            .configuration
+            .kind()
+            .or_else(|| current.configuration.kind())
+            .or_else(|| updated.configuration.kind());
         if !current.configuration.canonical_eq(&updated.configuration) {
             self.push(Edit::ModifyStereoBondField {
                 id: id.clone(),
@@ -1128,6 +1144,7 @@ impl Edits {
             if !unchanged {
                 self.push(Edit::ModifyStereoBondConstraint {
                     id: id.clone(),
+                    kind,
                     old,
                     new,
                 });
@@ -2651,6 +2668,7 @@ mod tests {
             },
             Edit::ModifyStereoAtomConstraint {
                 id: StereoAtomHandle::Id(StereoAtomId(7)),
+                kind: Some(StereoKind::Tetrahedral),
                 old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
                 new: None,
             },
@@ -2730,6 +2748,7 @@ mod tests {
             },
             Edit::ModifyStereoBondConstraint {
                 id: StereoBondHandle::Id(StereoBondId(7)),
+                kind: Some(StereoKind::CisTrans),
                 old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
                 new: None,
             },

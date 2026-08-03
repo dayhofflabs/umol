@@ -510,6 +510,7 @@ the section ships.
   bond sites and render each ligand as an atom handle plus `StereoLigandKind`. Test both site kinds,
   mixed existing/`New` ligand frames, removal preconditions, and every stereo update form.
   **Additive (green).** [dep: S1i, S2a]
+  **Done.**
 - **S2e — Expose `EditsDsl` and specify the grammar.** Add the public `EditsDsl` root with
   `FromStr`, `Display`, `FromEdn`, and `ToEdn`, plus `IntoAst<Edits>`/`FromAst<Edits>` under
   `MoleculeDefaults`; re-export it from `dsl.rs`. Parsing must rebuild the eight `Edits` counters in

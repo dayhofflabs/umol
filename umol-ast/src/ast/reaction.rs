@@ -726,11 +726,12 @@ impl ReactionAst {
                             },
                         })
                     }
-                    StereoAtomDelta::ModifyConstraint { id, old, new, .. } => {
+                    StereoAtomDelta::ModifyConstraint { id, kind, old, new } => {
                         if let Some(constraint) = new.as_ref().or(old.as_ref()) {
                             let host_id = host_stereo_atom(*id)?;
                             sets.push(Edit::ModifyStereoAtomConstraint {
                                 id: StereoAtomHandle::Id(host_id),
+                                kind: *kind,
                                 old: host
                                     .stereo_atom(host_id)
                                     .ast
@@ -798,11 +799,12 @@ impl ReactionAst {
                             },
                         })
                     }
-                    StereoBondDelta::ModifyConstraint { id, old, new, .. } => {
+                    StereoBondDelta::ModifyConstraint { id, kind, old, new } => {
                         if let Some(constraint) = new.as_ref().or(old.as_ref()) {
                             let host_id = host_stereo_bond(*id)?;
                             sets.push(Edit::ModifyStereoBondConstraint {
                                 id: StereoBondHandle::Id(host_id),
+                                kind: *kind,
                                 old: host
                                     .stereo_bond(host_id)
                                     .ast
