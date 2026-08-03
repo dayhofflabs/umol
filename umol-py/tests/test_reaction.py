@@ -37,6 +37,7 @@ from umol import (
     StereoResolveConfig,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
+    TransactionError,
     UnderdeterminedError,
     ValenceEntry,
     ValenceModel,
@@ -1647,8 +1648,8 @@ def test_reaction_ast_apply_iteration_error():
     application = reaction.apply(host)
 
     with pytest.raises(
-        RuntimeError,
-        match=r"^apply transaction failed: missing constraint entry on remove$",
+        TransactionError,
+        match=r"^missing constraint entry on remove$",
     ):
         next(application)
     with pytest.raises(StopIteration):

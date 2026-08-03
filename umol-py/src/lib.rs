@@ -68,7 +68,7 @@ use crate::{
     element::Element,
     error::{
         ContradictionError, InvalidStructureError, MetadataError, ModelConversionError, ParseError,
-        UnderdeterminedError,
+        TransactionError, UnderdeterminedError,
     },
     fingerprint::config::{
         EcfpHashScheme, HashedFingerprintConfig, PatternFingerprintConfig,
@@ -210,6 +210,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?;
         module.add("MetadataError", module.py().get_type::<MetadataError>())?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
+        module.add(
+            "TransactionError",
+            module.py().get_type::<TransactionError>(),
+        )?;
         module.add(
             "UnderdeterminedError",
             module.py().get_type::<UnderdeterminedError>(),

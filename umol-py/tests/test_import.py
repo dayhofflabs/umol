@@ -206,6 +206,7 @@ PUBLIC_EXPORTS = frozenset(
     Topicity
     TopicityAst
     TopicityRelationAst
+    TransactionError
     UnpairedElectrons
     UnpairedElectronsAst
     UnpairedElectronsUpdate
@@ -474,6 +475,7 @@ def test_public_constructor_signature(constructor, expected):
         umol.InvalidStructureError,
         umol.ModelConversionError,
         umol.ParseError,
+        umol.TransactionError,
         umol.UnderdeterminedError,
     ],
 )

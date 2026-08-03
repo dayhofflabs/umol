@@ -674,6 +674,7 @@ the section ships.
   `DuplicateRemoval`, malformed-edit, and `RollbackStateMismatch` failures and their exact exception
   class. **Additive (green).**
   [dep: S1i]
+  **Done.**
 - **S5b — Bind `MoleculeEditor` inspection and finalization.** In
   `umol-py/src/transaction.rs`, add and register the Python-owned editor wrapper with non-consuming
   `snapshot()` and consuming `build()`. Store the Rust editor as consumable state so any operation

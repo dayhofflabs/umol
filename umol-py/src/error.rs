@@ -2,7 +2,7 @@
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::{create_exception, PyErr};
-use umol_ast::ast::Contradiction as AstContradiction;
+use umol_ast::ast::{Contradiction as AstContradiction, TransactionError as AstTransactionError};
 use umol_ast::dsl::{MetadataError as AstMetadataError, ParseError as AstParseError};
 use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
 use umol_graph::ingest::{
@@ -54,6 +54,13 @@ create_exception!(
     "Raised when an operation requires a determined molecular value."
 );
 
+create_exception!(
+    umol,
+    TransactionError,
+    PyException,
+    "Raised when transactional molecule editing or rollback fails."
+);
+
 /// Map an `umol_ast` parse error onto the catchable `umol.ParseError`.
 pub(crate) fn parse_error(error: AstParseError) -> PyErr {
     ParseError::new_err(error.to_string())
@@ -67,6 +74,11 @@ pub(crate) fn contradiction_error(error: AstContradiction) -> PyErr {
 /// Map an `umol_ast` metadata error onto the catchable `umol.MetadataError`.
 pub(crate) fn metadata_error(error: AstMetadataError) -> PyErr {
     MetadataError::new_err(error.to_string())
+}
+
+/// Map an `umol_ast` transaction failure onto the catchable `umol.TransactionError`.
+pub(crate) fn transaction_error(error: AstTransactionError) -> PyErr {
+    TransactionError::new_err(error.to_string())
 }
 
 /// Map the resolved SMILES operation error onto the public Python taxonomy.
@@ -146,7 +158,7 @@ pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
 mod tests {
     use pyo3::prelude::*;
     use rstest::rstest;
-    use umol_ast::ast::{AtomId, BondId, Entity};
+    use umol_ast::ast::{AtomId, BondId, Entity, EntityKind};
     use umol_ast::dsl::MetadataError as AstMetadataError;
     use umol_graph::ingest::ingest_smiles;
     use umol_graph::ops::aromaticity::{
@@ -207,6 +219,63 @@ mod tests {
         Python::attach(|py| {
             let error = metadata_error(input);
             assert!(error.is_instance_of::<MetadataError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::handle_out_of_range(
+        AstTransactionError::HandleOutOfRange {
+            kind: EntityKind::Atom,
+            index: 3,
+            count: 2,
+        },
+        "atom handle 3 is out of range for 2 entries",
+    )]
+    #[case::handle_removed(
+        AstTransactionError::HandleRemoved {
+            kind: EntityKind::Bond,
+            index: 1,
+        },
+        "bond handle 1 refers to a removed entity",
+    )]
+    #[case::duplicate_removal(
+        AstTransactionError::DuplicateRemoval {
+            kind: EntityKind::StereoAtom,
+        },
+        "duplicate stereo atom in removal batch",
+    )]
+    #[case::old_state_mismatch(
+        AstTransactionError::OldStateMismatch,
+        "precondition failed: old state does not match current"
+    )]
+    #[case::missing_entry(
+        AstTransactionError::MissingEntry,
+        "missing constraint entry on remove"
+    )]
+    #[case::malformed_edit(
+        AstTransactionError::MalformedEdit("AddDativeBond requires at least one participant atom",),
+        "malformed edit: AddDativeBond requires at least one participant atom"
+    )]
+    #[case::rollback_failed(
+        AstTransactionError::RollbackFailed {
+            apply: Box::new(AstTransactionError::MissingEntry),
+            rollback: Box::new(AstTransactionError::RollbackStateMismatch),
+        },
+        "rollback failed after apply error: apply=missing constraint entry on remove; \
+         rollback=rollback journal does not match editor state",
+    )]
+    #[case::rollback_state_mismatch(
+        AstTransactionError::RollbackStateMismatch,
+        "rollback journal does not match editor state"
+    )]
+    fn test_transaction_error(#[case] input: AstTransactionError, #[case] expected_message: &str) {
+        Python::attach(|py| {
+            let error = transaction_error(input);
+            assert!(error.is_instance_of::<TransactionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 expected_message

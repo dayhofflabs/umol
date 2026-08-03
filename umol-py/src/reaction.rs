@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 #[cfg(test)]
 use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
 use umol_ast::ast::{
-    FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
+    ApplyError as AstApplyError, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation,
     SubstructureMatchConfig as AstSubstructureMatchConfig,
@@ -42,7 +42,7 @@ use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
 use crate::error::{
     contradiction_error, fingerprint_error, metadata_error, parse_error,
-    reaction_smiles_input_error, InvalidStructureError,
+    reaction_smiles_input_error, transaction_error, InvalidStructureError,
 };
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
@@ -620,6 +620,10 @@ impl ReactionApplicationIter {
             match self.reaction.apply_at(&self.host, &correspondence) {
                 Ok(derivation) => return Ok(Some(ReactionDerivation::from_rust(derivation))),
                 Err(error) if error.is_match_rejection() => {}
+                Err(AstApplyError::Transaction(error)) => {
+                    self.correspondences = Vec::new().into_iter();
+                    return Err(transaction_error(error));
+                }
                 Err(error) => {
                     self.correspondences = Vec::new().into_iter();
                     return Err(PyRuntimeError::new_err(error.to_string()));
@@ -667,7 +671,7 @@ mod tests {
     use super::*;
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
-    use crate::error::{ContradictionError, MetadataError, ParseError};
+    use crate::error::{ContradictionError, MetadataError, ParseError, TransactionError};
     use crate::fingerprint::config::{
         EcfpHashScheme, HashedFingerprintConfig, RefinementRounds, WlHashScheme,
     };
@@ -3373,10 +3377,10 @@ mod tests {
         let error = application.__next__().unwrap_err();
 
         Python::attach(|py| {
-            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert!(error.is_instance_of::<TransactionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "apply transaction failed: missing constraint entry on remove"
+                "missing constraint entry on remove"
             );
         });
         assert_eq!(application.correspondences.len(), 0);
