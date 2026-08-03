@@ -206,9 +206,6 @@ pub(super) fn read_molecule_input(
             "stereo-bonds" => mi.stereo_bonds = read_vec(de, read_stereo_bond_entry)?,
             "atom-aliases" => mi.atom_aliases = read_atom_aliases(de)?,
             "constraints" => mi.constraints = read_constraints_dsl(de)?,
-            "guards" => {
-                de.read_skip_value()?;
-            }
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1328,9 +1325,6 @@ pub(super) fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeErr
             "atom-aliases" => input.atom_aliases = parse_atom_aliases(v)?,
             "constraints" => {
                 input.constraints = parse_vec(v, ":constraints", |e| ConstraintDsl::from_edn(e))?
-            }
-            "guards" => {
-                // Spec §4 lists :guards as a future-reserved key; ignore for now.
             }
             other => {
                 return Err(DeError::UnknownField {

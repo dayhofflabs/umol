@@ -20,7 +20,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 - **Ground**: fully instantiated molecules; no wildcards, binds, or logic. Every numeric slot is a concrete integer; element is a single symbol.
 - **Query / Pattern**: adds wildcards (**`*`**), element/numeric sets, **`bool-expr`**, and **`?id`** references. Sufficient for substructure queries.
-- **Rule**: adds **element variables**, cross-atom **`id`** scope (**§6**), and **`:guards`** on molecule maps. Sufficient for transformation rules.
+- **Rule**: adds **element variables** and cross-atom **`id`** scope (**§6**). Sufficient for transformation rules.
 - **Compound**: rules whose RHS produces molecule maps that are themselves other terms; higher-order composition.
 
 The subgrammars in **§5.1**, **§7** define forms that are syntactically valid across all levels; which forms are *semantically* allowed depends on which level is in force (**§3**).
@@ -57,7 +57,7 @@ The same token grammars are used in every context; which **`value-expr`** shapes
 |-----------|-------------------------|
 | **Ground** | Wildcards, element **`*`**, element **brace-set**, **`?`**, **`bool-expr`**, and **element variables** are **invalid** unless this specification explicitly allows them for that slot. |
 | **Query**  | Wildcards and constraints per **§5.1** and **§7**. |
-| **Rule**   | Binds, guards, sets, boolean guards, and arithmetic per **§5.1**, **§6**, and **§7**. |
+| **Rule**   | Binds, sets, boolean expressions, and arithmetic per **§5.1**, **§6**, and **§7**. |
 
 **Builder-oriented** use (expecting a unique ground resolution) and **query-oriented** use (selecting a set of matches) differ only in evaluation policy, not in the grammars.
 
@@ -81,7 +81,6 @@ molecule-map ::=
     [:stereo-bonds      stereo-bond-list]
     [:atom-aliases      atom-alias-list]
     [:constraints       constraint-list]
-    [:guards            [ logic-expr* ]]
   }
 
 atom-alias-list      ::= [ keyword "atom-string" ]*
@@ -190,7 +189,6 @@ These rules apply **within** a single **molecule map**. **Constraints across** r
 
 **`:stereo-atoms` / `:stereo-bonds`.** The lists **MUST NOT** contain two **`stereo-atom-entry`** values with the same **`:site`** atom, nor two **`stereo-bond-entry`** values with the same **`:site`** bond. Each atom (resp. bond) **MUST** be the site of at most one stereo element.
 
-**`:guards`** **MAY** appear only in **Rule** context; it holds predicates over variables bound on the **LHS** that are not expressed inline in atom-strings.
 
 ---
 
@@ -528,7 +526,7 @@ glyph     ::= '=' | '\'' | '/'
 
 ## 6. Match semantics and bindings
 
-**Ground molecule, pattern LHS.** The target is **ground** (fully instantiated). The **LHS** of a rule (or query) may still contain **wildcards**, **sets**, **binds**, and **guards**: that is **pattern** data, not an indeterminate molecule.
+**Ground molecule, pattern LHS.** The target is **ground** (fully instantiated). The **LHS** of a rule (or query) may still contain **wildcards**, **sets**, and **binds**: that is **pattern** data, not an indeterminate molecule.
 
 ### 6.1 Inherent fields and derived predicates
 

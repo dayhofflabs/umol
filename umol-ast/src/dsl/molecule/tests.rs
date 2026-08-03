@@ -854,21 +854,6 @@ fn test_molecule_dsl_from_edn_error(#[case] source: &str) {
     assert!(matches!(err, DeError::Custom(_)), "expected Custom, got {:?}", err);
 }
 
-#[rstest]
-fn test_molecule_dsl_guards() {
-    let source = r##"{:atoms ["C"] :bonds [] :guards [[:placeholder]]}"##;
-    let edn = read_string(source).unwrap();
-    let dsl = MoleculeDsl::from_edn(&edn).unwrap();
-    // :guards is silently accepted; the rendered form drops it since the
-    // AST has no field for it yet.
-    let rendered = dsl.to_edn();
-    let Edn::Map(m) = &rendered else {
-        panic!("expected map");
-    };
-    assert!(m.get_keyword("guards").is_none());
-    assert_eq!(dsl.ast().atoms().count(), 1);
-}
-
 /// `MoleculeAst::to_edn` emits canonical EDN with positional refs only,
 /// regardless of any entity keywords on the input. Parsing the canonical
 /// output back yields the same AST.
