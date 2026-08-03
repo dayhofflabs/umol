@@ -638,6 +638,7 @@ the section ships.
   produce the typed Rust handle required by the surrounding argument position. Reject negative and
   overflowing integers. Test equality, repr, immutability, and conversion into all eight typed
   handles without exposing typed Python handle classes. **Additive (green).** [dep: S0b]
+  **Done.**
 - **S4b — Bind the raw `Edit` enum.** In `umol-py/src/edit.rs`, expose every Rust `Edit` variant
   with exact `from_rust`/`to_rust`, value equality, and repr, reusing the existing field-change,
   entity AST, constraint, and stereo-ligand wrappers. Do not add a second static add/remove/update

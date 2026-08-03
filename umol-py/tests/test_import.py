@@ -113,6 +113,7 @@ PUBLIC_EXPORTS = frozenset(
     MulticenterBondViews
     MulticenterValence
     MulticenterValenceAst
+    New
     NoncovalentBondAst
     NoncovalentBondConstraintAst
     NoncovalentBondConstraintKey
