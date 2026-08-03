@@ -6,6 +6,20 @@ use umol_ast::ast::Transaction;
 use crate::strategies::*;
 
 proptest! {
+    /// The standalone edit surface preserves every ordered raw edit, including repeated entries,
+    /// while rebuilding the per-kind creation ordinals through `Edits` construction.
+    #[test]
+    fn test_edits_dsl_roundtrip(edits in edits_dsl_strategy()) {
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ast(&edits, &defaults);
+        let rendered = dsl.to_edn();
+        let parsed = EditsDsl::from_edn(&rendered)
+            .map_err(|error| TestCaseError::fail(format!("edit parse failed: {error}")))?;
+        let rebuilt = parsed.into_ast(&defaults);
+
+        prop_assert_eq!(rebuilt, edits);
+    }
+
     /// Creation ordinals are reconstructed solely from the ordered entries: uninterrupted
     /// construction, raw pushes, and `FromIterator` agree for arbitrary interleavings, with one
     /// independent namespace per entity kind.

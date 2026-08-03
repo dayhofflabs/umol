@@ -43,12 +43,13 @@ pub(crate) use umol_ast::ast::{
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
-    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MetadataError,
-    MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata, MulticenterBondDsl,
-    MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError,
-    ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl, StereoAtomConstraintDsl,
-    StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl, StereoBondConstraintDsl,
-    StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl, StereoLigandRef, ValueDsl,
+    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, EditsDsl,
+    MetadataError, MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata,
+    MulticenterBondDsl, MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl,
+    ParseError, ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl,
+    StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl,
+    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl,
+    StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -4079,6 +4080,30 @@ pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst
         overlay_transaction_strategy(),
         stable_atom_handle_trace_strategy(false).prop_map(|trace| (trace.base(), trace.edits())),
     ]
+}
+
+/// Edit sequences in the standalone grammar's exact representational shape.
+///
+/// Transactions accept batched atom and bond additions, while the standalone grammar represents
+/// each addition as one entry. Keep those batches in `transaction_edits_strategy` for transaction
+/// coverage and split only the inputs to the syntax round-trip property.
+pub(crate) fn edits_dsl_strategy() -> impl Strategy<Value = Edits> {
+    transaction_edits_strategy().prop_map(|(_, edits)| {
+        edits
+            .into_iter()
+            .flat_map(|edit| match edit {
+                Edit::AddAtoms { atoms } => atoms
+                    .into_iter()
+                    .map(|atom| Edit::AddAtoms { atoms: vec![atom] })
+                    .collect(),
+                Edit::AddBonds { bonds } => bonds
+                    .into_iter()
+                    .map(|bond| Edit::AddBonds { bonds: vec![bond] })
+                    .collect(),
+                edit => vec![edit],
+            })
+            .collect()
+    })
 }
 
 /// A small localized molecule: 1–4 element atoms over a simple edge set, bond orders 1–3.

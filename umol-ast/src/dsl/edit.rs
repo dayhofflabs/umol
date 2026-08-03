@@ -1,9 +1,7 @@
-//! Surface encoding for handles in standalone edit documents.
+//! Surface encoding for standalone edit documents.
 
-#![expect(
-    dead_code,
-    reason = "edit-family codecs are assembled by the aggregate EditsDsl root"
-)]
+use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, FromEdn, ToEdn};
 
@@ -14,6 +12,7 @@ use super::config::MoleculeDefaults;
 use super::constraint::ConstraintDsl;
 use super::dative::{DativeBondDsl, DativeBondUpdateDsl};
 use super::edn_utils::{parse_single_key_map, single_key_map};
+use super::error::ParseError;
 use super::metadata::MoleculeMetadata;
 use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
 use super::namespace::Namespace;
@@ -149,6 +148,89 @@ type StereoBondRemovalInput = (
     Vec<StereoLigandInput>,
     StereoBondDsl,
 );
+
+/// Ordered standalone surface form for a batch of host-specific molecule edits.
+///
+/// Parsing validates each checked update and recorded removal shape before the batch can be
+/// converted to [`Edits`]. Full entity definitions and recorded removal state are interpreted under
+/// [`MoleculeDefaults`]; partial `:expect` and `:update` values are not defaulted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EditsDsl {
+    inputs: Vec<EditInput>,
+}
+
+impl FromStr for EditsDsl {
+    type Err = ParseError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Self::from_edn_str(input).map_err(|error| ParseError::EdnParse(error.to_string()))
+    }
+}
+
+impl Display for EditsDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
+impl<'de> FromEdn<'de> for EditsDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let Edn::Vector(entries) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "vector of edits",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        Ok(Self {
+            inputs: entries
+                .iter()
+                .map(EditInput::from_edn)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+impl ToEdn for EditsDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Vector(
+            self.inputs
+                .iter()
+                .map(ToEdn::to_edn)
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    }
+}
+
+impl FromAst<Edits> for EditsDsl {
+    type Ctx = MoleculeDefaults;
+
+    fn from_ast(edits: &Edits, defaults: &Self::Ctx) -> Self {
+        let mut inputs = Vec::new();
+        for edit in edits.iter() {
+            inputs.extend(
+                EditInput::from_edit(edit, defaults)
+                    .expect("Edit variants satisfy their representational invariants"),
+            );
+        }
+        Self { inputs }
+    }
+}
+
+impl IntoAst<Edits> for EditsDsl {
+    type Ctx = MoleculeDefaults;
+
+    fn into_ast(self, defaults: &Self::Ctx) -> Edits {
+        let mut edits = Edits::new();
+        for input in self.inputs {
+            input
+                .append_to(&mut edits, defaults)
+                .expect("EditsDsl stores only validated edit inputs");
+        }
+        edits
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EditInput {
@@ -608,7 +690,7 @@ impl EditInput {
         Ok(())
     }
 
-    fn from_edit(edit: &Edit, defaults: &MoleculeDefaults) -> Result<Option<Vec<Self>>, DeError> {
+    fn from_edit(edit: &Edit, defaults: &MoleculeDefaults) -> Result<Vec<Self>, DeError> {
         let inputs = match edit {
             Edit::AddAtoms { atoms } => atoms
                 .iter()
@@ -877,7 +959,7 @@ impl EditInput {
                 vec![Self::ConstraintRemove(constraint.clone())]
             }
         };
-        Ok(Some(inputs))
+        Ok(inputs)
     }
 }
 
@@ -3121,6 +3203,70 @@ mod tests {
     use crate::mol_dsl;
 
     #[rstest]
+    #[case::empty("[]", MoleculeDefaults::new(), Edits::new())]
+    #[case::construction(
+        r#"[{:atom {:add "C#h3"}} {:bond {:add [0 {:new 0} :single]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([
+            Edit::AddAtoms {
+                atoms: vec![AtomAst {
+                    element: ElementAst::Lit(Element::C),
+                    implicit_hydrogens: ValueAst::Lit(3),
+                    ..Default::default()
+                }],
+            },
+            Edit::AddBonds {
+                bonds: vec![AddBond {
+                    endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                    ast: BondAst::from_order(1),
+                }],
+            },
+        ]),
+    )]
+    #[case::checked_update(
+        r##"[{:atom {:modify [0 {:expect "#h3" :update "#h2"}]}}]"##,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::ImplicitHydrogens {
+                old: ValueAst::Lit(3),
+                new: ValueAst::Lit(2),
+            },
+        }]),
+    )]
+    #[case::ground_default(
+        r#"[{:atom {:add "O"}}]"#,
+        MoleculeDefaults::ground(),
+        Edits::from_iter([Edit::AddAtoms {
+            atoms: vec![AtomAst {
+                element: ElementAst::Lit(Element::O),
+                isotope_mass: IsotopeMassAst::Natural,
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Lit(0),
+                lone_pairs: ValueAst::Lit(0),
+                unpaired_electrons: UnpairedElectronsAst::closed_shell(),
+                constraints: AtomConstraintsAst::new(),
+            }],
+        }]),
+    )]
+    fn test_edits_dsl_roundtrip(
+        #[case] input: &str,
+        #[case] defaults: MoleculeDefaults,
+        #[case] expected: Edits,
+    ) {
+        let dsl = EditsDsl::from_str(input).unwrap();
+        let rendered = dsl.to_edn();
+        let displayed = dsl.to_string();
+        let edits = dsl.into_ast(&defaults);
+        let rebuilt = EditsDsl::from_ast(&expected, &defaults);
+
+        assert_eq!(edits, expected);
+        assert_eq!(rendered, read_string(input).unwrap());
+        assert_eq!(displayed, rendered.to_string());
+        assert_eq!(rebuilt.to_edn(), read_string(input).unwrap());
+    }
+
+    #[rstest]
     #[case::id("7", EditHandleDsl::Id(7))]
     #[case::new("{:new 7}", EditHandleDsl::New(7))]
     fn test_edit_handle_dsl_edn_roundtrip(#[case] input: &str, #[case] expected: EditHandleDsl) {
@@ -3551,7 +3697,6 @@ mod tests {
     ) {
         let rendered = EditInput::from_edit(&edit, &defaults)
             .unwrap()
-            .unwrap()
             .into_iter()
             .map(|input| input.to_edn())
             .collect::<Vec<_>>();
@@ -3898,7 +4043,6 @@ mod tests {
         parsed.append_to(&mut edits, &MoleculeDefaults::new()).unwrap();
         let rendered = EditInput::from_edit(&expected, &MoleculeDefaults::new())
             .unwrap()
-            .unwrap()
             .into_iter()
             .map(|input| input.to_edn())
             .collect::<Vec<_>>();
@@ -3950,7 +4094,6 @@ mod tests {
             .append_to(&mut edits, &MoleculeDefaults::ground())
             .unwrap();
         let rendered = EditInput::from_edit(&expected, &MoleculeDefaults::ground())
-            .unwrap()
             .unwrap()
             .into_iter()
             .map(|input| input.to_edn())

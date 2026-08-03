@@ -481,7 +481,7 @@ the section ships.
   [dep: S1i]
   **Done.**
 
-### S2 — Standalone edit DSL and normative grammar
+### S2 — Constraint edit representation, standalone edit DSL, and normative grammar
 
 - **S2a — Add the standalone handle codec.** Add `umol-ast/src/dsl/edit.rs` with the shared
   surface representation and typed conversions for existing non-negative integer handles and
@@ -511,15 +511,66 @@ the section ships.
   mixed existing/`New` ligand frames, removal preconditions, and every stereo update form.
   **Additive (green).** [dep: S1i, S2a]
   **Done.**
-- **S2e — Expose `EditsDsl` and specify the grammar.** Add the public `EditsDsl` root with
+- **S2e — Add the normalized `ConstraintEdit` representation.** In
+  `umol-ast/src/ast/edit.rs`, add the public `ConstraintEdit` value used only by molecule-constraint
+  edit entries. Keep `Constraint`, `ConstraintDelta`, and the inline entity-constraint ASTs
+  unchanged. Store one private `Constraint` tree whose target-molecule ids are normalized slots,
+  together with eight private typed handle vectors (`AtomHandle` through `StereoBondHandle`); an id
+  of kind `K` and index `i` in the private tree indexes handle vector `K[i]`. Intern repeated
+  references once per kind, reuse the slot throughout logical combinators, and map only the target
+  member of each `SubPatternAnchor` pair—the nested pattern and its ids retain their independent
+  coordinate space. Provide an infallible conversion from a concrete `Constraint` that maps every
+  referenced entity to its same-id `Id` handle, plus a checked public construction path from a
+  complete, kind-correct set of per-entity handle mappings for reaction lowering, DSL parsing, and
+  callers that need `New` references. Do not expose the normalized constraint or its slot ids as a
+  second public constraint model. Test a single entity leaf, repeated references in nested
+  `And`/`Or`/`Not`, explicit relational references, quantified relational predicates that carry no
+  atom identity, molecule-wide constraints with `None` subsets, mixed-kind subsets, and anchored and
+  unanchored subpatterns. Verify that equivalent repeated handles share one slot and that converting
+  an ordinary constraint preserves every exact predicate and maps every outer reference to `Id`.
+  **Additive (green).** [dep: S1i]
+  **Done.**
+- **S2f — Make constraint edits handle-aware end to end.** Change
+  `Edit::{AddMoleculeConstraint, RemoveMoleculeConstraint}` to carry `ConstraintEdit`, and change
+  `Edits::add_molecule_constraint` / `remove_molecule_constraint` to append that value while keeping
+  the ordinary concrete-`Constraint` path available through its infallible conversion. In
+  `ast/molecule/transact.rs`, resolve all eight handle vectors through `ApplicationState` before
+  mutation, construct the total `IdRemapping` required by the normalized tree, and materialize an
+  ordinary concrete `Constraint` through `Constraint::remap`; a forward, out-of-range, or removed
+  handle must return the existing transaction error before the constraint list changes. Store only
+  the realized concrete constraint in the undo journal so existing constraint compaction and
+  reverse-order rollback remain authoritative. In reaction application, build the complete
+  reaction-entity-to-edit-handle mapping while scheduled additions issue their actual per-kind
+  `New(n)` handles: preserved LHS entities map to matched host `Id` handles and created entities map
+  to those issued `New` handles. Lower every `ConstraintDelta` through that mapping, retaining the
+  established additions → updates → constraints → removals schedule. Correct `remap_delta` so both
+  constraint-delta variants remap their contained `Constraint` rather than passing it through.
+  Migrate all raw edit constructors and tests in the same subitem. Add exact application and
+  rollback cases for initial and created references of every kind; mixed relational references;
+  compaction before later constraint addition/removal; duplicate-value last-match removal; removed
+  and forward handles; target-only subpattern-anchor remapping; constraint deltas over created atoms
+  and overlays; and direct `remap_delta` coverage. **Breaking (red→green).** [dep: S2e]
+- **S2g — Extend molecule-constraint edit parsing to handles.** In `dsl/edit.rs`, parse every
+  target-molecule reference inside a molecule-level constraint as an edit handle and build
+  `ConstraintEdit` directly: integers become `Id`, `{:new n}` becomes `New`, repeated handles share
+  one normalized per-kind slot, and subpattern pattern-side refs remain local to the nested pattern.
+  Render by substituting the stored typed handles for normalized slots without exposing those slots.
+  Cover single entity leaves; logical trees over existing and created entities; explicit relational
+  references of every participating kind; quantified predicates that require no extra atom handle;
+  molecule subsets; and anchored subpatterns. Parsing and `IntoAst` enforce only the structural
+  integrity of the normalized handle representation; handle liveness and chemical semantics remain
+  transaction and validator concerns. **Additive (green).** [dep: S2a, S2b, S2f]
+- **S2h — Expose `EditsDsl` and specify the grammar.** Add the public `EditsDsl` root with
   `FromStr`, `Display`, `FromEdn`, and `ToEdn`, plus `IntoAst<Edits>`/`FromAst<Edits>` under
   `MoleculeDefaults`; re-export it from `dsl.rs`. Parsing must rebuild the eight `Edits` counters in
   one pass through the `Edits` construction surface, while rendering must preserve edit order and
-  duplicates. Add generated round-trip tests
-  spanning every `Edit` variant and direct conformance cases for the examples in this document.
-  Add the normative standalone-edit grammar adjacent to the reaction/delta grammar in
-  `umol-ast/spec/umol-dsl-spec.md`, including vector ordering, handles, defaults, checked updates,
-  removal preconditions, and batching. **Additive (green).** [dep: S2b, S2c, S2d]
+  duplicates. Rendering a `ConstraintEdit` must substitute its typed handles for normalized slots
+  without exposing those slots. Add generated round-trip tests spanning every `Edit` variant,
+  constraint trees referencing every handle family, and direct conformance cases for the examples in
+  this document. Add the normative standalone-edit grammar adjacent to the reaction/delta grammar
+  in `umol-ast/spec/umol-dsl-spec.md`, including vector ordering, handles inside constraints,
+  defaults, checked updates, removal preconditions, and batching. **Additive (green).**
+  [dep: S2b, S2c, S2d, S2g]
 
 ### S3 — Python update values
 
@@ -578,7 +629,7 @@ the section ships.
   molecule-constraint add/remove, and `parse(text, *, defaults=None)`/`render(*, defaults=None)`.
   Test zero- and multi-entry updates, exact old-state capture, complete removal preconditions,
   all-family DSL round trips, defaults, and parse-error classification. **Additive (green).**
-  [dep: S2e, S3c, S3d, S3e, S3f, S3g, S3h, S3i, S3j, S4c]
+  [dep: S2h, S3c, S3d, S3e, S3f, S3g, S3h, S3i, S3j, S4c]
 - **S4e — Register and inventory the editing data surface.** Register `New`, `Edit`, `Edits`, both
   leaf updates, and all eight entity updates in `umol-py/src/lib.rs`; add import-surface assertions
   for the complete inventory and for the deliberate absence of typed handle classes. **Additive
@@ -623,7 +674,7 @@ the section ships.
   [dep: S4e, S5d]
 
 **Critical path:** S0b → S1a → S1b → S1c → S1d → S1e → S1f → S1g → S1h → S1i →
-S2a → S2b/S2c/S2d → S2e → S4a → S4b → S4c → S4d → S4e → S5a → S5b →
+S2a → S2b/S2c/S2d → S2e → S2f → S2g → S2h → S4a → S4b → S4c → S4d → S4e → S5a → S5b →
 S5c → S5d → S6a. S1j can proceed after S1i and converges at S5b. S0a is an independent
 precedent cleanup. The S3 update wrappers can proceed after S1i and converge at S4d.
 
