@@ -55,6 +55,22 @@ proptest! {
         }
     }
 
+    /// Recovering a generated reaction from its span reproduces its exact delta normal form, not
+    /// merely the same right-hand molecule. The basic generator emits only absolute deltas, so its
+    /// canonicalized delta sequence is the recovery contract exercised here.
+    #[test]
+    fn test_reaction_span_ast_to_reaction_deltas(reaction in reaction_strategy()) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            let expected = reaction.canonicalize().map_err(|error| {
+                TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
+            })?;
+            let recovered = span.to_reaction().canonicalize().map_err(|error| {
+                TestCaseError::fail(format!("recovered reaction did not canonicalize: {error}"))
+            })?;
+            prop_assert_eq!(recovered, expected);
+        }
+    }
+
     /// Reaction ↔ span roundtrip fidelity: recovering the reaction from a span and re-materializing
     /// reproduces the span (`to_reaction` then `to_reaction_span` is the identity on spans),
     /// exercising the overlay `EntitySpan` columns and the span→delta recovery in both directions.

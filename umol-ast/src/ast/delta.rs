@@ -1196,16 +1196,16 @@ pub(crate) trait EntityFold: EntityPatch {
     /// Recover this kind's deltas from its lhs/rhs state column: `Added`/`Removed` become
     /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
     /// field/constraint `diff`. The id of entity `i` is `i` (the column is id-indexed).
-    fn deltas_from_states(
+    fn append_deltas_from_states(
         states: &[EntitySpan<Self::Ast>],
         atoms: impl Fn(usize) -> Self::Atoms,
-    ) -> Vec<Delta> {
-        let mut out = Vec::new();
+        deltas: &mut Deltas,
+    ) {
         for (index, state) in states.iter().enumerate() {
             let id = Self::Id::from(index);
             match state {
                 EntitySpan::Unchanged(_) => {}
-                EntitySpan::Added(ast) => out.push(
+                EntitySpan::Added(ast) => deltas.push(
                     Self::rebuild(
                         id,
                         EntityOp::Add {
@@ -1215,7 +1215,7 @@ pub(crate) trait EntityFold: EntityPatch {
                     )
                     .into_delta(),
                 ),
-                EntitySpan::Removed(ast) => out.push(
+                EntitySpan::Removed(ast) => deltas.push(
                     Self::rebuild(
                         id,
                         EntityOp::Remove {
@@ -1226,11 +1226,12 @@ pub(crate) trait EntityFold: EntityPatch {
                     .into_delta(),
                 ),
                 EntitySpan::Modified { lhs, rhs } => {
-                    out.extend(Self::diff(id, lhs, rhs).into_iter().map(Self::into_delta));
+                    for delta in Self::diff(id, lhs, rhs) {
+                        deltas.push(Self::into_delta(delta));
+                    }
                 }
             }
         }
-        out
     }
 }
 

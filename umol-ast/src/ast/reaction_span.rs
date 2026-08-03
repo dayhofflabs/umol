@@ -544,15 +544,20 @@ impl ReactionSpanAst {
     /// (which preserves the original lhs id space); each entity's `EntitySpan` yields its delta, a
     /// `Modified` one via an AST-diff of its left/right values.
     pub fn to_reaction(&self) -> ReactionAst {
-        let mut deltas = AtomDelta::deltas_from_states(&self.atoms, |_| ());
-        deltas.extend(BondDelta::deltas_from_states(&self.bonds, |edge| {
-            let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
-            [AtomId::from(a), AtomId::from(b)]
-        }));
+        let mut deltas = Deltas::new();
+        AtomDelta::append_deltas_from_states(&self.atoms, |_| (), &mut deltas);
+        BondDelta::append_deltas_from_states(
+            &self.bonds,
+            |edge| {
+                let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
+                [AtomId::from(a), AtomId::from(b)]
+            },
+            &mut deltas,
+        );
         let dative_states: Vec<EntitySpan<DativeBondAst>> = (0..self.dative_bonds.count())
             .map(|i| self.dative_bonds.data(RelationId(i as u32)).clone())
             .collect();
-        deltas.extend(DativeBondDelta::deltas_from_states(
+        DativeBondDelta::append_deltas_from_states(
             &dative_states,
             |index| {
                 let rid = RelationId(index as u32);
@@ -565,12 +570,13 @@ impl ReactionSpanAst {
                     AtomId::from(self.dative_bonds.participants_1(rid)[0]),
                 )
             },
-        ));
+            &mut deltas,
+        );
         let aromatic_states: Vec<EntitySpan<AromaticSystemAst>> =
             (0..self.aromatic_systems.count())
                 .map(|i| self.aromatic_systems.data(RelationId(i as u32)).clone())
                 .collect();
-        deltas.extend(AromaticSystemDelta::deltas_from_states(
+        AromaticSystemDelta::append_deltas_from_states(
             &aromatic_states,
             |index| {
                 self.aromatic_systems
@@ -579,12 +585,13 @@ impl ReactionSpanAst {
                     .map(|&n| AtomId::from(n))
                     .collect()
             },
-        ));
+            &mut deltas,
+        );
         let multicenter_states: Vec<EntitySpan<MulticenterBondAst>> =
             (0..self.multicenter_bonds.count())
                 .map(|i| self.multicenter_bonds.data(RelationId(i as u32)).clone())
                 .collect();
-        deltas.extend(MulticenterBondDelta::deltas_from_states(
+        MulticenterBondDelta::append_deltas_from_states(
             &multicenter_states,
             |index| {
                 self.multicenter_bonds
@@ -593,12 +600,13 @@ impl ReactionSpanAst {
                     .map(|&n| AtomId::from(n))
                     .collect()
             },
-        ));
+            &mut deltas,
+        );
         let noncovalent_states: Vec<EntitySpan<NoncovalentBondAst>> =
             (0..self.noncovalent_bonds.count())
                 .map(|i| self.noncovalent_bonds.data(RelationId(i as u32)).clone())
                 .collect();
-        deltas.extend(NoncovalentBondDelta::deltas_from_states(
+        NoncovalentBondDelta::append_deltas_from_states(
             &noncovalent_states,
             |index| {
                 let [a, b] = *self
@@ -606,7 +614,8 @@ impl ReactionSpanAst {
                     .participants(RelationId(index as u32));
                 [AtomId::from(a), AtomId::from(b)]
             },
-        ));
+            &mut deltas,
+        );
         // Stereo overlays have no `EntityFold`, so recover their deltas here: `Removed`/`Added` carry
         // the relation's site + ligand frame; `Modified` is the field/constraint diff. Site/ligand
         // ids are the union frame (lhs ids for preserved/removed entities).
@@ -634,11 +643,11 @@ impl ReactionSpanAst {
                 EntitySpan::Modified {
                     lhs: left,
                     rhs: right,
-                } => deltas.extend(
-                    StereoAtomDelta::diff(id, left, right)
-                        .into_iter()
-                        .map(Delta::StereoAtom),
-                ),
+                } => {
+                    for delta in StereoAtomDelta::diff(id, left, right) {
+                        deltas.push(Delta::StereoAtom(delta));
+                    }
+                }
             }
         }
         for i in 0..self.stereo_bonds.count() {
@@ -665,11 +674,11 @@ impl ReactionSpanAst {
                 EntitySpan::Modified {
                     lhs: left,
                     rhs: right,
-                } => deltas.extend(
-                    StereoBondDelta::diff(id, left, right)
-                        .into_iter()
-                        .map(Delta::StereoBond),
-                ),
+                } => {
+                    for delta in StereoBondDelta::diff(id, left, right) {
+                        deltas.push(Delta::StereoBond(delta));
+                    }
+                }
             }
         }
         for span in &self.constraints {
@@ -683,7 +692,7 @@ impl ReactionSpanAst {
                 ConstraintSpan::Unchanged(_) => {}
             }
         }
-        ReactionAst::new(self.lhs(), Deltas::from_iter(deltas))
+        ReactionAst::new(self.lhs(), deltas)
     }
 
     /// Project one `Side` to a `MoleculeAst`: every entity present on that side, in a compacted id

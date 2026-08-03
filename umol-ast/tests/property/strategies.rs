@@ -3479,7 +3479,7 @@ fn build_reaction(
         }
     }
 
-    let mut deltas: Vec<Delta> = Vec::new();
+    let mut deltas = Deltas::new();
     for &id in &removed_atoms {
         deltas.push(Delta::Atom(AtomDelta::Remove {
             id,
@@ -3791,5 +3791,5 @@ fn build_reaction(
             },
         }));
     }
-    ReactionAst::new(lhs, Deltas::from_iter(deltas))
+    ReactionAst::new(lhs, deltas)
 }
