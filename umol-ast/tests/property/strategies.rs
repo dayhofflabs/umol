@@ -2587,16 +2587,9 @@ pub(crate) fn transaction_atoms(count: usize) -> Vec<AtomAst> {
 
 pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
     (0..count.saturating_sub(1))
-        .map(|id| {
-            Edit::add_bond(
-                AtomHandle::New(id),
-                AtomHandle::New(id + 1),
-                BondAst::from_order((id % 3 + 1) as u8),
-            )
-        })
-        .map(|edit| match edit {
-            Edit::AddBonds { mut bonds } => bonds.remove(0),
-            _ => unreachable!(),
+        .map(|id| AddBond {
+            endpoints: [AtomHandle::New(id), AtomHandle::New(id + 1)],
+            ast: BondAst::from_order((id % 3 + 1) as u8),
         })
         .collect()
 }
@@ -2619,15 +2612,11 @@ pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
     })
 }
 
-pub(crate) fn transaction_add_path_edits(count: usize) -> Vec<Edit> {
-    vec![
-        Edit::AddAtoms {
-            atoms: transaction_atoms(count),
-        },
-        Edit::AddBonds {
-            bonds: transaction_path_bonds(count),
-        },
-    ]
+pub(crate) fn transaction_add_path_edits(count: usize) -> Edits {
+    let mut edits = Edits::new();
+    edits.add_atoms(transaction_atoms(count));
+    edits.add_bonds(transaction_path_bonds(count));
+    edits
 }
 
 #[derive(Clone, Debug)]
@@ -2678,45 +2667,47 @@ impl TransactionCase {
         }
     }
 
-    pub(crate) fn edits(&self) -> Vec<Edit> {
+    pub(crate) fn edits(&self) -> Edits {
         match self {
             Self::AddPath { count } => transaction_add_path_edits(*count),
             Self::RemoveAtom { count, id } => {
-                vec![Edit::remove_atom(AtomHandle::Id(AtomId(
-                    (id % count) as u32,
-                )))]
+                let mut edits = Edits::new();
+                edits.remove_atom(AtomHandle::Id(AtomId((id % count) as u32)));
+                edits
             }
-            Self::RemoveBond { count, id } => vec![Edit::remove_bond(BondHandle::Id(BondId(
-                (id % (count - 1)) as u32,
-            )))],
+            Self::RemoveBond { count, id } => {
+                let mut edits = Edits::new();
+                edits.remove_bond(BondHandle::Id(BondId((id % (count - 1)) as u32)));
+                edits
+            }
             Self::SetAtomCharge { count, id, charge } => {
-                vec![Edit::ModifyAtomField {
+                Edits::from_iter([Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId((id % count) as u32)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
                         new: ValueAst::Lit(*charge),
                     },
-                }]
+                }])
             }
             Self::SetBondOrder { count, id, order } => {
                 let bond_id = id % (count - 1);
-                vec![Edit::ModifyBondField {
+                Edits::from_iter([Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(bond_id as u32)),
                     change: BondFieldChange::Order {
                         old: ValueAst::Lit((bond_id % 3 + 1) as i64),
                         new: ValueAst::Lit(*order as i64),
                     },
-                }]
+                }])
             }
             Self::AddAtomConstraint { count, id, size } => {
-                vec![Edit::ModifyAtomConstraint {
+                Edits::from_iter([Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId((id % count) as u32)),
                     old: None,
                     new: Some(AtomConstraintAst::ring_membership(
                         RingScope::Size(*size as u8),
                         1,
                     )),
-                }]
+                }])
             }
             Self::AddDativeBond {
                 count,
@@ -2728,13 +2719,15 @@ impl TransactionCase {
                 if acceptor == donor {
                     acceptor = (acceptor + 1) % count;
                 }
-                vec![Edit::AddDativeBond {
-                    atoms: vec![
+                let mut edits = Edits::new();
+                edits.add_dative_bond(
+                    vec![
                         AtomHandle::Id(AtomId(donor as u32)),
                         AtomHandle::Id(AtomId(acceptor as u32)),
                     ],
-                    ast: DativeBondAst::from_order(1),
-                }]
+                    DativeBondAst::from_order(1),
+                );
+                edits
             }
         }
     }
@@ -2835,7 +2828,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
 /// removal), then a topology removal of a chosen atom subset (cascade-removes overlays not removed
 /// explicitly). Ordered adds → overlay removes → topology, mirroring `apply_at`; every id resolves
 /// against the pre-removal base state, so `transact` succeeds and the round-trip properties apply.
-pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Vec<Edit>)> {
+pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
     (
         prop::collection::vec(any::<bool>(), 2),
         prop::collection::vec(any::<bool>(), 2),
@@ -2849,7 +2842,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
     )
         .prop_map(
             |(rm_ar, rm_mc, rm_dv, rm_nc, add, mod_at, rm_at, con_ar, con_mc)| {
-                let mut edits: Vec<Edit> = Vec::new();
+                let mut edits = Edits::new();
                 if add > 0 {
                     edits.push(Edit::AddAtoms {
                         atoms: (0..add)
@@ -2974,7 +2967,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
 
 /// `(base, edits)` pairs for the transact round-trip properties: the single-edit `TransactionCase`
 /// coverage plus the multi-edit overlay-removal sequences.
-pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst, Vec<Edit>)> {
+pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
     prop_oneof![
         transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
         overlay_transaction_strategy(),

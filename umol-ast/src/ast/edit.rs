@@ -2217,7 +2217,7 @@ mod tests {
         let mut applied_edits = Edits::new();
         applied_edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("atom update edits should apply");
 
         assert_eq!(editor.atom(AtomId(0)).ast, &expected);
@@ -2309,7 +2309,7 @@ mod tests {
         let mut applied_edits = Edits::new();
         applied_edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("bond update edits should apply");
 
         assert_eq!(editor.bond(BondId(0)).ast, &expected);
@@ -2383,7 +2383,7 @@ mod tests {
             &update,
         );
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("dative-bond update edits should apply");
 
         assert_eq!(editor.dative_bond(DativeBondId(0)).ast, &expected_ast);
@@ -2470,7 +2470,7 @@ mod tests {
             &update,
         );
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("aromatic-system update edits should apply");
 
         assert_eq!(
@@ -2560,7 +2560,7 @@ mod tests {
             &update,
         );
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("multicenter-bond update edits should apply");
 
         assert_eq!(
@@ -2636,7 +2636,7 @@ mod tests {
             &update,
         );
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("noncovalent-bond update edits should apply");
 
         assert_eq!(
@@ -2718,7 +2718,7 @@ mod tests {
             &update,
         );
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("stereo-atom update edits should apply");
 
         assert_eq!(editor.stereo_atom(StereoAtomId(0)).ast, &expected_ast);
@@ -2798,7 +2798,7 @@ mod tests {
             &update,
         );
         editor
-            .transact(applied_edits.into_iter().collect())
+            .transact(applied_edits)
             .expect("stereo-bond update edits should apply");
 
         assert_eq!(editor.stereo_bond(StereoBondId(0)).ast, &expected_ast);

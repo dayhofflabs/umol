@@ -387,6 +387,7 @@ the section ships.
   acceptable if it makes this subitem independently verifiable, but it must be removed before S1i;
   the stage is otherwise allowed to remain red between subitems. **Breaking (red within S1).**
   [dep: S1a]
+  **Done.**
 - **S1c — Realize stable handles in per-kind namespaces.** In
   `umol-ast/src/ast/molecule/transact.rs`, replace the combined created-entity list with an
   initial-host table and a created-entity table for each kind. Initialize the former from the host's

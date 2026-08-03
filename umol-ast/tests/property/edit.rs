@@ -319,22 +319,23 @@ proptest! {
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.update(&multicenter_update))],
             ..Default::default()
         });
-        let mut edits = Edit::for_atom_update(AtomHandle::Id(AtomId(0)), &atom, &atom_update);
-        edits.extend(Edit::for_bond_update(
+        let mut edits = Edits::new();
+        edits.update_atom(AtomHandle::Id(AtomId(0)), &atom, &atom_update);
+        edits.update_bond(
             BondHandle::Id(BondId(0)),
             &bond,
             &bond_update,
-        ));
-        edits.extend(Edit::for_aromatic_system_update(
+        );
+        edits.update_aromatic_system(
             AromaticSystemHandle::Id(AromaticSystemId(0)),
             &aromatic,
             &aromatic_update,
-        ));
-        edits.extend(Edit::for_multicenter_bond_update(
+        );
+        edits.update_multicenter_bond(
             MulticenterBondHandle::Id(MulticenterBondId(0)),
             &multicenter,
             &multicenter_update,
-        ));
+        );
 
         let mut editor = base.clone().edit();
         let transaction = editor
@@ -364,7 +365,7 @@ proptest! {
         let mut combined = Transaction::default();
         for edit in edits {
             let transaction = staged
-                .transact(vec![edit])
+                .transact(Edits::from_iter([edit]))
                 .map_err(|e| TestCaseError::fail(format!("staged transact failed: {e}")))?;
             combined.append(transaction);
             let state = staged.build();
