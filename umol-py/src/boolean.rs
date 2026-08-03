@@ -61,16 +61,16 @@ impl_py_lattice!(
 /// Setter coercion for a boolean field: a Python `bool` → `Lit`, or a `BooleanAst`
 /// passthrough (matching `impl Into<BooleanAst>`).
 #[derive(FromPyObject)]
-pub(crate) enum BooleanArg {
+pub(crate) enum BooleanLike {
     Lit(bool),
     Ast(Py<BooleanAst>),
 }
 
-impl BooleanArg {
+impl BooleanLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBooleanAst {
         match self {
-            BooleanArg::Lit(b) => AstBooleanAst::Lit(*b),
-            BooleanArg::Ast(a) => a.bind(py).borrow().to_rust(),
+            BooleanLike::Lit(b) => AstBooleanAst::Lit(*b),
+            BooleanLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }

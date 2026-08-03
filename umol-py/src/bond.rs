@@ -12,7 +12,7 @@ use umol_ast::ast::{
 };
 
 use crate::constraint::bond::{
-    bond_constraints_asdict, BondConstraintsArg, BondConstraintsAst, BondConstraintsBacking,
+    bond_constraints_asdict, BondConstraintsAst, BondConstraintsBacking, BondConstraintsLike,
     BondConstraintsView,
 };
 use crate::convert::hash_rust;
@@ -20,7 +20,7 @@ use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// Attribute updates for a localized bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -33,8 +33,8 @@ impl BondUpdate {
     #[pyo3(signature = (*, order=None, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: Option<ValueArg>,
-        charge: Option<ValueArg>,
+        order: Option<ValueLike>,
+        charge: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
@@ -110,8 +110,8 @@ impl BondAst {
     #[pyo3(signature = (order, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: ValueArg,
-        charge: Option<ValueArg>,
+        order: ValueLike,
+        charge: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
@@ -148,7 +148,7 @@ impl BondAst {
     }
 
     #[setter]
-    fn set_order(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_order(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.order = value.to_rust(py);
     }
 
@@ -158,7 +158,7 @@ impl BondAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -186,7 +186,7 @@ impl BondAst {
     /// borrow, so `bond.constraints = bond.constraints` (a view over the same bond)
     /// reads while the bond is unborrowed instead of a double-borrow panic.
     #[setter]
-    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: BondConstraintsArg) -> PyResult<()> {
+    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: BondConstraintsLike) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
@@ -282,7 +282,7 @@ impl BondView {
     }
 
     #[setter]
-    fn set_order(&self, py: Python<'_>, value: ValueArg) {
+    fn set_order(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -298,7 +298,7 @@ impl BondView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -338,7 +338,7 @@ impl BondView {
     /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
     /// from a value container or a live view.
     #[setter]
-    fn set_constraints(&self, py: Python<'_>, value: BondConstraintsArg) -> PyResult<()> {
+    fn set_constraints(&self, py: Python<'_>, value: BondConstraintsLike) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -493,10 +493,10 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
-    use crate::boolean::BooleanArg;
+    use crate::boolean::BooleanLike;
     use crate::constraint::bond::{BondConstraintAst, BondConstraintKey, BondConstraintsUpdate};
     use crate::convert::into_py_variant;
-    use crate::stereo::{CisTransConfiguration, CisTransStereoArg, CisTransStereoAst};
+    use crate::stereo::{CisTransConfiguration, CisTransStereoAst, CisTransStereoLike};
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
@@ -555,7 +555,7 @@ mod tests {
             )
             .unwrap();
             let dst = Py::new(py, BondAst::from_inner(AstBondAst::from_order(2))).unwrap();
-            BondAst::set_constraints(dst.clone_ref(py), py, BondConstraintsArg::View(view))
+            BondAst::set_constraints(dst.clone_ref(py), py, BondConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.aromatic(),
@@ -924,7 +924,7 @@ mod tests {
                 },
             )
             .unwrap();
-            BondAst::set_constraints(bond.clone_ref(py), py, BondConstraintsArg::View(own_view))
+            BondAst::set_constraints(bond.clone_ref(py), py, BondConstraintsLike::View(own_view))
                 .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.aromatic(),
@@ -969,9 +969,9 @@ mod tests {
     fn test_bond_constraints_ast_set_aromatic() {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
-            constraints.set_aromatic(py, BooleanArg::Lit(true));
+            constraints.set_aromatic(py, BooleanLike::Lit(true));
             assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
-            constraints.set_aromatic(py, BooleanArg::Lit(false));
+            constraints.set_aromatic(py, BooleanLike::Lit(false));
             assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(false));
         });
     }
@@ -981,7 +981,7 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             constraints
-                .set_cis_trans_stereo(py, CisTransStereoArg::Config(CisTransConfiguration::E))
+                .set_cis_trans_stereo(py, CisTransStereoLike::Config(CisTransConfiguration::E))
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::Stereo(coset) => {
@@ -990,7 +990,7 @@ mod tests {
                 _ => panic!("expected Stereo"),
             }
             constraints
-                .set_cis_trans_stereo(py, CisTransStereoArg::Flag(false))
+                .set_cis_trans_stereo(py, CisTransStereoLike::Flag(false))
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::NotStereo() => {}
@@ -1004,7 +1004,7 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             assert!(constraints
-                .set_cis_trans_stereo(py, CisTransStereoArg::Flag(true))
+                .set_cis_trans_stereo(py, CisTransStereoLike::Flag(true))
                 .is_err());
         });
     }
@@ -1013,7 +1013,7 @@ mod tests {
     fn test_bond_constraints_ast_set_ring_count() {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
-            constraints.set_ring_count(py, ValueArg::Lit(2));
+            constraints.set_ring_count(py, ValueLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
@@ -1144,7 +1144,7 @@ mod tests {
                 view.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Undetermined
             );
-            view.set_aromatic(py, BooleanArg::Lit(true));
+            view.set_aromatic(py, BooleanLike::Lit(true));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond),
             };
@@ -1160,7 +1160,7 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueArg::Lit(3));
+            proxy.__setitem__(py, 6, ValueLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
@@ -1178,7 +1178,7 @@ mod tests {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
             view.ring_size_count(py)
-                .__setitem__(py, 5, ValueArg::Lit(1));
+                .__setitem__(py, 5, ValueLike::Lit(1));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond),
             };
@@ -1199,8 +1199,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueArg::Lit(3));
-            proxy.__setitem__(py, 5, ValueArg::Lit(1));
+            proxy.__setitem__(py, 6, ValueLike::Lit(3));
+            proxy.__setitem__(py, 5, ValueLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());
@@ -1245,7 +1245,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstBondId(0),
             };
-            view.set_order(py, ValueArg::Lit(1));
+            view.set_order(py, ValueLike::Lit(1));
             let fresh = BondView {
                 owner,
                 id: AstBondId(0),
@@ -1262,7 +1262,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstBondId(0),
             };
-            view.set_charge(py, ValueArg::Lit(-1));
+            view.set_charge(py, ValueLike::Lit(-1));
             let fresh = BondView {
                 owner,
                 id: AstBondId(0),
@@ -1330,7 +1330,7 @@ mod tests {
                 },
             };
             view.ring_size_count(py)
-                .__setitem__(py, 6, ValueArg::Lit(1));
+                .__setitem__(py, 6, ValueLike::Lit(1));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner,

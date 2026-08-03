@@ -18,7 +18,7 @@ use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
-use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
+use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
@@ -422,7 +422,7 @@ impl MoleculeAst {
 
     /// Replace the molecule-level constraints from an owned container or live view.
     #[setter]
-    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsArg) -> PyResult<()> {
+    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsLike) -> PyResult<()> {
         let constraints = value.to_rust(py)?;
         *slf.borrow_mut(py).inner_mut().constraints_mut() = constraints;
         Ok(())
@@ -1321,7 +1321,7 @@ mod tests {
             MoleculeAst::set_constraints(
                 molecule.clone_ref(py),
                 py,
-                ConstraintsArg::Container(constraints),
+                ConstraintsLike::Container(constraints),
             )
             .unwrap();
 
@@ -1350,7 +1350,7 @@ mod tests {
             MoleculeAst::set_constraints(
                 molecule.clone_ref(py),
                 py,
-                ConstraintsArg::View(own_view),
+                ConstraintsLike::View(own_view),
             )
             .unwrap();
 

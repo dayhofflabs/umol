@@ -13,8 +13,8 @@ use umol_ast::ast::{
 };
 
 use crate::constraint::dative::{
-    dative_bond_constraints_asdict, DativeBondConstraintsArg, DativeBondConstraintsAst,
-    DativeBondConstraintsBacking, DativeBondConstraintsView,
+    dative_bond_constraints_asdict, DativeBondConstraintsAst, DativeBondConstraintsBacking,
+    DativeBondConstraintsLike, DativeBondConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::dative::{
@@ -24,7 +24,7 @@ use crate::convert::hash_rust;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// Attribute updates for a dative bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -37,7 +37,7 @@ impl DativeBondUpdate {
     #[pyo3(signature = (*, order=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: Option<ValueArg>,
+        order: Option<ValueLike>,
         constraints: Option<Py<DativeBondConstraintsAst>>,
     ) -> Self {
         Self::from_rust(&AstDativeBondUpdate {
@@ -94,7 +94,7 @@ impl DativeBondAst {
     #[pyo3(signature = (order, *, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: ValueArg,
+        order: ValueLike,
         constraints: Option<Py<DativeBondConstraintsAst>>,
     ) -> Self {
         let mut bond = AstDativeBondAst::new(order.to_rust(py));
@@ -124,7 +124,7 @@ impl DativeBondAst {
     }
 
     #[setter]
-    fn set_order(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_order(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.order = value.to_rust(py);
     }
 
@@ -143,7 +143,7 @@ impl DativeBondAst {
     fn set_constraints(
         slf: Py<Self>,
         py: Python<'_>,
-        value: DativeBondConstraintsArg,
+        value: DativeBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
@@ -260,7 +260,7 @@ impl DativeBondView {
     }
 
     #[setter]
-    fn set_order(&self, py: Python<'_>, value: ValueArg) {
+    fn set_order(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -284,7 +284,7 @@ impl DativeBondView {
     /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
     /// from a value container or a live view.
     #[setter]
-    fn set_constraints(&self, py: Python<'_>, value: DativeBondConstraintsArg) -> PyResult<()> {
+    fn set_constraints(&self, py: Python<'_>, value: DativeBondConstraintsLike) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -455,7 +455,7 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
-    use crate::boolean::BooleanArg;
+    use crate::boolean::BooleanLike;
     use crate::constraint::ring::RingScope;
     use crate::convert::into_py_variant;
 
@@ -525,7 +525,7 @@ mod tests {
             DativeBondAst::set_constraints(
                 dst.clone_ref(py),
                 py,
-                DativeBondConstraintsArg::View(view),
+                DativeBondConstraintsLike::View(view),
             )
             .unwrap();
             assert_eq!(
@@ -570,7 +570,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstDativeBondId(0),
             };
-            view.set_order(py, ValueArg::Lit(2));
+            view.set_order(py, ValueLike::Lit(2));
             let fresh = DativeBondView {
                 owner,
                 id: AstDativeBondId(0),
@@ -1076,7 +1076,7 @@ mod tests {
             DativeBondAst::set_constraints(
                 bond.clone_ref(py),
                 py,
-                DativeBondConstraintsArg::View(own_view),
+                DativeBondConstraintsLike::View(own_view),
             )
             .unwrap();
             assert_eq!(
@@ -1121,9 +1121,9 @@ mod tests {
     fn test_dative_bond_constraints_ast_set_aromatic() {
         Python::attach(|py| {
             let mut constraints = DativeBondConstraintsAst::new(py, vec![]);
-            constraints.set_aromatic(py, BooleanArg::Lit(true));
+            constraints.set_aromatic(py, BooleanLike::Lit(true));
             assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
-            constraints.set_aromatic(py, BooleanArg::Lit(false));
+            constraints.set_aromatic(py, BooleanLike::Lit(false));
             assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(false));
         });
     }
@@ -1132,7 +1132,7 @@ mod tests {
     fn test_dative_bond_constraints_ast_set_ring_count() {
         Python::attach(|py| {
             let mut constraints = DativeBondConstraintsAst::new(py, vec![]);
-            constraints.set_ring_count(py, ValueArg::Lit(2));
+            constraints.set_ring_count(py, ValueLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
@@ -1279,7 +1279,7 @@ mod tests {
                 view.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Undetermined
             );
-            view.set_aromatic(py, BooleanArg::Lit(true));
+            view.set_aromatic(py, BooleanLike::Lit(true));
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
             };
@@ -1295,7 +1295,7 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, DativeBondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueArg::Lit(3));
+            proxy.__setitem__(py, 6, ValueLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
@@ -1317,7 +1317,7 @@ mod tests {
                 backing: DativeBondConstraintsBacking::DativeBond(bond.clone_ref(py)),
             };
             view.ring_size_count(py)
-                .__setitem__(py, 5, ValueArg::Lit(1));
+                .__setitem__(py, 5, ValueLike::Lit(1));
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
             };
@@ -1338,8 +1338,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, DativeBondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueArg::Lit(3));
-            proxy.__setitem__(py, 5, ValueArg::Lit(1));
+            proxy.__setitem__(py, 6, ValueLike::Lit(3));
+            proxy.__setitem__(py, 5, ValueLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());
@@ -1398,7 +1398,7 @@ mod tests {
                 },
             };
             view.ring_size_count(py)
-                .__setitem__(py, 6, ValueArg::Lit(1));
+                .__setitem__(py, 6, ValueLike::Lit(1));
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::Molecule {
                     owner,

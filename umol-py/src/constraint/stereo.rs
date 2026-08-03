@@ -18,7 +18,7 @@ use umol_ast::ast::{
     TopicityRelationAst as AstTopicityRelationAst,
 };
 
-use crate::boolean::{BooleanArg, BooleanAst};
+use crate::boolean::{BooleanAst, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -109,19 +109,19 @@ impl TopicityRelationAst {
 /// Setter coercion for a topicity relation: a `Topicity` literal (→ `Lit`) or a
 /// `TopicityRelationAst` passthrough (matching `impl From<Topicity>`).
 #[derive(FromPyObject)]
-pub(crate) enum TopicityRelationArg {
+pub(crate) enum TopicityRelationLike {
     Lit(Topicity),
     Ast(Py<TopicityRelationAst>),
 }
 
-impl TopicityRelationArg {
+impl TopicityRelationLike {
     /// Coerce to a `Py<TopicityRelationAst>` (for the `TopicityAst.relation` field).
     pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<TopicityRelationAst>> {
         match self {
-            TopicityRelationArg::Lit(topicity) => {
+            TopicityRelationLike::Lit(topicity) => {
                 into_py_variant(py, TopicityRelationAst::Lit(*topicity))
             }
-            TopicityRelationArg::Ast(relation) => Ok(relation.clone_ref(py)),
+            TopicityRelationLike::Ast(relation) => Ok(relation.clone_ref(py)),
         }
     }
 }
@@ -228,7 +228,7 @@ impl LigandSymmetryAst {
     pub(crate) fn new(
         py: Python<'_>,
         permutation: OrientedLigandPermutation,
-        invariant: BooleanArg,
+        invariant: BooleanLike,
     ) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation,
@@ -308,7 +308,7 @@ impl FluxionalityAst {
     pub(crate) fn new(
         py: Python<'_>,
         permutation: LigandPermutation,
-        active: BooleanArg,
+        active: BooleanLike,
     ) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation,
@@ -384,7 +384,7 @@ impl TopicityAst {
     pub(crate) fn new(
         py: Python<'_>,
         pair: StereoLigandPair,
-        relation: TopicityRelationArg,
+        relation: TopicityRelationLike,
     ) -> PyResult<Self> {
         Ok(TopicityAst {
             pair,
@@ -456,7 +456,7 @@ impl TopicityAst {
 macro_rules! stereo_constraints {
     (
         $key:ident, $constraint:ident, $constraints:ident,
-        $update:ident, $resolved:ident, $arg:ident,
+        $update:ident, $resolved:ident, $like:ident,
         $key_iter:ident, $iter:ident, $items_iter:ident,
         $ast_key:ident, $ast_constraint:ident, $ast_constraints:ident,
         $value:ident, $view:ident, $backing:ident,
@@ -664,16 +664,16 @@ macro_rules! stereo_constraints {
         /// A whole-container argument for the entity `constraints` setter: a value container
         /// or a live view (which is read while unborrowed, self-alias safe).
         #[derive(FromPyObject)]
-        pub(crate) enum $arg {
+        pub(crate) enum $like {
             Container(Py<$constraints>),
             View(Py<$view>),
         }
 
-        impl $arg {
+        impl $like {
             pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<$ast_constraints> {
                 match self {
-                    $arg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-                    $arg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
+                    $like::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+                    $like::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
                 }
             }
         }
@@ -1237,7 +1237,7 @@ macro_rules! stereo_constraints {
 
 stereo_constraints! {
     StereoAtomConstraintKey, StereoAtomConstraintAst, StereoAtomConstraintsAst,
-    StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsArg,
+    StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     AstStereoAtomConstraintKey, AstStereoAtomConstraintAst, AstStereoAtomConstraintsAst,
     StereoAtomAst, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
@@ -1246,7 +1246,7 @@ stereo_constraints! {
 
 stereo_constraints! {
     StereoBondConstraintKey, StereoBondConstraintAst, StereoBondConstraintsAst,
-    StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsArg,
+    StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     AstStereoBondConstraintKey, AstStereoBondConstraintAst, AstStereoBondConstraintsAst,
     StereoBondAst, StereoBondConstraintsView, StereoBondConstraintsBacking,

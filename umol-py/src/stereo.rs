@@ -479,21 +479,21 @@ impl CisTransConfiguration {
 /// Setter coercion for `cis_trans_stereo`: `False` → not stereogenic, a
 /// `CisTransConfiguration` (`Z`/`E`) → that coset, or a `CisTransStereoAst` passthrough.
 #[derive(FromPyObject)]
-pub(crate) enum CisTransStereoArg {
+pub(crate) enum CisTransStereoLike {
     Flag(bool),
     Config(CisTransConfiguration),
     Ast(Py<CisTransStereoAst>),
 }
 
-impl CisTransStereoArg {
+impl CisTransStereoLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstCisTransStereoAst> {
         Ok(match self {
-            CisTransStereoArg::Flag(false) => AstCisTransStereoAst::NotStereo,
-            CisTransStereoArg::Flag(true) => return Err(PyValueError::new_err(
+            CisTransStereoLike::Flag(false) => AstCisTransStereoAst::NotStereo,
+            CisTransStereoLike::Flag(true) => return Err(PyValueError::new_err(
                 "cis_trans_stereo = True is not meaningful; use CisTransConfiguration.Z/E or False",
             )),
-            CisTransStereoArg::Config(cts) => cts.to_rust().into(),
-            CisTransStereoArg::Ast(a) => a.bind(py).borrow().to_rust(py),
+            CisTransStereoLike::Config(cts) => cts.to_rust().into(),
+            CisTransStereoLike::Ast(a) => a.bind(py).borrow().to_rust(py),
         })
     }
 }
@@ -929,16 +929,16 @@ impl StereoConfigurationAst {
 /// `StereoConfigurationAst`
 /// passthrough. Axial/square-planar/etc. have no shorthand — use the full `Kinded` form.
 #[derive(FromPyObject)]
-pub(crate) enum StereoConfigurationArg {
+pub(crate) enum StereoConfigurationLike {
     Tetrahedral(TetrahedralConfiguration),
     CisTrans(CisTransConfiguration),
     Ast(Py<StereoConfigurationAst>),
 }
 
-impl StereoConfigurationArg {
+impl StereoConfigurationLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationAst {
         match self {
-            StereoConfigurationArg::Tetrahedral(t) => {
+            StereoConfigurationLike::Tetrahedral(t) => {
                 let coset = match t.to_rust() {
                     AstTetrahedralConfiguration::Ccw => 0,
                     AstTetrahedralConfiguration::Cw => 1,
@@ -948,7 +948,7 @@ impl StereoConfigurationArg {
                     AstStereoCoset::Lit(coset),
                 )
             }
-            StereoConfigurationArg::CisTrans(c) => {
+            StereoConfigurationLike::CisTrans(c) => {
                 let coset = match c.to_rust() {
                     AstCisTransConfiguration::Z => 0,
                     AstCisTransConfiguration::E => 1,
@@ -958,7 +958,7 @@ impl StereoConfigurationArg {
                     AstStereoCoset::Lit(coset),
                 )
             }
-            StereoConfigurationArg::Ast(a) => a.bind(py).borrow().to_rust(py),
+            StereoConfigurationLike::Ast(a) => a.bind(py).borrow().to_rust(py),
         }
     }
 }
@@ -1123,12 +1123,12 @@ impl StereoLigandPair {
 #[cfg(test)]
 use crate::constraint::stereo::{
     FluxionalityAst, LigandSymmetryAst, StereoAtomConstraintKey, StereoAtomConstraintsUpdate,
-    StereogenicityAst, TopicityAst, TopicityRelationArg, TopicityRelationAst,
+    StereogenicityAst, TopicityAst, TopicityRelationAst, TopicityRelationLike,
 };
 use crate::constraint::stereo::{
-    StereoAtomConstraintAst, StereoAtomConstraintsArg, StereoAtomConstraintsAst,
-    StereoAtomConstraintsBacking, StereoAtomConstraintsView, StereoBondConstraintAst,
-    StereoBondConstraintsArg, StereoBondConstraintsAst, StereoBondConstraintsBacking,
+    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomConstraintsBacking,
+    StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoBondConstraintAst,
+    StereoBondConstraintsAst, StereoBondConstraintsBacking, StereoBondConstraintsLike,
     StereoBondConstraintsView,
 };
 
@@ -1148,7 +1148,7 @@ macro_rules! stereo_value {
         }
     };
     (
-        $value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $arg:ident,
+        $value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $like:ident,
         $view:ident, $backing:ident, $from_inner:ident $(,)?
     ) => {
         #[pyclass]
@@ -1162,7 +1162,7 @@ macro_rules! stereo_value {
             #[pyo3(signature = (configuration, *, constraints=None))]
             fn new(
                 py: Python<'_>,
-                configuration: StereoConfigurationArg,
+                configuration: StereoConfigurationLike,
                 constraints: Option<Py<$constraints>>,
             ) -> Self {
                 let constraints = constraints
@@ -1195,7 +1195,7 @@ macro_rules! stereo_value {
             }
 
             #[setter]
-            fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationArg) {
+            fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationLike) {
                 self.0.configuration = value.to_rust(py);
             }
 
@@ -1213,7 +1213,7 @@ macro_rules! stereo_value {
             /// x.constraints` (a view over the same entity) reads while the entity is unborrowed
             /// instead of self-aliasing into a double-borrow panic.
             #[setter]
-            fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $arg) -> PyResult<()> {
+            fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $like) -> PyResult<()> {
                 let snapshot = value.to_rust(py)?;
                 slf.borrow_mut(py).0.constraints = snapshot;
                 Ok(())
@@ -1263,12 +1263,12 @@ macro_rules! stereo_value {
 
 stereo_value! {
     StereoAtomAst, AstStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
-    StereoAtomConstraintsArg, StereoAtomConstraintsView, StereoAtomConstraintsBacking, production,
+    StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoAtomConstraintsBacking, production,
 }
 
 stereo_value! {
     StereoBondAst, AstStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
-    StereoBondConstraintsArg, StereoBondConstraintsView, StereoBondConstraintsBacking, production,
+    StereoBondConstraintsLike, StereoBondConstraintsView, StereoBondConstraintsBacking, production,
 }
 
 /// Per-entity molecule-embedded stereo view — `StereoAtomView` / `StereoBondView` — a handle
@@ -1279,7 +1279,7 @@ macro_rules! stereo_view {
     (
         $view:ident, $ast_view:ident, $ast_id:ident, $namespace:ident, $entity_mut:ident,
         $id_error:literal, $constraint:ident, $constraints_view:ident, $constraints_backing:ident,
-        $arg:ident $(,)?
+        $like:ident $(,)?
     ) => {
         #[pyclass]
         pub struct $view {
@@ -1353,7 +1353,7 @@ macro_rules! stereo_view {
             }
 
             #[setter]
-            fn set_configuration(&self, py: Python<'_>, value: StereoConfigurationArg) {
+            fn set_configuration(&self, py: Python<'_>, value: StereoConfigurationLike) {
                 self.owner
                     .borrow_mut(py)
                     .inner_mut()
@@ -1377,7 +1377,7 @@ macro_rules! stereo_view {
             /// Replace the whole constraint set of the backing entity in place (wipe-and-set)
             /// from a value container or a live view.
             #[setter]
-            fn set_constraints(&self, py: Python<'_>, value: $arg) -> PyResult<()> {
+            fn set_constraints(&self, py: Python<'_>, value: $like) -> PyResult<()> {
                 self.owner
                     .borrow_mut(py)
                     .inner_mut()
@@ -1412,13 +1412,13 @@ macro_rules! stereo_view {
 stereo_view! {
     StereoAtomView, AstStereoAtomView, AstStereoAtomId, stereo_atoms, stereo_atom_mut,
     "stereo atom id out of range", StereoAtomConstraintAst, StereoAtomConstraintsView,
-    StereoAtomConstraintsBacking, StereoAtomConstraintsArg,
+    StereoAtomConstraintsBacking, StereoAtomConstraintsLike,
 }
 
 stereo_view! {
     StereoBondView, AstStereoBondView, AstStereoBondId, stereo_bonds, stereo_bond_mut,
     "stereo bond id out of range", StereoBondConstraintAst, StereoBondConstraintsView,
-    StereoBondConstraintsBacking, StereoBondConstraintsArg,
+    StereoBondConstraintsBacking, StereoBondConstraintsLike,
 }
 
 /// Per-entity molecule-level stereo collection — `StereoAtomViews` / `StereoBondViews` — the
@@ -1593,7 +1593,7 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
-    use crate::boolean::{BooleanArg, BooleanAst};
+    use crate::boolean::{BooleanAst, BooleanLike};
 
     #[rstest]
     #[case(vec![0, 1, 2, 3])]
@@ -1854,11 +1854,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_configuration_arg_to_rust() {
+    fn test_stereo_configuration_like_to_rust() {
         Python::attach(|py| {
             // the Th shorthand → Kinded(Tetrahedral, coset)
             assert_eq!(
-                StereoConfigurationArg::Tetrahedral(TetrahedralConfiguration::Cw).to_rust(py),
+                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw).to_rust(py),
                 AstStereoConfigurationAst::kinded(
                     AstStereoKind::Tetrahedral,
                     AstStereoCoset::Lit(1)
@@ -1866,13 +1866,13 @@ mod tests {
             );
             // the Ct shorthand → Kinded(CisTrans, coset)
             assert_eq!(
-                StereoConfigurationArg::CisTrans(CisTransConfiguration::E).to_rust(py),
+                StereoConfigurationLike::CisTrans(CisTransConfiguration::E).to_rust(py),
                 AstStereoConfigurationAst::kinded(AstStereoKind::CisTrans, AstStereoCoset::Lit(1))
             );
             // a StereoConfigurationAst passes through
             let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
             assert_eq!(
-                StereoConfigurationArg::Ast(config).to_rust(py),
+                StereoConfigurationLike::Ast(config).to_rust(py),
                 AstStereoConfigurationAst::Undetermined
             );
         });
@@ -2033,7 +2033,7 @@ mod tests {
                 LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap()),
                 Orientation::Proper,
             );
-            let value = LigandSymmetryAst::new(py, permutation, BooleanArg::Lit(true)).unwrap();
+            let value = LigandSymmetryAst::new(py, permutation, BooleanLike::Lit(true)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
                 value.invariant.bind(py).borrow().to_rust(),
@@ -2112,7 +2112,7 @@ mod tests {
     fn test_fluxionality_ast_new() {
         Python::attach(|py| {
             let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
-            let value = FluxionalityAst::new(py, permutation, BooleanArg::Lit(false)).unwrap();
+            let value = FluxionalityAst::new(py, permutation, BooleanLike::Lit(false)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
                 value.active.bind(py).borrow().to_rust(),
@@ -2179,7 +2179,7 @@ mod tests {
         Python::attach(|py| {
             let pair = StereoLigandPair::new(0, 2);
             let value =
-                TopicityAst::new(py, pair, TopicityRelationArg::Lit(Topicity::Homotopic)).unwrap();
+                TopicityAst::new(py, pair, TopicityRelationLike::Lit(Topicity::Homotopic)).unwrap();
             assert!(value.pair() == pair);
             assert_eq!(
                 value.relation.bind(py).borrow().to_rust(),
@@ -2473,7 +2473,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_constraints_arg_to_rust() {
+    fn test_stereo_atom_constraints_like_to_rust() {
         Python::attach(|py| {
             let entry = into_py_variant(
                 py,
@@ -2487,7 +2487,7 @@ mod tests {
             )
             .unwrap();
             let container = Py::new(py, StereoAtomConstraintsAst::new(py, vec![entry])).unwrap();
-            let arg = StereoAtomConstraintsArg::Container(container);
+            let arg = StereoAtomConstraintsLike::Container(container);
             let mut expected = AstStereoAtomConstraintsAst::new();
             expected.extend([AstStereoAtomConstraintAst::Stereogenicity(
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
@@ -2518,7 +2518,7 @@ mod tests {
             container_ast.extend([stereogenicity.clone()]);
             let container =
                 Py::new(py, StereoBondConstraintsAst::from_inner(container_ast)).unwrap();
-            let arg = StereoBondConstraintsArg::Container(container);
+            let arg = StereoBondConstraintsLike::Container(container);
             let mut expected = AstStereoBondConstraintsAst::new();
             expected.extend([stereogenicity]);
             assert_eq!(arg.to_rust(py).unwrap(), expected);
@@ -2814,7 +2814,7 @@ mod tests {
             StereoAtomAst::set_constraints(
                 value.clone_ref(py),
                 py,
-                StereoAtomConstraintsArg::View(Py::new(py, own_view).unwrap()),
+                StereoAtomConstraintsLike::View(Py::new(py, own_view).unwrap()),
             )
             .unwrap();
             assert_eq!(
@@ -2890,15 +2890,15 @@ mod tests {
 
     #[rstest]
     #[case::ccw(
-        StereoConfigurationArg::Tetrahedral(TetrahedralConfiguration::Ccw),
+        StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
         AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0))
     )]
     #[case::cw(
-        StereoConfigurationArg::Tetrahedral(TetrahedralConfiguration::Cw),
+        StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
         AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(1))
     )]
     fn test_stereo_atom_ast_new(
-        #[case] configuration: StereoConfigurationArg,
+        #[case] configuration: StereoConfigurationLike,
         #[case] expected: AstStereoAtomAst,
     ) {
         Python::attach(|py| {
@@ -2918,7 +2918,7 @@ mod tests {
             let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
             let value = StereoAtomAst::new(
                 py,
-                StereoConfigurationArg::Tetrahedral(TetrahedralConfiguration::Ccw),
+                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
                 Some(container),
             );
             let mut expected_cs = AstStereoAtomConstraintsAst::new();
@@ -3010,7 +3010,7 @@ mod tests {
             ));
             value.set_configuration(
                 py,
-                StereoConfigurationArg::Tetrahedral(TetrahedralConfiguration::Cw),
+                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
             );
             assert_eq!(
                 value.inner().configuration,
@@ -3042,7 +3042,7 @@ mod tests {
             StereoAtomAst::set_constraints(
                 value.clone_ref(py),
                 py,
-                StereoAtomConstraintsArg::Container(container),
+                StereoAtomConstraintsLike::Container(container),
             )
             .unwrap();
             let mut expected_cs = AstStereoAtomConstraintsAst::new();
@@ -3091,7 +3091,7 @@ mod tests {
         Python::attach(|py| {
             let value = StereoBondAst::new(
                 py,
-                StereoConfigurationArg::CisTrans(CisTransConfiguration::Z),
+                StereoConfigurationLike::CisTrans(CisTransConfiguration::Z),
                 None,
             );
             assert_eq!(
@@ -3258,7 +3258,7 @@ mod tests {
             };
             view.set_configuration(
                 py,
-                StereoConfigurationArg::Tetrahedral(TetrahedralConfiguration::Cw),
+                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
             );
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
@@ -3309,7 +3309,7 @@ mod tests {
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
             )]);
             let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
-            view.set_constraints(py, StereoAtomConstraintsArg::Container(container))
+            view.set_constraints(py, StereoAtomConstraintsLike::Container(container))
                 .unwrap();
             assert_eq!(
                 view.constraints(py).stereogenicity(py).unwrap().to_rust(),

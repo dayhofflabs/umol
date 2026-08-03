@@ -16,7 +16,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::multicenter::MulticenterBondAst;
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).
@@ -200,16 +200,16 @@ impl ResolvedMulticenterBondConstraintsUpdate {
 /// A whole-container argument that snapshots either a value container or a live view
 /// — for the multicenter bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
-pub(crate) enum MulticenterBondConstraintsArg {
+pub(crate) enum MulticenterBondConstraintsLike {
     Container(Py<MulticenterBondConstraintsAst>),
     View(Py<MulticenterBondConstraintsView>),
 }
 
-impl MulticenterBondConstraintsArg {
+impl MulticenterBondConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstMulticenterBondConstraintsAst> {
         match self {
-            MulticenterBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-            MulticenterBondConstraintsArg::View(v) => {
+            MulticenterBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            MulticenterBondConstraintsLike::View(v) => {
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
             }
         }
@@ -367,7 +367,7 @@ impl MulticenterBondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstMulticenterBondConstraintAst::electron_count(
             value.to_rust(py),
         ));
@@ -693,7 +693,7 @@ impl MulticenterBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(
             py,
             AstMulticenterBondConstraintAst::electron_count(value.to_rust(py)),

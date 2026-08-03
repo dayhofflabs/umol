@@ -17,8 +17,8 @@ use umol_ast::ast::{
 };
 
 use crate::constraint::noncovalent::{
-    noncovalent_bond_constraints_asdict, NoncovalentBondConstraintsArg,
-    NoncovalentBondConstraintsAst, NoncovalentBondConstraintsBacking,
+    noncovalent_bond_constraints_asdict, NoncovalentBondConstraintsAst,
+    NoncovalentBondConstraintsBacking, NoncovalentBondConstraintsLike,
     NoncovalentBondConstraintsView,
 };
 #[cfg(test)]
@@ -132,16 +132,16 @@ impl NoncovalentBondKindAst {
 /// `Lit`, or a `NoncovalentBondKindAst` passthrough (matching the `Undetermined |
 /// Lit` structure).
 #[derive(FromPyObject)]
-pub(crate) enum NoncovalentBondKindArg {
+pub(crate) enum NoncovalentBondKindLike {
     Kind(NoncovalentBondKind),
     Ast(Py<NoncovalentBondKindAst>),
 }
 
-impl NoncovalentBondKindArg {
+impl NoncovalentBondKindLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondKindAst {
         match self {
-            NoncovalentBondKindArg::Kind(k) => AstNoncovalentBondKindAst::Lit(k.to_rust()),
-            NoncovalentBondKindArg::Ast(a) => a.bind(py).borrow().to_rust(),
+            NoncovalentBondKindLike::Kind(k) => AstNoncovalentBondKindAst::Lit(k.to_rust()),
+            NoncovalentBondKindLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -157,7 +157,7 @@ impl NoncovalentBondUpdate {
     #[pyo3(signature = (*, kind=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        kind: Option<NoncovalentBondKindArg>,
+        kind: Option<NoncovalentBondKindLike>,
         constraints: Option<Py<NoncovalentBondConstraintsAst>>,
     ) -> Self {
         Self::from_rust(&AstNoncovalentBondUpdate {
@@ -214,7 +214,7 @@ impl NoncovalentBondAst {
     #[pyo3(signature = (kind, *, constraints=None))]
     fn new(
         py: Python<'_>,
-        kind: NoncovalentBondKindArg,
+        kind: NoncovalentBondKindLike,
         constraints: Option<Py<NoncovalentBondConstraintsAst>>,
     ) -> Self {
         let mut bond = AstNoncovalentBondAst::new(kind.to_rust(py));
@@ -247,7 +247,7 @@ impl NoncovalentBondAst {
     }
 
     #[setter]
-    fn set_kind(&mut self, py: Python<'_>, value: NoncovalentBondKindArg) {
+    fn set_kind(&mut self, py: Python<'_>, value: NoncovalentBondKindLike) {
         self.0.kind = value.to_rust(py);
     }
 
@@ -268,7 +268,7 @@ impl NoncovalentBondAst {
     fn set_constraints(
         slf: Py<Self>,
         py: Python<'_>,
-        value: NoncovalentBondConstraintsArg,
+        value: NoncovalentBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
@@ -368,7 +368,7 @@ impl NoncovalentBondView {
     }
 
     #[setter]
-    fn set_kind(&self, py: Python<'_>, value: NoncovalentBondKindArg) {
+    fn set_kind(&self, py: Python<'_>, value: NoncovalentBondKindLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -395,7 +395,7 @@ impl NoncovalentBondView {
     fn set_constraints(
         &self,
         py: Python<'_>,
-        value: NoncovalentBondConstraintsArg,
+        value: NoncovalentBondConstraintsLike,
     ) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
@@ -578,7 +578,7 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
-    use crate::boolean::{BooleanArg, BooleanAst};
+    use crate::boolean::{BooleanAst, BooleanLike};
     use crate::convert::into_py_variant;
 
     #[rstest]
@@ -610,17 +610,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_kind_arg_to_rust() {
+    fn test_noncovalent_bond_kind_like_to_rust() {
         Python::attach(|py| {
             // a bare kind coerces to Lit
             assert_eq!(
-                NoncovalentBondKindArg::Kind(NoncovalentBondKind::HydrogenBond).to_rust(py),
+                NoncovalentBondKindLike::Kind(NoncovalentBondKind::HydrogenBond).to_rust(py),
                 AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
             );
             // a NoncovalentBondKindAst passes through
             let ast = Py::new(py, NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)).unwrap();
             assert_eq!(
-                NoncovalentBondKindArg::Ast(ast).to_rust(py),
+                NoncovalentBondKindLike::Ast(ast).to_rust(py),
                 AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
             );
         });
@@ -874,7 +874,7 @@ mod tests {
     fn test_noncovalent_bond_constraints_ast_set_intramolecular() {
         Python::attach(|py| {
             let mut constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
-            constraints.set_intramolecular(py, BooleanArg::Lit(false));
+            constraints.set_intramolecular(py, BooleanLike::Lit(false));
             assert_eq!(
                 constraints.intramolecular().to_rust(),
                 AstBooleanAst::Lit(false)
@@ -926,7 +926,7 @@ mod tests {
         Python::attach(|py| {
             let bond = NoncovalentBondAst::new(
                 py,
-                NoncovalentBondKindArg::Kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondKindLike::Kind(NoncovalentBondKind::HydrogenBond),
                 None,
             );
             assert_eq!(
@@ -947,7 +947,7 @@ mod tests {
             .unwrap();
             let bond = NoncovalentBondAst::new(
                 py,
-                NoncovalentBondKindArg::Kind(NoncovalentBondKind::HalogenBond),
+                NoncovalentBondKindLike::Kind(NoncovalentBondKind::HalogenBond),
                 Some(constraints),
             );
             assert_eq!(
@@ -986,7 +986,10 @@ mod tests {
                 bond.kind().to_rust(),
                 AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
             );
-            bond.set_kind(py, NoncovalentBondKindArg::Kind(NoncovalentBondKind::Ionic));
+            bond.set_kind(
+                py,
+                NoncovalentBondKindLike::Kind(NoncovalentBondKind::Ionic),
+            );
             assert_eq!(
                 bond.kind().to_rust(),
                 AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
@@ -1006,7 +1009,7 @@ mod tests {
             NoncovalentBondAst::set_constraints(
                 bond.clone_ref(py),
                 py,
-                NoncovalentBondConstraintsArg::Container(constraints),
+                NoncovalentBondConstraintsLike::Container(constraints),
             )
             .unwrap();
             assert_eq!(
@@ -1033,7 +1036,7 @@ mod tests {
             NoncovalentBondAst::set_constraints(
                 dest.clone_ref(py),
                 py,
-                NoncovalentBondConstraintsArg::View(Py::new(py, view).unwrap()),
+                NoncovalentBondConstraintsLike::View(Py::new(py, view).unwrap()),
             )
             .unwrap();
             assert_eq!(
@@ -1061,7 +1064,7 @@ mod tests {
             NoncovalentBondAst::set_constraints(
                 bond.clone_ref(py),
                 py,
-                NoncovalentBondConstraintsArg::View(Py::new(py, own_view).unwrap()),
+                NoncovalentBondConstraintsLike::View(Py::new(py, own_view).unwrap()),
             )
             .unwrap();
             assert_eq!(
@@ -1211,7 +1214,7 @@ mod tests {
             let view = NoncovalentBondConstraintsView {
                 backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
             };
-            view.set_intramolecular(py, BooleanArg::Lit(true));
+            view.set_intramolecular(py, BooleanLike::Lit(true));
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
                 AstBooleanAst::Lit(true)
@@ -1262,7 +1265,10 @@ mod tests {
                 view.kind(py).unwrap().to_rust(),
                 AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
             );
-            view.set_kind(py, NoncovalentBondKindArg::Kind(NoncovalentBondKind::Ionic));
+            view.set_kind(
+                py,
+                NoncovalentBondKindLike::Kind(NoncovalentBondKind::Ionic),
+            );
             // a fresh read proves the write hit the molecule
             let fresh = NoncovalentBondView {
                 owner,
@@ -1285,7 +1291,7 @@ mod tests {
             };
             // the constraints handle is molecule-backed; a write goes through to the bond
             view.constraints(py)
-                .set_intramolecular(py, BooleanArg::Lit(true));
+                .set_intramolecular(py, BooleanLike::Lit(true));
             assert_eq!(
                 owner
                     .bind(py)
@@ -1313,7 +1319,7 @@ mod tests {
                 NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, false)]),
             )
             .unwrap();
-            view.set_constraints(py, NoncovalentBondConstraintsArg::Container(constraints))
+            view.set_constraints(py, NoncovalentBondConstraintsLike::Container(constraints))
                 .unwrap();
             assert_eq!(
                 owner

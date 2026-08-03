@@ -13,12 +13,12 @@ use umol_ast::ast::{
 };
 
 use super::ring::{RingMembershipAst, RingScope};
-use crate::boolean::{BooleanArg, BooleanAst};
+use crate::boolean::{BooleanAst, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// The key (identity) of a dative bond constraint, for keyed lookup. The
 /// ring-membership key carries its ring scope; all other keys are the bare
@@ -202,16 +202,16 @@ impl ResolvedDativeBondConstraintsUpdate {
 /// A whole-container argument that snapshots either a value container or a live
 /// view — for the dative bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
-pub(crate) enum DativeBondConstraintsArg {
+pub(crate) enum DativeBondConstraintsLike {
     Container(Py<DativeBondConstraintsAst>),
     View(Py<DativeBondConstraintsView>),
 }
 
-impl DativeBondConstraintsArg {
+impl DativeBondConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstDativeBondConstraintsAst> {
         match self {
-            DativeBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-            DativeBondConstraintsArg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
+            DativeBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            DativeBondConstraintsLike::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
         }
     }
 }
@@ -360,7 +360,7 @@ impl DativeBondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_aromatic(&mut self, py: Python<'_>, value: BooleanArg) {
+    pub(crate) fn set_aromatic(&mut self, py: Python<'_>, value: BooleanLike) {
         self.0
             .set(AstDativeBondConstraintAst::aromatic(value.to_rust(py)));
     }
@@ -375,7 +375,7 @@ impl DativeBondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstDativeBondConstraintAst::ring_membership(
             AstRingScope::All,
             value.to_rust(py),
@@ -723,7 +723,7 @@ impl DativeBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanArg) {
+    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) {
         self.set_ast(py, AstDativeBondConstraintAst::aromatic(value.to_rust(py)));
     }
 
@@ -738,7 +738,7 @@ impl DativeBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(
             py,
             AstDativeBondConstraintAst::ring_membership(AstRingScope::All, value.to_rust(py)),
@@ -860,7 +860,7 @@ impl DativeBondRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueArg) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueLike) {
         let constraint = AstDativeBondConstraintAst::ring_membership(
             AstRingScope::Size(size),
             count.to_rust(py),

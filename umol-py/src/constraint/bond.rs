@@ -12,12 +12,12 @@ use umol_ast::ast::{
 
 use super::ring::{RingMembershipAst, RingScope};
 use crate::bond::BondAst;
-use crate::boolean::{BooleanArg, BooleanAst};
+use crate::boolean::{BooleanAst, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::stereo::{CisTransStereoArg, CisTransStereoAst};
-use crate::value::{ValueArg, ValueAst};
+use crate::stereo::{CisTransStereoAst, CisTransStereoLike};
+use crate::value::{ValueAst, ValueLike};
 
 /// The key (identity) of a bond constraint, for keyed lookup. The ring-membership
 /// key carries its ring scope; all other keys are the bare discriminant.
@@ -203,16 +203,16 @@ impl ResolvedBondConstraintsUpdate {
 /// A whole-container argument that snapshots either a value container or a live
 /// view — for the bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
-pub(crate) enum BondConstraintsArg {
+pub(crate) enum BondConstraintsLike {
     Container(Py<BondConstraintsAst>),
     View(Py<BondConstraintsView>),
 }
 
-impl BondConstraintsArg {
+impl BondConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstBondConstraintsAst> {
         match self {
-            BondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-            BondConstraintsArg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
+            BondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            BondConstraintsLike::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
         }
     }
 }
@@ -359,7 +359,7 @@ impl BondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_aromatic(&mut self, py: Python<'_>, value: BooleanArg) {
+    pub(crate) fn set_aromatic(&mut self, py: Python<'_>, value: BooleanLike) {
         self.0
             .set(AstBondConstraintAst::aromatic(value.to_rust(py)));
     }
@@ -377,7 +377,7 @@ impl BondConstraintsAst {
     pub(crate) fn set_cis_trans_stereo(
         &mut self,
         py: Python<'_>,
-        value: CisTransStereoArg,
+        value: CisTransStereoLike,
     ) -> PyResult<()> {
         self.0
             .set(AstBondConstraintAst::cis_trans_stereo(value.to_rust(py)?));
@@ -394,7 +394,7 @@ impl BondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstBondConstraintAst::ring_membership(
             AstRingScope::All,
             value.to_rust(py),
@@ -729,7 +729,7 @@ impl BondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanArg) {
+    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) {
         self.set_ast(py, AstBondConstraintAst::aromatic(value.to_rust(py)));
     }
 
@@ -747,7 +747,7 @@ impl BondConstraintsView {
     pub(crate) fn set_cis_trans_stereo(
         &self,
         py: Python<'_>,
-        value: CisTransStereoArg,
+        value: CisTransStereoLike,
     ) -> PyResult<()> {
         self.set_ast(
             py,
@@ -767,7 +767,7 @@ impl BondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(
             py,
             AstBondConstraintAst::ring_membership(AstRingScope::All, value.to_rust(py)),
@@ -880,7 +880,7 @@ impl BondRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueArg) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueLike) {
         let constraint =
             AstBondConstraintAst::ring_membership(AstRingScope::Size(size), count.to_rust(py));
         self.write(py, |cs| cs.set(constraint));

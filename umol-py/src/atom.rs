@@ -16,7 +16,7 @@ use umol_ast::ast::{
 use umol_chem::element::Element as ChemElement;
 
 use crate::constraint::atom::{
-    atom_constraints_asdict, AtomConstraintsArg, AtomConstraintsAst, AtomConstraintsBacking,
+    atom_constraints_asdict, AtomConstraintsAst, AtomConstraintsBacking, AtomConstraintsLike,
     AtomConstraintsView,
 };
 use crate::convert::{hash_rust, variant_repr};
@@ -25,7 +25,7 @@ use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{MemOp, ValueArg, ValueAst};
+use crate::value::{MemOp, ValueAst, ValueLike};
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable with an optional membership restriction.
@@ -256,11 +256,11 @@ impl AtomUpdate {
     #[pyo3(signature = (*, element=None, isotope_mass=None, charge=None, implicit_hydrogens=None, lone_pairs=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        element: Option<ElementArg>,
-        isotope_mass: Option<IsotopeMassArg>,
-        charge: Option<ValueArg>,
-        implicit_hydrogens: Option<ValueArg>,
-        lone_pairs: Option<ValueArg>,
+        element: Option<ElementLike>,
+        isotope_mass: Option<IsotopeMassLike>,
+        charge: Option<ValueLike>,
+        implicit_hydrogens: Option<ValueLike>,
+        lone_pairs: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
@@ -360,11 +360,11 @@ impl AtomAst {
     #[pyo3(signature = (element, *, isotope_mass=None, charge=None, implicit_hydrogens=None, lone_pairs=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        element: ElementArg,
-        isotope_mass: Option<IsotopeMassArg>,
-        charge: Option<ValueArg>,
-        implicit_hydrogens: Option<ValueArg>,
-        lone_pairs: Option<ValueArg>,
+        element: ElementLike,
+        isotope_mass: Option<IsotopeMassLike>,
+        charge: Option<ValueLike>,
+        implicit_hydrogens: Option<ValueLike>,
+        lone_pairs: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
@@ -401,7 +401,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_element(&mut self, py: Python<'_>, value: ElementArg) {
+    fn set_element(&mut self, py: Python<'_>, value: ElementLike) {
         self.0.element = value.to_rust(py);
     }
 
@@ -411,7 +411,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_isotope_mass(&mut self, py: Python<'_>, value: IsotopeMassArg) {
+    fn set_isotope_mass(&mut self, py: Python<'_>, value: IsotopeMassLike) {
         self.0.isotope_mass = value.to_rust(py);
     }
 
@@ -421,7 +421,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -431,7 +431,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.implicit_hydrogens = value.to_rust(py);
     }
 
@@ -441,7 +441,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_lone_pairs(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_lone_pairs(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.lone_pairs = value.to_rust(py);
     }
 
@@ -469,7 +469,7 @@ impl AtomAst {
     /// borrow, so `atom.constraints = atom.constraints` (a view over the same atom) reads
     /// while the atom is unborrowed instead of a double-borrow panic.
     #[setter]
-    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: AtomConstraintsArg) -> PyResult<()> {
+    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: AtomConstraintsLike) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
@@ -499,39 +499,39 @@ impl_py_lattice!(
     |_py: Python<'_>, value: AstAtomAst| -> PyResult<AtomAst> { Ok(AtomAst::from_inner(value)) }
 );
 
-/// A binding argument that converts a literal or Python value to its Rust value — the `*Arg`
+/// A binding argument that converts a literal or Python value to its Rust value — the `*Like`
 /// convention for these inputs (`*Input` is reserved for the DSL side). Extracted as
 /// a PyO3 `FromPyObject` union tried in order; variants are `Ast` = the `*Ast`
 /// wrapper, `Lit` = the literal, corresponding to `impl Into<..>` on the Rust builders.
 ///
-/// `ElementArg` accepts a concrete `Element` or an `ElementAst`.
+/// `ElementLike` accepts a concrete `Element` or an `ElementAst`.
 #[derive(FromPyObject)]
-enum ElementArg {
+enum ElementLike {
     Ast(Py<ElementAst>),
     Lit(Element),
 }
 
-impl ElementArg {
+impl ElementLike {
     fn to_rust(&self, py: Python<'_>) -> AstElementAst {
         match self {
-            ElementArg::Ast(expr) => expr.bind(py).borrow().to_rust(),
-            ElementArg::Lit(element) => AstElementAst::Lit(ChemElement::from(element)),
+            ElementLike::Ast(expr) => expr.bind(py).borrow().to_rust(),
+            ElementLike::Lit(element) => AstElementAst::Lit(ChemElement::from(element)),
         }
     }
 }
 
 /// An `IsotopeMassAst` or a Python `int` (→ `IsotopeMassAst::Lit`, a mass number).
 #[derive(FromPyObject)]
-enum IsotopeMassArg {
+enum IsotopeMassLike {
     Ast(Py<IsotopeMassAst>),
     Lit(u32),
 }
 
-impl IsotopeMassArg {
+impl IsotopeMassLike {
     fn to_rust(&self, py: Python<'_>) -> AstIsotopeMassAst {
         match self {
-            IsotopeMassArg::Ast(mass) => mass.bind(py).borrow().to_rust(),
-            IsotopeMassArg::Lit(number) => AstIsotopeMassAst::Lit(*number),
+            IsotopeMassLike::Ast(mass) => mass.bind(py).borrow().to_rust(),
+            IsotopeMassLike::Lit(number) => AstIsotopeMassAst::Lit(*number),
         }
     }
 }
@@ -540,10 +540,10 @@ impl IsotopeMassArg {
 fn apply_fields(
     mut atom: AstAtomAst,
     py: Python<'_>,
-    isotope_mass: Option<IsotopeMassArg>,
-    charge: Option<ValueArg>,
-    implicit_hydrogens: Option<ValueArg>,
-    lone_pairs: Option<ValueArg>,
+    isotope_mass: Option<IsotopeMassLike>,
+    charge: Option<ValueLike>,
+    implicit_hydrogens: Option<ValueLike>,
+    lone_pairs: Option<ValueLike>,
     unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
     constraints: Option<Py<AtomConstraintsAst>>,
 ) -> AstAtomAst {
@@ -623,7 +623,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_element(&self, py: Python<'_>, value: ElementArg) {
+    fn set_element(&self, py: Python<'_>, value: ElementLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -641,7 +641,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_isotope_mass(&self, py: Python<'_>, value: IsotopeMassArg) {
+    fn set_isotope_mass(&self, py: Python<'_>, value: IsotopeMassLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -657,7 +657,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -673,7 +673,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_implicit_hydrogens(&self, py: Python<'_>, value: ValueArg) {
+    fn set_implicit_hydrogens(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -689,7 +689,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_lone_pairs(&self, py: Python<'_>, value: ValueArg) {
+    fn set_lone_pairs(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -729,7 +729,7 @@ impl AtomView {
     /// Replace the whole constraint set of the backing atom in place (wipe-and-set)
     /// from a value container or a live view.
     #[setter]
-    fn set_constraints(&self, py: Python<'_>, value: AtomConstraintsArg) -> PyResult<()> {
+    fn set_constraints(&self, py: Python<'_>, value: AtomConstraintsLike) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -880,8 +880,8 @@ mod tests {
 
     use super::*;
     use crate::constraint::atom::{
-        AromaticValenceArg, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
-        AtomConstraintsUpdate, TetrahedralStereoArg,
+        AromaticValenceAst, AromaticValenceLike, AtomConstraintAst, AtomConstraintKey,
+        AtomConstraintsUpdate, TetrahedralStereoLike,
     };
     use crate::convert::into_py_variant;
     use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
@@ -975,7 +975,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstAtomId(0),
             };
-            view.set_charge(py, ValueArg::Lit(-1));
+            view.set_charge(py, ValueLike::Lit(-1));
             let fresh = AtomView {
                 owner,
                 id: AstAtomId(0),
@@ -995,7 +995,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstAtomId(0),
             };
-            view.set_element(py, ElementArg::Lit(Element::from(ChemElement::N)));
+            view.set_element(py, ElementLike::Lit(Element::from(ChemElement::N)));
             let fresh = AtomView {
                 owner,
                 id: AstAtomId(0),
@@ -1015,7 +1015,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstAtomId(0),
             };
-            view.set_isotope_mass(py, IsotopeMassArg::Lit(13));
+            view.set_isotope_mass(py, IsotopeMassLike::Lit(13));
             let fresh = AtomView {
                 owner,
                 id: AstAtomId(0),
@@ -1164,7 +1164,7 @@ mod tests {
                 AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N)),
             )
             .unwrap();
-            AtomAst::set_constraints(dst.clone_ref(py), py, AtomConstraintsArg::View(view))
+            AtomAst::set_constraints(dst.clone_ref(py), py, AtomConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
                 dst.bind(py)
@@ -1200,7 +1200,7 @@ mod tests {
                 },
             )
             .unwrap();
-            AtomAst::set_constraints(atom.clone_ref(py), py, AtomConstraintsArg::View(own_view))
+            AtomAst::set_constraints(atom.clone_ref(py), py, AtomConstraintsLike::View(own_view))
                 .unwrap();
             assert_eq!(
                 atom.bind(py)
@@ -1714,7 +1714,7 @@ mod tests {
     fn test_atom_constraints_ast_set_valence() {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
-            constraints.set_valence(py, ValueArg::Lit(4));
+            constraints.set_valence(py, ValueLike::Lit(4));
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(4)
@@ -1726,7 +1726,7 @@ mod tests {
     fn test_atom_constraints_ast_set_ring_count() {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
-            constraints.set_ring_count(py, ValueArg::Lit(2));
+            constraints.set_ring_count(py, ValueLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
@@ -1739,14 +1739,14 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             constraints
-                .set_aromatic_valence(py, AromaticValenceArg::Value(ValueArg::Lit(1)))
+                .set_aromatic_valence(py, AromaticValenceLike::Value(ValueLike::Lit(1)))
                 .unwrap();
             match constraints.aromatic_valence(py).unwrap().unwrap() {
                 AromaticValenceAst::Aromatic(v) => assert_eq!(v.to_rust(py), AstValueAst::Lit(1)),
                 _ => panic!("expected Aromatic"),
             }
             constraints
-                .set_aromatic_valence(py, AromaticValenceArg::Flag(false))
+                .set_aromatic_valence(py, AromaticValenceLike::Flag(false))
                 .unwrap();
             match constraints.aromatic_valence(py).unwrap().unwrap() {
                 AromaticValenceAst::NotAromatic() => {}
@@ -1760,7 +1760,7 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             assert!(constraints
-                .set_aromatic_valence(py, AromaticValenceArg::Flag(true))
+                .set_aromatic_valence(py, AromaticValenceLike::Flag(true))
                 .is_err());
         });
     }
@@ -1772,7 +1772,7 @@ mod tests {
             constraints
                 .set_tetrahedral_stereo(
                     py,
-                    TetrahedralStereoArg::Config(TetrahedralConfiguration::Cw),
+                    TetrahedralStereoLike::Config(TetrahedralConfiguration::Cw),
                 )
                 .unwrap();
             match constraints.tetrahedral_stereo(py).unwrap().unwrap() {
@@ -1801,7 +1801,7 @@ mod tests {
                     id: AstAtomId(0),
                 },
             };
-            view.set_aromatic_valence(py, AromaticValenceArg::Value(ValueArg::Lit(1)))
+            view.set_aromatic_valence(py, AromaticValenceLike::Value(ValueLike::Lit(1)))
                 .unwrap();
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Molecule {
@@ -1821,7 +1821,7 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueArg::Lit(3));
+            proxy.__setitem__(py, 6, ValueLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
@@ -1849,7 +1849,7 @@ mod tests {
                 },
             };
             view.ring_size_count(py)
-                .__setitem__(py, 5, ValueArg::Lit(1));
+                .__setitem__(py, 5, ValueLike::Lit(1));
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Molecule {
                     owner,
@@ -1983,8 +1983,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueArg::Lit(3));
-            proxy.__setitem__(py, 5, ValueArg::Lit(1));
+            proxy.__setitem__(py, 6, ValueLike::Lit(3));
+            proxy.__setitem__(py, 5, ValueLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());

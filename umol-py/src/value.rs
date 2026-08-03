@@ -351,37 +351,37 @@ impl_py_lattice!(
 );
 
 /// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), matching `impl Into<ValueAst>`
-/// on the Rust builders. The `*Arg` convention for binding coercion inputs (`*Input`
+/// on the Rust builders. The `*Like` convention for binding coercion inputs (`*Input`
 /// is the DSL side); shared by the atom fields, unpaired-electron components, and
 /// ring-membership count.
 #[derive(FromPyObject)]
-pub enum ValueArg {
+pub enum ValueLike {
     Ast(Py<ValueAst>),
     Lit(i64),
 }
 
-impl ValueArg {
+impl ValueLike {
     /// Coerce to the value AST (for `impl Into<ValueAst>` Rust builders).
     pub(crate) fn to_rust(&self, py: Python<'_>) -> AstValueAst {
         match self {
-            ValueArg::Ast(value) => value.bind(py).borrow().to_rust(py),
-            ValueArg::Lit(number) => AstValueAst::Lit(*number),
+            ValueLike::Ast(value) => value.bind(py).borrow().to_rust(py),
+            ValueLike::Lit(number) => AstValueAst::Lit(*number),
         }
     }
 
     /// Coerce to a `Py<ValueAst>` (for value structs that store the value field).
     pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<ValueAst>> {
         match self {
-            ValueArg::Ast(value) => Ok(value.clone_ref(py)),
-            ValueArg::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
+            ValueLike::Ast(value) => Ok(value.clone_ref(py)),
+            ValueLike::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
         }
     }
 }
 
-/// `IntoPyObject` for `&ValueArg` so it can be a complex-enum field: constructors
+/// `IntoPyObject` for `&ValueLike` so it can be a complex-enum field: constructors
 /// (`AromaticValenceAst.Aromatic(1)`) coerce `int | ValueAst` in, and the field
 /// reads back as a `ValueAst`.
-impl<'py> IntoPyObject<'py> for &ValueArg {
+impl<'py> IntoPyObject<'py> for &ValueLike {
     type Target = ValueAst;
     type Output = Bound<'py, ValueAst>;
     type Error = PyErr;

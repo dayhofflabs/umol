@@ -13,12 +13,12 @@ use umol_ast::ast::{
 };
 
 use crate::convert::hash_rust;
-use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
+use crate::electrons::{ElectronCountsAst, ElectronCountsLike};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// Attribute updates for an aromatic system.
 #[pyclass(frozen, skip_from_py_object)]
@@ -31,8 +31,8 @@ impl AromaticSystemUpdate {
     #[pyo3(signature = (*, electrons=None, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        electrons: Option<ElectronCountsArg>,
-        charge: Option<ValueArg>,
+        electrons: Option<ElectronCountsLike>,
+        charge: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
@@ -107,8 +107,8 @@ impl AromaticSystemAst {
     #[pyo3(signature = (electrons, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        electrons: ElectronCountsArg,
-        charge: Option<ValueArg>,
+        electrons: ElectronCountsLike,
+        charge: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
@@ -148,7 +148,7 @@ impl AromaticSystemAst {
     }
 
     #[setter]
-    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsArg) {
+    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsLike) {
         self.0.electrons = value.to_rust(py);
     }
 
@@ -158,7 +158,7 @@ impl AromaticSystemAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -187,7 +187,7 @@ impl AromaticSystemAst {
     fn set_constraints(
         slf: Py<Self>,
         py: Python<'_>,
-        value: AromaticSystemConstraintsArg,
+        value: AromaticSystemConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
@@ -293,7 +293,7 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsArg) {
+    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -309,7 +309,7 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -355,7 +355,11 @@ impl AromaticSystemView {
     /// Replace the whole constraint set of the backing system in place (wipe-and-set)
     /// from a value container or a live view.
     #[setter]
-    fn set_constraints(&self, py: Python<'_>, value: AromaticSystemConstraintsArg) -> PyResult<()> {
+    fn set_constraints(
+        &self,
+        py: Python<'_>,
+        value: AromaticSystemConstraintsLike,
+    ) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -531,8 +535,8 @@ impl AromaticSystemViewIter {
 }
 
 use crate::constraint::aromatic::{
-    aromatic_system_constraints_asdict, AromaticSystemConstraintsArg, AromaticSystemConstraintsAst,
-    AromaticSystemConstraintsBacking, AromaticSystemConstraintsView,
+    aromatic_system_constraints_asdict, AromaticSystemConstraintsAst,
+    AromaticSystemConstraintsBacking, AromaticSystemConstraintsLike, AromaticSystemConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::aromatic::{
@@ -579,8 +583,8 @@ mod tests {
             .unwrap();
             let system = AromaticSystemAst::new(
                 py,
-                ElectronCountsArg::Lit(vec![1, 1, 1]),
-                Some(ValueArg::Lit(-2)),
+                ElectronCountsLike::Lit(vec![1, 1, 1]),
+                Some(ValueLike::Lit(-2)),
                 Some(unpaired_electrons.bind(py).borrow()),
                 None,
             );
@@ -608,7 +612,7 @@ mod tests {
             let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![ec])).unwrap();
             let system = AromaticSystemAst::new(
                 py,
-                ElectronCountsArg::Lit(vec![1, 1, 1]),
+                ElectronCountsLike::Lit(vec![1, 1, 1]),
                 None,
                 None,
                 Some(constraints),
@@ -647,7 +651,7 @@ mod tests {
                 system.electrons().to_rust(),
                 AstElectronCountsAst::Lit(vec![1, 1, 1])
             );
-            system.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2]));
+            system.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2]));
             assert_eq!(
                 system.electrons().to_rust(),
                 AstElectronCountsAst::Lit(vec![2, 2])
@@ -660,7 +664,7 @@ mod tests {
         Python::attach(|py| {
             let mut system =
                 AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1]));
-            system.set_charge(py, ValueArg::Lit(-1));
+            system.set_charge(py, ValueLike::Lit(-1));
             assert_eq!(system.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
         });
     }
@@ -710,7 +714,7 @@ mod tests {
             AromaticSystemAst::set_constraints(
                 dst.clone_ref(py),
                 py,
-                AromaticSystemConstraintsArg::View(view),
+                AromaticSystemConstraintsLike::View(view),
             )
             .unwrap();
             assert_eq!(
@@ -764,7 +768,7 @@ mod tests {
                 view.electrons(py).unwrap().to_rust(),
                 AstElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])
             );
-            view.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2, 2, 2, 2, 2]));
+            view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2, 2, 2, 2]));
             let fresh = AromaticSystemView {
                 owner,
                 id: AstAromaticSystemId(0),
@@ -784,7 +788,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstAromaticSystemId(0),
             };
-            view.set_charge(py, ValueArg::Lit(-1));
+            view.set_charge(py, ValueLike::Lit(-1));
             let fresh = AromaticSystemView {
                 owner,
                 id: AstAromaticSystemId(0),
@@ -859,7 +863,7 @@ mod tests {
                 ),
             )
             .unwrap();
-            view.set_constraints(py, AromaticSystemConstraintsArg::Container(constraints))
+            view.set_constraints(py, AromaticSystemConstraintsLike::Container(constraints))
                 .unwrap();
             let fresh = AromaticSystemView {
                 owner,
@@ -1232,7 +1236,7 @@ mod tests {
             AromaticSystemAst::set_constraints(
                 system.clone_ref(py),
                 py,
-                AromaticSystemConstraintsArg::View(own_view),
+                AromaticSystemConstraintsLike::View(own_view),
             )
             .unwrap();
             assert_eq!(
@@ -1436,7 +1440,7 @@ mod tests {
     fn test_aromatic_system_constraints_ast_set_electron_count() {
         Python::attach(|py| {
             let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
-            constraints.set_electron_count(py, ValueArg::Lit(6));
+            constraints.set_electron_count(py, ValueLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
@@ -1597,7 +1601,7 @@ mod tests {
                 view.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Undetermined
             );
-            view.set_electron_count(py, ValueArg::Lit(6));
+            view.set_electron_count(py, ValueLike::Lit(6));
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
             };

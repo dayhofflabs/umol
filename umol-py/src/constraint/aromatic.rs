@@ -16,7 +16,7 @@ use crate::aromatic::AromaticSystemAst;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// The key (identity) of an aromatic-system constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).
@@ -200,16 +200,16 @@ impl ResolvedAromaticSystemConstraintsUpdate {
 /// A whole-container argument that snapshots either a value container or a live view
 /// — for the aromatic system `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
-pub(crate) enum AromaticSystemConstraintsArg {
+pub(crate) enum AromaticSystemConstraintsLike {
     Container(Py<AromaticSystemConstraintsAst>),
     View(Py<AromaticSystemConstraintsView>),
 }
 
-impl AromaticSystemConstraintsArg {
+impl AromaticSystemConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstAromaticSystemConstraintsAst> {
         match self {
-            AromaticSystemConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-            AromaticSystemConstraintsArg::View(v) => {
+            AromaticSystemConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            AromaticSystemConstraintsLike::View(v) => {
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
             }
         }
@@ -367,7 +367,7 @@ impl AromaticSystemConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstAromaticSystemConstraintAst::electron_count(
             value.to_rust(py),
         ));
@@ -692,7 +692,7 @@ impl AromaticSystemConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(
             py,
             AstAromaticSystemConstraintAst::electron_count(value.to_rust(py)),

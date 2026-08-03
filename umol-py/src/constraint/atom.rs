@@ -19,7 +19,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// Exact ground aromatic-valence state.
 #[pyclass(from_py_object)]
@@ -75,7 +75,7 @@ impl AromaticValence {
 pub enum AromaticValenceAst {
     Undetermined(),
     NotAromatic(),
-    Aromatic(ValueArg),
+    Aromatic(ValueLike),
 }
 
 #[pymethods]
@@ -119,7 +119,7 @@ impl AromaticValenceAst {
         Ok(match ast {
             AstAromaticValenceAst::Undetermined => Self::Undetermined(),
             AstAromaticValenceAst::NotAromatic => Self::NotAromatic(),
-            AstAromaticValenceAst::Aromatic(v) => Self::Aromatic(ValueArg::Ast(into_py_variant(
+            AstAromaticValenceAst::Aromatic(v) => Self::Aromatic(ValueLike::Ast(into_py_variant(
                 py,
                 ValueAst::from_rust(py, v)?,
             )?)),
@@ -136,13 +136,13 @@ impl AromaticValenceAst {
 }
 
 #[derive(FromPyObject)]
-pub(crate) enum AromaticValenceArg {
+pub(crate) enum AromaticValenceLike {
     Flag(bool),
-    Value(ValueArg),
+    Value(ValueLike),
     Ast(Py<AromaticValenceAst>),
 }
 
-impl AromaticValenceArg {
+impl AromaticValenceLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstAromaticValenceAst> {
         Ok(match self {
             Self::Flag(false) => AstAromaticValenceAst::NotAromatic,
@@ -211,7 +211,7 @@ impl MulticenterValence {
 pub enum MulticenterValenceAst {
     Undetermined(),
     NotMulticenter(),
-    Multicenter(ValueArg),
+    Multicenter(ValueLike),
 }
 
 #[pymethods]
@@ -249,7 +249,7 @@ impl MulticenterValenceAst {
         Ok(match ast {
             AstMulticenterValenceAst::Undetermined => Self::Undetermined(),
             AstMulticenterValenceAst::NotMulticenter => Self::NotMulticenter(),
-            AstMulticenterValenceAst::Multicenter(v) => Self::Multicenter(ValueArg::Ast(
+            AstMulticenterValenceAst::Multicenter(v) => Self::Multicenter(ValueLike::Ast(
                 into_py_variant(py, ValueAst::from_rust(py, v)?)?,
             )),
         })
@@ -276,13 +276,13 @@ impl_py_lattice!(
 );
 
 #[derive(FromPyObject)]
-pub(crate) enum MulticenterValenceArg {
+pub(crate) enum MulticenterValenceLike {
     Flag(bool),
-    Value(ValueArg),
+    Value(ValueLike),
     Ast(Py<MulticenterValenceAst>),
 }
 
-impl MulticenterValenceArg {
+impl MulticenterValenceLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstMulticenterValenceAst> {
         Ok(match self {
             Self::Flag(false) => AstMulticenterValenceAst::NotMulticenter,
@@ -298,13 +298,13 @@ impl MulticenterValenceArg {
 }
 
 #[derive(FromPyObject)]
-pub(crate) enum TetrahedralStereoArg {
+pub(crate) enum TetrahedralStereoLike {
     Flag(bool),
     Config(TetrahedralConfiguration),
     Ast(Py<TetrahedralStereoAst>),
 }
 
-impl TetrahedralStereoArg {
+impl TetrahedralStereoLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstTetrahedralStereoAst> {
         Ok(match self {
             Self::Flag(false) => AstTetrahedralStereoAst::NotStereo,
@@ -622,16 +622,16 @@ impl ResolvedAtomConstraintsUpdate {
 /// A whole-container argument that snapshots either a value container or a live
 /// view — for the atom `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
-pub(crate) enum AtomConstraintsArg {
+pub(crate) enum AtomConstraintsLike {
     Container(Py<AtomConstraintsAst>),
     View(Py<AtomConstraintsView>),
 }
 
-impl AtomConstraintsArg {
+impl AtomConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstAtomConstraintsAst> {
         match self {
-            AtomConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-            AtomConstraintsArg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
+            AtomConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            AtomConstraintsLike::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
         }
     }
 }
@@ -780,7 +780,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_valence(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_valence(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstAtomConstraintAst::valence(value.to_rust(py)));
     }
 
@@ -794,7 +794,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_donated_pairs(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_donated_pairs(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::donated_pairs(value.to_rust(py)));
     }
@@ -809,7 +809,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_accepted_pairs(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_accepted_pairs(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::accepted_pairs(value.to_rust(py)));
     }
@@ -827,7 +827,7 @@ impl AtomConstraintsAst {
     pub(crate) fn set_aromatic_valence(
         &mut self,
         py: Python<'_>,
-        value: AromaticValenceArg,
+        value: AromaticValenceLike,
     ) -> PyResult<()> {
         self.0
             .set(AstAtomConstraintAst::aromatic_valence(value.to_rust(py)?));
@@ -850,7 +850,7 @@ impl AtomConstraintsAst {
     pub(crate) fn set_multicenter_valence(
         &mut self,
         py: Python<'_>,
-        value: MulticenterValenceArg,
+        value: MulticenterValenceLike,
     ) -> PyResult<()> {
         self.0.set(AstAtomConstraintAst::multicenter_valence(
             value.to_rust(py)?,
@@ -874,7 +874,7 @@ impl AtomConstraintsAst {
     pub(crate) fn set_tetrahedral_stereo(
         &mut self,
         py: Python<'_>,
-        value: TetrahedralStereoArg,
+        value: TetrahedralStereoLike,
     ) -> PyResult<()> {
         self.0
             .set(AstAtomConstraintAst::tetrahedral_stereo(value.to_rust(py)?));
@@ -891,7 +891,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_degree(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_degree(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstAtomConstraintAst::degree(value.to_rust(py)));
     }
 
@@ -905,7 +905,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_total_degree(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_total_degree(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::total_degree(value.to_rust(py)));
     }
@@ -920,7 +920,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_total_valence(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_total_valence(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::total_valence(value.to_rust(py)));
     }
@@ -935,7 +935,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_degree(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_degree(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::ring_degree(value.to_rust(py)));
     }
@@ -950,7 +950,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_valence(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_valence(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::ring_valence(value.to_rust(py)));
     }
@@ -965,7 +965,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_total_hydrogens(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_total_hydrogens(&mut self, py: Python<'_>, value: ValueLike) {
         self.0
             .set(AstAtomConstraintAst::total_hydrogens(value.to_rust(py)));
     }
@@ -980,7 +980,7 @@ impl AtomConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.set(AstAtomConstraintAst::ring_membership(
             AstRingScope::All,
             value.to_rust(py),
@@ -1347,7 +1347,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_valence(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_valence(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::valence(value.to_rust(py)));
     }
 
@@ -1362,7 +1362,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_donated_pairs(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_donated_pairs(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::donated_pairs(value.to_rust(py)));
     }
 
@@ -1377,7 +1377,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_accepted_pairs(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_accepted_pairs(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::accepted_pairs(value.to_rust(py)));
     }
 
@@ -1395,7 +1395,7 @@ impl AtomConstraintsView {
     pub(crate) fn set_aromatic_valence(
         &self,
         py: Python<'_>,
-        value: AromaticValenceArg,
+        value: AromaticValenceLike,
     ) -> PyResult<()> {
         self.set_ast(
             py,
@@ -1421,7 +1421,7 @@ impl AtomConstraintsView {
     pub(crate) fn set_multicenter_valence(
         &self,
         py: Python<'_>,
-        value: MulticenterValenceArg,
+        value: MulticenterValenceLike,
     ) -> PyResult<()> {
         self.set_ast(
             py,
@@ -1447,7 +1447,7 @@ impl AtomConstraintsView {
     pub(crate) fn set_tetrahedral_stereo(
         &self,
         py: Python<'_>,
-        value: TetrahedralStereoArg,
+        value: TetrahedralStereoLike,
     ) -> PyResult<()> {
         self.set_ast(
             py,
@@ -1465,7 +1465,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_degree(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_degree(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::degree(value.to_rust(py)));
     }
 
@@ -1480,7 +1480,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_total_degree(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_total_degree(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::total_degree(value.to_rust(py)));
     }
 
@@ -1495,7 +1495,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_total_valence(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_total_valence(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::total_valence(value.to_rust(py)));
     }
 
@@ -1510,7 +1510,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_degree(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_degree(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::ring_degree(value.to_rust(py)));
     }
 
@@ -1525,7 +1525,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_valence(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_valence(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::ring_valence(value.to_rust(py)));
     }
 
@@ -1540,7 +1540,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_total_hydrogens(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_total_hydrogens(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(py, AstAtomConstraintAst::total_hydrogens(value.to_rust(py)));
     }
 
@@ -1555,7 +1555,7 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueArg) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(
             py,
             AstAtomConstraintAst::ring_membership(AstRingScope::All, value.to_rust(py)),
@@ -1668,7 +1668,7 @@ impl AtomRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueArg) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueLike) {
         let constraint =
             AstAtomConstraintAst::ring_membership(AstRingScope::Size(size), count.to_rust(py));
         self.write(py, |cs| cs.set(constraint));

@@ -5,7 +5,7 @@ use umol_ast::ast::{RingMembershipAst as AstRingMembershipAst, RingScope as AstR
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 #[pyclass]
 pub enum RingScope {
@@ -59,7 +59,7 @@ pub struct RingMembershipAst {
 #[pymethods]
 impl RingMembershipAst {
     #[new]
-    fn new(py: Python<'_>, scope: Py<RingScope>, count: ValueArg) -> PyResult<Self> {
+    fn new(py: Python<'_>, scope: Py<RingScope>, count: ValueLike) -> PyResult<Self> {
         Ok(Self {
             scope,
             count: count.to_py(py)?,

@@ -362,12 +362,12 @@ impl ResolvedConstraintsUpdate {
 
 /// A whole-container input that snapshots either a value container or a live view.
 #[derive(FromPyObject)]
-pub(crate) enum ConstraintsArg {
+pub(crate) enum ConstraintsLike {
     Container(Py<Constraints>),
     View(Py<ConstraintsView>),
 }
 
-impl ConstraintsArg {
+impl ConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstConstraints> {
         match self {
             Self::Container(container) => Ok(container.bind(py).borrow().inner().clone()),
@@ -1612,7 +1612,7 @@ match node:
     }
 
     #[rstest]
-    fn test_constraints_arg_to_rust_container() {
+    fn test_constraints_like_to_rust_container() {
         let expected = AstConstraints::from(vec![
             AstConstraint::And(Vec::new()),
             AstConstraint::And(Vec::new()),
@@ -1620,14 +1620,14 @@ match node:
 
         Python::attach(|py| {
             let container = Py::new(py, Constraints::from_inner(expected.clone())).unwrap();
-            let arg = ConstraintsArg::Container(container);
+            let arg = ConstraintsLike::Container(container);
 
             assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
     }
 
     #[rstest]
-    fn test_constraints_arg_to_rust_view() {
+    fn test_constraints_like_to_rust_view() {
         let expected = AstConstraints::from(vec![
             AstConstraint::Or(Vec::new()),
             AstConstraint::Or(Vec::new()),
@@ -1638,7 +1638,7 @@ match node:
         Python::attach(|py| {
             let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
             let view = Py::new(py, ConstraintsView::new(owner)).unwrap();
-            let arg = ConstraintsArg::View(view);
+            let arg = ConstraintsLike::View(view);
 
             assert_eq!(arg.to_rust(py).unwrap(), expected);
         });

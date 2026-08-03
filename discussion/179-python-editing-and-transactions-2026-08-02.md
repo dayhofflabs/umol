@@ -620,6 +620,16 @@ the section ships.
   stereo-bond constraint updates with the same variant inventory and exact conversion checks.
   **Additive (green).** [dep: S3b]
   **Done.**
+- **S3k — Rename Python coercion unions from `*Arg` to `*Like`.** Apply the conventional Python
+  suffix uniformly to the 21 internal PyO3 input unions: `ValueLike`, `BooleanLike`,
+  `ElectronCountsLike`, `ElementLike`, `IsotopeMassLike`, `NoncovalentBondKindLike`,
+  `AromaticValenceLike`, `MulticenterValenceLike`, `TetrahedralStereoLike`,
+  `CisTransStereoLike`, `TopicityRelationLike`, `StereoConfigurationLike`, `ConstraintsLike`, and
+  the eight entity-specific `*ConstraintsLike` types. Update every constructor, setter, helper,
+  macro parameter, conversion test, and explanatory comment in `umol-py`; retain `*Input` for DSL
+  boundary representations. Verify that the complete Python constructor signatures and coercion
+  behavior are unchanged. **Breaking (red→green).** [dep: S3j]
+  **Done.**
 
 ### S4 — Python `Edit` and `Edits` values
 

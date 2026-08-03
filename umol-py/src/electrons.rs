@@ -71,16 +71,16 @@ impl_py_lattice!(
 /// Setter coercion for an electron-counts field: a Python `list[int]` → `Lit`, or an
 /// `ElectronCountsAst` passthrough (matching `impl From<Vec<i64>>`).
 #[derive(FromPyObject)]
-pub(crate) enum ElectronCountsArg {
+pub(crate) enum ElectronCountsLike {
     Ast(Py<ElectronCountsAst>),
     Lit(Vec<i64>),
 }
 
-impl ElectronCountsArg {
+impl ElectronCountsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> AstElectronCountsAst {
         match self {
-            ElectronCountsArg::Lit(counts) => AstElectronCountsAst::Lit(counts.clone()),
-            ElectronCountsArg::Ast(a) => a.bind(py).borrow().to_rust(),
+            ElectronCountsLike::Lit(counts) => AstElectronCountsAst::Lit(counts.clone()),
+            ElectronCountsLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -110,17 +110,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_electron_counts_arg_to_rust() {
+    fn test_electron_counts_like_to_rust() {
         Python::attach(|py| {
             // a bare list coerces to Lit
             assert_eq!(
-                ElectronCountsArg::Lit(vec![1, 0, 1]).to_rust(py),
+                ElectronCountsLike::Lit(vec![1, 0, 1]).to_rust(py),
                 AstElectronCountsAst::Lit(vec![1, 0, 1])
             );
             // an ElectronCountsAst passes through
             let ast = Py::new(py, ElectronCountsAst::Lit(vec![2, 2])).unwrap();
             assert_eq!(
-                ElectronCountsArg::Ast(ast).to_rust(py),
+                ElectronCountsLike::Ast(ast).to_rust(py),
                 AstElectronCountsAst::Lit(vec![2, 2])
             );
         });

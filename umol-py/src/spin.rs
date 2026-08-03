@@ -11,7 +11,7 @@ use umol_chem::spin::{SpinState as ChemSpinState, UnpairedElectrons as ChemUnpai
 
 use crate::convert::{hash_rust, into_py_variant};
 use crate::lattice::impl_py_lattice;
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// Exact unpaired-electron count and spin multiplicity without physical validation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -117,7 +117,7 @@ pub struct UnpairedElectronsAst {
 #[pymethods]
 impl UnpairedElectronsAst {
     #[new]
-    fn new(py: Python<'_>, count: ValueArg, multiplicity: ValueArg) -> PyResult<Self> {
+    fn new(py: Python<'_>, count: ValueLike, multiplicity: ValueLike) -> PyResult<Self> {
         Ok(UnpairedElectronsAst {
             count: count.to_py(py)?,
             multiplicity: multiplicity.to_py(py)?,
@@ -196,8 +196,8 @@ impl UnpairedElectronsUpdate {
     #[pyo3(signature = (*, count=None, multiplicity=None))]
     fn new(
         py: Python<'_>,
-        count: Option<ValueArg>,
-        multiplicity: Option<ValueArg>,
+        count: Option<ValueLike>,
+        multiplicity: Option<ValueLike>,
     ) -> PyResult<Self> {
         Self::from_rust(
             py,

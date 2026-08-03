@@ -12,7 +12,7 @@ use umol_ast::ast::{
     NoncovalentBondId as AstNoncovalentBondId,
 };
 
-use crate::boolean::{BooleanArg, BooleanAst};
+use crate::boolean::{BooleanAst, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -350,7 +350,7 @@ impl NoncovalentBondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_intramolecular(&mut self, py: Python<'_>, value: BooleanArg) {
+    pub(crate) fn set_intramolecular(&mut self, py: Python<'_>, value: BooleanLike) {
         self.0.set(AstNoncovalentBondConstraintAst::intramolecular(
             value.to_rust(py),
         ));
@@ -520,16 +520,16 @@ impl NoncovalentBondConstraintItemsIter {
 /// A whole-container argument that snapshots either a value container or a live view
 /// — for the noncovalent bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
-pub(crate) enum NoncovalentBondConstraintsArg {
+pub(crate) enum NoncovalentBondConstraintsLike {
     Container(Py<NoncovalentBondConstraintsAst>),
     View(Py<NoncovalentBondConstraintsView>),
 }
 
-impl NoncovalentBondConstraintsArg {
+impl NoncovalentBondConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstNoncovalentBondConstraintsAst> {
         match self {
-            NoncovalentBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
-            NoncovalentBondConstraintsArg::View(v) => {
+            NoncovalentBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            NoncovalentBondConstraintsLike::View(v) => {
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
             }
         }
@@ -753,7 +753,7 @@ impl NoncovalentBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_intramolecular(&self, py: Python<'_>, value: BooleanArg) {
+    pub(crate) fn set_intramolecular(&self, py: Python<'_>, value: BooleanLike) {
         self.set_ast(
             py,
             AstNoncovalentBondConstraintAst::intramolecular(value.to_rust(py)),

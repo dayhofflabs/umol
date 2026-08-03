@@ -14,8 +14,8 @@ use umol_ast::ast::{
 };
 
 use crate::constraint::multicenter::{
-    multicenter_bond_constraints_asdict, MulticenterBondConstraintsArg,
-    MulticenterBondConstraintsAst, MulticenterBondConstraintsBacking,
+    multicenter_bond_constraints_asdict, MulticenterBondConstraintsAst,
+    MulticenterBondConstraintsBacking, MulticenterBondConstraintsLike,
     MulticenterBondConstraintsView,
 };
 #[cfg(test)]
@@ -23,12 +23,12 @@ use crate::constraint::multicenter::{
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsUpdate,
 };
 use crate::convert::hash_rust;
-use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
+use crate::electrons::{ElectronCountsAst, ElectronCountsLike};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{ValueArg, ValueAst};
+use crate::value::{ValueAst, ValueLike};
 
 /// Attribute updates for a multicenter bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -41,8 +41,8 @@ impl MulticenterBondUpdate {
     #[pyo3(signature = (*, electrons=None, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        electrons: Option<ElectronCountsArg>,
-        charge: Option<ValueArg>,
+        electrons: Option<ElectronCountsLike>,
+        charge: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
@@ -117,8 +117,8 @@ impl MulticenterBondAst {
     #[pyo3(signature = (electrons, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        electrons: ElectronCountsArg,
-        charge: Option<ValueArg>,
+        electrons: ElectronCountsLike,
+        charge: Option<ValueLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
@@ -158,7 +158,7 @@ impl MulticenterBondAst {
     }
 
     #[setter]
-    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsArg) {
+    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsLike) {
         self.0.electrons = value.to_rust(py);
     }
 
@@ -168,7 +168,7 @@ impl MulticenterBondAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -197,7 +197,7 @@ impl MulticenterBondAst {
     fn set_constraints(
         slf: Py<Self>,
         py: Python<'_>,
-        value: MulticenterBondConstraintsArg,
+        value: MulticenterBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
@@ -303,7 +303,7 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsArg) {
+    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -319,7 +319,7 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -368,7 +368,7 @@ impl MulticenterBondView {
     fn set_constraints(
         &self,
         py: Python<'_>,
-        value: MulticenterBondConstraintsArg,
+        value: MulticenterBondConstraintsLike,
     ) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
@@ -584,8 +584,8 @@ mod tests {
             .unwrap();
             let bond = MulticenterBondAst::new(
                 py,
-                ElectronCountsArg::Lit(vec![1, 1, 1]),
-                Some(ValueArg::Lit(-2)),
+                ElectronCountsLike::Lit(vec![1, 1, 1]),
+                Some(ValueLike::Lit(-2)),
                 Some(unpaired_electrons.bind(py).borrow()),
                 None,
             );
@@ -614,7 +614,7 @@ mod tests {
                 Py::new(py, MulticenterBondConstraintsAst::new(py, vec![ec])).unwrap();
             let bond = MulticenterBondAst::new(
                 py,
-                ElectronCountsArg::Lit(vec![1, 1, 1]),
+                ElectronCountsLike::Lit(vec![1, 1, 1]),
                 None,
                 None,
                 Some(constraints),
@@ -655,7 +655,7 @@ mod tests {
                 bond.electrons().to_rust(),
                 AstElectronCountsAst::Lit(vec![1, 1, 1])
             );
-            bond.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2]));
+            bond.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2]));
             assert_eq!(
                 bond.electrons().to_rust(),
                 AstElectronCountsAst::Lit(vec![2, 2])
@@ -670,7 +670,7 @@ mod tests {
                 MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ]));
-            bond.set_charge(py, ValueArg::Lit(-1));
+            bond.set_charge(py, ValueLike::Lit(-1));
             assert_eq!(bond.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
         });
     }
@@ -724,7 +724,7 @@ mod tests {
             MulticenterBondAst::set_constraints(
                 dst.clone_ref(py),
                 py,
-                MulticenterBondConstraintsArg::View(view),
+                MulticenterBondConstraintsLike::View(view),
             )
             .unwrap();
             assert_eq!(
@@ -778,7 +778,7 @@ mod tests {
                 view.electrons(py).unwrap().to_rust(),
                 AstElectronCountsAst::Lit(vec![1, 1, 1])
             );
-            view.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2, 2]));
+            view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2]));
             let fresh = MulticenterBondView {
                 owner,
                 id: AstMulticenterBondId(0),
@@ -798,7 +798,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: AstMulticenterBondId(0),
             };
-            view.set_charge(py, ValueArg::Lit(-1));
+            view.set_charge(py, ValueLike::Lit(-1));
             let fresh = MulticenterBondView {
                 owner,
                 id: AstMulticenterBondId(0),
@@ -873,7 +873,7 @@ mod tests {
                 ),
             )
             .unwrap();
-            view.set_constraints(py, MulticenterBondConstraintsArg::Container(constraints))
+            view.set_constraints(py, MulticenterBondConstraintsLike::Container(constraints))
                 .unwrap();
             let fresh = MulticenterBondView {
                 owner,
@@ -1267,7 +1267,7 @@ mod tests {
             MulticenterBondAst::set_constraints(
                 bond.clone_ref(py),
                 py,
-                MulticenterBondConstraintsArg::View(own_view),
+                MulticenterBondConstraintsLike::View(own_view),
             )
             .unwrap();
             assert_eq!(
@@ -1461,7 +1461,7 @@ mod tests {
     fn test_multicenter_bond_constraints_ast_set_electron_count() {
         Python::attach(|py| {
             let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
-            constraints.set_electron_count(py, ValueArg::Lit(6));
+            constraints.set_electron_count(py, ValueLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
@@ -1628,7 +1628,7 @@ mod tests {
                 view.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Undetermined
             );
-            view.set_electron_count(py, ValueArg::Lit(6));
+            view.set_electron_count(py, ValueLike::Lit(6));
             let fresh = MulticenterBondConstraintsView {
                 backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
             };
