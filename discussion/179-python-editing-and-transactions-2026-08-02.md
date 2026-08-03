@@ -552,16 +552,18 @@ the section ships.
   and forward handles; target-only subpattern-anchor remapping; constraint deltas over created atoms
   and overlays; and direct `remap_delta` coverage. **Breaking (red→green).** [dep: S2e]
   **Done.**
-- **S2g — Extend molecule-constraint edit parsing to handles.** In `dsl/edit.rs`, parse every
-  target-molecule reference inside a molecule-level constraint as an edit handle and build
+- **S2g — Extend molecule-constraint edit parsing to handles.** Add a private parallel surface in
+  `dsl/edit.rs`. Reuse the ordinary constraint value DSLs,
+  while parsing every target-molecule reference as a typed edit handle and building
   `ConstraintEdit` directly: integers become `Id`, `{:new n}` becomes `New`, repeated handles share
   one normalized per-kind slot, and subpattern pattern-side refs remain local to the nested pattern.
-  Render by substituting the stored typed handles for normalized slots without exposing those slots.
+  Render typed handles directly from the normalized constraint without exposing its slots.
   Cover single entity leaves; logical trees over existing and created entities; explicit relational
   references of every participating kind; quantified predicates that require no extra atom handle;
   molecule subsets; and anchored subpatterns. Parsing and `IntoAst` enforce only the structural
   integrity of the normalized handle representation; handle liveness and chemical semantics remain
   transaction and validator concerns. **Additive (green).** [dep: S2a, S2b, S2f]
+  **Done.**
 - **S2h — Expose `EditsDsl` and specify the grammar.** Add the public `EditsDsl` root with
   `FromStr`, `Display`, `FromEdn`, and `ToEdn`, plus `IntoAst<Edits>`/`FromAst<Edits>` under
   `MoleculeDefaults`; re-export it from `dsl.rs`. Parsing must rebuild the eight `Edits` counters in

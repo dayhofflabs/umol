@@ -1,44 +1,61 @@
 //! Surface encoding for standalone edit documents.
 
+use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, FromEdn, ToEdn};
 
-use super::aromatic::{AromaticSystemDsl, AromaticSystemUpdateDsl};
-use super::atom::{AtomDsl, AtomUpdateDsl};
-use super::bond::{BondDsl, BondUpdateDsl};
+use super::aromatic::{AromaticSystemConstraintDsl, AromaticSystemDsl, AromaticSystemUpdateDsl};
+use super::atom::{AtomConstraintDsl, AtomDsl, AtomUpdateDsl};
+use super::bond::{BondConstraintDsl, BondDsl, BondUpdateDsl};
 use super::config::MoleculeDefaults;
-use super::constraint::ConstraintDsl;
-use super::dative::{DativeBondDsl, DativeBondUpdateDsl};
+use super::constraint::{expect_map, parse_unpaired_electrons, render_unpaired_electrons};
+use super::dative::{DativeBondConstraintDsl, DativeBondDsl, DativeBondUpdateDsl};
 use super::edn_utils::{parse_single_key_map, single_key_map};
 use super::error::ParseError;
 use super::metadata::MoleculeMetadata;
-use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
-use super::namespace::Namespace;
-use super::noncovalent::{NoncovalentBondDsl, NoncovalentBondUpdateDsl};
-use super::stereo::{StereoAtomDsl, StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl};
+use super::molecule::MoleculeDsl;
+use super::multicenter::{
+    MulticenterBondConstraintDsl, MulticenterBondDsl, MulticenterBondUpdateDsl,
+};
+use super::namespace::MoleculeContext;
+use super::noncovalent::{
+    NoncovalentBondConstraintDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl,
+};
+use super::refs::{
+    AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
+    StereoAtomRef, StereoBondRef,
+};
+use super::stereo::{
+    StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondConstraintDsl,
+    StereoBondDsl, StereoBondUpdateDsl,
+};
+use super::value::ValueDsl;
 use crate::ast::aromatic::AromaticSystemUpdate;
 use crate::ast::atom::AtomUpdate;
 use crate::ast::bond::BondUpdate;
 use crate::ast::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
-    DativeBondConstraintAst, MulticenterBondConstraintAst, NoncovalentBondConstraintAst,
-    StereoAtomConstraintAst, StereoBondConstraintAst,
+    DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
+    NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
+    StereoBondConstraintAst, SubPatternAnchor,
 };
 use crate::ast::dative::DativeBondUpdate;
 use crate::ast::edit::{
     AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange,
-    BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
+    BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits, EntityHandle,
     MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
     NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange,
     StereoBondHandle,
 };
+use crate::ast::entity::Entity;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::{StereoLigand, StereoLigandKind};
+use crate::ast::ligand::StereoLigandKind;
+use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondUpdate;
 use crate::ast::noncovalent::NoncovalentBondUpdate;
 use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
@@ -319,8 +336,8 @@ enum EditInput {
         atoms: Vec<AtomHandle>,
         bonds: Vec<BondHandle>,
     },
-    ConstraintAdd(Constraint),
-    ConstraintRemove(Constraint),
+    ConstraintAdd(ConstraintEdit),
+    ConstraintRemove(ConstraintEdit),
 }
 
 impl<'de> FromEdn<'de> for EditInput {
@@ -571,13 +588,15 @@ impl ToEdn for EditInput {
                 );
                 edit_map("topology", "remove", Edn::Map(removal))
             }
-            Self::ConstraintAdd(constraint) => {
-                edit_map("constraint", "add", render_constraint(constraint).to_edn())
-            }
+            Self::ConstraintAdd(constraint) => edit_map(
+                "constraint",
+                "add",
+                ConstraintEditDsl::from_edit(constraint.clone()).to_edn(),
+            ),
             Self::ConstraintRemove(constraint) => edit_map(
                 "constraint",
                 "remove",
-                render_constraint(constraint).to_edn(),
+                ConstraintEditDsl::from_edit(constraint.clone()).to_edn(),
             ),
         }
     }
@@ -685,10 +704,8 @@ impl EditInput {
                 append_stereo_bond_modify(edits, id, expect, update)?;
             }
             Self::TopologyRemove { atoms, bonds } => edits.remove_topology(atoms, bonds),
-            Self::ConstraintAdd(constraint) => edits.add_molecule_constraint(constraint.into()),
-            Self::ConstraintRemove(constraint) => {
-                edits.remove_molecule_constraint(constraint.into())
-            }
+            Self::ConstraintAdd(constraint) => edits.add_molecule_constraint(constraint),
+            Self::ConstraintRemove(constraint) => edits.remove_molecule_constraint(constraint),
         }
         Ok(())
     }
@@ -956,60 +973,14 @@ impl EditInput {
                 }]
             }
             Edit::AddMoleculeConstraint { constraint } => {
-                vec![Self::ConstraintAdd(concrete_constraint(
-                    constraint.clone(),
-                )?)]
+                vec![Self::ConstraintAdd(constraint.clone())]
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
-                vec![Self::ConstraintRemove(concrete_constraint(
-                    constraint.clone(),
-                )?)]
+                vec![Self::ConstraintRemove(constraint.clone())]
             }
         };
         Ok(inputs)
     }
-}
-
-fn concrete_constraint(edit: ConstraintEdit) -> Result<Constraint, DeError> {
-    let unsupported = || {
-        DeError::Custom(
-            "created-entity handles inside constraints are not supported by this DSL".to_string(),
-        )
-    };
-    edit.resolve(
-        |handle| match handle {
-            AtomHandle::Id(id) => Ok(id),
-            AtomHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            BondHandle::Id(id) => Ok(id),
-            BondHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            DativeBondHandle::Id(id) => Ok(id),
-            DativeBondHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            AromaticSystemHandle::Id(id) => Ok(id),
-            AromaticSystemHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            MulticenterBondHandle::Id(id) => Ok(id),
-            MulticenterBondHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            NoncovalentBondHandle::Id(id) => Ok(id),
-            NoncovalentBondHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            StereoAtomHandle::Id(id) => Ok(id),
-            StereoAtomHandle::New(_) => Err(unsupported()),
-        },
-        |handle| match handle {
-            StereoBondHandle::Id(id) => Ok(id),
-            StereoBondHandle::New(_) => Err(unsupported()),
-        },
-    )
 }
 
 fn parse_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
@@ -1561,9 +1532,7 @@ fn parse_topology_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
 
 fn parse_constraint_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "constraint edit")?;
-    let constraint = ConstraintDsl::from_edn(payload)?
-        .into_ast(&EditConstraintNamespace)
-        .map_err(|error| DeError::subgrammar("standalone-edit-constraint", error))?;
+    let constraint = ConstraintEditDsl::from_edn(payload)?.into_edit();
     match op {
         "add" => Ok(EditInput::ConstraintAdd(constraint)),
         "remove" => Ok(EditInput::ConstraintRemove(constraint)),
@@ -3085,140 +3054,1299 @@ fn edit_map(entity: &str, operation: &str, payload: Edn<'static>) -> Edn<'static
     single_key_map(entity, single_key_map(operation, payload))
 }
 
-fn render_constraint(constraint: &Constraint) -> ConstraintDsl {
-    ConstraintDsl::from_ast(constraint, &MoleculeMetadata::new())
-        .expect("anonymous positional constraint rendering is infallible")
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ConstraintEditDsl {
+    constraint: Constraint,
+    handles: ConstraintHandles,
 }
 
-struct EditConstraintNamespace;
-
-impl EditConstraintNamespace {
-    fn positional_count() -> usize {
-        usize::try_from(u64::from(u32::MAX) + 1).unwrap_or(usize::MAX)
-    }
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct ConstraintHandles {
+    atoms: Vec<AtomHandle>,
+    bonds: Vec<BondHandle>,
+    dative_bonds: Vec<DativeBondHandle>,
+    aromatic_systems: Vec<AromaticSystemHandle>,
+    multicenter_bonds: Vec<MulticenterBondHandle>,
+    noncovalent_bonds: Vec<NoncovalentBondHandle>,
+    stereo_atoms: Vec<StereoAtomHandle>,
+    stereo_bonds: Vec<StereoBondHandle>,
 }
 
-impl Namespace for EditConstraintNamespace {
-    fn atom_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn bond_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn dative_bond_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn aromatic_system_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn multicenter_bond_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn noncovalent_bond_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn stereo_atom_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn stereo_bond_count(&self) -> usize {
-        Self::positional_count()
-    }
-
-    fn find_atom_by_keyword(&self, _keyword: &str) -> Option<AtomId> {
-        None
-    }
-
-    fn find_bond_by_keyword(&self, _keyword: &str) -> Option<BondId> {
-        None
-    }
-
-    fn find_dative_bond_by_keyword(&self, _keyword: &str) -> Option<DativeBondId> {
-        None
-    }
-
-    fn find_aromatic_system_by_keyword(&self, _keyword: &str) -> Option<AromaticSystemId> {
-        None
-    }
-
-    fn find_multicenter_bond_by_keyword(&self, _keyword: &str) -> Option<MulticenterBondId> {
-        None
-    }
-
-    fn find_noncovalent_bond_by_keyword(&self, _keyword: &str) -> Option<NoncovalentBondId> {
-        None
-    }
-
-    fn find_stereo_atom_by_keyword(&self, _keyword: &str) -> Option<StereoAtomId> {
-        None
-    }
-
-    fn find_stereo_bond_by_keyword(&self, _keyword: &str) -> Option<StereoBondId> {
-        None
-    }
-
-    fn find_bond_by_participants(&self, _first: AtomId, _second: AtomId) -> Option<BondId> {
-        None
-    }
-
-    fn find_dative_bond_by_participants(
-        &self,
-        _donors: &[AtomId],
-        _acceptor: AtomId,
-    ) -> Option<DativeBondId> {
-        None
-    }
-
-    fn find_aromatic_system_by_participants(&self, _atoms: &[AtomId]) -> Option<AromaticSystemId> {
-        None
-    }
-
-    fn find_multicenter_bond_by_participants(
-        &self,
-        _atoms: &[AtomId],
-    ) -> Option<MulticenterBondId> {
-        None
-    }
-
-    fn find_noncovalent_bond_by_participants(
-        &self,
-        _first: AtomId,
-        _second: AtomId,
-    ) -> Option<NoncovalentBondId> {
-        None
-    }
-
-    fn find_stereo_atom_by_participants(
-        &self,
-        _site: AtomId,
-        _ligands: &[StereoLigand],
-    ) -> Option<StereoAtomId> {
-        None
-    }
-
-    fn find_stereo_bond_by_participants(
-        &self,
-        _site: BondId,
-        _ligands: &[StereoLigand],
-    ) -> Option<StereoBondId> {
-        None
-    }
-
-    fn contains_keyword(&self, _keyword: &str) -> bool {
-        false
-    }
-
-    fn find_atom_alias(&self, _name: &str) -> Option<&AtomDsl> {
-        None
+impl<'de> FromEdn<'de> for ConstraintEditDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let mut handles = ConstraintHandles::default();
+        let constraint = parse_constraint(edn, &mut handles)?;
+        Ok(Self {
+            constraint,
+            handles,
+        })
     }
 }
 
+impl ToEdn for ConstraintEditDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        render_constraint(&self.constraint, &self.handles)
+    }
+}
+
+impl ConstraintEditDsl {
+    pub(super) fn from_edit(edit: ConstraintEdit) -> Self {
+        let mut handles = ConstraintHandles::default();
+        let ConstraintHandles {
+            atoms,
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+        } = &mut handles;
+        let constraint = edit
+            .resolve(
+                |handle| Ok::<_, Infallible>(AtomId::from(intern(atoms, handle))),
+                |handle| Ok::<_, Infallible>(BondId::from(intern(bonds, handle))),
+                |handle| Ok::<_, Infallible>(DativeBondId::from(intern(dative_bonds, handle))),
+                |handle| {
+                    Ok::<_, Infallible>(AromaticSystemId::from(intern(aromatic_systems, handle)))
+                },
+                |handle| {
+                    Ok::<_, Infallible>(MulticenterBondId::from(intern(multicenter_bonds, handle)))
+                },
+                |handle| {
+                    Ok::<_, Infallible>(NoncovalentBondId::from(intern(noncovalent_bonds, handle)))
+                },
+                |handle| Ok::<_, Infallible>(StereoAtomId::from(intern(stereo_atoms, handle))),
+                |handle| Ok::<_, Infallible>(StereoBondId::from(intern(stereo_bonds, handle))),
+            )
+            .expect("normalizing constraint-edit handles is infallible");
+        Self {
+            constraint,
+            handles,
+        }
+    }
+
+    pub(super) fn into_edit(self) -> ConstraintEdit {
+        let Self {
+            constraint,
+            handles,
+        } = self;
+        ConstraintEdit::new(constraint, |entity| handles.get(entity))
+            .expect("constraint-edit DSL slots have kind-correct handles")
+    }
+}
+
+impl ConstraintHandles {
+    fn atom(&mut self, handle: AtomHandle) -> AtomId {
+        AtomId::from(intern(&mut self.atoms, handle))
+    }
+
+    fn bond(&mut self, handle: BondHandle) -> BondId {
+        BondId::from(intern(&mut self.bonds, handle))
+    }
+
+    fn dative_bond(&mut self, handle: DativeBondHandle) -> DativeBondId {
+        DativeBondId::from(intern(&mut self.dative_bonds, handle))
+    }
+
+    fn aromatic_system(&mut self, handle: AromaticSystemHandle) -> AromaticSystemId {
+        AromaticSystemId::from(intern(&mut self.aromatic_systems, handle))
+    }
+
+    fn multicenter_bond(&mut self, handle: MulticenterBondHandle) -> MulticenterBondId {
+        MulticenterBondId::from(intern(&mut self.multicenter_bonds, handle))
+    }
+
+    fn noncovalent_bond(&mut self, handle: NoncovalentBondHandle) -> NoncovalentBondId {
+        NoncovalentBondId::from(intern(&mut self.noncovalent_bonds, handle))
+    }
+
+    fn stereo_atom(&mut self, handle: StereoAtomHandle) -> StereoAtomId {
+        StereoAtomId::from(intern(&mut self.stereo_atoms, handle))
+    }
+
+    fn stereo_bond(&mut self, handle: StereoBondHandle) -> StereoBondId {
+        StereoBondId::from(intern(&mut self.stereo_bonds, handle))
+    }
+
+    fn get(&self, entity: Entity) -> Option<EntityHandle> {
+        match entity {
+            Entity::Atom(id) => self.atoms.get(id.index()).cloned().map(EntityHandle::Atom),
+            Entity::Bond(id) => self.bonds.get(id.index()).cloned().map(EntityHandle::Bond),
+            Entity::DativeBond(id) => self
+                .dative_bonds
+                .get(id.index())
+                .cloned()
+                .map(EntityHandle::DativeBond),
+            Entity::AromaticSystem(id) => self
+                .aromatic_systems
+                .get(id.index())
+                .cloned()
+                .map(EntityHandle::AromaticSystem),
+            Entity::MulticenterBond(id) => self
+                .multicenter_bonds
+                .get(id.index())
+                .cloned()
+                .map(EntityHandle::MulticenterBond),
+            Entity::NoncovalentBond(id) => self
+                .noncovalent_bonds
+                .get(id.index())
+                .cloned()
+                .map(EntityHandle::NoncovalentBond),
+            Entity::StereoAtom(id) => self
+                .stereo_atoms
+                .get(id.index())
+                .cloned()
+                .map(EntityHandle::StereoAtom),
+            Entity::StereoBond(id) => self
+                .stereo_bonds
+                .get(id.index())
+                .cloned()
+                .map(EntityHandle::StereoBond),
+        }
+    }
+}
+
+fn intern<H: Eq>(handles: &mut Vec<H>, handle: H) -> usize {
+    handles
+        .iter()
+        .position(|candidate| candidate == &handle)
+        .unwrap_or_else(|| {
+            handles.push(handle);
+            handles.len() - 1
+        })
+}
+
+fn parse_constraint(edn: &Edn<'_>, handles: &mut ConstraintHandles) -> Result<Constraint, DeError> {
+    let (key, payload) = parse_single_key_map(edn, "constraint")?;
+    Ok(match key {
+        "atom" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            Constraint::Atom(
+                handles.atom(AtomHandle::from_edn(handle)?),
+                AtomConstraintDsl::from_edn(constraint)?.into_ast(&()),
+            )
+        }
+        "bond" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            Constraint::Bond(
+                handles.bond(BondHandle::from_edn(handle)?),
+                BondConstraintDsl::from_edn(constraint)?.into_ast(&()),
+            )
+        }
+        "dative-bond" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            Constraint::DativeBond(
+                handles.dative_bond(DativeBondHandle::from_edn(handle)?),
+                DativeBondConstraintDsl::from_edn(constraint)?.into_ast(),
+            )
+        }
+        "aromatic-system" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            Constraint::AromaticSystem(
+                handles.aromatic_system(AromaticSystemHandle::from_edn(handle)?),
+                AromaticSystemConstraintDsl::from_edn(constraint)?.into_ast(),
+            )
+        }
+        "multicenter-bond" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            Constraint::MulticenterBond(
+                handles.multicenter_bond(MulticenterBondHandle::from_edn(handle)?),
+                MulticenterBondConstraintDsl::from_edn(constraint)?.into_ast(),
+            )
+        }
+        "noncovalent-bond" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            Constraint::NoncovalentBond(
+                handles.noncovalent_bond(NoncovalentBondHandle::from_edn(handle)?),
+                NoncovalentBondConstraintDsl::from_edn(constraint)?.into_ast(),
+            )
+        }
+        "stereo-atom" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            let StereoAtomConstraintDsl(kind, constraint) =
+                StereoAtomConstraintDsl::from_edn(constraint)?;
+            Constraint::StereoAtom(
+                handles.stereo_atom(StereoAtomHandle::from_edn(handle)?),
+                kind,
+                constraint,
+            )
+        }
+        "stereo-bond" => {
+            let (handle, constraint) = parse_pair(payload, key)?;
+            let StereoBondConstraintDsl(kind, constraint) =
+                StereoBondConstraintDsl::from_edn(constraint)?;
+            Constraint::StereoBond(
+                handles.stereo_bond(StereoBondHandle::from_edn(handle)?),
+                kind,
+                constraint,
+            )
+        }
+        "and" => Constraint::And(parse_constraint_vec(payload, handles)?),
+        "or" => Constraint::Or(parse_constraint_vec(payload, handles)?),
+        "not" => Constraint::Not(Box::new(parse_constraint(payload, handles)?)),
+        "charge-sum"
+        | "unpaired-electron-coupling"
+        | "bond-order-sum"
+        | "connected"
+        | "sub-pattern" => Constraint::Molecule(parse_molecule_constraint(key, payload, handles)?),
+        _ => Constraint::Relational(parse_relational_constraint(key, payload, handles)?),
+    })
+}
+
+fn render_constraint(constraint: &Constraint, handles: &ConstraintHandles) -> Edn<'static> {
+    match constraint {
+        Constraint::Atom(id, constraint) => entity_leaf_edn(
+            "atom",
+            handles.atoms[id.index()].to_edn(),
+            AtomConstraintDsl::from_ast(constraint, &()).to_edn(),
+        ),
+        Constraint::Bond(id, constraint) => entity_leaf_edn(
+            "bond",
+            handles.bonds[id.index()].to_edn(),
+            BondConstraintDsl::from_ast(constraint, &()).to_edn(),
+        ),
+        Constraint::DativeBond(id, constraint) => entity_leaf_edn(
+            "dative-bond",
+            handles.dative_bonds[id.index()].to_edn(),
+            DativeBondConstraintDsl::from_ast(constraint).to_edn(),
+        ),
+        Constraint::AromaticSystem(id, constraint) => entity_leaf_edn(
+            "aromatic-system",
+            handles.aromatic_systems[id.index()].to_edn(),
+            AromaticSystemConstraintDsl::from_ast(constraint).to_edn(),
+        ),
+        Constraint::MulticenterBond(id, constraint) => entity_leaf_edn(
+            "multicenter-bond",
+            handles.multicenter_bonds[id.index()].to_edn(),
+            MulticenterBondConstraintDsl::from_ast(constraint).to_edn(),
+        ),
+        Constraint::NoncovalentBond(id, constraint) => entity_leaf_edn(
+            "noncovalent-bond",
+            handles.noncovalent_bonds[id.index()].to_edn(),
+            NoncovalentBondConstraintDsl::from_ast(constraint).to_edn(),
+        ),
+        Constraint::StereoAtom(id, kind, constraint) => entity_leaf_edn(
+            "stereo-atom",
+            handles.stereo_atoms[id.index()].to_edn(),
+            StereoAtomConstraintDsl::from_ast(constraint, kind).to_edn(),
+        ),
+        Constraint::StereoBond(id, kind, constraint) => entity_leaf_edn(
+            "stereo-bond",
+            handles.stereo_bonds[id.index()].to_edn(),
+            StereoBondConstraintDsl::from_ast(constraint, kind).to_edn(),
+        ),
+        Constraint::Relational(constraint) => render_relational_constraint(constraint, handles),
+        Constraint::Molecule(constraint) => render_molecule_constraint(constraint, handles),
+        Constraint::And(constraints) => combinator_edn("and", constraints, handles),
+        Constraint::Or(constraints) => combinator_edn("or", constraints, handles),
+        Constraint::Not(constraint) => {
+            single_key_map("not", render_constraint(constraint, handles))
+        }
+    }
+}
+
+fn parse_constraint_vec(
+    edn: &Edn<'_>,
+    handles: &mut ConstraintHandles,
+) -> Result<Vec<Constraint>, DeError> {
+    let Edn::Vector(values) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "vector of constraints",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    values
+        .iter()
+        .map(|constraint| parse_constraint(constraint, handles))
+        .collect()
+}
+
+fn combinator_edn(
+    key: &str,
+    constraints: &[Constraint],
+    handles: &ConstraintHandles,
+) -> Edn<'static> {
+    single_key_map(
+        key,
+        Edn::Vector(
+            constraints
+                .iter()
+                .map(|constraint| render_constraint(constraint, handles))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+    )
+}
+
+fn entity_leaf_edn(key: &str, handle: Edn<'static>, constraint: Edn<'static>) -> Edn<'static> {
+    single_key_map(key, Edn::Vector(vec![handle, constraint].into()))
+}
+
+fn parse_pair<'a>(edn: &'a Edn<'_>, context: &str) -> Result<(&'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(values) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "2-element vector",
+            got: edn.kind(),
+            path: vec![context.to_string()],
+        });
+    };
+    if values.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "{context}: expected 2 elements, got {}",
+            values.len()
+        )));
+    }
+    Ok((&values[0], &values[1]))
+}
+
+fn parse_handle_vec<H>(edn: &Edn<'_>, context: &str) -> Result<Vec<H>, DeError>
+where
+    H: for<'de> FromEdn<'de>,
+{
+    let Edn::Vector(values) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "vector of edit handles",
+            got: edn.kind(),
+            path: vec![context.to_string()],
+        });
+    };
+    values.iter().map(H::from_edn).collect()
+}
+
+fn render_handle_vec<H: ToEdn>(handles: &[H]) -> Edn<'static> {
+    Edn::Vector(handles.iter().map(ToEdn::to_edn).collect::<Vec<_>>().into())
+}
+
+fn parse_molecule_constraint(
+    key: &str,
+    payload: &Edn<'_>,
+    handles: &mut ConstraintHandles,
+) -> Result<MoleculeConstraint, DeError> {
+    let map = expect_map(payload, "molecule constraint")?;
+    Ok(match key {
+        "charge-sum" => {
+            let mut helper = EdnMapHelper::new(map);
+            let atoms = helper
+                .optional::<Vec<AtomHandle>>("atoms")?
+                .map(|atoms| atoms.into_iter().map(|atom| handles.atom(atom)).collect());
+            let sum: ValueDsl = helper.required("sum")?;
+            helper.finalize()?;
+            MoleculeConstraint::ChargeSum {
+                atoms,
+                sum: sum.into_ast(&()),
+            }
+        }
+        "unpaired-electron-coupling" => {
+            let mut helper = EdnMapHelper::new(map);
+            let atoms = helper
+                .optional::<Vec<AtomHandle>>("atoms")?
+                .map(|atoms| atoms.into_iter().map(|atom| handles.atom(atom)).collect());
+            let unpaired_electrons = parse_unpaired_electrons(
+                map.get_keyword("unpaired-electrons")
+                    .ok_or_else(|| DeError::MissingField {
+                        key: "unpaired-electrons".to_string(),
+                        path: vec!["unpaired-electron-coupling".to_string()],
+                    })?,
+            )?;
+            helper.optional::<Edn<'_>>("unpaired-electrons")?;
+            helper.finalize()?;
+            MoleculeConstraint::UnpairedElectronCoupling {
+                atoms,
+                unpaired_electrons,
+            }
+        }
+        "bond-order-sum" => {
+            let mut helper = EdnMapHelper::new(map);
+            let bonds = helper
+                .optional::<Vec<BondHandle>>("bonds")?
+                .map(|bonds| bonds.into_iter().map(|bond| handles.bond(bond)).collect());
+            let sum: ValueDsl = helper.required("sum")?;
+            helper.finalize()?;
+            MoleculeConstraint::BondOrderSum {
+                bonds,
+                sum: sum.into_ast(&()),
+            }
+        }
+        "connected" => {
+            let mut helper = EdnMapHelper::new(map);
+            let atoms = helper
+                .optional::<Vec<AtomHandle>>("atoms")?
+                .map(|atoms| atoms.into_iter().map(|atom| handles.atom(atom)).collect());
+            helper.finalize()?;
+            MoleculeConstraint::Connected { atoms }
+        }
+        "sub-pattern" => parse_sub_pattern(map, handles)?,
+        _ => unreachable!("molecule-constraint key was classified by parse_constraint"),
+    })
+}
+
+fn render_molecule_constraint(
+    constraint: &MoleculeConstraint,
+    handles: &ConstraintHandles,
+) -> Edn<'static> {
+    match constraint {
+        MoleculeConstraint::ChargeSum { atoms, sum } => {
+            let mut map = EdnMap::with_capacity(2);
+            if let Some(atoms) = atoms {
+                map.insert(
+                    Edn::keyword("atoms"),
+                    render_handle_vec(
+                        &atoms
+                            .iter()
+                            .map(|id| handles.atoms[id.index()].clone())
+                            .collect::<Vec<_>>(),
+                    ),
+                );
+            }
+            map.insert(Edn::keyword("sum"), ValueDsl::from_ast(sum, &()).to_edn());
+            single_key_map("charge-sum", Edn::Map(map))
+        }
+        MoleculeConstraint::UnpairedElectronCoupling {
+            atoms,
+            unpaired_electrons,
+        } => {
+            let mut map = EdnMap::with_capacity(2);
+            if let Some(atoms) = atoms {
+                map.insert(
+                    Edn::keyword("atoms"),
+                    render_handle_vec(
+                        &atoms
+                            .iter()
+                            .map(|id| handles.atoms[id.index()].clone())
+                            .collect::<Vec<_>>(),
+                    ),
+                );
+            }
+            map.insert(
+                Edn::keyword("unpaired-electrons"),
+                render_unpaired_electrons(unpaired_electrons),
+            );
+            single_key_map("unpaired-electron-coupling", Edn::Map(map))
+        }
+        MoleculeConstraint::BondOrderSum { bonds, sum } => {
+            let mut map = EdnMap::with_capacity(2);
+            if let Some(bonds) = bonds {
+                map.insert(
+                    Edn::keyword("bonds"),
+                    render_handle_vec(
+                        &bonds
+                            .iter()
+                            .map(|id| handles.bonds[id.index()].clone())
+                            .collect::<Vec<_>>(),
+                    ),
+                );
+            }
+            map.insert(Edn::keyword("sum"), ValueDsl::from_ast(sum, &()).to_edn());
+            single_key_map("bond-order-sum", Edn::Map(map))
+        }
+        MoleculeConstraint::Connected { atoms } => {
+            let mut map = EdnMap::with_capacity(1);
+            if let Some(atoms) = atoms {
+                map.insert(
+                    Edn::keyword("atoms"),
+                    render_handle_vec(
+                        &atoms
+                            .iter()
+                            .map(|id| handles.atoms[id.index()].clone())
+                            .collect::<Vec<_>>(),
+                    ),
+                );
+            }
+            single_key_map("connected", Edn::Map(map))
+        }
+        MoleculeConstraint::SubPattern { anchor, pattern } => {
+            render_sub_pattern(anchor, pattern, handles)
+        }
+    }
+}
+
+fn parse_sub_pattern(
+    map: &EdnMap<'_>,
+    handles: &mut ConstraintHandles,
+) -> Result<MoleculeConstraint, DeError> {
+    let mut helper = EdnMapHelper::new(map);
+    let anchor: Edn<'_> = helper.required("anchor")?;
+    let pattern_dsl: MoleculeDsl = helper.required("pattern")?;
+    helper.finalize()?;
+    let (pattern, metadata) = pattern_dsl.into_parts();
+    if !metadata.is_empty() {
+        return Err(DeError::Custom(
+            "sub-pattern molecule must be anonymous: no :id or :atom-aliases".to_string(),
+        ));
+    }
+    let pattern_context = MoleculeContext::from_ast(&pattern);
+    let anchor = parse_sub_pattern_anchor(&anchor, handles, &pattern_context)?;
+    Ok(MoleculeConstraint::SubPattern {
+        anchor,
+        pattern: Box::new(pattern),
+    })
+}
+
+fn render_sub_pattern(
+    anchor: &SubPatternAnchor,
+    pattern: &MoleculeAst,
+    handles: &ConstraintHandles,
+) -> Edn<'static> {
+    let mut anchor_map = EdnMap::with_capacity(8);
+    render_anchor_pairs(
+        &mut anchor_map,
+        "atoms",
+        anchor.atoms(),
+        |id| handles.atoms[id.index()].to_edn(),
+        |id| AtomRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "bonds",
+        anchor.bonds(),
+        |id| handles.bonds[id.index()].to_edn(),
+        |id| BondRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "dative-bonds",
+        anchor.dative_bonds(),
+        |id| handles.dative_bonds[id.index()].to_edn(),
+        |id| DativeBondRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "aromatic-systems",
+        anchor.aromatic_systems(),
+        |id| handles.aromatic_systems[id.index()].to_edn(),
+        |id| AromaticSystemRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "multicenter-bonds",
+        anchor.multicenter_bonds(),
+        |id| handles.multicenter_bonds[id.index()].to_edn(),
+        |id| MulticenterBondRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "noncovalent-bonds",
+        anchor.noncovalent_bonds(),
+        |id| handles.noncovalent_bonds[id.index()].to_edn(),
+        |id| NoncovalentBondRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "stereo-atoms",
+        anchor.stereo_atoms(),
+        |id| handles.stereo_atoms[id.index()].to_edn(),
+        |id| StereoAtomRef::Index(id.index()).to_edn(),
+    );
+    render_anchor_pairs(
+        &mut anchor_map,
+        "stereo-bonds",
+        anchor.stereo_bonds(),
+        |id| handles.stereo_bonds[id.index()].to_edn(),
+        |id| StereoBondRef::Index(id.index()).to_edn(),
+    );
+    let pattern = MoleculeDsl::new(pattern.clone(), MoleculeMetadata::new())
+        .expect("empty metadata is coherent with an anonymous pattern")
+        .to_edn();
+    let mut map = EdnMap::with_capacity(2);
+    map.insert(Edn::keyword("anchor"), Edn::Map(anchor_map));
+    map.insert(Edn::keyword("pattern"), pattern);
+    single_key_map("sub-pattern", Edn::Map(map))
+}
+
+fn parse_sub_pattern_anchor(
+    edn: &Edn<'_>,
+    handles: &mut ConstraintHandles,
+    pattern: &MoleculeContext,
+) -> Result<SubPatternAnchor, DeError> {
+    let map = expect_map(edn, "sub-pattern anchor")?;
+    let mut anchor = SubPatternAnchor::new();
+    for (key, value) in map.iter() {
+        let Edn::Keyword(key) = key else {
+            return Err(DeError::TypeMismatch {
+                expected: "keyword key",
+                got: key.kind(),
+                path: vec!["sub-pattern anchor".to_string()],
+            });
+        };
+        match key.name() {
+            "atoms" => {
+                for (target, local) in parse_anchor_pairs::<AtomHandle, AtomRef>(value)? {
+                    anchor.push_atom(
+                        handles.atom(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "bonds" => {
+                for (target, local) in parse_anchor_pairs::<BondHandle, BondRef>(value)? {
+                    anchor.push_bond(
+                        handles.bond(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "dative-bonds" => {
+                for (target, local) in parse_anchor_pairs::<DativeBondHandle, DativeBondRef>(value)?
+                {
+                    anchor.push_dative_bond(
+                        handles.dative_bond(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "aromatic-systems" => {
+                for (target, local) in
+                    parse_anchor_pairs::<AromaticSystemHandle, AromaticSystemRef>(value)?
+                {
+                    anchor.push_aromatic_system(
+                        handles.aromatic_system(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "multicenter-bonds" => {
+                for (target, local) in
+                    parse_anchor_pairs::<MulticenterBondHandle, MulticenterBondRef>(value)?
+                {
+                    anchor.push_multicenter_bond(
+                        handles.multicenter_bond(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "noncovalent-bonds" => {
+                for (target, local) in
+                    parse_anchor_pairs::<NoncovalentBondHandle, NoncovalentBondRef>(value)?
+                {
+                    anchor.push_noncovalent_bond(
+                        handles.noncovalent_bond(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "stereo-atoms" => {
+                for (target, local) in parse_anchor_pairs::<StereoAtomHandle, StereoAtomRef>(value)?
+                {
+                    anchor.push_stereo_atom(
+                        handles.stereo_atom(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            "stereo-bonds" => {
+                for (target, local) in parse_anchor_pairs::<StereoBondHandle, StereoBondRef>(value)?
+                {
+                    anchor.push_stereo_bond(
+                        handles.stereo_bond(target),
+                        local
+                            .resolve(pattern)
+                            .map_err(|error| DeError::Custom(error.to_string()))?,
+                    );
+                }
+            }
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["sub-pattern anchor".to_string()],
+                });
+            }
+        }
+    }
+    Ok(anchor)
+}
+
+fn parse_anchor_pairs<A, B>(edn: &Edn<'_>) -> Result<Vec<(A, B)>, DeError>
+where
+    A: for<'de> FromEdn<'de>,
+    B: for<'de> FromEdn<'de>,
+{
+    let Edn::Vector(pairs) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "vector of reference pairs",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    pairs
+        .iter()
+        .map(|pair| {
+            let (target, local) = parse_pair(pair, "sub-pattern anchor pair")?;
+            Ok((A::from_edn(target)?, B::from_edn(local)?))
+        })
+        .collect()
+}
+
+fn render_anchor_pairs<I: Copy>(
+    map: &mut EdnMap<'static>,
+    key: &'static str,
+    pairs: &[(I, I)],
+    target: impl Fn(I) -> Edn<'static>,
+    local: impl Fn(I) -> Edn<'static>,
+) {
+    if !pairs.is_empty() {
+        map.insert(
+            Edn::keyword(key),
+            Edn::Vector(
+                pairs
+                    .iter()
+                    .map(|&(target_id, local_id)| {
+                        Edn::Vector(vec![target(target_id), local(local_id)].into())
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+        );
+    }
+}
+
+fn parse_relational_constraint(
+    key: &str,
+    payload: &Edn<'_>,
+    handles: &mut ConstraintHandles,
+) -> Result<RelationalConstraint, DeError> {
+    use RelationalConstraint as R;
+
+    let constraint = match key {
+        "dative-bond-donors" => {
+            let (bond, atoms) = parse_pair(payload, key)?;
+            R::DativeBondDonors {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "dative-bond-donor" => {
+            let (bond, atom) = parse_pair(payload, key)?;
+            R::DativeBondDonor {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "dative-bond-contains-all-donors" => {
+            let (bond, atoms) = parse_pair(payload, key)?;
+            R::DativeBondContainsAllDonors {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "dative-bond-all-donors" => {
+            let (bond, predicate) = parse_pair(payload, key)?;
+            R::DativeBondAllDonors {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "dative-bond-any-donor" => {
+            let (bond, predicate) = parse_pair(payload, key)?;
+            R::DativeBondAnyDonor {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "dative-bond-acceptor" => {
+            let (bond, atom) = parse_pair(payload, key)?;
+            R::DativeBondAcceptor {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "dative-bond-acceptor-satisfies" => {
+            let (bond, predicate) = parse_pair(payload, key)?;
+            R::DativeBondAcceptorSatisfies {
+                bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "dative-bond-parallels" => {
+            let (dative, parallel) = parse_pair(payload, key)?;
+            R::DativeBondParallels {
+                dative: handles.dative_bond(DativeBondHandle::from_edn(dative)?),
+                parallel: handles.bond(BondHandle::from_edn(parallel)?),
+            }
+        }
+        "aromatic-system-atoms" => {
+            let (system, atoms) = parse_pair(payload, key)?;
+            R::AromaticSystemAtoms {
+                system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "aromatic-system-contains" => {
+            let (system, atom) = parse_pair(payload, key)?;
+            R::AromaticSystemContains {
+                system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "aromatic-system-contains-all" => {
+            let (system, atoms) = parse_pair(payload, key)?;
+            R::AromaticSystemContainsAll {
+                system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "aromatic-system-all-atoms" => {
+            let (system, predicate) = parse_pair(payload, key)?;
+            R::AromaticSystemAllAtoms {
+                system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "aromatic-system-any-atom" => {
+            let (system, predicate) = parse_pair(payload, key)?;
+            R::AromaticSystemAnyAtom {
+                system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "multicenter-bond-atoms" => {
+            let (bond, atoms) = parse_pair(payload, key)?;
+            R::MulticenterBondAtoms {
+                bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "multicenter-bond-contains" => {
+            let (bond, atom) = parse_pair(payload, key)?;
+            R::MulticenterBondContains {
+                bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "multicenter-bond-contains-all" => {
+            let (bond, atoms) = parse_pair(payload, key)?;
+            R::MulticenterBondContainsAll {
+                bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "multicenter-bond-all-atoms" => {
+            let (bond, predicate) = parse_pair(payload, key)?;
+            R::MulticenterBondAllAtoms {
+                bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "multicenter-bond-any-atom" => {
+            let (bond, predicate) = parse_pair(payload, key)?;
+            R::MulticenterBondAnyAtom {
+                bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "noncovalent-bond-ends" => {
+            let (bond, atoms) = parse_pair(payload, key)?;
+            let (first, second) = parse_pair(atoms, key)?;
+            R::NoncovalentBondEnds {
+                bond: handles.noncovalent_bond(NoncovalentBondHandle::from_edn(bond)?),
+                atoms: [
+                    handles.atom(AtomHandle::from_edn(first)?),
+                    handles.atom(AtomHandle::from_edn(second)?),
+                ],
+            }
+        }
+        "noncovalent-bond-contains" => {
+            let (bond, atom) = parse_pair(payload, key)?;
+            R::NoncovalentBondContains {
+                bond: handles.noncovalent_bond(NoncovalentBondHandle::from_edn(bond)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "noncovalent-bond-ends-satisfy" => {
+            let (bond, predicates) = parse_pair(payload, key)?;
+            let (first, second) = parse_pair(predicates, key)?;
+            R::NoncovalentBondEndsSatisfy {
+                bond: handles.noncovalent_bond(NoncovalentBondHandle::from_edn(bond)?),
+                predicates: [
+                    Box::new(AtomConstraintDsl::from_edn(first)?.into_ast(&())),
+                    Box::new(AtomConstraintDsl::from_edn(second)?.into_ast(&())),
+                ],
+            }
+        }
+        "stereo-atom-site" => {
+            let (stereo_atom, atom) = parse_pair(payload, key)?;
+            R::StereoAtomSite {
+                stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "stereo-atom-contains" => {
+            let (stereo_atom, atom) = parse_pair(payload, key)?;
+            R::StereoAtomContains {
+                stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "stereo-atom-ligands" => {
+            let (stereo_atom, atoms) = parse_pair(payload, key)?;
+            R::StereoAtomLigands {
+                stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "stereo-atom-all-ligands" => {
+            let (stereo_atom, predicate) = parse_pair(payload, key)?;
+            R::StereoAtomAllLigands {
+                stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "stereo-atom-any-ligand" => {
+            let (stereo_atom, predicate) = parse_pair(payload, key)?;
+            R::StereoAtomAnyLigand {
+                stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "stereo-bond-site" => {
+            let (stereo_bond, bond) = parse_pair(payload, key)?;
+            R::StereoBondSite {
+                stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
+                bond: handles.bond(BondHandle::from_edn(bond)?),
+            }
+        }
+        "stereo-bond-contains" => {
+            let (stereo_bond, atom) = parse_pair(payload, key)?;
+            R::StereoBondContains {
+                stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
+                atom: handles.atom(AtomHandle::from_edn(atom)?),
+            }
+        }
+        "stereo-bond-ligands" => {
+            let (stereo_bond, atoms) = parse_pair(payload, key)?;
+            R::StereoBondLigands {
+                stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
+                atoms: parse_handle_vec::<AtomHandle>(atoms, key)?
+                    .into_iter()
+                    .map(|atom| handles.atom(atom))
+                    .collect(),
+            }
+        }
+        "stereo-bond-all-ligands" => {
+            let (stereo_bond, predicate) = parse_pair(payload, key)?;
+            R::StereoBondAllLigands {
+                stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        "stereo-bond-any-ligand" => {
+            let (stereo_bond, predicate) = parse_pair(payload, key)?;
+            R::StereoBondAnyLigand {
+                stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+            }
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["constraint edit".to_string()],
+            });
+        }
+    };
+    Ok(constraint)
+}
+
+fn render_relational_constraint(
+    constraint: &RelationalConstraint,
+    handles: &ConstraintHandles,
+) -> Edn<'static> {
+    use RelationalConstraint as R;
+
+    let (key, payload) = match constraint {
+        R::DativeBondDonors { bond, atoms } => (
+            "dative-bond-donors",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::DativeBondDonor { bond, atom } => (
+            "dative-bond-donor",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::DativeBondContainsAllDonors { bond, atoms } => (
+            "dative-bond-contains-all-donors",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::DativeBondAllDonors { bond, predicate } => (
+            "dative-bond-all-donors",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::DativeBondAnyDonor { bond, predicate } => (
+            "dative-bond-any-donor",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::DativeBondAcceptor { bond, atom } => (
+            "dative-bond-acceptor",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::DativeBondAcceptorSatisfies { bond, predicate } => (
+            "dative-bond-acceptor-satisfies",
+            relation_pair(
+                handles.dative_bonds[bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::DativeBondParallels { dative, parallel } => (
+            "dative-bond-parallels",
+            relation_pair(
+                handles.dative_bonds[dative.index()].to_edn(),
+                handles.bonds[parallel.index()].to_edn(),
+            ),
+        ),
+        R::AromaticSystemAtoms { system, atoms } => (
+            "aromatic-system-atoms",
+            relation_pair(
+                handles.aromatic_systems[system.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::AromaticSystemContains { system, atom } => (
+            "aromatic-system-contains",
+            relation_pair(
+                handles.aromatic_systems[system.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::AromaticSystemContainsAll { system, atoms } => (
+            "aromatic-system-contains-all",
+            relation_pair(
+                handles.aromatic_systems[system.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::AromaticSystemAllAtoms { system, predicate } => (
+            "aromatic-system-all-atoms",
+            relation_pair(
+                handles.aromatic_systems[system.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::AromaticSystemAnyAtom { system, predicate } => (
+            "aromatic-system-any-atom",
+            relation_pair(
+                handles.aromatic_systems[system.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::MulticenterBondAtoms { bond, atoms } => (
+            "multicenter-bond-atoms",
+            relation_pair(
+                handles.multicenter_bonds[bond.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::MulticenterBondContains { bond, atom } => (
+            "multicenter-bond-contains",
+            relation_pair(
+                handles.multicenter_bonds[bond.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::MulticenterBondContainsAll { bond, atoms } => (
+            "multicenter-bond-contains-all",
+            relation_pair(
+                handles.multicenter_bonds[bond.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::MulticenterBondAllAtoms { bond, predicate } => (
+            "multicenter-bond-all-atoms",
+            relation_pair(
+                handles.multicenter_bonds[bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::MulticenterBondAnyAtom { bond, predicate } => (
+            "multicenter-bond-any-atom",
+            relation_pair(
+                handles.multicenter_bonds[bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::NoncovalentBondEnds { bond, atoms } => (
+            "noncovalent-bond-ends",
+            relation_pair(
+                handles.noncovalent_bonds[bond.index()].to_edn(),
+                Edn::Vector(
+                    vec![
+                        handles.atoms[atoms[0].index()].to_edn(),
+                        handles.atoms[atoms[1].index()].to_edn(),
+                    ]
+                    .into(),
+                ),
+            ),
+        ),
+        R::NoncovalentBondContains { bond, atom } => (
+            "noncovalent-bond-contains",
+            relation_pair(
+                handles.noncovalent_bonds[bond.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::NoncovalentBondEndsSatisfy { bond, predicates } => (
+            "noncovalent-bond-ends-satisfy",
+            relation_pair(
+                handles.noncovalent_bonds[bond.index()].to_edn(),
+                Edn::Vector(
+                    vec![
+                        AtomConstraintDsl::from_ast(&predicates[0], &()).to_edn(),
+                        AtomConstraintDsl::from_ast(&predicates[1], &()).to_edn(),
+                    ]
+                    .into(),
+                ),
+            ),
+        ),
+        R::StereoAtomSite { stereo_atom, atom } => (
+            "stereo-atom-site",
+            relation_pair(
+                handles.stereo_atoms[stereo_atom.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::StereoAtomContains { stereo_atom, atom } => (
+            "stereo-atom-contains",
+            relation_pair(
+                handles.stereo_atoms[stereo_atom.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::StereoAtomLigands { stereo_atom, atoms } => (
+            "stereo-atom-ligands",
+            relation_pair(
+                handles.stereo_atoms[stereo_atom.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::StereoAtomAllLigands {
+            stereo_atom,
+            predicate,
+        } => (
+            "stereo-atom-all-ligands",
+            relation_pair(
+                handles.stereo_atoms[stereo_atom.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::StereoAtomAnyLigand {
+            stereo_atom,
+            predicate,
+        } => (
+            "stereo-atom-any-ligand",
+            relation_pair(
+                handles.stereo_atoms[stereo_atom.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::StereoBondSite { stereo_bond, bond } => (
+            "stereo-bond-site",
+            relation_pair(
+                handles.stereo_bonds[stereo_bond.index()].to_edn(),
+                handles.bonds[bond.index()].to_edn(),
+            ),
+        ),
+        R::StereoBondContains { stereo_bond, atom } => (
+            "stereo-bond-contains",
+            relation_pair(
+                handles.stereo_bonds[stereo_bond.index()].to_edn(),
+                handles.atoms[atom.index()].to_edn(),
+            ),
+        ),
+        R::StereoBondLigands { stereo_bond, atoms } => (
+            "stereo-bond-ligands",
+            relation_pair(
+                handles.stereo_bonds[stereo_bond.index()].to_edn(),
+                render_atom_ids(atoms, handles),
+            ),
+        ),
+        R::StereoBondAllLigands {
+            stereo_bond,
+            predicate,
+        } => (
+            "stereo-bond-all-ligands",
+            relation_pair(
+                handles.stereo_bonds[stereo_bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+        R::StereoBondAnyLigand {
+            stereo_bond,
+            predicate,
+        } => (
+            "stereo-bond-any-ligand",
+            relation_pair(
+                handles.stereo_bonds[stereo_bond.index()].to_edn(),
+                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+            ),
+        ),
+    };
+    single_key_map(key, payload)
+}
+
+fn relation_pair(owner: Edn<'static>, target: Edn<'static>) -> Edn<'static> {
+    Edn::Vector(vec![owner, target].into())
+}
+
+fn render_atom_ids(atoms: &[AtomId], handles: &ConstraintHandles) -> Edn<'static> {
+    Edn::Vector(
+        atoms
+            .iter()
+            .map(|atom| handles.atoms[atom.index()].to_edn())
+            .collect::<Vec<_>>()
+            .into(),
+    )
+}
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -3232,7 +4360,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::boolean::BooleanAst;
     use crate::ast::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintsAst, BondConstraintsAst,
+        AromaticSystemConstraintAst, AtomConstraintsAst, BondConstraintsAst, Constraint,
         DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
         NoncovalentBondConstraintAst, RingMembershipAst, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
@@ -4242,9 +5370,9 @@ mod tests {
     )]
     #[case::constraint_keyword(
         "{:constraint {:add {:atom [:carbon {:valence 4}]}}}",
-        EdnError::De(DeError::Subgrammar {
-            grammar: "standalone-edit-constraint",
-            message: "invalid atom ref: carbon".to_string(),
+        EdnError::De(DeError::TypeMismatch {
+            expected: "edit handle (non-negative integer or {:new n} map)",
+            got: "keyword",
             path: Vec::new(),
         }),
     )]
@@ -4303,5 +5431,92 @@ mod tests {
             .unwrap();
 
         assert_eq!(molecule.apply(edits), Ok(expected));
+    }
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::entity_leaf(
+        "{:atom [2 {:valence 4}]}")]
+    #[case::logical_repeated_handle(
+        "{:and [{:atom [{:new 0} {:valence 4}]} {:not {:atom [{:new 0} {:degree 3}]}}]}")]
+    #[case::entity_kinds(
+        "{:and [{:bond [{:new 0} {:aromatic true}]} {:dative-bond [{:new 1} {:aromatic false}]} {:aromatic-system [{:new 2} {:electron-count 6}]} {:multicenter-bond [{:new 3} {:electron-count 2}]} {:noncovalent-bond [{:new 4} {:intramolecular true}]} {:stereo-atom [{:new 5} [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]} {:stereo-bond [{:new 6} [:cis-trans {:stereogenicity {:relation :stereogenic}}]]}]}")]
+    #[case::relational_kinds(
+        "{:and [{:dative-bond-parallels [{:new 0} {:new 0}]} {:aromatic-system-contains [{:new 0} {:new 0}]} {:multicenter-bond-contains [{:new 0} {:new 0}]} {:noncovalent-bond-contains [{:new 0} {:new 0}]} {:stereo-atom-site [{:new 0} {:new 0}]} {:stereo-bond-site [{:new 0} {:new 0}]}]}")]
+    #[case::quantified_predicate(
+        "{:aromatic-system-all-atoms [{:new 0} {:valence 3}]}")]
+    #[case::atom_subset(
+        "{:charge-sum {:atoms [1 {:new 0}] :sum 0}}")]
+    #[case::bond_subset(
+        "{:bond-order-sum {:bonds [2 {:new 0}] :sum 3}}")]
+    #[case::whole_molecule(
+        "{:connected {}}")]
+    #[case::sub_pattern_anchor(
+        r#"{:sub-pattern {:anchor {:atoms [[{:new 0} 0]]} :pattern {:atoms ["C"] :bonds []}}}"#)]
+    fn test_constraint_edit_dsl_roundtrip(#[case] input: &str) {
+        let parsed = ConstraintEditDsl::from_edn_str(input).unwrap();
+        let rebuilt = ConstraintEditDsl::from_edit(parsed.clone().into_edit());
+
+        assert_eq!(parsed.to_edn(), read_string(input).unwrap());
+        assert_eq!(rebuilt, parsed);
+    }
+
+    #[rstest]
+    #[case::repeated(
+        "{:and [{:atom [{:new 2} {:valence 4}]} {:atom [{:new 2} {:degree 3}]}]}",
+        ConstraintHandles {
+            atoms: vec![AtomHandle::New(2)],
+            ..ConstraintHandles::default()
+        },
+    )]
+    #[case::quantified(
+        "{:aromatic-system-all-atoms [{:new 1} {:valence 3}]}",
+        ConstraintHandles {
+            aromatic_systems: vec![AromaticSystemHandle::New(1)],
+            ..ConstraintHandles::default()
+        },
+    )]
+    #[case::sub_pattern_target(
+        r#"{:sub-pattern {:anchor {:atoms [[{:new 3} 0]]} :pattern {:atoms ["C"] :bonds []}}}"#,
+        ConstraintHandles {
+            atoms: vec![AtomHandle::New(3)],
+            ..ConstraintHandles::default()
+        },
+    )]
+    fn test_constraint_edit_dsl_handles(#[case] input: &str, #[case] expected: ConstraintHandles) {
+        assert_eq!(
+            ConstraintEditDsl::from_edn_str(input).unwrap().handles,
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::keyword(
+        "{:atom [:carbon {:valence 4}]}",
+        DeError::TypeMismatch {
+            expected: "edit handle (non-negative integer or {:new n} map)",
+            got: "keyword",
+            path: Vec::new(),
+        },
+    )]
+    #[case::structural(
+        "{:bond [{:atoms [0 1]} {:aromatic true}]}",
+        DeError::MissingField {
+            key: "new".to_string(),
+            path: Vec::new(),
+        },
+    )]
+    #[case::pattern_side_new(
+        r#"{:sub-pattern {:anchor {:atoms [[0 {:new 0}]]} :pattern {:atoms ["C"] :bonds []}}}"#,
+        DeError::TypeMismatch {
+            expected: "atom ref (int or keyword)",
+            got: "map",
+            path: Vec::new(),
+        },
+    )]
+    fn test_constraint_edit_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(
+            ConstraintEditDsl::from_edn_str(input),
+            Err(EdnError::De(expected))
+        );
     }
 }

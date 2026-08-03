@@ -1713,7 +1713,10 @@ impl ToEdn for SubPatternAnchorDsl {
     }
 }
 
-fn expect_map<'e>(edn: &'e Edn<'e>, context: &'static str) -> Result<&'e EdnMap<'e>, DeError> {
+pub(super) fn expect_map<'e>(
+    edn: &'e Edn<'e>,
+    context: &'static str,
+) -> Result<&'e EdnMap<'e>, DeError> {
     match edn {
         Edn::Map(m) => Ok(m),
         other => Err(DeError::TypeMismatch {
@@ -1823,7 +1826,7 @@ fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &ValueDs
     Edn::Map(m)
 }
 
-fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeError> {
+pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeError> {
     let m = expect_map(edn, "unpaired-electrons")?;
     let count = m
         .get_keyword("count")
@@ -1843,7 +1846,7 @@ fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeErr
     })
 }
 
-fn render_unpaired_electrons(unpaired_electrons: &UnpairedElectronsAst) -> Edn<'static> {
+pub(super) fn render_unpaired_electrons(unpaired_electrons: &UnpairedElectronsAst) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("count"),
