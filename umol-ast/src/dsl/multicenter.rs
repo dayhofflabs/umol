@@ -257,11 +257,49 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MulticenterBondUpdateDsl(pub MulticenterBondUpdate);
 
+impl MulticenterBondUpdateDsl {
+    /// Zero-cost reference cast from `&MulticenterBondUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &MulticenterBondUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const MulticenterBondUpdate as *const Self) }
+    }
+}
+
+impl FromAst<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &MulticenterBondUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> MulticenterBondUpdate {
+        self.0
+    }
+}
+
 impl FromStr for MulticenterBondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_multicenter_bond_update(s)
+    }
+}
+
+impl FromStr for MulticenterBondUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(MulticenterBondUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for MulticenterBondUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        MulticenterBondUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -705,6 +743,21 @@ mod tests {
     #[case::duplicate_electron_count("#e6#e4", ParseError::DuplicateMulticenterBondPredicate("#e".to_string()))]
     fn test_parse_multicenter_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_multicenter_bond_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::duplicate_charge(
+        "#c+#c-",
+        ParseError::DuplicateMulticenterBondPredicate("#c".to_string())
+    )]
+    fn test_multicenter_bond_update_from_str_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
+        assert_eq!(
+            input.parse::<MulticenterBondUpdate>().unwrap_err(),
+            expected
+        );
     }
 
     #[rustfmt::skip]

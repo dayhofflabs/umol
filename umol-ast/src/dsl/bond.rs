@@ -217,11 +217,49 @@ fn bond(i: &mut &str) -> PResult<BondDsl> {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BondUpdateDsl(pub BondUpdate);
 
+impl BondUpdateDsl {
+    /// Zero-cost reference cast from `&BondUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &BondUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const BondUpdate as *const Self) }
+    }
+}
+
+impl FromAst<BondUpdate> for BondUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &BondUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<BondUpdate> for BondUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> BondUpdate {
+        self.0
+    }
+}
+
 impl FromStr for BondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_bond_update(s)
+    }
+}
+
+impl FromStr for BondUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(BondUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for BondUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        BondUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -697,6 +735,12 @@ mod tests {
     #[case::unknown_pred("1#x", ParseError::UnknownBondPredicate("#x".to_string()))]
     fn test_parse_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_bond_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::duplicate_charge("#c+#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
+    fn test_bond_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(input.parse::<BondUpdate>().unwrap_err(), expected);
     }
 
     #[rustfmt::skip]

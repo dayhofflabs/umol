@@ -116,6 +116,17 @@ proptest! {
     }
 
     #[test]
+    fn test_aromatic_system_update_display_from_str_roundtrip(
+        update in aromatic_system_update_strategy(),
+    ) {
+        let rendered = update.to_string();
+        let parsed: AromaticSystemUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
+    }
+
+    #[test]
     fn test_aromatic_system_update_dsl_to_edn_from_edn_roundtrip(
         update in aromatic_system_update_strategy(),
     ) {
@@ -148,6 +159,17 @@ proptest! {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
         })?;
         prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_multicenter_bond_update_display_from_str_roundtrip(
+        update in multicenter_bond_update_strategy(),
+    ) {
+        let rendered = update.to_string();
+        let parsed: MulticenterBondUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
     }
 
     #[test]
@@ -186,6 +208,17 @@ proptest! {
     }
 
     #[test]
+    fn test_dative_bond_update_display_from_str_roundtrip(
+        update in dative_bond_update_strategy(),
+    ) {
+        let rendered = update.to_string();
+        let parsed: DativeBondUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
+    }
+
+    #[test]
     fn test_dative_bond_update_dsl_to_edn_from_edn_roundtrip(
         update in dative_bond_update_strategy(),
     ) {
@@ -221,6 +254,17 @@ proptest! {
     }
 
     #[test]
+    fn test_noncovalent_bond_update_display_from_str_roundtrip(
+        update in noncovalent_bond_update_strategy(),
+    ) {
+        let rendered = update.to_string();
+        let parsed: NoncovalentBondUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
+    }
+
+    #[test]
     fn test_noncovalent_bond_update_dsl_to_edn_from_edn_roundtrip(
         update in noncovalent_bond_update_strategy(),
     ) {
@@ -244,6 +288,15 @@ proptest! {
     }
 
     #[test]
+    fn test_atom_update_display_from_str_roundtrip(update in atom_update_strategy()) {
+        let rendered = update.to_string();
+        let parsed: AtomUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
+    }
+
+    #[test]
     fn test_bond_update_dsl_display_from_str_roundtrip(update in bond_update_strategy()) {
         let dsl = BondUpdateDsl(update);
         let rendered = dsl.to_string();
@@ -251,6 +304,15 @@ proptest! {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
         })?;
         prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_bond_update_display_from_str_roundtrip(update in bond_update_strategy()) {
+        let rendered = update.to_string();
+        let parsed: BondUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
     }
 
     /// Atom-update DSL round-trips through its EDN string leaf.

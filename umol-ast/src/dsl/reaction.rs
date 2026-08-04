@@ -1311,7 +1311,7 @@ fn read_delta_atom_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("atom :modify expects [ref dsl]".into()).into());
             }
-            DeltaInput::AtomModify(r, dsl.0)
+            DeltaInput::AtomModify(r, dsl.into_ast(&()))
         }
         o => return Err(DeError::Custom(format!("unknown atom delta op :{o}")).into()),
     };
@@ -1335,7 +1335,7 @@ fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("bond :modify expects [ref dsl]".into()).into());
             }
-            DeltaInput::BondModify(r, dsl.0)
+            DeltaInput::BondModify(r, dsl.into_ast(&()))
         }
         o => return Err(DeError::Custom(format!("unknown bond delta op :{o}")).into()),
     };
@@ -1366,7 +1366,7 @@ fn read_delta_dative_bond_input(
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("dative-bond :modify expects [ref dsl]".into()).into());
             }
-            DeltaInput::DativeBondModify(r, dsl.0)
+            DeltaInput::DativeBondModify(r, dsl.into_ast(&()))
         }
         o => return Err(DeError::Custom(format!("unknown dative-bond delta op :{o}")).into()),
     };
@@ -1394,7 +1394,7 @@ fn read_delta_aromatic_system_input(
                     DeError::Custom("aromatic-system :modify expects [ref dsl]".into()).into(),
                 );
             }
-            DeltaInput::AromaticSystemModify(r, dsl.0)
+            DeltaInput::AromaticSystemModify(r, dsl.into_ast(&()))
         }
         o => return Err(DeError::Custom(format!("unknown aromatic-system delta op :{o}")).into()),
     };
@@ -1422,7 +1422,7 @@ fn read_delta_multicenter_bond_input(
                     DeError::Custom("multicenter-bond :modify expects [ref dsl]".into()).into(),
                 );
             }
-            DeltaInput::MulticenterBondModify(r, dsl.0)
+            DeltaInput::MulticenterBondModify(r, dsl.into_ast(&()))
         }
         o => return Err(DeError::Custom(format!("unknown multicenter-bond delta op :{o}")).into()),
     };
@@ -1450,7 +1450,7 @@ fn read_delta_noncovalent_bond_input(
                     DeError::Custom("noncovalent-bond :modify expects [ref dsl]".into()).into(),
                 );
             }
-            DeltaInput::NoncovalentBondModify(r, dsl.0)
+            DeltaInput::NoncovalentBondModify(r, dsl.into_ast(&()))
         }
         o => return Err(DeError::Custom(format!("unknown noncovalent-bond delta op :{o}")).into()),
     };
@@ -1476,7 +1476,7 @@ fn read_delta_stereo_atom_input(
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("stereo-atom :modify expects [ref dsl]".into()).into());
             }
-            DeltaInput::StereoAtomModify(r, dsl.0)
+            DeltaInput::StereoAtomModify(r, dsl.into_ast(&()))
         }
         "swap" => {
             de.consume_byte(b'[')?;
@@ -1536,7 +1536,7 @@ fn read_delta_stereo_bond_input(
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("stereo-bond :modify expects [ref dsl]".into()).into());
             }
-            DeltaInput::StereoBondModify(r, dsl.0)
+            DeltaInput::StereoBondModify(r, dsl.into_ast(&()))
         }
         "swap" => {
             de.consume_byte(b'[')?;
@@ -1626,7 +1626,7 @@ fn parse_delta_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::AtomModify(
                 AtomRef::from_edn(&v[0])?,
-                AtomUpdateDsl::from_edn(&v[1])?.0,
+                AtomUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         o => Err(DeError::Custom(format!("unknown atom delta op :{o}"))),
@@ -1654,7 +1654,7 @@ fn parse_delta_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::BondModify(
                 BondRef::from_edn(&v[0])?,
-                BondUpdateDsl::from_edn(&v[1])?.0,
+                BondUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         o => Err(DeError::Custom(format!("unknown bond delta op :{o}"))),
@@ -1695,7 +1695,7 @@ fn parse_delta_dative_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::DativeBondModify(
                 DativeBondRef::from_edn(&v[0])?,
-                DativeBondUpdateDsl::from_edn(&v[1])?.0,
+                DativeBondUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -1729,7 +1729,7 @@ fn parse_delta_aromatic_system_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErro
             }
             Ok(DeltaInput::AromaticSystemModify(
                 AromaticSystemRef::from_edn(&v[0])?,
-                AromaticSystemUpdateDsl::from_edn(&v[1])?.0,
+                AromaticSystemUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -1763,7 +1763,7 @@ fn parse_delta_multicenter_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
             }
             Ok(DeltaInput::MulticenterBondModify(
                 MulticenterBondRef::from_edn(&v[0])?,
-                MulticenterBondUpdateDsl::from_edn(&v[1])?.0,
+                MulticenterBondUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -1797,7 +1797,7 @@ fn parse_delta_noncovalent_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
             }
             Ok(DeltaInput::NoncovalentBondModify(
                 NoncovalentBondRef::from_edn(&v[0])?,
-                NoncovalentBondUpdateDsl::from_edn(&v[1])?.0,
+                NoncovalentBondUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -1829,7 +1829,7 @@ fn parse_delta_stereo_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::StereoAtomModify(
                 StereoAtomRef::from_edn(&v[0])?,
-                StereoAtomUpdateDsl::from_edn(&v[1])?.0,
+                StereoAtomUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         "swap" => {
@@ -1883,7 +1883,7 @@ fn parse_delta_stereo_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::StereoBondModify(
                 StereoBondRef::from_edn(&v[0])?,
-                StereoBondUpdateDsl::from_edn(&v[1])?.0,
+                StereoBondUpdateDsl::from_edn(&v[1])?.into_ast(&()),
             ))
         }
         "swap" => {

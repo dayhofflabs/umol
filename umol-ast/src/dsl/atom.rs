@@ -189,11 +189,49 @@ pub(crate) fn atom(i: &mut &str) -> PResult<AtomDsl> {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomUpdateDsl(pub AtomUpdate);
 
+impl AtomUpdateDsl {
+    /// Zero-cost reference cast from `&AtomUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &AtomUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const AtomUpdate as *const Self) }
+    }
+}
+
+impl FromAst<AtomUpdate> for AtomUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &AtomUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<AtomUpdate> for AtomUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> AtomUpdate {
+        self.0
+    }
+}
+
 impl FromStr for AtomUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_atom_update(s)
+    }
+}
+
+impl FromStr for AtomUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(AtomUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for AtomUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        AtomUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -1421,6 +1459,12 @@ mod tests {
     #[case::duplicate_undetermined_count("#u*#u1", ParseError::DuplicateAtomPredicate("#u".to_string()))]
     fn test_parse_atom_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_atom_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::duplicate_hydrogens("#h1#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
+    fn test_atom_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(input.parse::<AtomUpdate>().unwrap_err(), expected);
     }
 
     #[rstest]

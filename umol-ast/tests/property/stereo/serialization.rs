@@ -37,6 +37,17 @@ proptest! {
     }
 
     #[test]
+    fn test_stereo_atom_update_display_from_str_roundtrip(
+        update in stereo_atom_update_strategy(),
+    ) {
+        let rendered = update.to_string();
+        let parsed: StereoAtomUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
+    }
+
+    #[test]
     fn test_stereo_atom_update_dsl_to_edn_from_edn_roundtrip(
         update in stereo_atom_update_strategy(),
     ) {
@@ -69,6 +80,17 @@ proptest! {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
         })?;
         prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_stereo_bond_update_display_from_str_roundtrip(
+        update in stereo_bond_update_strategy(),
+    ) {
+        let rendered = update.to_string();
+        let parsed: StereoBondUpdate = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(update, parsed);
     }
 
     #[test]

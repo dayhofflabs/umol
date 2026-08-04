@@ -156,11 +156,49 @@ impl IntoAst<DativeBondAst> for DativeBondDsl {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DativeBondUpdateDsl(pub DativeBondUpdate);
 
+impl DativeBondUpdateDsl {
+    /// Zero-cost reference cast from `&DativeBondUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &DativeBondUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const DativeBondUpdate as *const Self) }
+    }
+}
+
+impl FromAst<DativeBondUpdate> for DativeBondUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &DativeBondUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<DativeBondUpdate> for DativeBondUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> DativeBondUpdate {
+        self.0
+    }
+}
+
 impl FromStr for DativeBondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_dative_bond_update(s)
+    }
+}
+
+impl FromStr for DativeBondUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(DativeBondUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for DativeBondUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        DativeBondUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -590,6 +628,12 @@ mod tests {
     #[case::duplicate("#a#a", ParseError::DuplicateDativeBondPredicate("#a".to_string()))]
     fn test_parse_dative_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_dative_bond_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::duplicate_aromatic("#a#a", ParseError::DuplicateDativeBondPredicate("#a".to_string()))]
+    fn test_dative_bond_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(input.parse::<DativeBondUpdate>().unwrap_err(), expected);
     }
 
     #[rstest]

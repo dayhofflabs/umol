@@ -255,11 +255,49 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AromaticSystemUpdateDsl(pub AromaticSystemUpdate);
 
+impl AromaticSystemUpdateDsl {
+    /// Zero-cost reference cast from `&AromaticSystemUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &AromaticSystemUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const AromaticSystemUpdate as *const Self) }
+    }
+}
+
+impl FromAst<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &AromaticSystemUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> AromaticSystemUpdate {
+        self.0
+    }
+}
+
 impl FromStr for AromaticSystemUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_aromatic_system_update(s)
+    }
+}
+
+impl FromStr for AromaticSystemUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(AromaticSystemUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for AromaticSystemUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        AromaticSystemUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -711,6 +749,18 @@ mod tests {
     #[case::duplicate_electron_count("#e6#e4", ParseError::DuplicateAromaticSystemPredicate("#e".to_string()))]
     fn test_parse_aromatic_system_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_aromatic_system_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::duplicate_charge(
+        "#c+#c-",
+        ParseError::DuplicateAromaticSystemPredicate("#c".to_string())
+    )]
+    fn test_aromatic_system_update_from_str_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
+        assert_eq!(input.parse::<AromaticSystemUpdate>().unwrap_err(), expected);
     }
 
     #[rustfmt::skip]

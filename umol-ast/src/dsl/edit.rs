@@ -1569,7 +1569,11 @@ fn parse_atom_checked_update(
     let expect: AtomUpdateDsl = helper.required("expect")?;
     let update: AtomUpdateDsl = helper.required("update")?;
     helper.finalize()?;
-    Ok((AtomHandle::from_edn(&parts[0])?, expect.0, update.0))
+    Ok((
+        AtomHandle::from_edn(&parts[0])?,
+        expect.into_ast(&()),
+        update.into_ast(&()),
+    ))
 }
 
 fn parse_bond_checked_update(
@@ -1599,7 +1603,11 @@ fn parse_bond_checked_update(
     let expect: BondUpdateDsl = helper.required("expect")?;
     let update: BondUpdateDsl = helper.required("update")?;
     helper.finalize()?;
-    Ok((BondHandle::from_edn(&parts[0])?, expect.0, update.0))
+    Ok((
+        BondHandle::from_edn(&parts[0])?,
+        expect.into_ast(&()),
+        update.into_ast(&()),
+    ))
 }
 
 fn parse_dative_bond_checked_update(
@@ -1629,7 +1637,11 @@ fn parse_dative_bond_checked_update(
     let expect: DativeBondUpdateDsl = helper.required("expect")?;
     let update: DativeBondUpdateDsl = helper.required("update")?;
     helper.finalize()?;
-    Ok((DativeBondHandle::from_edn(&parts[0])?, expect.0, update.0))
+    Ok((
+        DativeBondHandle::from_edn(&parts[0])?,
+        expect.into_ast(&()),
+        update.into_ast(&()),
+    ))
 }
 
 fn parse_aromatic_system_checked_update(
@@ -1668,8 +1680,8 @@ fn parse_aromatic_system_checked_update(
     helper.finalize()?;
     Ok((
         AromaticSystemHandle::from_edn(&parts[0])?,
-        expect.0,
-        update.0,
+        expect.into_ast(&()),
+        update.into_ast(&()),
     ))
 }
 
@@ -1709,8 +1721,8 @@ fn parse_multicenter_bond_checked_update(
     helper.finalize()?;
     Ok((
         MulticenterBondHandle::from_edn(&parts[0])?,
-        expect.0,
-        update.0,
+        expect.into_ast(&()),
+        update.into_ast(&()),
     ))
 }
 
@@ -1750,8 +1762,8 @@ fn parse_noncovalent_bond_checked_update(
     helper.finalize()?;
     Ok((
         NoncovalentBondHandle::from_edn(&parts[0])?,
-        expect.0,
-        update.0,
+        expect.into_ast(&()),
+        update.into_ast(&()),
     ))
 }
 
@@ -1782,7 +1794,11 @@ fn parse_stereo_atom_checked_update(
     let expect: StereoAtomUpdateDsl = helper.required("expect")?;
     let update: StereoAtomUpdateDsl = helper.required("update")?;
     helper.finalize()?;
-    Ok((StereoAtomHandle::from_edn(&parts[0])?, expect.0, update.0))
+    Ok((
+        StereoAtomHandle::from_edn(&parts[0])?,
+        expect.into_ast(&()),
+        update.into_ast(&()),
+    ))
 }
 
 fn parse_stereo_bond_checked_update(
@@ -1812,7 +1828,11 @@ fn parse_stereo_bond_checked_update(
     let expect: StereoBondUpdateDsl = helper.required("expect")?;
     let update: StereoBondUpdateDsl = helper.required("update")?;
     helper.finalize()?;
-    Ok((StereoBondHandle::from_edn(&parts[0])?, expect.0, update.0))
+    Ok((
+        StereoBondHandle::from_edn(&parts[0])?,
+        expect.into_ast(&()),
+        update.into_ast(&()),
+    ))
 }
 
 fn validate_atom_update_pair(expect: &AtomUpdate, update: &AtomUpdate) -> Result<(), DeError> {

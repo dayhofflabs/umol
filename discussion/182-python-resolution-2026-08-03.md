@@ -5,14 +5,29 @@ Date: 2026-08-03
 Relates: [178](178-python-lattice-ops-2026-08-01.md),
 [179](179-python-editing-and-transactions-2026-08-02.md)
 
-Third instance of the same gap. Doc 178 exposed the lattice operations, doc 179 the edit vocabulary,
-and each time the argument was that an operation central to the model was unreachable from the
-interface most users have. Resolution is the remaining one, and it is the largest.
-
 A molecule built by editing cannot be resolved from Python. `MoleculeAst.from_smiles` accepts
 `chemistry_model` and `resolve_config` because ingest invokes resolution; `MoleculeAst.parse` accepts
 only `defaults` and does not resolve; there is no `resolve` method. The three `*ResolveConfig` classes
 are exported and nothing outside reaction application consumes them.
+
+## The Rust side, for reference
+
+Fully worked out; the binding has a settled shape to mirror.
+
+```rust
+Resolver::new(&chemistry_model)                          // ResolveConfig::default()
+Resolver::with_config(&chemistry_model, resolve_config)  // explicit
+    .resolve(&mut ast)   // -> Result<Solution<(), ResolverContradiction>, ResolverError>
+```
+
+Both internal callers use exactly this — `umol-graph/src/ingest.rs:130` and
+`umol-graph/src/parse.rs:48` are `Resolver::with_config(model, *resolve_config).resolve(&mut ast)?`.
+Ingest constructs the same resolver any caller would; nothing about it is privileged.
+
+`Resolver` is not re-exported from `umol-graph/src/lib.rs`, so the path today is
+`umol_graph::ops::resolve::Resolver`. Worth raising when the facade of doc
+[180](180-umol-facade-crate-2026-08-02.md) is built, since this is a public operation reached through
+a private-looking path.
 
 ## Justification
 

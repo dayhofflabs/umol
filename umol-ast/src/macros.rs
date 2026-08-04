@@ -58,9 +58,7 @@ macro_rules! atom_dsl_ground {
 #[macro_export]
 macro_rules! atom_update_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::dsl::AtomUpdateDsl as ::core::str::FromStr>::from_str($s)
-            .unwrap()
-            .0
+        <$crate::ast::AtomUpdate as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -93,9 +91,7 @@ macro_rules! bond_dsl_ground {
 #[macro_export]
 macro_rules! bond_update_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::dsl::BondUpdateDsl as ::core::str::FromStr>::from_str($s)
-            .unwrap()
-            .0
+        <$crate::ast::BondUpdate as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 

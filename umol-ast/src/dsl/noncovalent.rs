@@ -265,11 +265,49 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::R
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NoncovalentBondUpdateDsl(pub NoncovalentBondUpdate);
 
+impl NoncovalentBondUpdateDsl {
+    /// Zero-cost reference cast from `&NoncovalentBondUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &NoncovalentBondUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const NoncovalentBondUpdate as *const Self) }
+    }
+}
+
+impl FromAst<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &NoncovalentBondUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> NoncovalentBondUpdate {
+        self.0
+    }
+}
+
 impl FromStr for NoncovalentBondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_noncovalent_bond_update(s)
+    }
+}
+
+impl FromStr for NoncovalentBondUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(NoncovalentBondUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for NoncovalentBondUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        NoncovalentBondUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -589,6 +627,21 @@ mod tests {
     #[case::duplicate("#I#I", ParseError::DuplicateNoncovalentBondPredicate("#I".into()))]
     fn test_parse_noncovalent_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_noncovalent_bond_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::duplicate_intramolecular(
+        "#I#I",
+        ParseError::DuplicateNoncovalentBondPredicate("#I".into())
+    )]
+    fn test_noncovalent_bond_update_from_str_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
+        assert_eq!(
+            input.parse::<NoncovalentBondUpdate>().unwrap_err(),
+            expected
+        );
     }
 
     #[rustfmt::skip]

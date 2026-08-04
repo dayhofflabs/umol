@@ -848,11 +848,49 @@ pub fn parse_stereo_bond_update(input: &str) -> Result<StereoBondUpdateDsl, Pars
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoAtomUpdateDsl(pub StereoAtomUpdate);
 
+impl StereoAtomUpdateDsl {
+    /// Zero-cost reference cast from `&StereoAtomUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &StereoAtomUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const StereoAtomUpdate as *const Self) }
+    }
+}
+
+impl FromAst<StereoAtomUpdate> for StereoAtomUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &StereoAtomUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<StereoAtomUpdate> for StereoAtomUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereoAtomUpdate {
+        self.0
+    }
+}
+
 impl FromStr for StereoAtomUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_stereo_atom_update(s)
+    }
+}
+
+impl FromStr for StereoAtomUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(StereoAtomUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for StereoAtomUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        StereoAtomUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -954,11 +992,49 @@ fn stereo_atom_update(i: &mut &str) -> PResult<StereoAtomUpdateDsl> {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoBondUpdateDsl(pub StereoBondUpdate);
 
+impl StereoBondUpdateDsl {
+    /// Zero-cost reference cast from `&StereoBondUpdate`. Relies on `repr(transparent)`.
+    pub fn from_ref(update: &StereoBondUpdate) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(update as *const StereoBondUpdate as *const Self) }
+    }
+}
+
+impl FromAst<StereoBondUpdate> for StereoBondUpdateDsl {
+    type Ctx = ();
+
+    fn from_ast(update: &StereoBondUpdate, _ctx: &Self::Ctx) -> Self {
+        Self(update.clone())
+    }
+}
+
+impl IntoAst<StereoBondUpdate> for StereoBondUpdateDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereoBondUpdate {
+        self.0
+    }
+}
+
 impl FromStr for StereoBondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_stereo_bond_update(s)
+    }
+}
+
+impl FromStr for StereoBondUpdate {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(StereoBondUpdateDsl::from_str(s)?.into_ast(&()))
+    }
+}
+
+impl Display for StereoBondUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        StereoBondUpdateDsl::from_ref(self).fmt(f)
     }
 }
 
@@ -1971,6 +2047,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::undetermined_kind_with_constraint(
+        "*#o(0,1)=",
+        ParseError::TrailingInput("#o(0,1)=".to_string())
+    )]
+    fn test_stereo_atom_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(input.parse::<StereoAtomUpdate>().unwrap_err(), expected);
+    }
+
+    #[rstest]
     #[case::empty("")]
     #[case::undetermined("*")]
     #[case::absolute("Th1")]
@@ -2001,6 +2086,15 @@ mod tests {
     #[case::undetermined_kind_with_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
     fn test_parse_stereo_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_stereo_bond_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined_kind_with_constraint(
+        "*#g/",
+        ParseError::TrailingInput("#g/".to_string())
+    )]
+    fn test_stereo_bond_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(input.parse::<StereoBondUpdate>().unwrap_err(), expected);
     }
 
     #[rstest]
