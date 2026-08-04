@@ -81,6 +81,27 @@ def test_atom_update(update, expected):
     ) == expected
 
 
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("#c-1", "#c-"),
+        ("*#i*#c*#h*#n*#u*#s*", "*#i*#c*#h*#n*#u*#s*"),
+        ("#v*", "#v*"),
+    ],
+)
+def test_atom_update_parse(dsl, canonical):
+    update = AtomUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"AtomUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_atom_update_parse_error():
+    with pytest.raises(ParseError):
+        AtomUpdate.parse("#h1#h2")
+
+
 def carbon_oxygen():
     return MoleculeAst.from_parts(
         [AtomAst(Element("C")), AtomAst(Element("O"))]

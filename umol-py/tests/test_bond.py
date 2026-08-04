@@ -65,6 +65,27 @@ def test_bond_update(update, expected):
     ) == expected
 
 
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("#c-1", "#c-"),
+        ("*#c*#u*#s*", "*#c*#u*#s*"),
+        ("#a*", "#a*"),
+    ],
+)
+def test_bond_update_parse(dsl, canonical):
+    update = BondUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"BondUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_bond_update_parse_error():
+    with pytest.raises(ParseError):
+        BondUpdate.parse("#c+#c-")
+
+
 def ethene():
     # two carbons joined by one double bond (bond id 0, atoms 0-1)
     return MoleculeAst.from_parts(

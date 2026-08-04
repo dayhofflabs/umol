@@ -279,6 +279,20 @@ impl AtomUpdate {
         })
     }
 
+    /// Parse an atom-update DSL string into an `AtomUpdate`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstAtomUpdate::from_str(s).map(Self).map_err(parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AtomUpdate.parse('{}')", self.0)
+    }
+
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }

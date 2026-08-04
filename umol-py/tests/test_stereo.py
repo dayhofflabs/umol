@@ -7,6 +7,7 @@ from umol import (
     CisTransStereoAst,
     Element,
     MoleculeAst,
+    ParseError,
     Permutation,
     StereoAtomAst,
     StereoAtomConstraintAst,
@@ -125,6 +126,27 @@ def test_stereo_atom_update(update, expected):
 
 
 @pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("Th1", "Th1"),
+        ("*", "*"),
+        ("Th#o(0,1)*", "Th#o(0,1)*"),
+    ],
+)
+def test_stereo_atom_update_parse(dsl, canonical):
+    update = StereoAtomUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"StereoAtomUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_stereo_atom_update_parse_error():
+    with pytest.raises(ParseError):
+        StereoAtomUpdate.parse("*#o(0,1)=")
+
+
+@pytest.mark.parametrize(
     ("update", "expected"),
     [
         (
@@ -184,6 +206,27 @@ def test_stereo_atom_update(update, expected):
 )
 def test_stereo_bond_update(update, expected):
     assert (update.configuration, update.constraints) == expected
+
+
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("Ct1", "Ct1"),
+        ("*", "*"),
+        ("Ct#o(0,1)*", "Ct#o(0,1)*"),
+    ],
+)
+def test_stereo_bond_update_parse(dsl, canonical):
+    update = StereoBondUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"StereoBondUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_stereo_bond_update_parse_error():
+    with pytest.raises(ParseError):
+        StereoBondUpdate.parse("*#g/")
 
 
 def test_permutation_image_degree():

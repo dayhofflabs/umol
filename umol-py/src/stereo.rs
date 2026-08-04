@@ -774,6 +774,22 @@ impl StereoAtomUpdate {
         })
     }
 
+    /// Parse a stereo-atom-update DSL string into a `StereoAtomUpdate`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstStereoAtomUpdate::from_str(s)
+            .map(Self)
+            .map_err(parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("StereoAtomUpdate.parse('{}')", self.0)
+    }
+
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }
@@ -825,6 +841,22 @@ impl StereoBondUpdate {
                 .map(|value| value.bind(py).borrow().inner().clone())
                 .unwrap_or_default(),
         })
+    }
+
+    /// Parse a stereo-bond-update DSL string into a `StereoBondUpdate`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstStereoBondUpdate::from_str(s)
+            .map(Self)
+            .map_err(parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("StereoBondUpdate.parse('{}')", self.0)
     }
 
     fn __eq__(&self, other: &Self) -> bool {

@@ -138,19 +138,20 @@ to the direct Rust API from S0. Extend the existing per-entity Python test modul
 the empty update, a populated or explicitly undetermined field, a constraint removal, canonical
 string output, evaluable representation, round-trip equality, and representative invalid input.
 
-- **S1a — Atom updates.** Update `umol-py/src/atom.rs` and `umol-py/tests/test_atom.py`.
+- **S1a — Atom updates.** **Done.** Update `umol-py/src/atom.rs` and `umol-py/tests/test_atom.py`.
   **Additive (green).** [dep: S0a]
-- **S1b — Bond updates.** Update `umol-py/src/bond.rs` and `umol-py/tests/test_bond.py`.
+- **S1b — Bond updates.** **Done.** Update `umol-py/src/bond.rs` and
+  `umol-py/tests/test_bond.py`.
   **Additive (green).** [dep: S0b]
-- **S1c — Dative-bond updates.** Update `umol-py/src/dative.rs` and
+- **S1c — Dative-bond updates.** **Done.** Update `umol-py/src/dative.rs` and
   `umol-py/tests/test_dative.py`. **Additive (green).** [dep: S0c]
-- **S1d — Aromatic-system updates.** Update `umol-py/src/aromatic.rs` and
+- **S1d — Aromatic-system updates.** **Done.** Update `umol-py/src/aromatic.rs` and
   `umol-py/tests/test_aromatic.py`. **Additive (green).** [dep: S0d]
-- **S1e — Multicenter-bond updates.** Update `umol-py/src/multicenter.rs` and
+- **S1e — Multicenter-bond updates.** **Done.** Update `umol-py/src/multicenter.rs` and
   `umol-py/tests/test_multicenter.py`. **Additive (green).** [dep: S0e]
-- **S1f — Noncovalent-bond updates.** Update `umol-py/src/noncovalent.rs` and
+- **S1f — Noncovalent-bond updates.** **Done.** Update `umol-py/src/noncovalent.rs` and
   `umol-py/tests/test_noncovalent.py`. **Additive (green).** [dep: S0f]
-- **S1g — Stereo-entity updates.** Update `umol-py/src/stereo.rs` and
+- **S1g — Stereo-entity updates.** **Done.** Update `umol-py/src/stereo.rs` and
   `umol-py/tests/test_stereo.py` for both `StereoAtomUpdate` and `StereoBondUpdate`. Keep the pair
   together because their bindings share the same module and method structure. **Additive (green).**
   [dep: S0g]

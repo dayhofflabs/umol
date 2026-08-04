@@ -77,6 +77,27 @@ def test_multicenter_bond_update(update, expected):
     ) == expected
 
 
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("[2,2,2]#c-1#s1", "[2,2,2]#c-#s"),
+        ("*#c*#u*#s*#e*", "*#c*#u*#s*#e*"),
+        ("#e*", "#e*"),
+    ],
+)
+def test_multicenter_bond_update_parse(dsl, canonical):
+    update = MulticenterBondUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"MulticenterBondUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_multicenter_bond_update_parse_error():
+    with pytest.raises(ParseError):
+        MulticenterBondUpdate.parse("#c+#c-")
+
+
 def three_center_bond():
     # three borons (atom ids 0-2), one 3-center multicenter bond over all three
     return MoleculeAst.from_parts(

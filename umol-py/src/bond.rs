@@ -50,6 +50,20 @@ impl BondUpdate {
         })
     }
 
+    /// Parse a bond-update DSL string into a `BondUpdate`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstBondUpdate::from_str(s).map(Self).map_err(parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("BondUpdate.parse('{}')", self.0)
+    }
+
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }

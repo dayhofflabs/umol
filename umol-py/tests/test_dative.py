@@ -41,6 +41,27 @@ def test_dative_bond_update(update, expected):
     assert (update.order, update.constraints) == expected
 
 
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("2", "2"),
+        ("*", "*"),
+        ("#R(6)*", "#R(6)*"),
+    ],
+)
+def test_dative_bond_update_parse(dsl, canonical):
+    update = DativeBondUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"DativeBondUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_dative_bond_update_parse_error():
+    with pytest.raises(ParseError):
+        DativeBondUpdate.parse("#a#a")
+
+
 def ammonia_borane():
     # borane B (id 0) accepts from ammonia N (id 1); dative bond id 0
     return MoleculeAst.from_parts(

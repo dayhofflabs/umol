@@ -77,6 +77,27 @@ def test_aromatic_system_update(update, expected):
     ) == expected
 
 
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("[2,2,2]#c-1#s1", "[2,2,2]#c-#s"),
+        ("*#c*#u*#s*#e*", "*#c*#u*#s*#e*"),
+        ("#e*", "#e*"),
+    ],
+)
+def test_aromatic_system_update_parse(dsl, canonical):
+    update = AromaticSystemUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"AromaticSystemUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_aromatic_system_update_parse_error():
+    with pytest.raises(ParseError):
+        AromaticSystemUpdate.parse("#c+#c-")
+
+
 def benzene():
     # six aromatic carbons (atom ids 0-5), one aromatic system over all six
     return MoleculeAst.from_parts(

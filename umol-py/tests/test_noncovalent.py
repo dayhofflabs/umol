@@ -58,6 +58,27 @@ def test_noncovalent_bond_update(update, expected):
     assert (update.kind, update.constraints) == expected
 
 
+@pytest.mark.parametrize(
+    ("dsl", "canonical"),
+    [
+        ("", ""),
+        ("Ion#I!", "Ion#I!"),
+        ("*", "*"),
+        ("#I*", "#I*"),
+    ],
+)
+def test_noncovalent_bond_update_parse(dsl, canonical):
+    update = NoncovalentBondUpdate.parse(dsl)
+    assert str(update) == canonical
+    assert repr(update) == f"NoncovalentBondUpdate.parse('{canonical}')"
+    assert eval(repr(update)) == update
+
+
+def test_noncovalent_bond_update_parse_error():
+    with pytest.raises(ParseError):
+        NoncovalentBondUpdate.parse("#I#I")
+
+
 def hbond_molecule():
     # two oxygens (atom ids 0-1), one hydrogen bond over them (noncovalent id 0)
     return MoleculeAst.from_parts(
