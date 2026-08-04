@@ -100,6 +100,29 @@ def test_bondast_new():
     assert bond.charge == ValueAst.Undetermined()
 
 
+@pytest.mark.parametrize(
+    ("actual", "expected"),
+    [
+        pytest.param(BondAst.single(), BondAst(1), id="single"),
+        pytest.param(BondAst.double(), BondAst(2), id="double"),
+        pytest.param(BondAst.triple(), BondAst(3), id="triple"),
+        pytest.param(BondAst.quadruple(), BondAst(4), id="quadruple"),
+        pytest.param(
+            BondAst.aromatic(),
+            BondAst(
+                1,
+                constraints=BondConstraintsAst(
+                    [BondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+                ),
+            ),
+            id="aromatic",
+        ),
+    ],
+)
+def test_bondast_keyword_constructors(actual, expected):
+    assert actual == expected
+
+
 def test_bondast_new_kwargs():
     bond = BondAst(
         1,

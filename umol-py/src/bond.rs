@@ -7,8 +7,8 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
-    AtomId as AstAtomId, BondAst as AstBondAst, BondId as AstBondId, BondUpdate as AstBondUpdate,
-    MoleculeAst as AstMoleculeAst,
+    AtomId as AstAtomId, BondAst as AstBondAst, BondConstraintAst as AstBondConstraintAst,
+    BondId as AstBondId, BondUpdate as AstBondUpdate, MoleculeAst as AstMoleculeAst,
 };
 
 use crate::constraint::bond::{
@@ -140,6 +140,37 @@ impl BondAst {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
         BondAst(bond)
+    }
+
+    /// Construct the canonical `:single` bond shape.
+    #[staticmethod]
+    fn single() -> Self {
+        Self(AstBondAst::from_order(1))
+    }
+
+    /// Construct the canonical `:double` bond shape.
+    #[staticmethod]
+    fn double() -> Self {
+        Self(AstBondAst::from_order(2))
+    }
+
+    /// Construct the canonical `:triple` bond shape.
+    #[staticmethod]
+    fn triple() -> Self {
+        Self(AstBondAst::from_order(3))
+    }
+
+    /// Construct the canonical `:quadruple` bond shape.
+    #[staticmethod]
+    fn quadruple() -> Self {
+        Self(AstBondAst::from_order(4))
+    }
+
+    /// Construct the canonical `:aromatic` shape: an order-1 localized bond
+    /// carrying the aromatic constraint, not an aromatic bond order.
+    #[staticmethod]
+    fn aromatic() -> Self {
+        Self(AstBondAst::from_order(1).with_constraint(AstBondConstraintAst::aromatic(true)))
     }
 
     /// Parse a bond-DSL string (e.g. `"2#c-1"`) into a `BondAst`.
