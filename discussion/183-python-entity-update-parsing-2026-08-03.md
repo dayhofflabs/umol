@@ -1,6 +1,6 @@
 # 183 — Parse and render entity updates in Python
 
-Status: Proposed
+Status: Completed
 Date: 2026-08-03
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md)
 
@@ -161,13 +161,13 @@ Python test modules successfully.
 
 ### S2 — Integrated verification and closeout
 
-- **S2a — Full verification.** Format the workspace; run the complete `umol-ast` unit and property
-  suites with the `proptest` feature, clippy for the affected Rust crates and targets with warnings
-  denied, rebuild `umol-py` in its Python 3.13 virtual environment, and run the complete Python test
-  suite. **Additive (green).** [dep: S0a, S0b, S0c, S0d, S0e, S0f, S0g, S1a, S1b, S1c, S1d, S1e,
-  S1f, S1g]
-- **S2b — Closeout.** Mark this document `Completed` and update `000-status.md` after S2a passes.
-  **Additive (green).** [dep: S2a]
+- **S2a — Full verification.** **Done.** Format the workspace; run the complete `umol-ast` unit
+  and property suites with the `proptest` feature, clippy for the affected Rust crates and targets
+  with warnings denied, rebuild `umol-py` in its Python 3.13 virtual environment, and run the
+  complete Python test suite. **Additive (green).** [dep: S0a, S0b, S0c, S0d, S0e, S0f, S0g, S1a,
+  S1b, S1c, S1d, S1e, S1f, S1g]
+- **S2b — Closeout.** **Done.** Mark this document `Completed` and update `000-status.md` after S2a
+  passes. **Additive (green).** [dep: S2a]
 
 The critical path is the Rust API for an entity update, its corresponding Python methods, and full
 verification: `S0x -> S1x -> S2a -> S2b`. The S0 subitems are mutually independent, as are the S1
