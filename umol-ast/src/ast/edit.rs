@@ -266,8 +266,21 @@ pub struct AddBond {
     pub ast: BondAst,
 }
 
-/// One raw mutation entry in an [`Edits`] transaction batch. Topology and
-/// removal entries retain their semantic batching.
+/// One modification of a molecule the caller holds.
+///
+/// An edit is an imperative instruction, not an algebraic value. It refers to entities by their
+/// index in the transaction's initial host, and to entities created earlier in the same sequence
+/// as `New(n)`, since the host's concrete numbering is not known when the sequence is written.
+///
+/// Removal uses cascade deletion: taking an atom out of a ring also removes its incident bonds and
+/// any aromatic system it belonged to. This is an execution behavior, not a complete definition of
+/// SqPO rewriting. Because the edit need not name what it discards, and because concrete ids and
+/// compaction are only known during application, an edit cannot be inverted on its own. Checked
+/// application records an [`Undo`] as these effects are realized. `RemoveTopology` removes atoms
+/// and bonds together.
+///
+/// Edits have no canonical form. Sorting or deduplicating a sequence would invalidate the `New(n)`
+/// references that depend on its order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
     // Atoms / bonds
@@ -437,6 +450,8 @@ pub enum Edit {
 ///
 /// The public mutation surface is append-only. Mutable iteration, insertion, removal, reordering,
 /// and concatenation are deliberately absent because they could invalidate issued `New(n)` handles.
+/// Checked application resolves the handles against one host and returns the realized undo journal
+/// as a [`Transaction`](crate::ast::Transaction).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Edits {
     edits: Vec<Edit>,
@@ -1793,8 +1808,13 @@ impl CascadedConstraints {
     }
 }
 
-/// Realized rollback operation produced by the checked transaction path.
-// TODO: Review
+/// The information needed to reverse one applied [`Edit`], captured as it was applied.
+///
+/// Checked application resolves symbolic handles and observes concrete allocations, compactions,
+/// and cascaded removals that cannot be derived from the edit alone. Recorded undo entries are
+/// replayed immediately if a later edit in the same batch fails. After successful application they
+/// are returned in a [`Transaction`](crate::ast::Transaction) for explicit rollback against the
+/// exact post-transaction state.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undo {

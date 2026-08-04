@@ -913,7 +913,22 @@ impl ConstraintDelta {
     }
 }
 
-/// One resolved edit across the localized-topology families.
+/// One rule-relative modification carried by a reaction, over any entity kind.
+///
+/// A delta is an algebraic value, not an instruction to a particular molecule. Existing entities
+/// are identified in the reaction-owned id frame anchored by its left-hand side; additions extend
+/// that frame with new ids. The frame remains meaningful before any host or match is selected.
+///
+/// Deltas are complete: one that removes an entity carries that entity, and one that changes a
+/// field carries the old value as well as the new. The vocabulary is therefore closed under
+/// inversion, [`Delta::inverse`] is total, and applying it twice returns the original delta.
+/// Completeness is distinct from the DPO gluing condition: strict reaction application separately
+/// rejects a match when host structure outside the explicit rule would be left dangling. An SqPO
+/// application policy could instead cascade such host-relative removals, but the original delta
+/// would not describe that additional realized effect.
+///
+/// Applying a reaction converts its deltas into [`Edit`](crate::ast::edit::Edit) values against the
+/// matched host; the match supplies the translation between the two id spaces.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Delta {
     Atom(AtomDelta),
@@ -928,7 +943,7 @@ pub enum Delta {
 }
 
 impl Delta {
-    /// The inverse delta.
+    /// The inverse delta. Inversion is total and involutive.
     pub fn inverse(self) -> Self {
         match self {
             Self::Atom(delta) => Self::Atom(delta.inverse()),
@@ -2890,7 +2905,15 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
     }
 }
 
-/// The resolved-delta collection.
+/// A collection of [`Delta`] values, as carried by a reaction.
+///
+/// Before canonicalization, input order matters within a chain of operations on the same entity:
+/// an addition must precede modifications to that addition, and successive field changes must
+/// connect through their `old` and `new` values. Cross-entity source order is not semantic because
+/// deltas refer to entities directly through ids in the reaction-owned frame.
+/// [`Canonicalize::canonicalize`] folds each entity's chain, rejects contradictions, and sorts the
+/// normalized result. Unlike an edit sequence, the canonical form retains no incidental source
+/// ordering.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Deltas(Vec<Delta>);
 
