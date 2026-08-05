@@ -647,7 +647,7 @@ mod tests {
         DativeBondId as AstDativeBondId, Delta as AstDelta, Deltas as AstDeltas,
         Entity as AstEntity, MoleculeAst as AstMoleculeAst,
         MoleculeConstraint as AstMoleculeConstraint,
-        MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeParts as AstMoleculeParts,
+        MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeEntries as AstMoleculeEntries,
         MulticenterBondAst as AstMulticenterBondAst,
         MulticenterBondDelta as AstMulticenterBondDelta, MulticenterBondId as AstMulticenterBondId,
         NoncovalentBondAst as AstNoncovalentBondAst,
@@ -960,7 +960,7 @@ mod tests {
     #[rstest]
     #[case::empty(None, None, AstReactionAst::default())]
     #[case::populated(
-        Some(AstMoleculeAst::from_parts(AstMoleculeParts {
+        Some(AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         })),
@@ -969,7 +969,7 @@ mod tests {
             ast: AstAtomAst::from_element(ChemElement::O),
         })].into_iter().collect()),
         AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                 ..Default::default()
             }),
@@ -999,7 +999,7 @@ mod tests {
         Python::attach(|py| {
             let lhs = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1292,17 +1292,17 @@ mod tests {
 
     #[rstest]
     #[case::identity(
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         }),
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         }),
         vec![(0, 0)],
         AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                 ..Default::default()
             }),
@@ -1310,14 +1310,14 @@ mod tests {
         ),
     )]
     #[case::partial_correspondence(
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::O),
             ],
             ..Default::default()
         }),
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::N),
@@ -1326,7 +1326,7 @@ mod tests {
         }),
         vec![(0, 0)],
         AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::O),
@@ -1348,7 +1348,7 @@ mod tests {
         ),
     )]
     #[case::bond_order(
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
@@ -1356,7 +1356,7 @@ mod tests {
             bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
             ..Default::default()
         }),
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
@@ -1366,7 +1366,7 @@ mod tests {
         }),
         vec![(0, 0), (1, 1)],
         AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::C),
@@ -1521,14 +1521,14 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_from_sides_snapshot() {
         Python::attach(|py| {
-            let lhs_before = AstMoleculeAst::from_parts(AstMoleculeParts {
+            let lhs_before = AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::O),
                 ],
                 ..Default::default()
             });
-            let rhs_before = AstMoleculeAst::from_parts(AstMoleculeParts {
+            let rhs_before = AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::N),
@@ -1554,7 +1554,7 @@ mod tests {
             assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::F)],
                     ..Default::default()
                 });
@@ -1579,7 +1579,7 @@ mod tests {
 
             assert_eq!(
                 changed.lhs,
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::F)],
                     ..Default::default()
                 })
@@ -1604,7 +1604,7 @@ mod tests {
             let second_deltas = reaction.bind(py).borrow().deltas(py);
 
             *first_lhs.bind(py).borrow_mut().inner_mut() =
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 });
@@ -1630,7 +1630,7 @@ mod tests {
             assert_eq!(
                 reaction.bind(py).borrow().to_rust(py),
                 AstReactionAst::new(
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
@@ -1651,7 +1651,7 @@ mod tests {
             let reaction = Py::new(py, ReactionAst::new(py, None, None).unwrap()).unwrap();
             let lhs = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1699,7 +1699,7 @@ mod tests {
     fn test_reaction_ast_set_components_self() {
         Python::attach(|py| {
             let expected = AstReactionAst::new(
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 }),
@@ -1728,7 +1728,7 @@ mod tests {
             let source = ReactionAst::from_rust(
                 py,
                 AstReactionAst::new(
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::C).with_charge(0)],
                         ..Default::default()
                     }),
@@ -1784,7 +1784,7 @@ mod tests {
             let source = ReactionAst::from_rust(
                 py,
                 AstReactionAst::new(
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::C).with_charge(0)],
                         ..Default::default()
                     }),
@@ -1839,7 +1839,7 @@ mod tests {
 
             assert_eq!(
                 reversed.to_rust(py).lhs,
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C),
                         AstAtomAst::from_element(ChemElement::N),
@@ -2044,7 +2044,7 @@ mod tests {
 
             for composite in &composites {
                 *composite.lhs.bind(py).borrow_mut().inner_mut() =
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::F)],
                         ..Default::default()
                     });
@@ -2068,7 +2068,7 @@ mod tests {
 
                 assert_eq!(
                     composite.to_rust(py).lhs,
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::F)],
                         ..Default::default()
                     })
@@ -2113,14 +2113,14 @@ mod tests {
             assert_eq!(
                 [first.rhs().inner().clone(), second.rhs().inner().clone()],
                 [
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![
                             AstAtomAst::from_element(ChemElement::C).with_charge(1),
                             AstAtomAst::from_element(ChemElement::C),
                         ],
                         ..Default::default()
                     }),
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![
                             AstAtomAst::from_element(ChemElement::C),
                             AstAtomAst::from_element(ChemElement::C).with_charge(1),
@@ -2147,13 +2147,13 @@ mod tests {
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::N)],
                     ..Default::default()
                 });
             reaction.deltas = Py::new(py, Deltas::from_rust(AstDeltas::default())).unwrap();
             *host.bind(py).borrow_mut().inner_mut() =
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::F)],
                     ..Default::default()
                 });
@@ -2169,14 +2169,14 @@ mod tests {
             assert_eq!(
                 products,
                 vec![
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![
                             AstAtomAst::from_element(ChemElement::C).with_charge(1),
                             AstAtomAst::from_element(ChemElement::C),
                         ],
                         ..Default::default()
                     }),
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![
                             AstAtomAst::from_element(ChemElement::C),
                             AstAtomAst::from_element(ChemElement::C).with_charge(1),
@@ -2249,14 +2249,14 @@ mod tests {
             assert_eq!(
                 products,
                 vec![
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![
                             AstAtomAst::from_element(ChemElement::C).with_charge(1),
                             AstAtomAst::from_element(ChemElement::C),
                         ],
                         ..Default::default()
                     }),
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![
                             AstAtomAst::from_element(ChemElement::C),
                             AstAtomAst::from_element(ChemElement::C).with_charge(1),
@@ -2274,7 +2274,7 @@ mod tests {
             let reaction = ReactionAst::new(py, None, None).unwrap();
             let host = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C),
                         AstAtomAst::from_element(ChemElement::O),
@@ -2717,7 +2717,7 @@ mod tests {
             let populated = ReactionAst::from_rust(
                 py,
                 AstReactionAst::new(
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
@@ -2744,7 +2744,7 @@ mod tests {
     )]
     #[case::populated(
         AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                 ..Default::default()
             }),
@@ -2770,7 +2770,7 @@ mod tests {
             let reaction = ReactionAst::from_rust(
                 py,
                 AstReactionAst::new(
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
@@ -2780,7 +2780,7 @@ mod tests {
             .unwrap();
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C).with_charge(1)],
                     ..Default::default()
                 });
@@ -2838,7 +2838,7 @@ mod tests {
             let reaction = ReactionAst::from_rust(
                 py,
                 AstReactionAst::new(
-                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
                         atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
@@ -2862,7 +2862,7 @@ mod tests {
     #[rstest]
     #[case::empty(AstReactionAst::default())]
     #[case::populated(AstReactionAst::new(
-        AstMoleculeAst::from_parts(AstMoleculeParts {
+        AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         }),
@@ -2885,7 +2885,7 @@ mod tests {
     fn test_reaction_ast_to_rust() {
         Python::attach(|py| {
             let expected = AstReactionAst::new(
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 }),
@@ -2910,7 +2910,7 @@ mod tests {
     fn test_reaction_ast_to_rust_roundtrip() {
         Python::attach(|py| {
             let expected = AstReactionAst::new(
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 }),
@@ -2942,7 +2942,7 @@ mod tests {
 
     #[fixture]
     fn derivation_and_host() -> (AstReactionDerivation, AstMoleculeAst) {
-        let pattern = AstMoleculeAst::from_parts(AstMoleculeParts {
+        let pattern = AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
@@ -3064,7 +3064,7 @@ mod tests {
     ) {
         let (expected_derivation, _) = derivation_and_host;
         let expected_reaction = AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::C),
@@ -3183,7 +3183,7 @@ mod tests {
         Vec<AstMoleculeCorrespondence>,
     ) {
         let reaction = AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                 ..Default::default()
             }),
@@ -3195,7 +3195,7 @@ mod tests {
                 },
             })]),
         );
-        let host = AstMoleculeAst::from_parts(AstMoleculeParts {
+        let host = AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
@@ -3252,14 +3252,14 @@ mod tests {
         assert_eq!(
             [first.rhs().inner().clone(), second.rhs().inner().clone()],
             [
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C).with_charge(1),
                         AstAtomAst::from_element(ChemElement::C),
                     ],
                     ..Default::default()
                 }),
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C),
                         AstAtomAst::from_element(ChemElement::C).with_charge(1),
@@ -3294,7 +3294,7 @@ mod tests {
     #[rstest]
     fn test_reaction_application_iter_rejection() {
         let reaction = AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                 ..Default::default()
             }),
@@ -3303,7 +3303,7 @@ mod tests {
                 ast: AstAtomAst::from_element(ChemElement::C),
             })]),
         );
-        let host = AstMoleculeAst::from_parts(AstMoleculeParts {
+        let host = AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
@@ -3331,7 +3331,7 @@ mod tests {
         assert_eq!(
             [first.rhs().inner().clone(), second.rhs().inner().clone()],
             [
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C),
                         AstAtomAst::from_element(ChemElement::C),
@@ -3340,7 +3340,7 @@ mod tests {
                     bonds: vec![(AstAtomId(0), AstAtomId(2), AstBondAst::from_order(1))],
                     ..Default::default()
                 }),
-                AstMoleculeAst::from_parts(AstMoleculeParts {
+                AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C),
                         AstAtomAst::from_element(ChemElement::C),
@@ -3361,14 +3361,14 @@ mod tests {
             sum: AstValueAst::Lit(0),
         });
         let reaction = AstReactionAst::new(
-            AstMoleculeAst::from_parts(AstMoleculeParts {
+            AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                 constraints: constraint.clone().into(),
                 ..Default::default()
             }),
             AstDeltas::from_iter([AstDelta::Constraint(AstConstraintDelta::Remove(constraint))]),
         );
-        let host = AstMoleculeAst::from_parts(AstMoleculeParts {
+        let host = AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         });

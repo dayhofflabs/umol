@@ -219,7 +219,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::spin::UnpairedElectronsAst;
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use crate::ast::value::ValueAst;
@@ -227,7 +227,7 @@ mod tests {
     #[fixture]
     fn ethanol_fragment() -> MoleculeAst {
         // C-C-O: the two carbons share an element; oxygen differs.
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -264,7 +264,7 @@ mod tests {
     fn stereo_molecule() -> MoleculeAst {
         // Two stereo atoms of different kinds (Tetrahedral, SquarePlanar) and a
         // stereo bond, on a C₆ chain — enough to exercise kind + tag distinction.
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -340,7 +340,7 @@ mod tests {
     ) {
         // Two same-element atoms differing only in unpaired electrons; the color matches iff
         // the unpaired-electron components are indistinguishable under `features`.
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C)
                     .with_unpaired_electrons(unpaired_electrons_a),

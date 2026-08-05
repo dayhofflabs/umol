@@ -115,7 +115,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_binding_present() {
         AtomId(0),
         AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
-    let ast = MoleculeAst::from_parts(MoleculeParts {
+    let ast = MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         constraints: cs,
         ..Default::default()

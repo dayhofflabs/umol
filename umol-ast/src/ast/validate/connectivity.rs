@@ -13,7 +13,7 @@ use super::super::id::{
 };
 use super::super::molecule::MoleculeAst;
 #[cfg(test)]
-use super::super::molecule::MoleculeParts;
+use super::super::molecule::MoleculeEntries;
 
 /// Connectivity definitions.
 /// - `allow_disconnected`: allow disconnected atom / bond graph
@@ -221,7 +221,7 @@ mod tests {
 
     #[rstest]
     fn test_connectivity_validator_validate_disconnected_allowed() {
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -239,7 +239,7 @@ mod tests {
 
     #[rstest]
     fn test_connectivity_validator_validate_disconnected_forbidden() {
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -263,7 +263,7 @@ mod tests {
     #[rstest]
     fn test_connectivity_validator_validate_aromatic_spanning() {
         // an aromatic system over atoms in the two separate bond components — disallowed by default
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -291,7 +291,7 @@ mod tests {
     #[rstest]
     fn test_connectivity_validator_validate_noncovalent_spanning_allowed() {
         // a noncovalent bond bridging the two components — permitted by default
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),

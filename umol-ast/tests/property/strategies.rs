@@ -24,7 +24,7 @@ pub(crate) use umol_ast::ast::{
     DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsAst,
     ElementAst, Entity, EntityHandle, EntityKind, FluxionalityAst, FromAst, IntoAst,
     IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
-    MoleculeConstraint, MoleculeCorrespondence, MoleculeParts, MulticenterBondAst,
+    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondAst,
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
     MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
     MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
@@ -1596,7 +1596,7 @@ pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms,
                     bonds,
                     dative: dative_triples,
@@ -2631,7 +2631,7 @@ pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         bonds,
         ..Default::default()
@@ -2666,7 +2666,7 @@ pub(crate) struct StableAtomHandleTrace {
 
 impl StableAtomHandleTrace {
     pub(crate) fn base(&self) -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: INITIAL_HANDLE_ELEMENTS[..self.initial_count]
                 .iter()
                 .copied()
@@ -2747,7 +2747,7 @@ impl StableAtomHandleTrace {
                     AtomAst::from_element(element)
                 }
             });
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: initial
                 .chain(created)
                 .chain([AtomAst::from_element(SENTINEL_HANDLE_ELEMENT).with_charge(9_i64)])
@@ -2913,7 +2913,7 @@ impl InvalidTransactionBatch {
                 )
             })
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative,
@@ -3259,7 +3259,7 @@ fn transaction_all_entities_molecule() -> MoleculeAst {
     let ligands = (0..4)
         .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
         .collect::<Vec<_>>();
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
         bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -3751,7 +3751,7 @@ fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         bonds,
         dative,
@@ -3930,7 +3930,7 @@ pub(crate) fn consecutive_transaction_strategy(
             first != second
         })
         .prop_map(|(first, second)| {
-            let base = MoleculeAst::from_parts(MoleculeParts {
+            let base = MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C)],
                 ..Default::default()
             });
@@ -4007,7 +4007,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         bonds,
         dative,
@@ -4226,7 +4226,7 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 .zip(orders)
                 .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondAst::from_order(order)))
                 .collect();
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms,
                 bonds,
                 ..Default::default()
@@ -4367,7 +4367,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms,
                     bonds,
                     dative,

@@ -231,7 +231,7 @@ mod tests {
     use super::super::super::bond::BondAst;
     use super::super::super::constraint::Constraints;
     use super::super::super::dative::DativeBondAst;
-    use super::super::super::molecule::{MoleculeAst, MoleculeParts};
+    use super::super::super::molecule::{MoleculeAst, MoleculeEntries};
     use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use super::super::super::reaction::ReactionAst;
@@ -239,7 +239,7 @@ mod tests {
 
     #[rstest]
     #[case::co_deleted(ReactionAst::new(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
@@ -254,7 +254,7 @@ mod tests {
         ]),
     ))]
     #[case::no_deletion(ReactionAst::new(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
@@ -262,7 +262,7 @@ mod tests {
         Deltas::new(),
     ))]
     #[case::isolated_atom(ReactionAst::new(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             bonds: vec![],
             ..Default::default()
@@ -284,7 +284,7 @@ mod tests {
     #[rstest]
     #[case::bond(
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
                 ..Default::default()
@@ -298,7 +298,7 @@ mod tests {
     )]
     #[case::dative(
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::B)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
                 constraints: Constraints::new(),
@@ -313,7 +313,7 @@ mod tests {
     )]
     #[case::aromatic(
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
                 aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))],
                 constraints: Constraints::new(),
@@ -328,7 +328,7 @@ mod tests {
     )]
     #[case::multicenter(
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomAst::from_element(Element::B),
                     AtomAst::from_element(Element::H),
@@ -347,7 +347,7 @@ mod tests {
     )]
     #[case::noncovalent(
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
                 constraints: Constraints::new(),
@@ -375,7 +375,7 @@ mod tests {
     #[rstest]
     fn test_dpo_validator_validate_reaction_span() {
         let span = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
@@ -408,7 +408,7 @@ mod tests {
         // Delete the C but keep the C-O bond: the span has a `Removed` atom carrying an unchanged
         // bond.
         let span = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),

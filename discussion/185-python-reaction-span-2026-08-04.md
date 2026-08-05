@@ -332,7 +332,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   construction semantics in this subitem and verify representative empty, topology-only, overlay,
   stereo, and constrained molecules by full structural equality. Do not retain aliases for the old
   names. The Python-visible method may remain `from_parts` until S1c, but its Rust implementation
-  uses the renamed API. **Breaking (red→green).** [dep: none]
+  uses the renamed API. **Breaking (red→green).** [dep: none] **Done.**
 - **S1b — Add checked molecule-entry construction.** In `ast/molecule.rs`, add
   `MoleculeEntriesError` and `MoleculeAst::try_from_entries`. Validate bond endpoints; every atom
   participant of dative, aromatic, multicenter, and noncovalent entries; stereo-atom sites and

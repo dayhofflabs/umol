@@ -141,7 +141,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
 fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPreconditionError)>
 {
     (1u32..64).prop_flat_map(|missing| {
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             ..Default::default()
         });
@@ -277,7 +277,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
     prop_oneof![
         Just((
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::from_element(Element::C); 3],
                     dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default(),)],
                     ..Default::default()
@@ -295,7 +295,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::from_element(Element::C); 3],
                     aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default(),)],
                     ..Default::default()
@@ -312,7 +312,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::from_element(Element::C); 3],
                     multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondAst::default(),)],
                     ..Default::default()
@@ -329,7 +329,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::from_element(Element::C); 3],
                     noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default(),)],
                     ..Default::default()
@@ -346,7 +346,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::from_element(Element::C); 5],
                     stereo_atoms: vec![(
                         AtomId(0),
@@ -373,7 +373,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::from_element(Element::C); 6],
                     bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
                     stereo_bonds: vec![(
@@ -409,7 +409,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
             let discontinuous_old = first + gap;
             let new = discontinuous_old + second_step;
             ReactionAst::new(
-                MoleculeAst::from_parts(MoleculeParts {
+                MoleculeAst::from_entries(MoleculeEntries {
                     atoms: vec![AtomAst::default().with_charge(old)],
                     ..Default::default()
                 }),
@@ -437,7 +437,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C); kind.degree() + 1],
                 stereo_atoms: vec![(AtomId(0), ligands, StereoAtomAst::new(kind, 0u32))],
                 ..Default::default()
@@ -454,7 +454,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
     let stereo_bond = (0u32..16).prop_map(|offset| {
         let kind = StereoKind::CisTrans;
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C); 6],
                 bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
                 stereo_bonds: vec![(
@@ -525,14 +525,14 @@ proptest! {
             sum: ValueAst::Lit(0),
         });
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C)],
                 constraints: Constraints::from(constraint.clone()),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(constraint))]),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); host_atom_count],
             ..Default::default()
         });

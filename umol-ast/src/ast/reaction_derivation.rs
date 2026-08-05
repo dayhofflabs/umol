@@ -13,7 +13,7 @@ use super::correspondence::MoleculeCorrespondence;
 use super::id::AtomId;
 use super::molecule::MoleculeAst;
 #[cfg(test)]
-use super::molecule::MoleculeParts;
+use super::molecule::MoleculeEntries;
 use super::reaction::ReactionAst;
 
 /// A reaction fired once at a match: its two concrete molecule sides (`lhs` ⇒ `rhs`) plus the
@@ -96,7 +96,7 @@ mod tests {
     /// A `lhs ⇒ rhs` derivation over C-C, bond order 1 → 2, total atom map.
     #[fixture]
     fn derivation_parts() -> (MoleculeAst, MoleculeAst, MoleculeCorrespondence) {
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -104,7 +104,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_parts(MoleculeParts {
+        let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -224,7 +224,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_chain() {
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -232,7 +232,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
         });
-        let mid = MoleculeAst::from_parts(MoleculeParts {
+        let mid = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -240,7 +240,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_parts(MoleculeParts {
+        let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),

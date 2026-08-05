@@ -16,7 +16,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
     AtomAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp, MoleculeAst,
-    MoleculeParts, RelOp, UnpairedElectronsAst, ValueAst, ValuePredicate, ValueTerm,
+    MoleculeEntries, RelOp, UnpairedElectronsAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
@@ -95,7 +95,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)
         })
         .collect();
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         bonds,
         ..Default::default()

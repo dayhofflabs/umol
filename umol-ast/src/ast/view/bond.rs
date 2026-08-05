@@ -252,14 +252,14 @@ mod tests {
     use crate::ast::dative::DativeBondAst;
     use crate::ast::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::stereo::{CisTransStereoAst, StereoBondAst, StereoCoset, StereoKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -384,7 +384,7 @@ mod tests {
 
     #[fixture]
     fn stereo_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 4],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),

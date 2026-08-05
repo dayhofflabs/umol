@@ -565,7 +565,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AtomAst as AstAtomAst, AtomId as AstAtomId, ElectronCountsAst as AstElectronCountsAst,
-        MoleculeParts, MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
+        MoleculeEntries, MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
         MulticenterBondConstraintKey as AstMulticenterBondConstraintKey,
         MulticenterBondConstraintsAst as AstMulticenterBondConstraintsAst,
         UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
@@ -578,7 +578,7 @@ mod tests {
     /// Three borons (atom ids 0–2) joined by one 3-center multicenter bond over all
     /// three (electrons `[1,1,1]`), multicenter bond id 0.
     fn three_center_bond(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::B); 3],
             multicenter: vec![(
                 (0u32..3).map(AstAtomId).collect(),
@@ -1011,7 +1011,7 @@ mod tests {
     fn test_multicenter_bond_views_incident() {
         Python::attach(|py| {
             // three borons bonded plus one isolated boron (atom id 3)
-            let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+            let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::B); 4],
                 multicenter: vec![(
                     (0u32..3).map(AstAtomId).collect(),

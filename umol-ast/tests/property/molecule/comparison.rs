@@ -85,7 +85,7 @@ proptest! {
             third_order.rotate_left(1);
         }
         let molecule = |order: &[usize]| {
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: order.iter().map(|&index| atoms[index].clone()).collect(),
                 ..Default::default()
             })
@@ -146,11 +146,11 @@ proptest! {
         change_mapped_atom in any::<bool>(),
     ) {
         let count = atoms.len();
-        let left = MoleculeAst::from_parts(MoleculeParts {
+        let left = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             ..Default::default()
         });
-        let mut right = MoleculeAst::from_parts(MoleculeParts {
+        let mut right = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.into_iter().rev().collect(),
             ..Default::default()
         });

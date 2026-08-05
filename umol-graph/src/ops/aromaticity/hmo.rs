@@ -305,7 +305,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, MoleculeAst,
-        MoleculeParts, RingConfig, RingModel, RingSetKind, ValueAst,
+        MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -341,7 +341,7 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -354,7 +354,7 @@ mod tests {
             .iter()
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()

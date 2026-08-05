@@ -282,11 +282,11 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::id::AtomId;
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
 
     #[fixture]
     fn hexagon() -> AtomAutomorphism {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -304,7 +304,7 @@ mod tests {
 
     #[fixture]
     fn chain_3() -> AtomAutomorphism {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 3],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),

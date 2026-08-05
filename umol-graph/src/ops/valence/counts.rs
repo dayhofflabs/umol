@@ -5,7 +5,7 @@
 
 use thiserror::Error;
 #[cfg(test)]
-use umol_ast::ast::MoleculeParts;
+use umol_ast::ast::MoleculeEntries;
 use umol_ast::ast::{
     aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
     AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edits, IsotopeMassAst, Lattice,
@@ -666,7 +666,7 @@ mod tests {
         #[case] expected: Solution<(), CountsMismatch>,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!(input)],
             ..Default::default()
         });

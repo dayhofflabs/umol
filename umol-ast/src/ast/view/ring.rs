@@ -227,14 +227,14 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::molecule::MoleculeParts;
+    use crate::ast::molecule::MoleculeEntries;
     use crate::ast::ring::{RingConfig, RingModel};
 
     // A six-membered ring (atoms 0-5, bonds 0-5) with a pendant chain atom 6
     // (bond 6, atom 0 to atom 6).
     #[fixture]
     fn ring_with_chain() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 7],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),

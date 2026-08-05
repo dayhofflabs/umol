@@ -69,9 +69,9 @@ pub struct MoleculeAst {
     constraints: Constraints,
 }
 
-/// Constructor input for [`MoleculeAst::from_parts`].
+/// Constructor input for [`MoleculeAst::from_entries`].
 #[derive(Debug, Default, Clone)]
-pub struct MoleculeParts {
+pub struct MoleculeEntries {
     pub atoms: Vec<AtomAst>,
     pub bonds: Vec<(AtomId, AtomId, BondAst)>,
     pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)>,
@@ -96,12 +96,12 @@ impl MoleculeAst {
         MoleculeBuilder::new()
     }
 
-    /// Full structural constructor from a flat [`MoleculeParts`]: every
+    /// Full structural constructor from a flat [`MoleculeEntries`]: every
     /// entity-type field is supplied directly. The topology-only case fills
     /// just `atoms` and `bonds`; relations and molecule-level constraints go
     /// in the remaining fields.
-    pub fn from_parts(parts: MoleculeParts) -> Self {
-        let MoleculeParts {
+    pub fn from_entries(entries: MoleculeEntries) -> Self {
+        let MoleculeEntries {
             atoms,
             bonds,
             dative,
@@ -111,7 +111,7 @@ impl MoleculeAst {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        } = parts;
+        } = entries;
         let node_count = atoms.len();
         let edges: Vec<[u32; 2]> = bonds
             .iter()
@@ -1348,7 +1348,7 @@ impl MoleculeAst {
         let stereo_atom_count = molecules.iter().map(|m| m.stereo_atoms().count()).sum();
         let stereo_bond_count = molecules.iter().map(|m| m.stereo_bonds().count()).sum();
 
-        let mut parts = MoleculeParts {
+        let mut entries = MoleculeEntries {
             atoms: Vec::with_capacity(atom_count),
             bonds: Vec::with_capacity(bond_count),
             dative: Vec::with_capacity(dative_count),
@@ -1380,14 +1380,14 @@ impl MoleculeAst {
             let molecule_stereo_bond_count = molecule.stereo_bonds().count();
             let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-            parts
+            entries
                 .atoms
                 .extend(molecule.atoms().iter().map(|atom| atom.ast.clone()));
-            parts.bonds.extend(molecule.bonds().iter().map(|bond| {
+            entries.bonds.extend(molecule.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
                 (shift_atom(first), shift_atom(second), bond.ast.clone())
             }));
-            parts
+            entries
                 .dative
                 .extend(molecule.dative_bonds().iter().map(|bond| {
                     (
@@ -1396,7 +1396,7 @@ impl MoleculeAst {
                         bond.ast.clone(),
                     )
                 }));
-            parts
+            entries
                 .aromatic
                 .extend(molecule.aromatic_systems().iter().map(|system| {
                     (
@@ -1404,13 +1404,13 @@ impl MoleculeAst {
                         system.ast.clone(),
                     )
                 }));
-            parts.multicenter.extend(
+            entries.multicenter.extend(
                 molecule
                     .multicenter_bonds()
                     .iter()
                     .map(|bond| (bond.atom_ids().map(shift_atom).collect(), bond.ast.clone())),
             );
-            parts
+            entries
                 .noncovalent
                 .extend(molecule.noncovalent_bonds().iter().map(|bond| {
                     let [first, second] = bond.atom_ids();
@@ -1424,7 +1424,7 @@ impl MoleculeAst {
                     .iter()
                     .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
                     .collect();
-                parts
+                entries
                     .stereo_atoms
                     .push((site, ligands, molecule.stereo_atoms.data(id).clone()));
             }
@@ -1437,7 +1437,7 @@ impl MoleculeAst {
                     .iter()
                     .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
                     .collect();
-                parts
+                entries
                     .stereo_bonds
                     .push((site, ligands, molecule.stereo_bonds.data(id).clone()));
             }
@@ -1454,7 +1454,9 @@ impl MoleculeAst {
                     offset_map(stereo_bond_offset, molecule_stereo_bond_count),
                 );
                 for constraint in molecule.constraints.iter() {
-                    parts.constraints.push(constraint.clone().remap(&remapping));
+                    entries
+                        .constraints
+                        .push(constraint.clone().remap(&remapping));
                 }
             }
 
@@ -1495,7 +1497,7 @@ impl MoleculeAst {
             stereo_bond_offset += molecule_stereo_bond_count;
         }
 
-        (MoleculeAst::from_parts(parts), correspondences)
+        (MoleculeAst::from_entries(entries), correspondences)
     }
 
     /// Combine `self` and `other` as a fresh molecule by disjoint concatenation. Returns the

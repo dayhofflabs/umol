@@ -6,7 +6,7 @@ use std::str::FromStr;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AtomId as AstAtomId, BondId as AstBondId, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
-    MoleculeParts as AstMoleculeParts,
+    MoleculeEntries as AstMoleculeEntries,
 };
 use umol_ast::dsl::MoleculeDsl as AstMoleculeDsl;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
@@ -210,7 +210,7 @@ impl MoleculeAst {
             .iter()
             .map(|constraint| constraint.bind(py).borrow().to_rust(py))
             .collect::<Vec<_>>();
-        MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+        MoleculeAst(AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: ast_atoms,
             bonds: ast_bonds,
             dative: ast_dative,
@@ -1381,7 +1381,7 @@ mod tests {
     #[case(vec![ChemElement::C, ChemElement::O], 2)]
     fn test_molecule_ast_atoms(#[case] elements: Vec<ChemElement>, #[case] expected: usize) {
         let atoms = elements.into_iter().map(AstAtomAst::from_element).collect();
-        let molecule = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+        let molecule = MoleculeAst(AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms,
             ..Default::default()
         }));
@@ -1438,7 +1438,7 @@ mod tests {
                 AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
             let molecule = Py::new(
                 py,
-                MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     constraints: AstConstraints::from(vec![constraint.clone()]),
                     ..Default::default()
                 })),
@@ -1463,7 +1463,7 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_eq() {
         assert_eq!(MoleculeAst::new(), MoleculeAst::new());
-        let carbon = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+        let carbon = MoleculeAst(AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         }));
@@ -1473,7 +1473,7 @@ mod tests {
     #[rstest]
     #[case::empty(MoleculeAst::new(), "MoleculeAst(atoms=0, bonds=0)")]
     #[case::noncovalent(
-        MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+        MoleculeAst(AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::O),
                 AstAtomAst::from_element(ChemElement::O),

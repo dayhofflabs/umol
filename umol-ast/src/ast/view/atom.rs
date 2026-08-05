@@ -482,7 +482,7 @@ mod tests {
         StereoAtomId,
     };
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::stereo::{StereoAtomAst, StereoCoset, StereoKind, TetrahedralStereoAst};
@@ -491,7 +491,7 @@ mod tests {
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -577,7 +577,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_neighbors(molecule: MoleculeAst) {
-        let isolated = MoleculeAst::from_parts(MoleculeParts {
+        let isolated = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             ..Default::default()
         });
@@ -604,7 +604,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_bond_ids(molecule: MoleculeAst) {
-        let isolated = MoleculeAst::from_parts(MoleculeParts {
+        let isolated = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             ..Default::default()
         });
@@ -661,7 +661,7 @@ mod tests {
         if let Some(c) = constraint {
             atom.constraints.set(c);
         }
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -675,7 +675,7 @@ mod tests {
     #[case::donor(AtomId(0), ValueAst::Lit(1))]
     #[case::acceptor(AtomId(1), ValueAst::Lit(0))]
     fn test_atom_view_donated_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::C),
@@ -690,7 +690,7 @@ mod tests {
     fn test_atom_view_donated_pairs_constraint() {
         let mut atom = AtomAst::from_element(Element::N);
         atom.constraints.set(AtomConstraintAst::donated_pairs(1));
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -704,7 +704,7 @@ mod tests {
     #[case::donor(AtomId(0), ValueAst::Lit(0))]
     #[case::acceptor(AtomId(1), ValueAst::Lit(1))]
     fn test_atom_view_accepted_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::C),
@@ -719,7 +719,7 @@ mod tests {
     fn test_atom_view_accepted_pairs_constraint() {
         let mut atom = AtomAst::from_element(Element::C);
         atom.constraints.set(AtomConstraintAst::accepted_pairs(2));
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -740,14 +740,14 @@ mod tests {
 
     #[rstest]
     #[case::not_in_system(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             ..Default::default()
         }),
         ValueAst::Lit(0),
     )]
     #[case::aromatic_one(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
@@ -758,7 +758,7 @@ mod tests {
         ValueAst::Lit(1),
     )]
     #[case::aromatic_zero(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
@@ -769,7 +769,7 @@ mod tests {
         ValueAst::Lit(0),
     )]
     #[case::aromatic_two(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
@@ -780,7 +780,7 @@ mod tests {
         ValueAst::Lit(0),
     )]
     #[case::undetermined(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             aromatic: vec![(vec![AtomId(0)], AromaticSystemAst::default())],
             ..Default::default()
@@ -873,7 +873,7 @@ mod tests {
 
     #[fixture]
     fn stereo_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 10],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -983,7 +983,7 @@ mod tests {
 
     #[rstest]
     #[case::aromatic(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             aromatic: vec![(vec![AtomId(0)], AromaticSystemAst::default())],
             ..Default::default()
@@ -996,7 +996,7 @@ mod tests {
         ]),
     )]
     #[case::multicenter(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -1028,7 +1028,7 @@ mod tests {
         atom.constraints.set(AtomConstraintAst::aromatic_valence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
         ));
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -1062,7 +1062,7 @@ mod tests {
             .into_iter()
             .map(|(parts, electrons)| (parts, MulticenterBondAst::new(electrons)))
             .collect();
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -1080,7 +1080,7 @@ mod tests {
         atom.constraints.set(AtomConstraintAst::multicenter_valence(
             MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
         ));
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -1196,7 +1196,7 @@ mod tests {
         // 3-membered C ring, each with 0 implicit H (valence 2 from two ring
         // bonds), aromatic system electrons [1, 2, 0].
         let carbon = AtomAst::from_element(Element::C).with_implicit_hydrogens(0_i64);
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![carbon.clone(), carbon.clone(), carbon],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -1228,7 +1228,7 @@ mod tests {
         // H₃N→BH₃: N (3 H) donates a pair to B (3 H). Localized valence plus
         // implicit hydrogens plus aromatic covalence is 3 for both; the dative
         // bond (donated on N, accepted on B) is excluded.
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::N).with_implicit_hydrogens(3_i64),
                 AtomAst::from_element(Element::B).with_implicit_hydrogens(3_i64),
@@ -1251,7 +1251,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_multicenter_degree() {
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),

@@ -250,7 +250,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
-        ElementAst, MoleculeAst, MoleculeParts, RingConfig, RingModel, RingSetKind, ValueAst,
+        ElementAst, MoleculeAst, MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -301,7 +301,7 @@ mod tests {
             })
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -314,7 +314,7 @@ mod tests {
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()

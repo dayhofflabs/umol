@@ -2339,7 +2339,7 @@ mod tests {
         StereoKind,
     };
     use super::super::super::value::ValueAst;
-    use super::super::{MoleculeAst, MoleculeParts};
+    use super::super::{MoleculeAst, MoleculeEntries};
     use super::*;
     use crate::ast::BooleanAst;
 
@@ -3307,7 +3307,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_transact_molecule_constraint_subpattern(mut one_atom: MoleculeEditor) {
-        let pattern = MoleculeAst::from_parts(MoleculeParts {
+        let pattern = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 4],
             ..Default::default()
         });

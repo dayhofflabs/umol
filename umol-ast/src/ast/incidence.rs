@@ -7,7 +7,7 @@ use umol_graph_core::{Graph, NodeId};
 use super::entity::{Entity, EntityKind};
 use super::molecule::MoleculeAst;
 #[cfg(test)]
-use super::molecule::MoleculeParts;
+use super::molecule::MoleculeEntries;
 
 bitflags! {
     /// Which relation kinds become pseudonodes in [`MoleculeAst::incidence_graph`].
@@ -219,7 +219,7 @@ mod tests {
     // site 1; a stereo bond on site BondId(1).
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),

@@ -14,7 +14,7 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
 #[cfg(test)]
-use super::molecule::MoleculeParts;
+use super::molecule::MoleculeEntries;
 use super::remap::IdRemapping;
 
 /// A per-entity partial bijection between two molecules: atoms + bonds + the six overlay families.
@@ -629,7 +629,7 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_induce() {
         // lhs C-C-C with a dative (donor 2 → acceptor 1); rhs adds a fourth atom + bond.
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 3],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -638,7 +638,7 @@ mod tests {
             dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_parts(MoleculeParts {
+        let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 4],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -682,7 +682,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_correspondence_induce_partial() {
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 2],
             noncovalent: vec![
                 (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
@@ -690,7 +690,7 @@ mod tests {
             ],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_parts(MoleculeParts {
+        let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 2],
             noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
             ..Default::default()

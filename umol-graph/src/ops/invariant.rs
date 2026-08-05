@@ -491,7 +491,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst, IsotopeMassAst,
-        MoleculeAst, MoleculeParts, UnpairedElectronsAst, ValueAst,
+        MoleculeAst, MoleculeEntries, UnpairedElectronsAst, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -500,7 +500,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ground_methane(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
@@ -512,7 +512,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::undetermined_h(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
@@ -523,7 +523,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::orbital_count_mismatch(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
@@ -614,7 +614,7 @@ mod tests {
 
     #[rstest]
     #[case::ground_methane(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
@@ -629,7 +629,7 @@ mod tests {
 
     #[rstest]
     #[case::methane(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
@@ -648,7 +648,7 @@ mod tests {
         }],
     )]
     #[case::infeasible_h(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
@@ -662,7 +662,7 @@ mod tests {
     // Every enumerated field already ground: the single combination is returned
     // verbatim (oxygen atom, triplet, two lone pairs).
     #[case::all_fields_ground(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::O),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
@@ -684,7 +684,7 @@ mod tests {
     // Unpaired electrons fully ground to a non-maximal but valid coupling (3 electrons as a
     // doublet); lone pairs open and fixed by conservation to 1.
     #[case::ground_unpaired_electrons(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::N),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
@@ -705,7 +705,7 @@ mod tests {
     // Multiplicity is ground (singlet), unpaired-electron count open: conservation fixes the
     // count to 2, and the meet keeps the pinned multiplicity (open-shell singlet).
     #[case::ground_multiplicity(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
@@ -730,7 +730,7 @@ mod tests {
     // Unpaired electrons pinned to a physically impossible pair (count 2, multiplicity 2):
     // the only conservation-valid count is incompatible, so no candidate.
     #[case::inconsistent_unpaired_electrons(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
@@ -744,7 +744,7 @@ mod tests {
     // Both components open: unpaired-electron count fixed by conservation to 2, multiplicity
     // defaulted by `into_ground` to the maximum (triplet carbene).
     #[case::open_unpaired_electrons(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
@@ -764,7 +764,7 @@ mod tests {
     )]
     // Nonzero (given) charge: oxide anion, 7 electrons, resolves to a doublet.
     #[case::nonzero_charge(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::O),
             charge: ValueAst::Lit(-1),
             implicit_hydrogens: ValueAst::Lit(0),
@@ -785,7 +785,7 @@ mod tests {
     // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
     // preserved through `into_ground`.
     #[case::specified_isotope(
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Lit(13),
             charge: ValueAst::Lit(0),

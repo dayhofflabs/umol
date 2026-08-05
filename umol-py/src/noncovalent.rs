@@ -586,7 +586,7 @@ impl NoncovalentBondViewIter {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst as AstAtomAst, BooleanAst as AstBooleanAst, MoleculeParts,
+        AtomAst as AstAtomAst, BooleanAst as AstBooleanAst, MoleculeEntries,
         NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
         NoncovalentBondConstraintKey as AstNoncovalentBondConstraintKey,
         NoncovalentBondConstraintsAst as AstNoncovalentBondConstraintsAst,
@@ -1240,7 +1240,7 @@ mod tests {
 
     /// A molecule of two oxygens with one hydrogen bond over atoms (0, 1), noncovalent id 0.
     fn molecule_with_hbond(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::O),
                 AstAtomAst::from_element(ChemElement::O),
@@ -1426,7 +1426,7 @@ mod tests {
     /// Three atoms, one hydrogen bond over (0, 1), atom 2 isolated. For the collection
     /// negative cases (`of` / `incident` with no bond).
     fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::O),
                 AstAtomAst::from_element(ChemElement::O),

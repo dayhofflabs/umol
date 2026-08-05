@@ -860,7 +860,7 @@ mod tests {
     use crate::ast::coloring::ConstitutionColoring;
     use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::stereo::{
         StereoAtomAst, StereoBondAst, StereoCoset, StereoKind, Stereogenicity, Topicity,
     };
@@ -868,7 +868,7 @@ mod tests {
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             // Atom 6 is an unbonded spare: a node that is neither stereo-bond site nor ligand.
             atoms: vec![AtomAst::from_element(Element::C); 7],
             bonds: vec![
@@ -902,7 +902,7 @@ mod tests {
 
     #[fixture]
     fn virtual_ligand_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -937,7 +937,7 @@ mod tests {
     // a stereo atom on ring atom 0 and a stereo bond on ring bond 0-1.
     #[fixture]
     fn ring_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -1116,7 +1116,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_view_ligands(molecule: MoleculeAst) {
-        let empty = MoleculeAst::from_parts(MoleculeParts {
+        let empty = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -1159,7 +1159,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_view_stereo_queries() {
         // A clean stereocenter: C bonded to four distinct halogens.
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
@@ -1576,7 +1576,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_view_ligands(molecule: MoleculeAst) {
-        let empty = MoleculeAst::from_parts(MoleculeParts {
+        let empty = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),

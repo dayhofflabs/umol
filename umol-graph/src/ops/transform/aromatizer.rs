@@ -104,8 +104,8 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst, MoleculeParts,
-        RingConfig, UnpairedElectronsAst,
+        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst,
+        MoleculeEntries, RingConfig, UnpairedElectronsAst,
     };
     use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
@@ -131,7 +131,7 @@ mod tests {
                 (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(order))
             })
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()

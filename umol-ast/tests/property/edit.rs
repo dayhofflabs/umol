@@ -271,7 +271,7 @@ proptest! {
     fn test_molecule_editor_transact_handle_namespaces(
         kinds in transaction_entity_kind_order_strategy(),
     ) {
-        let base = MoleculeAst::from_parts(MoleculeParts {
+        let base = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
@@ -631,14 +631,14 @@ proptest! {
             unpaired_electrons: multicenter_components,
             ..Default::default()
         };
-        let base = MoleculeAst::from_parts(MoleculeParts {
+        let base = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom.clone(), AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), bond.clone())],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.clone())],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.clone())],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom.update(&atom_update), AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), bond.update(&bond_update))],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.update(&aromatic_update))],

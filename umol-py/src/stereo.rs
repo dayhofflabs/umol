@@ -1612,7 +1612,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AtomAst as AstAtomAst, BondAst as AstBondAst, FluxionalityAst as AstFluxionalityAst,
-        LigandSymmetryAst as AstLigandSymmetryAst, MoleculeParts,
+        LigandSymmetryAst as AstLigandSymmetryAst, MoleculeEntries,
         StereoAtomConstraintAst as AstStereoAtomConstraintAst,
         StereoAtomConstraintKey as AstStereoAtomConstraintKey,
         StereoAtomConstraintsAst as AstStereoAtomConstraintsAst,
@@ -3158,7 +3158,7 @@ mod tests {
     }
 
     fn stereo_atom_molecule(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C); 5],
             stereo_atoms: vec![(
                 AstAtomId(0),
@@ -3176,7 +3176,7 @@ mod tests {
     }
 
     fn stereo_bond_molecule(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C); 4],
             bonds: vec![
                 (AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2)),

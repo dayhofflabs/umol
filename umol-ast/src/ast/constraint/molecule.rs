@@ -792,7 +792,7 @@ mod tests {
     use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::spin::UnpairedElectronsAst;
     use crate::ast::value::{ValueAst, ValueTerm};
     use crate::ast::BooleanAst;
@@ -1439,7 +1439,7 @@ mod tests {
     )]
     #[case::sub_pattern_ignores_pattern(
         MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::default()], bonds: vec![], ..Default::default() })) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::default()], bonds: vec![], ..Default::default() })) },
         Ordering::Equal,
     )]
     #[case::sub_pattern_orders_by_anchor(

@@ -566,7 +566,7 @@ mod tests {
         AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
         AromaticSystemConstraintKey as AstAromaticSystemConstraintKey,
         AromaticSystemConstraintsAst as AstAromaticSystemConstraintsAst, AtomAst as AstAtomAst,
-        AtomId as AstAtomId, ElectronCountsAst as AstElectronCountsAst, MoleculeParts,
+        AtomId as AstAtomId, ElectronCountsAst as AstElectronCountsAst, MoleculeEntries,
         UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
@@ -577,7 +577,7 @@ mod tests {
     /// Benzene: six aromatic carbons (atom ids 0–5), one aromatic system over all six
     /// (electrons `[1,1,1,1,1,1]`), aromatic system id 0.
     fn benzene(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AstAtomAst::from_element(ChemElement::C); 6],
             aromatic: vec![(
                 (0u32..6).map(AstAtomId).collect(),
@@ -992,7 +992,7 @@ mod tests {
     fn test_aromatic_system_views_incident() {
         Python::attach(|py| {
             // benzene's six carbons plus one isolated carbon (atom id 6)
-            let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+            let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AstAtomAst::from_element(ChemElement::C); 7],
                 aromatic: vec![(
                     (0u32..6).map(AstAtomId).collect(),

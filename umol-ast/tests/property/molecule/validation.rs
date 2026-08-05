@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
 use umol_ast::ast::{
     AtomAst, AtomConstraintAst, AtomId, Constraint, ConstraintValidateConfig, ConstraintValidator,
-    Constraints, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm,
+    Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
 };
 use umol_chem::element::Element;
 use umol_graph_core::{
@@ -22,10 +22,10 @@ const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
 };
 
 fn molecule_with(constraint: Constraint) -> MoleculeAst {
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms: vec![AtomAst::from_element(Element::C)],
         constraints: Constraints::from(constraint),
-        ..MoleculeParts::default()
+        ..MoleculeEntries::default()
     })
 }
 
@@ -87,9 +87,9 @@ proptest! {
     #[test]
     fn test_constraint_inline_top_level_leaf_agreement(value in 0i64..=3) {
         let constraint = AtomConstraintAst::valence(value);
-        let inline = MoleculeAst::from_parts(MoleculeParts {
+        let inline = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C).with_constraint(constraint.clone())],
-            ..MoleculeParts::default()
+            ..MoleculeEntries::default()
         });
         let top_level = molecule_with(Constraint::Atom(AtomId(0), constraint));
         let validator = ConstraintValidator::new(CONFIG);

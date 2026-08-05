@@ -95,7 +95,7 @@ proptest! {
             prop::collection::vec(any::<bool>(), atom_count),
         )),
     ) {
-        let ast = MoleculeAst::from_parts(MoleculeParts {
+        let ast = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); atom_count],
             ..Default::default()
         });

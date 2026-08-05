@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
-    MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, StereoCoset,
+    MoleculeAst, MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, StereoCoset,
     TetrahedralStereoAst, TryIntoAst, UnpairedElectronsAst, ValueAst,
 };
 use umol_chem::element::Element;
@@ -116,7 +116,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
 
         let constraints = Constraints::new();
 
-        Ok(MoleculeAst::from_parts(MoleculeParts {
+        Ok(MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative: dative_bonds,
@@ -467,7 +467,7 @@ mod tests {
         let ast: MoleculeAst = (&methane).try_into_ast(&()).unwrap();
         assert_eq!(
             ast,
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst {
                     element: ElementAst::Lit(Element::C),
                     isotope_mass: IsotopeMassAst::Natural,

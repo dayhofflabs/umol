@@ -465,7 +465,7 @@ mod tests {
         AtomAst as AstAtomAst, BooleanAst as AstBooleanAst,
         DativeBondConstraintAst as AstDativeBondConstraintAst,
         DativeBondConstraintKey as AstDativeBondConstraintKey,
-        DativeBondConstraintsAst as AstDativeBondConstraintsAst, MoleculeParts,
+        DativeBondConstraintsAst as AstDativeBondConstraintsAst, MoleculeEntries,
         RingScope as AstRingScope, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
@@ -478,7 +478,7 @@ mod tests {
     /// An ammonia-borane adduct: borane B (id 0) accepts from ammonia N (id 1),
     /// dative bond id 0 (acceptor B, donor N, order 1).
     fn ammonia_borane(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::B),
                 AstAtomAst::from_element(ChemElement::N),
@@ -678,7 +678,7 @@ mod tests {
     fn test_dative_bond_views_incident() {
         Python::attach(|py| {
             // B(0) accepts from N(1); C(2) isolated
-            let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+            let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::B),
                     AstAtomAst::from_element(ChemElement::N),

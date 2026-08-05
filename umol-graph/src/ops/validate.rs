@@ -261,7 +261,7 @@ mod tests {
     use umol_ast::ast::{
         AtomAst, AtomConstraintAst, AtomId, Constraint, DativeBondId, ElementAst, Entity,
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
-        MoleculeConstraintContradiction, MoleculeParts, RelationalConstraint,
+        MoleculeConstraintContradiction, MoleculeEntries, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
         StereoAtomConstraintAst, StereoAtomId, StereoBondConstraintAst, StereoBondId, StereoKind,
         StereogenicityAst, UnpairedElectronsAst, ValueAst,
@@ -415,7 +415,7 @@ mod tests {
     #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
     #[case::invalid_spin(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::C),
                 charge: ValueAst::Lit(0),
@@ -437,7 +437,7 @@ mod tests {
         )),
     )]
     #[case::valid_coupling_not_yet_evaluated(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
@@ -447,7 +447,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_coupling(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
@@ -491,7 +491,7 @@ mod tests {
         Ok(Solution::Determined(())),
     )]
     #[case::contradiction(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             constraints: Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)).into(),
             ..Default::default()
@@ -504,7 +504,7 @@ mod tests {
         ))),
     )]
     #[case::error(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C)],
             constraints: Constraint::Atom(AtomId(1), AtomConstraintAst::valence(0)).into(),
             ..Default::default()
@@ -531,7 +531,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::partial_spin(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::C),
                 charge: ValueAst::Lit(0),
@@ -548,7 +548,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_spin(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::C),
                 charge: ValueAst::Lit(0),
@@ -570,7 +570,7 @@ mod tests {
         )),
     )]
     #[case::valid_coupling_not_yet_evaluated(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
@@ -580,7 +580,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_coupling(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
@@ -727,7 +727,7 @@ mod tests {
             count in 0_u8..5,
             multiplicity in 0_u8..8,
         ) {
-            let molecule = MoleculeAst::from_parts(MoleculeParts {
+            let molecule = MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst {
                     element: ElementAst::Lit(Element::C),
                     charge: ValueAst::Lit(0),

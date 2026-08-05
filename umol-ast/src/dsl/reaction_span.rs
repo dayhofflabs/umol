@@ -1684,7 +1684,7 @@ mod tests {
     use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ast::edit::BondFieldChange;
     use crate::ast::ligand::StereoLigandKind;
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::reaction::ReactionAst;
     use crate::ast::value::ValueAst;
 
@@ -1769,7 +1769,7 @@ mod tests {
     // Modified bond + Unchanged atoms + Unchanged molecule-constraint.
     #[rstest]
     #[case::modify(ReactionAst::new(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
@@ -1782,7 +1782,7 @@ mod tests {
     ))]
     // Unchanged / Removed / Added atoms and bonds + an Added constraint.
     #[case::add_remove(ReactionAst::new(
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()

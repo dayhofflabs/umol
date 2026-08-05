@@ -532,7 +532,7 @@ mod tests {
         AtomAst as AstAtomAst, BondConstraintAst as AstBondConstraintAst,
         BondConstraintKey as AstBondConstraintKey, BondConstraintsAst as AstBondConstraintsAst,
         BooleanAst as AstBooleanAst, CisTransStereoAst as AstCisTransStereoAst,
-        MoleculeParts as AstMoleculeParts, RingScope as AstRingScope,
+        MoleculeEntries as AstMoleculeEntries, RingScope as AstRingScope,
         StereoCoset as AstStereoCoset, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
@@ -545,7 +545,7 @@ mod tests {
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
@@ -1435,7 +1435,7 @@ mod tests {
     fn test_bond_views_of() {
         Python::attach(|py| {
             // three carbons, one bond 0–1; atom 2 is isolated
-            let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
+            let molecule = AstMoleculeAst::from_entries(AstMoleculeEntries {
                 atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::C),

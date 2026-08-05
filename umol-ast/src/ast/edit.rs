@@ -1925,7 +1925,7 @@ mod tests {
         NoncovalentBondConstraintsAst, RelationalConstraint, RingScope, StereoAtomConstraintsAst,
         StereoBondConstraintsAst, StereogenicityAst, SubPatternAnchor,
     };
-    use super::super::molecule::{MoleculeAst, MoleculeParts};
+    use super::super::molecule::{MoleculeAst, MoleculeEntries};
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::spin::UnpairedElectronsUpdate;
     use super::super::stereo::{
@@ -2675,7 +2675,7 @@ mod tests {
         );
 
         let expected = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![current.clone()],
             ..Default::default()
         });
@@ -2766,7 +2766,7 @@ mod tests {
         );
 
         let expected = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::default(), AtomAst::default()],
             bonds: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
@@ -2836,7 +2836,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::default(), AtomAst::default()],
             dative: vec![(vec![AtomId(0)], AtomId(1), current.clone())],
             ..Default::default()
@@ -2919,7 +2919,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::default(),
                 AtomAst::default(),
@@ -3009,7 +3009,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::default(),
                 AtomAst::default(),
@@ -3089,7 +3089,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::default(), AtomAst::default()],
             noncovalent: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
@@ -3166,7 +3166,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::default(); 5],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -3246,7 +3246,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::default(); 6],
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             stereo_bonds: vec![(

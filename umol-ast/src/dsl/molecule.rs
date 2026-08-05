@@ -50,7 +50,7 @@ use crate::ast::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-use crate::ast::molecule::{MoleculeAst, MoleculeParts};
+use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
@@ -1266,7 +1266,7 @@ impl MoleculeInput {
         // The context is complete; constraints resolve against it directly.
         let constraints = ConstraintsDsl(constraint_dsls).into_ast(&context)?;
 
-        let ast = MoleculeAst::from_parts(MoleculeParts {
+        let ast = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative: dative_list,

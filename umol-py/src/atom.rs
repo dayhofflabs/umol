@@ -887,7 +887,7 @@ mod tests {
     use umol_ast::ast::{
         AromaticValenceAst as AstAromaticValenceAst, AtomConstraintAst as AstAtomConstraintAst,
         AtomConstraintKey as AstAtomConstraintKey, AtomConstraintsAst as AstAtomConstraintsAst,
-        MemOp as AstMemOp, MoleculeParts as AstMoleculeParts, RingScope as AstRingScope,
+        MemOp as AstMemOp, MoleculeEntries as AstMoleculeEntries, RingScope as AstRingScope,
         StereoCoset as AstStereoCoset, TetrahedralStereoAst as AstTetrahedralStereoAst,
         UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
     };
@@ -956,7 +956,7 @@ mod tests {
     }
 
     fn carbon_oxygen(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
+        let molecule = AstMoleculeAst::from_entries(AstMoleculeEntries {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::O),
@@ -1508,7 +1508,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1555,7 +1555,7 @@ mod tests {
                 .with_constraint(AstAtomConstraintAst::valence(4));
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![atom],
                     ..Default::default()
                 })),
@@ -1594,7 +1594,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1803,7 +1803,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1850,7 +1850,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),

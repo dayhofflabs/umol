@@ -42,17 +42,17 @@ proptest! {
         let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
         let atom_deltas = AtomDelta::for_update(AtomId(0), &pattern_atom, &effective_update);
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::default()],
                 ..Default::default()
             }),
             Deltas::from_iter(atom_deltas.into_iter().map(Delta::Atom)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![host_atom],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![expected_atom],
             ..Default::default()
         });
@@ -81,19 +81,19 @@ proptest! {
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
         let bond_deltas = BondDelta::for_update(BondId(0), &pattern_bond, &effective_update);
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(bond_deltas.into_iter().map(Delta::Bond)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), host_bond)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), expected_bond)],
             ..Default::default()
@@ -127,19 +127,19 @@ proptest! {
             &effective_update,
         );
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(dative_deltas.into_iter().map(Delta::DativeBond)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             dative: vec![(vec![AtomId(0)], AtomId(1), host_bond)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             dative: vec![(vec![AtomId(0)], AtomId(1), expected_bond)],
             ..Default::default()
@@ -174,7 +174,7 @@ proptest! {
             &effective_update,
         );
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::N),
@@ -185,7 +185,7 @@ proptest! {
             }),
             Deltas::from_iter(aromatic_deltas.into_iter().map(Delta::AromaticSystem)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
@@ -194,7 +194,7 @@ proptest! {
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], host_system)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
@@ -233,7 +233,7 @@ proptest! {
             &effective_update,
         );
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::N),
@@ -244,7 +244,7 @@ proptest! {
             }),
             Deltas::from_iter(multicenter_deltas.into_iter().map(Delta::MulticenterBond)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
@@ -253,7 +253,7 @@ proptest! {
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], host_bond)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
@@ -291,19 +291,19 @@ proptest! {
             &effective_update,
         );
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(noncovalent_deltas.into_iter().map(Delta::NoncovalentBond)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             noncovalent: vec![(AtomId(0), AtomId(1), host_bond)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             noncovalent: vec![(AtomId(0), AtomId(1), expected_bond)],
             ..Default::default()
@@ -353,19 +353,19 @@ proptest! {
             AtomAst::from_element(Element::F),
         ];
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
                 stereo_atoms: vec![(AtomId(0), ligands.clone(), pattern_atom.clone())],
                 ..Default::default()
             }),
             Deltas::from_iter(stereo_atom_deltas.into_iter().map(Delta::StereoAtom)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             stereo_atoms: vec![(AtomId(0), ligands.clone(), host_atom)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             stereo_atoms: vec![(AtomId(0), ligands, expected_atom)],
             ..Default::default()
@@ -416,7 +416,7 @@ proptest! {
         ];
         let bonds = vec![(AtomId(0), AtomId(1), BondAst::from_order(2))];
         let reaction = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts {
+            MoleculeAst::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
                 bonds: bonds.clone(),
                 stereo_bonds: vec![(BondId(0), ligands.clone(), pattern_bond.clone())],
@@ -424,13 +424,13 @@ proptest! {
             }),
             Deltas::from_iter(stereo_bond_deltas.into_iter().map(Delta::StereoBond)),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(BondId(0), ligands.clone(), host_bond)],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_bonds: vec![(BondId(0), ligands, expected_bond)],
@@ -503,7 +503,7 @@ proptest! {
             .collect();
         let old_ast = StereoAtomAst::new(StereoKind::Tetrahedral, old);
         let new_ast = StereoAtomAst::new(StereoKind::Tetrahedral, new);
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_atoms: vec![(AtomId(0), rule_frame.clone(), old_ast.clone())],
@@ -520,7 +520,7 @@ proptest! {
             })]),
         );
         let host_frame = permutation.act(&rule_frame);
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_atoms: vec![(
@@ -530,7 +530,7 @@ proptest! {
             )],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_atoms: vec![(
@@ -572,7 +572,7 @@ proptest! {
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
         let rule_ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_atoms: vec![(AtomId(0), rule_frame.clone(), rule_ast.clone())],
@@ -587,7 +587,7 @@ proptest! {
                 ast: rule_ast,
             })]),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_atoms: vec![(
@@ -597,7 +597,7 @@ proptest! {
             )],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -641,7 +641,7 @@ proptest! {
             .collect();
         let old_ast = StereoBondAst::new(StereoKind::CisTrans, old);
         let new_ast = StereoBondAst::new(StereoKind::CisTrans, new);
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(BondId(0), rule_frame.clone(), old_ast.clone())],
@@ -658,7 +658,7 @@ proptest! {
             })]),
         );
         let host_frame = permutation.act(&rule_frame);
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(
@@ -668,7 +668,7 @@ proptest! {
             )],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_bonds: vec![(
@@ -715,7 +715,7 @@ proptest! {
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
         let rule_ast = StereoBondAst::new(StereoKind::CisTrans, coset);
-        let lhs = MoleculeAst::from_parts(MoleculeParts {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(BondId(0), rule_frame.clone(), rule_ast.clone())],
@@ -730,7 +730,7 @@ proptest! {
                 ast: rule_ast,
             })]),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts {
+        let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(
@@ -740,7 +740,7 @@ proptest! {
             )],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_parts(MoleculeParts {
+        let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()

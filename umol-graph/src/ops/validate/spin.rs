@@ -190,7 +190,9 @@ mod tests {
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use rstest::rstest;
-    use umol_ast::ast::{AromaticSystemAst, BondAst, MoleculeParts, MulticenterBondAst, ValueAst};
+    use umol_ast::ast::{
+        AromaticSystemAst, BondAst, MoleculeEntries, MulticenterBondAst, ValueAst,
+    };
     use umol_chem::spin::SpinMultiplicity;
 
     use super::*;
@@ -269,7 +271,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::all_entity_pairs_valid(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },
@@ -282,7 +284,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::partial_pair(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![AtomAst {
                 unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
                 ..Default::default()
@@ -292,7 +294,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::molecule_atom_reports_id(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)), ..Default::default() },
@@ -305,7 +307,7 @@ mod tests {
         }),
     )]
     #[case::bond_reports_id(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },
@@ -323,7 +325,7 @@ mod tests {
         }),
     )]
     #[case::aromatic_system_reports_id(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() }; 4],
             aromatic: vec![
                 (vec![AtomId(0), AtomId(1)], AromaticSystemAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() }),
@@ -337,7 +339,7 @@ mod tests {
         }),
     )]
     #[case::multicenter_bond_reports_id(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() }; 6],
             multicenter: vec![
                 (vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() }),
@@ -351,7 +353,7 @@ mod tests {
         }),
     )]
     #[case::underdetermined_does_not_mask_later_contradiction(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![
                 AtomAst {
                     unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
@@ -370,12 +372,12 @@ mod tests {
         }),
     )]
     fn test_spin_invariants_validator_validate(
-        #[case] parts: MoleculeParts,
+        #[case] entries: MoleculeEntries,
         #[case] expected: Solution<(), SpinInvariantsContradiction>,
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate(&MoleculeAst::from_parts(parts))
+                .validate(&MoleculeAst::from_entries(entries))
                 .unwrap(),
             expected,
         );
@@ -384,14 +386,14 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unrelated_constraint(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
             ..Default::default()
         },
         Solution::Determined(()),
     )]
     #[case::vacuous_coupling(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::default(),
@@ -401,7 +403,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::partial_coupling(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst {
@@ -414,7 +416,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::valid_coupling_not_yet_evaluated(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
@@ -424,7 +426,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_coupling(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
@@ -440,7 +442,7 @@ mod tests {
         }),
     )]
     #[case::invalid_coupling_nested_in_and_or_not(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: vec![
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
                 Constraint::Or(vec![
@@ -464,7 +466,7 @@ mod tests {
         }),
     )]
     #[case::valid_coupling_nested_in_not(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: Constraint::Not(Box::new(Constraint::Molecule(
                 MoleculeConstraint::UnpairedElectronCoupling {
                     atoms: None,
@@ -476,7 +478,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::earlier_underdetermination_does_not_mask_invalid_coupling(
-        MoleculeParts {
+        MoleculeEntries {
             constraints: vec![
                 Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                     atoms: None,
@@ -499,7 +501,7 @@ mod tests {
         }),
     )]
     #[case::underdetermined_entity_does_not_mask_invalid_coupling(
-        MoleculeParts {
+        MoleculeEntries {
             atoms: vec![AtomAst {
                 unpaired_electrons: UnpairedElectronsAst {
                     count: ValueAst::Undetermined,
@@ -522,12 +524,12 @@ mod tests {
         }),
     )]
     fn test_spin_invariants_validator_validate_constraints(
-        #[case] parts: MoleculeParts,
+        #[case] entries: MoleculeEntries,
         #[case] expected: Solution<(), SpinInvariantsContradiction>,
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate(&MoleculeAst::from_parts(parts))
+                .validate(&MoleculeAst::from_entries(entries))
                 .unwrap(),
             expected,
         );
@@ -550,7 +552,7 @@ mod tests {
                 2 => UnpairedElectronsAst::from((2_u8, 2_u8)),
                 _ => unreachable!("strategy only generates states 0..3"),
             };
-            let molecule = MoleculeAst::from_parts(MoleculeParts {
+            let molecule = MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomAst { unpaired_electrons: state_pair(atom_state), ..Default::default() },
                     AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },

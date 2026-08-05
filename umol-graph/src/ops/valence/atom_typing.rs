@@ -154,7 +154,9 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeParts, ValueAst};
+    use umol_ast::ast::{
+        AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeEntries, ValueAst,
+    };
     use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
@@ -294,7 +296,7 @@ mod tests {
         #[case] expected: Solution<(), AtomTypingMismatch>,
     ) {
         let resolver = AtomTypingValence::new(&atom_type_registry);
-        let molecule = MoleculeAst::from_parts(MoleculeParts {
+        let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!(input)],
             ..Default::default()
         });

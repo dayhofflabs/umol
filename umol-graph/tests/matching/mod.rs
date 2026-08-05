@@ -2,7 +2,7 @@ use rstest::rstest;
 use serde::Deserialize;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-    MoleculeParts, RingConfig, RingModel, RingSetKind, ValueAst,
+    MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
@@ -31,7 +31,7 @@ fn test_clar_aromaticity_find_from_rings() {
         .iter()
         .map(|&[a, b]| (AtomId(a), AtomId(b), BondAst::from_order(1)))
         .collect();
-    let ast = MoleculeAst::from_parts(MoleculeParts {
+    let ast = MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         bonds,
         ..Default::default()

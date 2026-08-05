@@ -412,7 +412,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
-        AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeParts,
+        AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeEntries,
         UnpairedElectronsAst, ValueAst,
     };
     use umol_ast::{mol_dsl, mol_dsl_ground};
@@ -473,7 +473,7 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -491,7 +491,7 @@ mod tests {
         let bonds: Vec<_> = (0..5)
             .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -870,7 +870,7 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        let mut ast = MoleculeAst::from_parts(MoleculeParts {
+        let mut ast = MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()

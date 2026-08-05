@@ -13,7 +13,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_ast::ast::{
-    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm,
+    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
     SubstructureMatchConfig, ValueAst,
 };
 use umol_chem::element::Element;
@@ -94,7 +94,7 @@ fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(u32, u32, BondAst)>) -> MoleculeAst 
         .into_iter()
         .map(|(s, t, b)| (AtomId(s), AtomId(t), b))
         .collect();
-    MoleculeAst::from_parts(MoleculeParts {
+    MoleculeAst::from_entries(MoleculeEntries {
         atoms,
         bonds: bond_list,
         ..Default::default()

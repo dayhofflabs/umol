@@ -13,7 +13,7 @@ use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
 #[cfg(test)]
-use super::molecule::MoleculeParts;
+use super::molecule::MoleculeEntries;
 use super::stereo::{coset_apply_permutation, StereoCoset, StereoKind, Stereogenicity, Topicity};
 use super::traits::AsLit;
 
@@ -597,7 +597,7 @@ mod tests {
         let bonds = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -611,7 +611,7 @@ mod tests {
         let bonds = (1..=4)
             .map(|i| (AtomId(0), AtomId(i), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_parts(MoleculeParts {
+        MoleculeAst::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_atoms: vec![(
@@ -741,7 +741,7 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_stereo_bond_symmetry() {
         // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
-        let mol = MoleculeAst::from_parts(MoleculeParts {
+        let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),

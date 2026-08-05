@@ -118,10 +118,10 @@ fn test_molecule_dsl_new_parsed(populated_molecule_dsl: MoleculeDsl) {
 
 #[rstest]
 #[case::empty("{:atoms [] :bonds []}", MoleculeAst::default())]
-#[case::two_atoms_one_bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
-#[case::atom_with_keyword(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![], ..Default::default() }))]
-#[case::bond_with_id_field(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
-#[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
+#[case::two_atoms_one_bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
+#[case::atom_with_keyword(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![], ..Default::default() }))]
+#[case::bond_with_id_field(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
+#[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
 fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
     let dsl = input.parse::<MoleculeDsl>().unwrap();
     assert_eq!(dsl.into_ast(&MoleculeDefaults::default()), expected);
