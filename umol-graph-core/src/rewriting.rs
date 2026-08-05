@@ -168,7 +168,8 @@ impl Graph {
                 .collect(),
             self.node_count(),
             object.node_count(),
-        );
+        )
+        .expect("graph compaction defines a valid node correspondence");
         let host_to_d_edges = Correspondence::new(
             (0..self.edge_count())
                 .filter_map(|e| {
@@ -178,7 +179,8 @@ impl Graph {
                 .collect(),
             self.edge_count(),
             object.edge_count(),
-        );
+        )
+        .expect("graph compaction defines a valid edge correspondence");
 
         let context =
             GraphCorrespondence::new(host_to_d_nodes.reverse(), host_to_d_edges.reverse());
@@ -295,7 +297,8 @@ mod tests {
                 .collect(),
             left.node_count(),
             right.node_count(),
-        );
+        )
+        .expect("correspondence producer preserves partial-bijection invariants");
         GraphCorrespondence::induced(left, right, nodes)
     }
 
@@ -340,8 +343,10 @@ mod tests {
         );
         // K = the two endpoints of L (nodes 0 and 2), no edges — the rest is deleted.
         let interface = GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3),
-            Correspondence::new(vec![], 0, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let pc = host
             .pushout_complement(&matched, &interface)
@@ -364,8 +369,10 @@ mod tests {
         );
         // K keeps both endpoints and both edges; only L node 1 is deleted → it dangles.
         let interface = GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3),
-            Correspondence::new(vec![(EdgeId(0), EdgeId(0)), (EdgeId(1), EdgeId(1))], 2, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0)), (EdgeId(1), EdgeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         assert_eq!(host.pushout_complement(&matched, &interface), None);
     }
@@ -378,12 +385,16 @@ mod tests {
         let right = Graph::new(3, &[[0, 1], [1, 2]]);
         // left → E and right → E onto a 2-node/1-edge E.
         let left_into = GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 2),
-            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 2, 1),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 2, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let right_into = GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(1), NodeId(0)), (NodeId(2), NodeId(1))], 3, 2),
-            Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1),
+            Correspondence::new(vec![(NodeId(1), NodeId(0)), (NodeId(2), NodeId(1))], 3, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let pb = left.pullback(&right, &left_into, &right_into);
         assert_eq!(pb.object.node_count(), 2);

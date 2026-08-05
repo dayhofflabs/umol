@@ -593,7 +593,8 @@ fn test_molecule_ast_equiv_under_rejects_partial_correspondence(
             ],
             4,
             4,
-        ),
+        )
+        .expect("correspondence producer preserves partial-bijection invariants"),
         correspondence.bonds().clone(),
         correspondence.dative_bonds().clone(),
         correspondence.aromatic_systems().clone(),

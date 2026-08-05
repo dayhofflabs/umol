@@ -936,7 +936,8 @@ mod tests {
                     vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
                     2,
                     3,
-                ),
+                )
+                .expect("correspondence producer preserves partial-bijection invariants"),
             )),
             MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::induce(
                 pattern.inner(),
@@ -945,7 +946,8 @@ mod tests {
                     vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
                     2,
                     3,
-                ),
+                )
+                .expect("correspondence producer preserves partial-bijection invariants"),
             )),
         ];
 
@@ -978,7 +980,8 @@ mod tests {
                     vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
                     2,
                     3,
-                ),
+                )
+                .expect("correspondence producer preserves partial-bijection invariants"),
             ),
         )];
         let config = SubstructureSearchConfig::from_rust(AstSubstructureMatchConfig {

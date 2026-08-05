@@ -488,8 +488,10 @@ impl<'g> McsState<'g> {
                 .collect(),
         };
         GraphCorrespondence::new(
-            Correspondence::new(mapping, self.a.node_count(), self.b.node_count()),
-            Correspondence::new(edges, self.a.edge_count(), self.b.edge_count()),
+            Correspondence::new(mapping, self.a.node_count(), self.b.node_count())
+                .expect("maximum-common-subgraph node pairs form a valid correspondence"),
+            Correspondence::new(edges, self.a.edge_count(), self.b.edge_count())
+                .expect("maximum-common-subgraph edge pairs form a valid correspondence"),
         )
     }
 }

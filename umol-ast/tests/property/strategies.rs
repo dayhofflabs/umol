@@ -53,7 +53,7 @@ pub(crate) use umol_ast::dsl::{
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
-use umol_graph_core::{Correspondence, EdgeId, NodeId};
+use umol_graph_core::{Correspondence, EdgeId};
 pub(crate) use umol_perm::{Orientation, Permutation};
 
 const ELEMENTS: &[Element] = &[
@@ -2254,39 +2254,63 @@ pub(crate) fn molecule_ast_structurally_unambiguous_strategy() -> impl Strategy<
 {
     molecule_ast_strategy().prop_filter(
         "entity incidence identifies at most one entity of each family",
-        |ast| {
-            let atom_images = (0..ast.atoms().count())
-                .map(NodeId::from)
-                .collect::<Vec<_>>();
-            let correspondence = MoleculeCorrespondence::induce(
-                ast,
-                ast,
-                Correspondence::from_images(&atom_images, ast.atoms().count()),
-            );
-            correspondence.is_total()
-                && correspondence_rights_are_unique(correspondence.atoms())
-                && correspondence_rights_are_unique(correspondence.bonds())
-                && correspondence_rights_are_unique(correspondence.dative_bonds())
-                && correspondence_rights_are_unique(correspondence.aromatic_systems())
-                && correspondence_rights_are_unique(correspondence.multicenter_bonds())
-                && correspondence_rights_are_unique(correspondence.noncovalent_bonds())
-                && correspondence_rights_are_unique(correspondence.stereo_atoms())
-                && correspondence_rights_are_unique(correspondence.stereo_bonds())
-        },
+        molecule_entity_incidence_is_unique,
     )
 }
 
-fn correspondence_rights_are_unique<Id>(correspondence: &Correspondence<Id>) -> bool
+fn molecule_entity_incidence_is_unique(ast: &MoleculeAst) -> bool {
+    all_unique(ast.bonds().iter().map(|bond| sorted_pair(bond.atom_ids())))
+        && all_unique(
+            ast.dative_bonds()
+                .iter()
+                .map(|dative| (dative.acceptor_id(), sorted(dative.donor_ids().collect()))),
+        )
+        && all_unique(
+            ast.aromatic_systems()
+                .iter()
+                .map(|aromatic| sorted(aromatic.atom_ids().collect())),
+        )
+        && all_unique(
+            ast.multicenter_bonds()
+                .iter()
+                .map(|multicenter| sorted(multicenter.atom_ids().collect())),
+        )
+        && all_unique(
+            ast.noncovalent_bonds()
+                .iter()
+                .map(|noncovalent| sorted_pair(noncovalent.atom_ids())),
+        )
+        && all_unique(
+            ast.stereo_atoms()
+                .iter()
+                .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+        )
+        && all_unique(
+            ast.stereo_bonds()
+                .iter()
+                .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+        )
+}
+
+fn all_unique<T>(values: impl IntoIterator<Item = T>) -> bool
 where
-    Id: Copy + Eq + Ord + From<usize> + Hash,
+    T: Eq + Hash,
 {
-    correspondence
-        .matched_pairs()
-        .iter()
-        .map(|&(_, right)| right)
-        .collect::<HashSet<_>>()
-        .len()
-        == correspondence.matched_pair_count()
+    let mut seen = HashSet::new();
+    values.into_iter().all(|value| seen.insert(value))
+}
+
+fn sorted<T: Ord>(mut values: Vec<T>) -> Vec<T> {
+    values.sort_unstable();
+    values
+}
+
+fn sorted_pair<T: Ord>([first, second]: [T; 2]) -> [T; 2] {
+    if first <= second {
+        [first, second]
+    } else {
+        [second, first]
+    }
 }
 
 /// Generate a `MoleculeMetadata` populated for an AST of the given counts. Entity
@@ -4217,7 +4241,8 @@ pub(crate) fn reaction_strategy() -> impl Strategy<Value = ReactionAst> {
 pub(crate) fn replacement_reaction_strategy() -> impl Strategy<Value = ReactionAst> {
     (molecule_ast_strategy(), molecule_ast_strategy()).prop_map(|(lhs, rhs)| {
         let correspondence =
-            Correspondence::new(Vec::new(), lhs.atoms().count(), rhs.atoms().count());
+            Correspondence::new(Vec::new(), lhs.atoms().count(), rhs.atoms().count())
+                .expect("correspondence producer preserves partial-bijection invariants");
         ReactionAst::from_sides(lhs, rhs, correspondence)
     })
 }

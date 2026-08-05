@@ -362,14 +362,22 @@ mod tests {
             .add_atom_alias("carbon", AtomDsl(AtomAst::from_element(Element::C)))
             .unwrap();
         let correspondence = MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
-            GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(BondId(0), BondId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(DativeBondId(0), DativeBondId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(AromaticSystemId(0), AromaticSystemId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(MulticenterBondId(0), MulticenterBondId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(StereoAtomId(0), StereoAtomId(1))], 1, 2),
-            GraphCoreCorrespondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2),
+            GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(BondId(0), BondId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(DativeBondId(0), DativeBondId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(AromaticSystemId(0), AromaticSystemId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(MulticenterBondId(0), MulticenterBondId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(StereoAtomId(0), StereoAtomId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         ));
 
         let remapped = MoleculeMetadata::from_rust(metadata).remap(&correspondence);

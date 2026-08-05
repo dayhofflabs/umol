@@ -1,7 +1,6 @@
 //! `ReactionAst` — an owned Python component facade over the Rust reaction AST.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
-use std::collections::HashSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
@@ -22,7 +21,7 @@ use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_core::{
     CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
-    Correspondence, NodeId,
+    Correspondence, CorrespondenceError, NodeId,
 };
 #[cfg(test)]
 use umol_graph_core::{
@@ -216,35 +215,35 @@ fn atom_correspondence(
     lhs_count: usize,
     rhs_count: usize,
 ) -> PyResult<Correspondence<NodeId>> {
-    let mut left_ids = HashSet::with_capacity(pairs.len());
-    let mut right_ids = HashSet::with_capacity(pairs.len());
-    let mut matched_pairs = Vec::with_capacity(pairs.len());
-
-    for (left, right) in pairs {
-        if left >= lhs_count {
-            return Err(PyValueError::new_err(format!(
-                "left atom id {left} out of range for {lhs_count} atoms"
-            )));
-        }
-        if right >= rhs_count {
-            return Err(PyValueError::new_err(format!(
-                "right atom id {right} out of range for {rhs_count} atoms"
-            )));
-        }
-        if !left_ids.insert(left) {
-            return Err(PyValueError::new_err(format!(
-                "duplicate left atom id {left}"
-            )));
-        }
-        if !right_ids.insert(right) {
-            return Err(PyValueError::new_err(format!(
-                "duplicate right atom id {right}"
-            )));
-        }
-        matched_pairs.push((NodeId::from(left), NodeId::from(right)));
-    }
-
-    Ok(Correspondence::new(matched_pairs, lhs_count, rhs_count))
+    let matched_pairs = pairs
+        .into_iter()
+        .map(|(left, right)| (NodeId::from(left), NodeId::from(right)))
+        .collect();
+    Correspondence::new(matched_pairs, lhs_count, rhs_count).map_err(|error| {
+        PyValueError::new_err(match error {
+            CorrespondenceError::LeftIdOutOfRange { id, count } => {
+                format!("left atom id {} out of range for {count} atoms", id.index())
+            }
+            CorrespondenceError::RightIdOutOfRange { id, count } => {
+                format!(
+                    "right atom id {} out of range for {count} atoms",
+                    id.index()
+                )
+            }
+            CorrespondenceError::DuplicateLeftId { id } => {
+                format!("duplicate left atom id {}", id.index())
+            }
+            CorrespondenceError::DuplicateRightId { id } => {
+                format!("duplicate right atom id {}", id.index())
+            }
+            CorrespondenceError::LeftCountMismatch { declared, actual } => {
+                format!("declared left atom count {declared} does not match actual count {actual}")
+            }
+            CorrespondenceError::RightCountMismatch { declared, actual } => {
+                format!("declared right atom count {declared} does not match actual count {actual}")
+            }
+        })
+    })
 }
 
 /// A reaction whose molecule and delta components remain live Python values.
@@ -2965,7 +2964,8 @@ mod tests {
         let correspondence = AstMoleculeCorrespondence::induce(
             &pattern,
             &host,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let derivation = reaction.apply_at(&host, &correspondence).unwrap();
         (derivation, host)
@@ -3033,7 +3033,8 @@ mod tests {
         let correspondence = AstMoleculeCorrespondence::induce(
             &middle,
             &middle,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let second = reaction.apply_at(&middle, &correspondence).unwrap();
         let first_value = ReactionDerivation::from_rust(first.clone());

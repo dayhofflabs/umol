@@ -19,6 +19,7 @@ fn correspondence_strategy() -> impl Strategy<Value = Correspondence<NodeId>> {
                     left_count,
                     right_count,
                 )
+                .expect("correspondence producer preserves partial-bijection invariants")
             })
     })
 }

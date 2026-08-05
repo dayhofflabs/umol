@@ -115,7 +115,8 @@ mod tests {
         let comap = MoleculeCorrespondence::induce(
             &lhs,
             &rhs,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         (lhs, rhs, comap)
     }
@@ -250,12 +251,14 @@ mod tests {
         let first_comap = MoleculeCorrespondence::induce(
             &lhs,
             &mid,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let second_comap = MoleculeCorrespondence::induce(
             &mid,
             &rhs,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let first = ReactionDerivation::new(lhs.clone(), mid.clone(), first_comap.clone());
         let second = ReactionDerivation::new(mid, rhs.clone(), second_comap.clone());

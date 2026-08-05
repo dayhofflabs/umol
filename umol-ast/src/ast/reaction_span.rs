@@ -100,6 +100,7 @@ where
         }
     }
     Correspondence::new(matched_pairs, left, right)
+        .unwrap_or_else(|_| panic!("recovered entity spans preserve partial-bijection invariants"))
 }
 
 impl MoleculeAst {
@@ -2274,7 +2275,8 @@ mod tests {
             ],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3);
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3)
+            .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
 
         let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
@@ -2301,7 +2303,8 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 3);
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 3)
+            .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
         let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
 
@@ -2332,7 +2335,8 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2);
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
         assert_eq!(
             left.difference_to(&right, &correspondence),
@@ -2363,7 +2367,8 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 2);
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 2)
+            .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
 
         let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);

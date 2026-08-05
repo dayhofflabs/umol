@@ -420,8 +420,10 @@ mod tests {
     #[fixture]
     fn overlap() -> GraphCorrespondence {
         GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(0))], 2, 2),
-            Correspondence::new(vec![], 1, 1),
+            Correspondence::new(vec![(NodeId(0), NodeId(0))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         )
     }
 
@@ -537,7 +539,8 @@ mod tests {
                 ],
                 4,
                 4,
-            ),
+            )
+            .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(
                 vec![
                     (EdgeId(0), EdgeId(0)),
@@ -546,7 +549,8 @@ mod tests {
                 ],
                 3,
                 3,
-            ),
+            )
+            .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let left = MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![AtomAst::from_element(Element::C); 4],
@@ -703,8 +707,10 @@ mod tests {
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
-            Correspondence::new((0..6u32).map(|i| (NodeId(i), NodeId(i))).collect(), 6, 6),
-            Correspondence::new(vec![], 0, 0),
+            Correspondence::new((0..6u32).map(|i| (NodeId(i), NodeId(i))).collect(), 6, 6)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let expected = admissible.then(|| self_mol.clone());
         assert_eq!(
@@ -786,8 +792,10 @@ mod tests {
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
-            Correspondence::new((0..4u32).map(|i| (NodeId(i), NodeId(i))).collect(), 4, 4),
-            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+            Correspondence::new((0..4u32).map(|i| (NodeId(i), NodeId(i))).collect(), 4, 4)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let expected = admissible.then(|| self_mol.clone());
         assert_eq!(

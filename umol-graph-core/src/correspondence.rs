@@ -6,16 +6,55 @@
 //! entity family (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally exposes the
 //! induced edge correspondence over the two graphs.
 
+use std::collections::BTreeSet;
+use std::error::Error;
+use std::fmt::{self, Debug, Display, Formatter};
+
 use crate::graph::{EdgeId, Graph, NodeId, Remapping};
+
+/// Failure to construct or contextually apply a correspondence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CorrespondenceError<Id> {
+    LeftIdOutOfRange { id: Id, count: usize },
+    RightIdOutOfRange { id: Id, count: usize },
+    DuplicateLeftId { id: Id },
+    DuplicateRightId { id: Id },
+    LeftCountMismatch { declared: usize, actual: usize },
+    RightCountMismatch { declared: usize, actual: usize },
+}
+
+impl<Id: Debug> Display for CorrespondenceError<Id> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LeftIdOutOfRange { id, count } => {
+                write!(f, "left id {id:?} is out of range for {count} entries")
+            }
+            Self::RightIdOutOfRange { id, count } => {
+                write!(f, "right id {id:?} is out of range for {count} entries")
+            }
+            Self::DuplicateLeftId { id } => write!(f, "left id {id:?} occurs more than once"),
+            Self::DuplicateRightId { id } => write!(f, "right id {id:?} occurs more than once"),
+            Self::LeftCountMismatch { declared, actual } => write!(
+                f,
+                "declared left count {declared} does not match actual count {actual}"
+            ),
+            Self::RightCountMismatch { declared, actual } => write!(
+                f,
+                "declared right count {declared} does not match actual count {actual}"
+            ),
+        }
+    }
+}
+
+impl<Id: Debug> Error for CorrespondenceError<Id> {}
 
 /// A partial bijection between two `Id` spaces: the matched `(left, right)` pairs; every unmatched
 /// id is reported on its side. Only the matched pairs are stored — unmatched ids are derived on
 /// demand, so the carrier stays cheap to produce on the hot enumeration path.
 ///
-/// Invariant: `matched_pairs` is sorted by left id (no duplicate lefts — it is a bijection), so
-/// `right_of` is a binary search and `left_unmatched` a single merge. Producers already emit this
-/// order (a subgraph-isomorphism match is query-index order; a maximum-common-subgraph is sorted by
-/// the first graph's node), so `new` only confirms it.
+/// Invariant: `matched_pairs` is a partial bijection within the declared id spaces and is sorted by
+/// left id, so `right_of` is a binary search and `left_unmatched` a single merge. `new` validates
+/// the partial-bijection invariant and establishes the ordering.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Correspondence<Id> {
     matched_pairs: Vec<(Id, Id)>,
@@ -27,13 +66,41 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// A correspondence from its matched `(left, right)` pairs over two id spaces of the given sizes.
     /// Every id of either side not appearing in `matched_pairs` is unmatched on that side. Pairs are
     /// sorted by left id to establish the lookup invariant (cheap when already sorted).
-    pub fn new(mut matched_pairs: Vec<(Id, Id)>, left_count: usize, right_count: usize) -> Self {
+    pub fn new(
+        mut matched_pairs: Vec<(Id, Id)>,
+        left_count: usize,
+        right_count: usize,
+    ) -> Result<Self, CorrespondenceError<Id>> {
+        let left_bound = Id::from(left_count);
+        let right_bound = Id::from(right_count);
+        let mut left_ids = BTreeSet::new();
+        let mut right_ids = BTreeSet::new();
+        for &(left, right) in &matched_pairs {
+            if left >= left_bound {
+                return Err(CorrespondenceError::LeftIdOutOfRange {
+                    id: left,
+                    count: left_count,
+                });
+            }
+            if right >= right_bound {
+                return Err(CorrespondenceError::RightIdOutOfRange {
+                    id: right,
+                    count: right_count,
+                });
+            }
+            if !left_ids.insert(left) {
+                return Err(CorrespondenceError::DuplicateLeftId { id: left });
+            }
+            if !right_ids.insert(right) {
+                return Err(CorrespondenceError::DuplicateRightId { id: right });
+            }
+        }
         matched_pairs.sort_unstable_by_key(|&(left, _)| left);
-        Self {
+        Ok(Self {
             matched_pairs,
             left_count,
             right_count,
-        }
+        })
     }
 
     /// A correspondence whose left space is dense (`0..images.len()`), pairing each left id `i` with
@@ -123,6 +190,7 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
             .filter_map(|&(left, middle)| other.right_of(middle).map(|right| (left, right)))
             .collect();
         Correspondence::new(matched_pairs, self.left_count, other.right_count)
+            .unwrap_or_else(|_| panic!("composition of valid correspondences is valid"))
     }
 
     /// Compose correspondences in iteration order. Returns `None` for an empty input and the value
@@ -142,6 +210,7 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
             .map(|&(left, right)| (right, left))
             .collect();
         Correspondence::new(matched_pairs, self.right_count, self.left_count)
+            .unwrap_or_else(|_| panic!("reversal of a valid correspondence is valid"))
     }
 }
 
@@ -190,7 +259,8 @@ impl GraphCorrespondence {
             nodes.edge_matched_pairs(left, right),
             left.edge_count(),
             right.edge_count(),
-        );
+        )
+        .expect("an induced edge correspondence is valid");
         Self { nodes, edges }
     }
 
@@ -282,7 +352,8 @@ mod tests {
         (
             Graph::new(3, &[[0, 1], [1, 2]]),
             Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
-            Correspondence::new(vec![(n(0), n(1)), (n(1), n(2)), (n(2), n(3))], 3, 4),
+            Correspondence::new(vec![(n(0), n(1)), (n(1), n(2)), (n(2), n(3))], 3, 4)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         )
     }
 
@@ -290,35 +361,91 @@ mod tests {
     fn graph_correspondences() -> [GraphCorrespondence; 3] {
         [
             GraphCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2),
-                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+                Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
             ),
             GraphCorrespondence::new(
-                Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3),
-                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2),
+                Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
             ),
             GraphCorrespondence::new(
-                Correspondence::new(vec![(NodeId(2), NodeId(0))], 3, 1),
-                Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1),
+                Correspondence::new(vec![(NodeId(2), NodeId(0))], 3, 1)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
             ),
         ]
     }
 
     #[rstest]
-    fn test_correspondence_matched_pairs() {
-        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
-        assert_eq!(c.matched_pairs(), &[(n(0), n(2)), (n(1), n(3))]);
-        assert_eq!(c.matched_pair_count(), 2);
+    #[case::empty(Vec::new(), 0, 0, Correspondence { matched_pairs: Vec::new(), left_count: 0, right_count: 0 })]
+    #[case::partial(
+        vec![(NodeId(1), NodeId(3))],
+        3,
+        4,
+        Correspondence { matched_pairs: vec![(NodeId(1), NodeId(3))], left_count: 3, right_count: 4 },
+    )]
+    #[case::unsorted(
+        vec![(NodeId(2), NodeId(0)), (NodeId(0), NodeId(3)), (NodeId(1), NodeId(1))],
+        3,
+        4,
+        Correspondence {
+            matched_pairs: vec![(NodeId(0), NodeId(3)), (NodeId(1), NodeId(1)), (NodeId(2), NodeId(0))],
+            left_count: 3,
+            right_count: 4,
+        },
+    )]
+    fn test_correspondence_new(
+        #[case] matched_pairs: Vec<(NodeId, NodeId)>,
+        #[case] left_count: usize,
+        #[case] right_count: usize,
+        #[case] expected: Correspondence<NodeId>,
+    ) {
+        assert_eq!(
+            Correspondence::new(matched_pairs, left_count, right_count),
+            Ok(expected),
+        );
     }
 
     #[rstest]
-    fn test_correspondence_new_sorts() {
-        let c = Correspondence::new(vec![(n(2), n(0)), (n(0), n(3)), (n(1), n(1))], 3, 4);
+    #[case::left_out_of_range(
+        vec![(NodeId(2), NodeId(0))],
+        2,
+        1,
+        CorrespondenceError::LeftIdOutOfRange { id: NodeId(2), count: 2 },
+    )]
+    #[case::right_out_of_range(
+        vec![(NodeId(0), NodeId(2))],
+        1,
+        2,
+        CorrespondenceError::RightIdOutOfRange { id: NodeId(2), count: 2 },
+    )]
+    #[case::duplicate_left(
+        vec![(NodeId(0), NodeId(0)), (NodeId(0), NodeId(1))],
+        1,
+        2,
+        CorrespondenceError::DuplicateLeftId { id: NodeId(0) },
+    )]
+    #[case::duplicate_right(
+        vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(1))],
+        2,
+        2,
+        CorrespondenceError::DuplicateRightId { id: NodeId(1) },
+    )]
+    fn test_correspondence_new_error(
+        #[case] matched_pairs: Vec<(NodeId, NodeId)>,
+        #[case] left_count: usize,
+        #[case] right_count: usize,
+        #[case] expected: CorrespondenceError<NodeId>,
+    ) {
         assert_eq!(
-            c.matched_pairs(),
-            &[(n(0), n(3)), (n(1), n(1)), (n(2), n(0))]
+            Correspondence::new(matched_pairs, left_count, right_count),
+            Err(expected),
         );
-        assert_eq!(c.right_of(n(2)), Some(n(0)));
     }
 
     #[rstest]
@@ -332,6 +459,14 @@ mod tests {
         assert_eq!(c.matched_pair_count(), 3);
         assert_eq!(c.left_unmatched(), Vec::<NodeId>::new());
         assert_eq!(c.right_unmatched(), vec![n(2)]);
+    }
+
+    #[rstest]
+    fn test_correspondence_matched_pairs() {
+        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants");
+        assert_eq!(c.matched_pairs(), &[(n(0), n(2)), (n(1), n(3))]);
+        assert_eq!(c.matched_pair_count(), 2);
     }
 
     #[rstest]
@@ -351,8 +486,10 @@ mod tests {
         assert_eq!(
             left.compose(&right),
             GraphCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(2))], 1, 3),
-                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2),
+                Correspondence::new(vec![(NodeId(0), NodeId(2))], 1, 3)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
             ),
         );
     }
@@ -369,8 +506,10 @@ mod tests {
             0 => None,
             1 => Some(graph_correspondences[0].clone()),
             3 => Some(GraphCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1),
-                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
             )),
             _ => unreachable!(),
         };
@@ -401,7 +540,8 @@ mod tests {
     #[case::matched_second(n(1), Some(n(3)))]
     #[case::unmatched(n(2), None)]
     fn test_correspondence_right_of(#[case] left: NodeId, #[case] expected: Option<NodeId>) {
-        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
+        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(c.right_of(left), expected);
     }
 
@@ -410,19 +550,22 @@ mod tests {
     #[case::matched_second(n(3), Some(n(1)))]
     #[case::unmatched(n(0), None)]
     fn test_correspondence_left_of(#[case] right: NodeId, #[case] expected: Option<NodeId>) {
-        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
+        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(c.left_of(right), expected);
     }
 
     #[rstest]
     fn test_correspondence_left_unmatched() {
-        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
+        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(c.left_unmatched(), vec![n(2)]);
     }
 
     #[rstest]
     fn test_correspondence_right_unmatched() {
-        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
+        let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(c.right_unmatched(), vec![n(0), n(1)]);
     }
 
@@ -452,7 +595,9 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(
-            Correspondence::new(matched_pairs, left_count, right_count).is_total(),
+            Correspondence::new(matched_pairs, left_count, right_count)
+                .expect("correspondence producer preserves partial-bijection invariants")
+                .is_total(),
             expected
         );
     }
@@ -467,7 +612,7 @@ mod tests {
             ],
             3,
             13,
-        ),
+        ).expect("correspondence producer preserves partial-bijection invariants"),
         Correspondence::new(
             vec![
                 (NodeId(10), NodeId(100)),
@@ -475,7 +620,7 @@ mod tests {
             ],
             13,
             102,
-        ),
+        ).expect("correspondence producer preserves partial-bijection invariants"),
         Correspondence::new(
             vec![
                 (NodeId(0), NodeId(100)),
@@ -483,7 +628,7 @@ mod tests {
             ],
             3,
             102,
-        ),
+        ).expect("correspondence producer preserves partial-bijection invariants"),
     )]
     #[case::mismatched_intermediate(
         Correspondence::new(
@@ -493,22 +638,22 @@ mod tests {
             ],
             2,
             3,
-        ),
+        ).expect("correspondence producer preserves partial-bijection invariants"),
         Correspondence::new(
             vec![(NodeId(0), NodeId(1))],
             1,
             2,
-        ),
+        ).expect("correspondence producer preserves partial-bijection invariants"),
         Correspondence::new(
             vec![(NodeId(0), NodeId(1))],
             2,
             2,
-        ),
+        ).expect("correspondence producer preserves partial-bijection invariants"),
     )]
     #[case::deletion_then_addition(
-        Correspondence::new(vec![], 1, 0),
-        Correspondence::new(vec![], 0, 1),
-        Correspondence::new(vec![], 1, 1),
+        Correspondence::new(vec![], 1, 0).expect("correspondence producer preserves partial-bijection invariants"),
+        Correspondence::new(vec![], 0, 1).expect("correspondence producer preserves partial-bijection invariants"),
+        Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
     )]
     fn test_correspondence_compose(
         #[case] left: Correspondence<NodeId>,
@@ -525,12 +670,12 @@ mod tests {
             vec![(NodeId(0), NodeId(1))],
             1,
             2,
-        )],
+        ).expect("correspondence producer preserves partial-bijection invariants")],
         Some(Correspondence::new(
             vec![(NodeId(0), NodeId(1))],
             1,
             2,
-        )),
+        ).expect("correspondence producer preserves partial-bijection invariants")),
     )]
     #[case::multiple(
         vec![
@@ -541,7 +686,7 @@ mod tests {
                 ],
                 2,
                 3,
-            ),
+            ).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(
                 vec![
                     (NodeId(0), NodeId(1)),
@@ -549,18 +694,18 @@ mod tests {
                 ],
                 3,
                 2,
-            ),
+            ).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(
                 vec![(NodeId(0), NodeId(2))],
                 1,
                 3,
-            ),
+            ).expect("correspondence producer preserves partial-bijection invariants"),
         ],
         Some(Correspondence::new(
             vec![(NodeId(1), NodeId(2))],
             2,
             3,
-        )),
+        ).expect("correspondence producer preserves partial-bijection invariants")),
     )]
     fn test_correspondence_compose_all(
         #[case] correspondences: Vec<Correspondence<NodeId>>,
@@ -572,7 +717,8 @@ mod tests {
     #[rstest]
     fn test_correspondence_reverse() {
         // pairs and counts swap; the left-unmatched id 2 becomes right-unmatched.
-        let c = Correspondence::new(vec![(n(0), n(3)), (n(1), n(1))], 3, 4);
+        let c = Correspondence::new(vec![(n(0), n(3)), (n(1), n(1))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants");
         let reversed = c.reverse();
         assert_eq!(reversed.matched_pairs(), &[(n(1), n(1)), (n(3), n(0))]);
         assert_eq!(reversed.left_unmatched(), vec![n(0), n(2)]);

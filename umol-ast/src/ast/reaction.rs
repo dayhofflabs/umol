@@ -1325,7 +1325,8 @@ impl ReactionAst {
             atom_matched_pairs,
             host.atoms().count(),
             product.atoms().count(),
-        );
+        )
+        .expect("correspondence producer preserves partial-bijection invariants");
         let comap = MoleculeCorrespondence::induce(host, &product, atom_map);
         Ok(ReactionDerivation::new(host.clone(), product, comap))
     }
@@ -1605,7 +1606,8 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2);
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(
             ReactionAst::from_sides(left.clone(), right, atoms),
             ReactionAst::new(
@@ -1749,23 +1751,11 @@ mod tests {
         ReactionAst::new(MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], ..Default::default() }), Deltas::new()),
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], ..Default::default() }),
         MoleculeCorrespondence::new(
-            Correspondence::new(vec![], 1, 1),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-        ),
-        ApplyError::CorrespondenceMismatch { entity: Entity::Atom(AtomId(0)) },
-    )]
-    #[case::atom_out_of_range(
-        ReactionAst::new(MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], ..Default::default() }), Deltas::new()),
-        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], ..Default::default() }),
-        MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 1),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         ),
         ApplyError::CorrespondenceMismatch { entity: Entity::Atom(AtomId(0)) },
     )]
@@ -1777,10 +1767,10 @@ mod tests {
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::from_images(&[NodeId(0), NodeId(1)], 2),
-            Correspondence::new(vec![], 1, 1), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         ),
         ApplyError::CorrespondenceMismatch { entity: Entity::Bond(BondId(0)) },
     )]
@@ -1792,10 +1782,10 @@ mod tests {
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2)], 3),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1),
-            Correspondence::new(vec![], 0, 0), Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         ),
         ApplyError::CorrespondenceMismatch { entity: Entity::NoncovalentBond(NoncovalentBondId(0)) },
     )]
@@ -1857,14 +1847,22 @@ mod tests {
             ..Default::default()
         });
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::new((0..6u32).map(|id| (NodeId(id), NodeId(id))).collect(), 6, 6),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1),
-            Correspondence::new(vec![], 0, 0),
+            Correspondence::new((0..6u32).map(|id| (NodeId(id), NodeId(id))).collect(), 6, 6)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let reaction = ReactionAst::new(lhs, Deltas::from_iter([delta]));
 
@@ -1927,14 +1925,22 @@ mod tests {
             ..Default::default()
         });
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::new((0..7u32).map(|id| (NodeId(id), NodeId(id))).collect(), 7, 7),
-            Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1),
+            Correspondence::new((0..7u32).map(|id| (NodeId(id), NodeId(id))).collect(), 7, 7)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let reaction = ReactionAst::new(lhs, Deltas::from_iter([delta]));
 
@@ -2086,7 +2092,8 @@ mod tests {
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::new(Vec::new(), 0, 0),
+            Correspondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let result = reaction.apply_at(&host, &correspondence).unwrap();
 

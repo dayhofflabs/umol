@@ -281,7 +281,8 @@ impl MoleculeAst {
                         .collect(),
                     pattern.atoms().count(),
                     host.atoms().count(),
-                );
+                )
+                .expect("correspondence producer preserves partial-bijection invariants");
                 pattern.verify_overlays(host, atoms)
             })
             .collect()
@@ -386,7 +387,8 @@ impl MoleculeAst {
             stereo_atom,
             pattern.stereo_atoms().count(),
             host.stereo_atoms().count(),
-        );
+        )
+        .expect("correspondence producer preserves partial-bijection invariants");
 
         let mut stereo_bond = Vec::new();
         for sp in pattern.stereo_bonds().iter() {
@@ -409,7 +411,8 @@ impl MoleculeAst {
             stereo_bond,
             pattern.stereo_bonds().count(),
             host.stereo_bonds().count(),
-        );
+        )
+        .expect("correspondence producer preserves partial-bijection invariants");
 
         Some(MoleculeCorrespondence::new(
             atoms,

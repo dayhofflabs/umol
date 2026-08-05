@@ -282,12 +282,14 @@ impl<'a> MatchingSearchState<'a> {
                 node_matched_pairs,
                 residual.node_count(),
                 self.graph.node_count(),
-            ),
+            )
+            .expect("residual node pairs form a valid correspondence"),
             Correspondence::new(
                 edge_matched_pairs,
                 residual.edge_count(),
                 self.graph.edge_count(),
-            ),
+            )
+            .expect("residual edge pairs form a valid correspondence"),
         );
         (residual, correspondence)
     }

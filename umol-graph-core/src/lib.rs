@@ -44,7 +44,7 @@ pub use algorithms::subgraph_isomorphism::{
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
-pub use correspondence::{Correspondence, GraphCorrespondence};
+pub use correspondence::{Correspondence, CorrespondenceError, GraphCorrespondence};
 pub use digraph::DiGraph;
 pub use graph::{
     compact_edge_vec, compact_node_vec, Compaction, EdgeId, Graph, Neighbor, NodeId, Remapping,

@@ -169,8 +169,10 @@ fn subgraph_from_mapping(
         }
     }
     GraphCorrespondence::new(
-        Correspondence::new(mapping, left.node_count(), right.node_count()),
-        Correspondence::new(edges, left.edge_count(), right.edge_count()),
+        Correspondence::new(mapping, left.node_count(), right.node_count())
+            .expect("common-subgraph node pairs form a valid correspondence"),
+        Correspondence::new(edges, left.edge_count(), right.edge_count())
+            .expect("common-subgraph edge pairs form a valid correspondence"),
     )
 }
 
@@ -338,8 +340,8 @@ mod tests {
         vec![],
         vec![],
         vec![GraphCorrespondence::new(
-            Correspondence::new(vec![], 0, 0),
-            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         )],
     )]
     #[case::isolated(
@@ -351,12 +353,12 @@ mod tests {
         vec![],
         vec![
             GraphCorrespondence::new(
-                Correspondence::new(vec![], 1, 1),
-                Correspondence::new(vec![], 0, 0),
+                Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
             ),
             GraphCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1),
-                Correspondence::new(vec![], 0, 0),
+                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
+                Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
             ),
         ],
     )]
@@ -368,8 +370,8 @@ mod tests {
         vec![],
         vec![],
         vec![GraphCorrespondence::new(
-            Correspondence::new(vec![], 1, 1),
-            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         )],
     )]
     fn test_direct_backtracking(

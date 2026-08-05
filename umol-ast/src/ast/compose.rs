@@ -829,8 +829,10 @@ mod tests {
             })]),
         );
         let overlap = GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
-            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let a_inverse = a.reverse().unwrap();
         let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");

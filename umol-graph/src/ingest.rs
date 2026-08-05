@@ -180,7 +180,8 @@ impl Interpret for ReactionSmiles {
         let rhs = interpret_molecule(&reaction.products, model, resolve_config)
             .map_err(ReactionInterpretationError::Products)?;
         let atom_correspondence =
-            Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count());
+            Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count())
+                .expect("correspondence producer preserves partial-bijection invariants");
 
         Ok(ReactionAst::from_sides(lhs, rhs, atom_correspondence))
     }
