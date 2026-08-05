@@ -515,7 +515,7 @@ mod tests {
     };
     use umol_graph::ingest::ingest_smiles;
     use umol_graph_core::{
-        Correspondence as GraphCoreCorrespondence, NodeId,
+        Correspondence as GraphCoreCorrespondence,
         RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
     };
@@ -933,7 +933,7 @@ mod tests {
                 pattern.inner(),
                 host.inner(),
                 GraphCoreCorrespondence::new(
-                    vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+                    vec![(AstAtomId(0), AstAtomId(0)), (AstAtomId(1), AstAtomId(1))],
                     2,
                     3,
                 )
@@ -943,7 +943,7 @@ mod tests {
                 pattern.inner(),
                 host.inner(),
                 GraphCoreCorrespondence::new(
-                    vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+                    vec![(AstAtomId(0), AstAtomId(1)), (AstAtomId(1), AstAtomId(0))],
                     2,
                     3,
                 )
@@ -977,7 +977,7 @@ mod tests {
                 pattern.inner(),
                 host.inner(),
                 GraphCoreCorrespondence::new(
-                    vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+                    vec![(AstAtomId(0), AstAtomId(0)), (AstAtomId(1), AstAtomId(1))],
                     2,
                     3,
                 )

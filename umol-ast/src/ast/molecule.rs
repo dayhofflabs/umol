@@ -406,8 +406,14 @@ impl MoleculeAst {
             };
             let [first, second] = self.graph.edge_endpoints(EdgeId::from(left));
             let (Some(mapped_first), Some(mapped_second)) = (
-                correspondence.atoms().right_of(first),
-                correspondence.atoms().right_of(second),
+                correspondence
+                    .atoms()
+                    .right_of(AtomId::from(first))
+                    .map(NodeId::from),
+                correspondence
+                    .atoms()
+                    .right_of(AtomId::from(second))
+                    .map(NodeId::from),
             ) else {
                 return false;
             };
@@ -430,13 +436,23 @@ impl MoleculeAst {
                 .dative_bonds
                 .participants_1(left_id)
                 .iter()
-                .map(|&atom| correspondence.atoms().right_of(atom))
+                .map(|&atom| {
+                    correspondence
+                        .atoms()
+                        .right_of(AtomId::from(atom))
+                        .map(NodeId::from)
+                })
                 .collect();
             let mapped_donors: Option<Vec<NodeId>> = self
                 .dative_bonds
                 .participants_2(left_id)
                 .iter()
-                .map(|&atom| correspondence.atoms().right_of(atom))
+                .map(|&atom| {
+                    correspondence
+                        .atoms()
+                        .right_of(AtomId::from(atom))
+                        .map(NodeId::from)
+                })
                 .collect();
             let (Some(mapped_acceptor), Some(mapped_donors)) = (mapped_acceptor, mapped_donors)
             else {
@@ -470,7 +486,12 @@ impl MoleculeAst {
                 .aromatic_systems
                 .participants(left_id)
                 .iter()
-                .map(|&atom| correspondence.atoms().right_of(atom))
+                .map(|&atom| {
+                    correspondence
+                        .atoms()
+                        .right_of(AtomId::from(atom))
+                        .map(NodeId::from)
+                })
                 .collect();
             let Some(order) = mapped.and_then(|participants| {
                 other
@@ -500,7 +521,12 @@ impl MoleculeAst {
                 .multicenter_bonds
                 .participants(left_id)
                 .iter()
-                .map(|&atom| correspondence.atoms().right_of(atom))
+                .map(|&atom| {
+                    correspondence
+                        .atoms()
+                        .right_of(AtomId::from(atom))
+                        .map(NodeId::from)
+                })
                 .collect();
             let Some(order) = mapped.and_then(|participants| {
                 other
@@ -530,7 +556,12 @@ impl MoleculeAst {
                 .noncovalent_bonds
                 .participants(left_id)
                 .iter()
-                .map(|&atom| correspondence.atoms().right_of(atom))
+                .map(|&atom| {
+                    correspondence
+                        .atoms()
+                        .right_of(AtomId::from(atom))
+                        .map(NodeId::from)
+                })
                 .collect();
             let Some(order) = mapped.and_then(|participants| {
                 other
@@ -560,7 +591,12 @@ impl MoleculeAst {
                 .stereo_atoms
                 .participants_1(left_id)
                 .iter()
-                .map(|&atom| correspondence.atoms().right_of(atom))
+                .map(|&atom| {
+                    correspondence
+                        .atoms()
+                        .right_of(AtomId::from(atom))
+                        .map(NodeId::from)
+                })
                 .collect();
             let mapped_ligands: Option<Vec<StereoLigand>> = self
                 .stereo_atoms
@@ -569,8 +605,8 @@ impl MoleculeAst {
                 .map(|ligand| {
                     correspondence
                         .atoms()
-                        .right_of(NodeId::from(ligand.atom_id))
-                        .map(|atom| StereoLigand::new(AtomId::from(atom), ligand.kind))
+                        .right_of(ligand.atom_id)
+                        .map(|atom| StereoLigand::new(atom, ligand.kind))
                 })
                 .collect();
             let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
@@ -618,8 +654,8 @@ impl MoleculeAst {
                 .map(|ligand| {
                     correspondence
                         .atoms()
-                        .right_of(NodeId::from(ligand.atom_id))
-                        .map(|atom| StereoLigand::new(AtomId::from(atom), ligand.kind))
+                        .right_of(ligand.atom_id)
+                        .map(|atom| StereoLigand::new(atom, ligand.kind))
                 })
                 .collect();
             let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
@@ -833,9 +869,8 @@ impl MoleculeAst {
             .map(|v| v.id)
             .collect();
 
-        let atom_images: Vec<NodeId> = host_atoms.iter().map(|&a| NodeId::from(a)).collect();
         MoleculeCorrespondence::new(
-            Correspondence::from_images(&atom_images, self.atoms().count()),
+            Correspondence::from_images(&host_atoms, self.atoms().count()),
             Correspondence::from_images(&host_bonds, self.bonds().count()),
             Correspondence::from_images(&host_dative_bonds, self.dative_bonds().count()),
             Correspondence::from_images(&host_aromatic_systems, self.aromatic_systems().count()),
@@ -854,7 +889,7 @@ impl MoleculeAst {
             .atoms()
             .matched_pairs()
             .iter()
-            .map(|&(_, host)| AtomId::from(host))
+            .map(|&(_, host)| host)
             .collect();
         let remove_atoms: Vec<AtomId> = (0..self.atoms().count())
             .map(AtomId::from)
@@ -881,7 +916,7 @@ impl MoleculeAst {
             .atoms()
             .matched_pairs()
             .iter()
-            .map(|&(_, host)| AtomId::from(host))
+            .map(|&(_, host)| host)
             .collect();
         let kept_bonds: HashSet<BondId> = sub
             .bonds()
@@ -1788,8 +1823,7 @@ impl MoleculeAst {
                 }
                 let entities = editor.build();
 
-                let atom_images: Vec<NodeId> = atoms.iter().map(|a| NodeId(a.0)).collect();
-                let atom_correspondence = Correspondence::from_images(&atom_images, atom_count);
+                let atom_correspondence = Correspondence::from_images(atoms, atom_count);
                 let correspondence =
                     MoleculeCorrespondence::induce(&entities, self, atom_correspondence);
 
@@ -2026,7 +2060,7 @@ fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> I
             .atoms()
             .matched_pairs()
             .iter()
-            .map(|&(compact, original)| (AtomId::from(original), AtomId::from(compact)))
+            .map(|&(compact, original)| (original, compact))
             .collect(),
         correspondence
             .bonds()

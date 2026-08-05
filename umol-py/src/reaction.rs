@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 #[cfg(test)]
 use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
 use umol_ast::ast::{
-    ApplyError as AstApplyError, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
+    ApplyError as AstApplyError, AtomId, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation,
     SubstructureMatchConfig as AstSubstructureMatchConfig,
@@ -21,7 +21,7 @@ use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_core::{
     CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
-    Correspondence, CorrespondenceError, NodeId,
+    Correspondence, CorrespondenceError,
 };
 #[cfg(test)]
 use umol_graph_core::{
@@ -214,10 +214,10 @@ fn atom_correspondence(
     pairs: Vec<(usize, usize)>,
     lhs_count: usize,
     rhs_count: usize,
-) -> PyResult<Correspondence<NodeId>> {
+) -> PyResult<Correspondence<AtomId>> {
     let matched_pairs = pairs
         .into_iter()
-        .map(|(left, right)| (NodeId::from(left), NodeId::from(right)))
+        .map(|(left, right)| (AtomId::from(left), AtomId::from(right)))
         .collect();
     Correspondence::new(matched_pairs, lhs_count, rhs_count).map_err(|error| {
         PyValueError::new_err(match error {
@@ -884,24 +884,24 @@ mod tests {
 
     #[rstest]
     #[case::empty(Vec::new(), 0, 0, Vec::new())]
-    #[case::partial(vec![(1, 2)], 3, 4, vec![(NodeId(1), NodeId(2))])]
+    #[case::partial(vec![(1, 2)], 3, 4, vec![(AstAtomId(1), AstAtomId(2))])]
     #[case::total(
         vec![(0, 1), (1, 0)],
         2,
         2,
-        vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+        vec![(AstAtomId(0), AstAtomId(1)), (AstAtomId(1), AstAtomId(0))],
     )]
     #[case::unsorted(
         vec![(2, 0), (0, 2)],
         3,
         3,
-        vec![(NodeId(0), NodeId(2)), (NodeId(2), NodeId(0))],
+        vec![(AstAtomId(0), AstAtomId(2)), (AstAtomId(2), AstAtomId(0))],
     )]
     fn test_atom_correspondence(
         #[case] pairs: Vec<(usize, usize)>,
         #[case] lhs_count: usize,
         #[case] rhs_count: usize,
-        #[case] expected_matched_pairs: Vec<(NodeId, NodeId)>,
+        #[case] expected_matched_pairs: Vec<(AstAtomId, AstAtomId)>,
     ) {
         let correspondence = atom_correspondence(pairs, lhs_count, rhs_count).unwrap();
 
@@ -2964,8 +2964,12 @@ mod tests {
         let correspondence = AstMoleculeCorrespondence::induce(
             &pattern,
             &host,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
-                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(
+                vec![(AstAtomId(0), AstAtomId(0)), (AstAtomId(1), AstAtomId(1))],
+                2,
+                2,
+            )
+            .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let derivation = reaction.apply_at(&host, &correspondence).unwrap();
         (derivation, host)
@@ -3033,8 +3037,12 @@ mod tests {
         let correspondence = AstMoleculeCorrespondence::induce(
             &middle,
             &middle,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
-                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(
+                vec![(AstAtomId(0), AstAtomId(0)), (AstAtomId(1), AstAtomId(1))],
+                2,
+                2,
+            )
+            .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let second = reaction.apply_at(&middle, &correspondence).unwrap();
         let first_value = ReactionDerivation::from_rust(first.clone());
@@ -3194,7 +3202,7 @@ mod tests {
             ],
             ..Default::default()
         });
-        let correspondences = [NodeId(0), NodeId(1)]
+        let correspondences = [AstAtomId(0), AstAtomId(1)]
             .into_iter()
             .map(|host_atom| {
                 AstMoleculeCorrespondence::induce(
@@ -3305,7 +3313,7 @@ mod tests {
             bonds: vec![(AstAtomId(1), AstAtomId(3), AstBondAst::from_order(1))],
             ..Default::default()
         });
-        let correspondences = [NodeId(0), NodeId(1), NodeId(2)]
+        let correspondences = [AstAtomId(0), AstAtomId(1), AstAtomId(2)]
             .into_iter()
             .map(|host_atom| {
                 AstMoleculeCorrespondence::induce(
@@ -3367,7 +3375,7 @@ mod tests {
         let correspondence = AstMoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::from_images(&[NodeId(0)], 1),
+            Correspondence::from_images(&[AstAtomId(0)], 1),
         );
         let mut application = ReactionApplicationIter::new(
             reaction,

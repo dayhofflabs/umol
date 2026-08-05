@@ -221,7 +221,19 @@ impl MoleculeAst {
                 subiso,
             )
             .into_iter()
-            .filter_map(|atoms| pattern.verify_overlays(host, atoms))
+            .filter_map(|nodes| {
+                let atoms = Correspondence::new(
+                    nodes
+                        .matched_pairs()
+                        .iter()
+                        .map(|&(left, right)| (AtomId::from(left), AtomId::from(right)))
+                        .collect(),
+                    nodes.left_count(),
+                    nodes.right_count(),
+                )
+                .expect("subgraph match preserves atom correspondence invariants");
+                pattern.verify_overlays(host, atoms)
+            })
             .collect()
     }
 
@@ -274,7 +286,7 @@ impl MoleculeAst {
                                 .right_of(NodeId(a))
                                 .expect("a pattern atom node is matched");
                             match host_levi.entity(host_node) {
-                                Entity::Atom(id) => (NodeId(a), NodeId::from(id)),
+                                Entity::Atom(id) => (AtomId(a), id),
                                 _ => unreachable!("a pattern atom node maps to a host atom node"),
                             }
                         })
@@ -297,7 +309,7 @@ impl MoleculeAst {
     fn verify_overlays(
         &self,
         host: &MoleculeAst,
-        atoms: Correspondence<NodeId>,
+        atoms: Correspondence<AtomId>,
     ) -> Option<MoleculeCorrespondence> {
         let pattern = self;
         let bonds = induced_bonds(pattern, host, &atoms);
@@ -437,7 +449,7 @@ fn overlay_matches<D: Lattice + RelationData>(
     host_ast: &D,
     pattern_atoms: &[AtomId],
     host_atoms: &[AtomId],
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
 ) -> bool {
     if pattern_ast.is_permutation_invariant() {
         return pattern_ast.matches(host_ast);
@@ -445,11 +457,9 @@ fn overlay_matches<D: Lattice + RelationData>(
     let order: Vec<ParticipantPosition> = host_atoms
         .iter()
         .map(|&host_atom| {
-            let pattern_atom = AtomId::from(
-                atoms
-                    .left_of(NodeId::from(host_atom))
-                    .expect("host overlay atom is matched"),
-            );
+            let pattern_atom = atoms
+                .left_of(host_atom)
+                .expect("host overlay atom is matched");
             ParticipantPosition(
                 pattern_atoms
                     .iter()
@@ -623,7 +633,7 @@ mod tests {
                         c.atoms()
                             .matched_pairs()
                             .iter()
-                            .map(|&(_, host)| AtomId::from(host))
+                            .map(|&(_, host)| host)
                             .collect()
                     })
                     .collect();

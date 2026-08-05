@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::{AtomId, RingConfig, RingModel, RingSetKind, ValueAst};
+use umol_ast::ast::{RingConfig, RingModel, RingSetKind, ValueAst};
 
 use crate::strategies::*;
 
@@ -122,8 +122,7 @@ proptest! {
                     .map(|&atom| {
                         correspondence
                             .atoms()
-                            .right_of(atom.into())
-                            .map(AtomId::from)
+                            .right_of(atom)
                             .ok_or_else(|| {
                                 TestCaseError::fail(format!(
                                     "component atom {atom:?} has no source atom"

@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_ast::ast::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 use umol_graph_core::{
-    Correspondence, NodeId, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use crate::strategies::*;
@@ -42,7 +42,7 @@ proptest! {
     #[test]
     fn test_reaction_ast_apply_at(reaction in reaction_strategy()) {
         let atom_count = reaction.lhs.atoms().count();
-        let atom_images = (0..atom_count).map(NodeId::from).collect::<Vec<_>>();
+        let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &reaction.lhs,
@@ -77,7 +77,7 @@ proptest! {
     #[test]
     fn test_reaction_derivation_roundtrip(reaction in reaction_strategy()) {
         let atom_count = reaction.lhs.atoms().count();
-        let atom_images = (0..atom_count).map(NodeId::from).collect::<Vec<_>>();
+        let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &reaction.lhs,

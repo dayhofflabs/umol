@@ -1,7 +1,6 @@
 //! A partial bijection between two `MoleculeAst` id spaces, per entity family.
 //!
-//! The atom part is a node-level `Correspondence<NodeId>` (aligned with the molecular graph, so the
-//! bond correspondence is its induced edge correspondence); the seven other families each carry a
+//! The atom part is a `Correspondence<AtomId>`; the seven other families each carry a
 //! `Correspondence` over their entity id. Valueless — pairing only; adding values and a direction
 //! lifts it to a reaction span.
 
@@ -22,7 +21,7 @@ use super::remap::IdRemapping;
 /// The matched/unmatched reads of each family are those of its `Correspondence`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeCorrespondence {
-    atoms: Correspondence<NodeId>,
+    atoms: Correspondence<AtomId>,
     bonds: Correspondence<BondId>,
     dative_bonds: Correspondence<DativeBondId>,
     aromatic_systems: Correspondence<AromaticSystemId>,
@@ -36,7 +35,7 @@ impl MoleculeCorrespondence {
     /// A correspondence from its eight per-family correspondences (the fully materialized form).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        atoms: Correspondence<NodeId>,
+        atoms: Correspondence<AtomId>,
         bonds: Correspondence<BondId>,
         dative_bonds: Correspondence<DativeBondId>,
         aromatic_systems: Correspondence<AromaticSystemId>,
@@ -66,7 +65,7 @@ impl MoleculeCorrespondence {
     /// induced pairing. To keep this infallible operation from panicking on such input, the first
     /// left entity found retains the right match and later collisions remain unmatched. No semantic
     /// correctness beyond a valid partial correspondence is promised for invalid input.
-    pub fn induce(lhs: &MoleculeAst, rhs: &MoleculeAst, atoms: Correspondence<NodeId>) -> Self {
+    pub fn induce(lhs: &MoleculeAst, rhs: &MoleculeAst, atoms: Correspondence<AtomId>) -> Self {
         let bonds = induced_bonds(lhs, rhs, &atoms);
         let dative_bonds = induced_dative_bonds(lhs, rhs, &atoms);
         let aromatic_systems = induced_aromatic_systems(lhs, rhs, &atoms);
@@ -169,11 +168,7 @@ impl MoleculeCorrespondence {
     /// The rhs entity matched to `left`, preserving its entity kind.
     pub fn right_of(&self, left: Entity) -> Option<Entity> {
         match left {
-            Entity::Atom(id) => self
-                .atoms
-                .right_of(NodeId::from(id))
-                .map(AtomId::from)
-                .map(Entity::Atom),
+            Entity::Atom(id) => self.atoms.right_of(id).map(Entity::Atom),
             Entity::Bond(id) => self.bonds.right_of(id).map(Entity::Bond),
             Entity::DativeBond(id) => self.dative_bonds.right_of(id).map(Entity::DativeBond),
             Entity::AromaticSystem(id) => self
@@ -196,11 +191,7 @@ impl MoleculeCorrespondence {
     /// The lhs entity matched to `right`, preserving its entity kind.
     pub fn left_of(&self, right: Entity) -> Option<Entity> {
         match right {
-            Entity::Atom(id) => self
-                .atoms
-                .left_of(NodeId::from(id))
-                .map(AtomId::from)
-                .map(Entity::Atom),
+            Entity::Atom(id) => self.atoms.left_of(id).map(Entity::Atom),
             Entity::Bond(id) => self.bonds.left_of(id).map(Entity::Bond),
             Entity::DativeBond(id) => self.dative_bonds.left_of(id).map(Entity::DativeBond),
             Entity::AromaticSystem(id) => self
@@ -249,11 +240,7 @@ impl MoleculeCorrespondence {
             "to_remapping requires every entity family to be total on the left",
         );
         IdRemapping::new(
-            self.atoms
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (AtomId::from(left), AtomId::from(right)))
-                .collect(),
+            self.atoms.matched_pairs().iter().copied().collect(),
             self.bonds.matched_pairs().iter().copied().collect(),
             self.dative_bonds.matched_pairs().iter().copied().collect(),
             self.aromatic_systems
@@ -276,8 +263,8 @@ impl MoleculeCorrespondence {
         )
     }
 
-    /// The atom correspondence (node-level — the spine the other families are induced from).
-    pub fn atoms(&self) -> &Correspondence<NodeId> {
+    /// The atom correspondence — the spine the other families are induced from.
+    pub fn atoms(&self) -> &Correspondence<AtomId> {
         &self.atoms
     }
 
@@ -322,12 +309,16 @@ impl MoleculeCorrespondence {
 pub(crate) fn induced_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
 ) -> Correspondence<BondId> {
-    let matched_pairs = atoms
-        .edge_matched_pairs(left.raw_graph(), right.raw_graph())
-        .into_iter()
-        .map(|(left, right)| (BondId::from(left), BondId::from(right)));
+    let matched_pairs = left.bonds().iter().filter_map(|bond| {
+        let [first, second] = bond.atom_ids();
+        let (first, second) = (atoms.right_of(first)?, atoms.right_of(second)?);
+        let right_bond = right
+            .raw_graph()
+            .find_edge(NodeId::from(first), NodeId::from(second))?;
+        Some((bond.id, BondId::from(right_bond)))
+    });
     Correspondence::new(
         retain_unique_rights(matched_pairs, right.bonds().count(), BondId::index),
         left.bonds().count(),
@@ -341,7 +332,7 @@ pub(crate) fn induced_bonds(
 pub(crate) fn induced_dative_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
 ) -> Correspondence<DativeBondId> {
     let matched_pairs = retain_unique_rights(
         left.dative_bonds().iter().filter_map(|dative| {
@@ -372,7 +363,7 @@ pub(crate) fn induced_dative_bonds(
 pub(crate) fn induced_aromatic_systems(
     left: &MoleculeAst,
     right: &MoleculeAst,
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
 ) -> Correspondence<AromaticSystemId> {
     let matched_pairs = retain_unique_rights(
         left.aromatic_systems().iter().filter_map(|aromatic| {
@@ -398,7 +389,7 @@ pub(crate) fn induced_aromatic_systems(
 pub(crate) fn induced_multicenter_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
 ) -> Correspondence<MulticenterBondId> {
     let matched_pairs = retain_unique_rights(
         left.multicenter_bonds().iter().filter_map(|multicenter| {
@@ -424,7 +415,7 @@ pub(crate) fn induced_multicenter_bonds(
 pub(crate) fn induced_noncovalent_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
 ) -> Correspondence<NoncovalentBondId> {
     let matched_pairs = retain_unique_rights(
         left.noncovalent_bonds().iter().filter_map(|noncovalent| {
@@ -450,13 +441,13 @@ pub(crate) fn induced_noncovalent_bonds(
 }
 
 /// The rhs partner of a lhs atom under the atom correspondence, if matched.
-pub(crate) fn map_atom(atoms: &Correspondence<NodeId>, atom: AtomId) -> Option<AtomId> {
-    atoms.right_of(NodeId::from(atom)).map(AtomId::from)
+pub(crate) fn map_atom(atoms: &Correspondence<AtomId>, atom: AtomId) -> Option<AtomId> {
+    atoms.right_of(atom)
 }
 
 /// The rhs partners of a set of lhs atoms, or `None` if any is unmatched.
 fn map_atoms(
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
     lhs: impl IntoIterator<Item = AtomId>,
 ) -> Option<Vec<AtomId>> {
     lhs.into_iter().map(|atom| map_atom(atoms, atom)).collect()
@@ -465,7 +456,7 @@ fn map_atoms(
 /// The rhs-frame ligands (each ligand's atom mapped, its kind kept), or `None` if any ligand's
 /// atom is unmatched.
 pub(crate) fn map_ligands(
-    atoms: &Correspondence<NodeId>,
+    atoms: &Correspondence<AtomId>,
     ligands: Vec<StereoLigand>,
 ) -> Option<Vec<StereoLigand>> {
     ligands
@@ -520,7 +511,7 @@ mod tests {
     fn correspondence() -> MoleculeCorrespondence {
         // distinct pairs per family so a mis-wired accessor is caught.
         MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(1))], 2, 2)
+            Correspondence::new(vec![(AtomId(0), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![(BondId(0), BondId(2))], 2, 3)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -543,7 +534,7 @@ mod tests {
     fn composition_chain() -> [MoleculeCorrespondence; 3] {
         [
             MoleculeCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2)
+                Correspondence::new(vec![(AtomId(0), AtomId(1))], 1, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 Correspondence::new(vec![(BondId(0), BondId(1))], 1, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -561,7 +552,7 @@ mod tests {
                     .expect("correspondence producer preserves partial-bijection invariants"),
             ),
             MoleculeCorrespondence::new(
-                Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3)
+                Correspondence::new(vec![(AtomId(1), AtomId(2))], 2, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 Correspondence::new(vec![(BondId(1), BondId(2))], 2, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -579,7 +570,7 @@ mod tests {
                     .expect("correspondence producer preserves partial-bijection invariants"),
             ),
             MoleculeCorrespondence::new(
-                Correspondence::new(vec![(NodeId(2), NodeId(0))], 3, 1)
+                Correspondence::new(vec![(AtomId(2), AtomId(0))], 3, 1)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 Correspondence::new(vec![(BondId(2), BondId(0))], 3, 1)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -603,7 +594,7 @@ mod tests {
     fn test_molecule_correspondence_accessors(correspondence: MoleculeCorrespondence) {
         assert_eq!(
             correspondence.atoms().matched_pairs(),
-            &[(NodeId(0), NodeId(1))]
+            &[(AtomId(0), AtomId(1))]
         );
         assert_eq!(
             correspondence.bonds().matched_pairs(),
@@ -659,9 +650,9 @@ mod tests {
         });
         let atoms = Correspondence::new(
             vec![
-                (NodeId(0), NodeId(0)),
-                (NodeId(1), NodeId(1)),
-                (NodeId(2), NodeId(2)),
+                (AtomId(0), AtomId(0)),
+                (AtomId(1), AtomId(1)),
+                (AtomId(2), AtomId(2)),
             ],
             3,
             4,
@@ -673,9 +664,9 @@ mod tests {
         assert_eq!(
             c.atoms().matched_pairs(),
             &[
-                (NodeId(0), NodeId(0)),
-                (NodeId(1), NodeId(1)),
-                (NodeId(2), NodeId(2))
+                (AtomId(0), AtomId(0)),
+                (AtomId(1), AtomId(1)),
+                (AtomId(2), AtomId(2))
             ]
         );
         assert_eq!(
@@ -708,7 +699,7 @@ mod tests {
         let correspondence = MoleculeCorrespondence::induce(
             &lhs,
             &rhs,
-            Correspondence::from_images(&[NodeId(0), NodeId(1)], 2),
+            Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
         );
 
         assert_eq!(
@@ -725,7 +716,7 @@ mod tests {
         assert_eq!(
             left.compose(&right),
             MoleculeCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(2))], 1, 3)
+                Correspondence::new(vec![(AtomId(0), AtomId(2))], 1, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 Correspondence::new(vec![(BondId(0), BondId(2))], 1, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -757,7 +748,7 @@ mod tests {
             0 => None,
             1 => Some(composition_chain[0].clone()),
             3 => Some(MoleculeCorrespondence::new(
-                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1)
+                Correspondence::new(vec![(AtomId(0), AtomId(0))], 1, 1)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -786,7 +777,7 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_reverse(correspondence: MoleculeCorrespondence) {
         let reversed = correspondence.reverse();
-        assert_eq!(reversed.atoms().matched_pairs(), &[(NodeId(1), NodeId(0))]);
+        assert_eq!(reversed.atoms().matched_pairs(), &[(AtomId(1), AtomId(0))]);
         assert_eq!(reversed.bonds().matched_pairs(), &[(BondId(2), BondId(0))]);
         assert_eq!(
             reversed.dative_bonds().matched_pairs(),
@@ -813,7 +804,7 @@ mod tests {
             &[(StereoBondId(8), StereoBondId(0))]
         );
         // Counts swap too: rhs atom 0 becomes an unmatched lhs atom.
-        assert_eq!(reversed.atoms().left_unmatched(), vec![NodeId(0)]);
+        assert_eq!(reversed.atoms().left_unmatched(), vec![AtomId(0)]);
     }
 
     #[rstest]
@@ -905,7 +896,7 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_is_total() {
         let complete = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(0)], 1),
+            Correspondence::from_images(&[AtomId(0)], 1),
             Correspondence::from_images(&[BondId(0)], 1),
             Correspondence::from_images(&[DativeBondId(0)], 1),
             Correspondence::from_images(&[AromaticSystemId(0)], 1),
@@ -958,7 +949,7 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_to_remapping() {
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(1), NodeId(0)], 2),
+            Correspondence::from_images(&[AtomId(1), AtomId(0)], 2),
             Correspondence::from_images(&[BondId(1), BondId(0)], 2),
             Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 2),
             Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 2),

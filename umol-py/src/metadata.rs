@@ -248,7 +248,7 @@ mod tests {
     };
     use umol_ast::dsl::AtomDsl;
     use umol_chem::element::Element;
-    use umol_graph_core::{Correspondence as GraphCoreCorrespondence, NodeId};
+    use umol_graph_core::Correspondence as GraphCoreCorrespondence;
 
     use super::*;
     use crate::error::MetadataError;
@@ -362,7 +362,7 @@ mod tests {
             .add_atom_alias("carbon", AtomDsl(AtomAst::from_element(Element::C)))
             .unwrap();
         let correspondence = MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
-            GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(1))], 1, 2)
+            GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(1))], 1, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             GraphCoreCorrespondence::new(vec![(BondId(0), BondId(1))], 1, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),

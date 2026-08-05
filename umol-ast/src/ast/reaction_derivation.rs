@@ -7,9 +7,10 @@
 //! function : one evaluation) and carries the ground-truth atom map — `apply` created the atoms, so
 //! no post-hoc diff is needed to recover it; `to_reaction` abstracts back to the rule layer.
 
-use umol_graph_core::{Correspondence, NodeId};
+use umol_graph_core::Correspondence;
 
 use super::correspondence::MoleculeCorrespondence;
+use super::id::AtomId;
 use super::molecule::MoleculeAst;
 #[cfg(test)]
 use super::molecule::MoleculeParts;
@@ -46,7 +47,7 @@ impl ReactionDerivation {
     }
 
     /// The atom-level slice of the comap — the per-step atom map.
-    pub fn atom_map(&self) -> &Correspondence<NodeId> {
+    pub fn atom_map(&self) -> &Correspondence<AtomId> {
         self.comap.atoms()
     }
 
@@ -83,7 +84,6 @@ impl ReactionDerivation {
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::NodeId;
 
     use super::super::atom::AtomAst;
     use super::super::bond::BondAst;
@@ -115,7 +115,7 @@ mod tests {
         let comap = MoleculeCorrespondence::induce(
             &lhs,
             &rhs,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
         (lhs, rhs, comap)
@@ -183,7 +183,7 @@ mod tests {
         let derivation = ReactionDerivation::new(lhs, rhs, comap);
         assert_eq!(
             derivation.atom_map().matched_pairs(),
-            &[(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))]
+            &[(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))]
         );
     }
 
@@ -251,13 +251,13 @@ mod tests {
         let first_comap = MoleculeCorrespondence::induce(
             &lhs,
             &mid,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let second_comap = MoleculeCorrespondence::induce(
             &mid,
             &rhs,
-            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let first = ReactionDerivation::new(lhs.clone(), mid.clone(), first_comap.clone());

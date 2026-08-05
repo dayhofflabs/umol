@@ -2,8 +2,9 @@
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    AromaticSystemId, BondId, DativeBondId, MoleculeCorrespondence as AstMoleculeCorrespondence,
-    MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
+    AromaticSystemId, AtomId, BondId, DativeBondId,
+    MoleculeCorrespondence as AstMoleculeCorrespondence, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use umol_graph_core::{Correspondence as GraphCoreCorrespondence, NodeId};
 
@@ -26,6 +27,7 @@ macro_rules! correspondence_ids {
 
 correspondence_ids!(
     NodeId,
+    AtomId,
     BondId,
     DativeBondId,
     AromaticSystemId,
@@ -275,7 +277,7 @@ mod tests {
     #[fixture]
     fn molecule_correspondence() -> AstMoleculeCorrespondence {
         AstMoleculeCorrespondence::new(
-            GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(1))], 2, 3)
+            GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(1))], 2, 3)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             GraphCoreCorrespondence::new(vec![(BondId(0), BondId(2))], 1, 3)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -678,7 +680,7 @@ mod tests {
         assert_eq!(
             MoleculeCorrespondence::from_rust(molecule_correspondence).reverse(),
             MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
-                GraphCoreCorrespondence::new(vec![(NodeId(1), NodeId(0))], 3, 2)
+                GraphCoreCorrespondence::new(vec![(AtomId(1), AtomId(0))], 3, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 GraphCoreCorrespondence::new(vec![(BondId(2), BondId(0))], 3, 1)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -721,7 +723,7 @@ mod tests {
         assert_eq!(
             left.compose(&right),
             MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
-                GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(0))], 2, 2)
+                GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(0))], 2, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 GraphCoreCorrespondence::new(vec![(BondId(0), BondId(0))], 1, 1)
                     .expect("correspondence producer preserves partial-bijection invariants"),

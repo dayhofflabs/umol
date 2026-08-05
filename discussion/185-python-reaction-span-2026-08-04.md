@@ -321,7 +321,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   graph escape hatch; keep `GraphCorrespondence` unchanged. Migrate all fixtures, examples,
   benchmarks, unit tests, and property generators, and assert atom pairs with `AtomId` so the
   domain type is visible in the contract. Verify by source inventory that no public `umol-ast`
-  signature exposes `Correspondence<NodeId>`. **Breaking (red→green).** [dep: S0a]
+  signature exposes `Correspondence<NodeId>`. **Breaking (red→green).** [dep: S0a] **Done.**
 
 ### S1 — Establish checked molecule-entry construction
 

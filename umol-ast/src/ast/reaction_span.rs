@@ -184,7 +184,7 @@ impl ReactionSpanAst {
         let lhs_bond_count = lhs.bonds().count();
 
         // R id → union id per family.
-        let atom_union: HashMap<NodeId, NodeId> = union_map(atoms_corr, lhs_atom_count);
+        let atom_union: HashMap<AtomId, AtomId> = union_map(atoms_corr, lhs_atom_count);
         let bond_union: HashMap<BondId, BondId> = union_map(bonds_corr, lhs_bond_count);
 
         // Atoms
@@ -192,14 +192,12 @@ impl ReactionSpanAst {
         for i in 0..lhs_atom_count {
             let lhs_ast = lhs.atom(AtomId(i as u32)).ast.clone();
             let rhs_ast = atoms_corr
-                .right_of(NodeId(i as u32))
-                .map(|r| rhs.atom(AtomId::from(r.index())).ast.clone());
+                .right_of(AtomId(i as u32))
+                .map(|r| rhs.atom(r).ast.clone());
             atoms.push(EntitySpan::superimpose(Some(lhs_ast), rhs_ast).unwrap());
         }
         for &r in &atoms_corr.right_unmatched() {
-            atoms.push(EntitySpan::Added(
-                rhs.atom(AtomId::from(r.index())).ast.clone(),
-            ));
+            atoms.push(EntitySpan::Added(rhs.atom(r).ast.clone()));
         }
 
         // Bonds + union edges
@@ -216,7 +214,10 @@ impl ReactionSpanAst {
         }
         for &r in &bonds_corr.right_unmatched() {
             let [a, b] = rhs.raw_graph().edge_endpoints(EdgeId(r.index() as u32));
-            edges.push([atom_union[&a].0, atom_union[&b].0]);
+            edges.push([
+                atom_union[&AtomId::from(a)].0,
+                atom_union[&AtomId::from(b)].0,
+            ]);
             bonds.push(EntitySpan::Added(rhs.bond(r).ast.clone()));
         }
 
@@ -237,7 +238,7 @@ impl ReactionSpanAst {
             let view = rhs.aromatic_system(r);
             let participants: Vec<NodeId> = view
                 .atom_ids()
-                .map(|a| atom_union[&NodeId::from(a)])
+                .map(|a| NodeId::from(atom_union[&a]))
                 .collect();
             aromatic_entries.push((participants, EntitySpan::Added(view.ast.clone())));
         }
@@ -261,7 +262,7 @@ impl ReactionSpanAst {
             let view = rhs.multicenter_bond(r);
             let participants: Vec<NodeId> = view
                 .atom_ids()
-                .map(|a| atom_union[&NodeId::from(a)])
+                .map(|a| NodeId::from(atom_union[&a]))
                 .collect();
             multicenter_entries.push((participants, EntitySpan::Added(view.ast.clone())));
         }
@@ -284,7 +285,7 @@ impl ReactionSpanAst {
         for &r in &noncovalent_corr.right_unmatched() {
             let view = rhs.noncovalent_bond(r);
             let [a, b] = view.atom_ids();
-            let participants = [atom_union[&NodeId::from(a)], atom_union[&NodeId::from(b)]];
+            let participants = [NodeId::from(atom_union[&a]), NodeId::from(atom_union[&b])];
             noncovalent_entries.push((participants, EntitySpan::Added(view.ast.clone())));
         }
         let noncovalent_bonds = FixedRelationSet::new(noncovalent_entries);
@@ -307,10 +308,10 @@ impl ReactionSpanAst {
         }
         for &r in &dative_corr.right_unmatched() {
             let view = rhs.dative_bond(r);
-            let acceptor = [atom_union[&NodeId::from(view.acceptor_id())]];
+            let acceptor = [NodeId::from(atom_union[&view.acceptor_id()])];
             let donors: Vec<NodeId> = view
                 .donor_ids()
-                .map(|a| atom_union[&NodeId::from(a)])
+                .map(|a| NodeId::from(atom_union[&a]))
                 .collect();
             dative_entries.push((acceptor, donors, EntitySpan::Added(view.ast.clone())));
         }
@@ -335,16 +336,11 @@ impl ReactionSpanAst {
         }
         for &r in &stereo_atom_corr.right_unmatched() {
             let view = rhs.stereo_atom(r);
-            let site = [atom_union[&NodeId::from(view.site_id())]];
+            let site = [NodeId::from(atom_union[&view.site_id()])];
             let ligands: Vec<StereoLigand> = view
                 .ligand_frame()
                 .iter()
-                .map(|l| {
-                    StereoLigand::new(
-                        AtomId::from(atom_union[&NodeId::from(l.atom_id)].index()),
-                        l.kind,
-                    )
-                })
+                .map(|l| StereoLigand::new(atom_union[&l.atom_id], l.kind))
                 .collect();
             stereo_atom_entries.push((site, ligands, EntitySpan::Added(view.ast.clone())));
         }
@@ -373,12 +369,7 @@ impl ReactionSpanAst {
             let ligands: Vec<StereoLigand> = view
                 .ligand_frame()
                 .iter()
-                .map(|l| {
-                    StereoLigand::new(
-                        AtomId::from(atom_union[&NodeId::from(l.atom_id)].index()),
-                        l.kind,
-                    )
-                })
+                .map(|l| StereoLigand::new(atom_union[&l.atom_id], l.kind))
                 .collect();
             stereo_bond_entries.push((site, ligands, EntitySpan::Added(view.ast.clone())));
         }
@@ -386,10 +377,7 @@ impl ReactionSpanAst {
 
         // Constraints: R's remapped into the union frame, then set-diffed against L's.
         let remapping = IdRemapping::new(
-            atom_union
-                .iter()
-                .map(|(&r, &u)| (AtomId::from(r.index()), AtomId::from(u.index())))
-                .collect(),
+            atom_union.iter().map(|(&r, &u)| (r, u)).collect(),
             bond_union,
             union_map(dative_corr, lhs.dative_bonds().count()),
             union_map(aromatic_corr, lhs.aromatic_systems().count()),
@@ -2275,7 +2263,7 @@ mod tests {
             ],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3)
+        let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 3)
             .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
 
@@ -2303,7 +2291,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 3)
+        let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 3, 3)
             .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
         let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
@@ -2335,7 +2323,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+        let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
             .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
         assert_eq!(
@@ -2367,7 +2355,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 2)
+        let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 3, 2)
             .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
 

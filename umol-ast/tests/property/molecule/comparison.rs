@@ -9,7 +9,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_ast::ast::MoleculeCorrespondence;
-use umol_graph_core::{Correspondence, NodeId};
+use umol_graph_core::Correspondence;
 
 use crate::strategies::*;
 
@@ -23,7 +23,7 @@ fn identity_correspondence(ast: &MoleculeAst) -> MoleculeCorrespondence {
     }
 
     MoleculeCorrespondence::new(
-        identity::<NodeId>(ast.atoms().count()),
+        identity::<AtomId>(ast.atoms().count()),
         identity::<BondId>(ast.bonds().count()),
         identity::<DativeBondId>(ast.dative_bonds().count()),
         identity::<AromaticSystemId>(ast.aromatic_systems().count()),
@@ -34,7 +34,7 @@ fn identity_correspondence(ast: &MoleculeAst) -> MoleculeCorrespondence {
     )
 }
 
-fn atom_only_correspondence(images: &[NodeId], count: usize) -> MoleculeCorrespondence {
+fn atom_only_correspondence(images: &[AtomId], count: usize) -> MoleculeCorrespondence {
     fn empty<Id>() -> Correspondence<Id>
     where
         Id: Copy + Ord + From<usize>,
@@ -94,7 +94,7 @@ proptest! {
             let images = left
                 .iter()
                 .map(|original| {
-                    NodeId::from(
+                    AtomId::from(
                         right
                             .iter()
                             .position(|candidate| candidate == original)
@@ -157,7 +157,7 @@ proptest! {
         if change_mapped_atom && count > 0 {
             right.atom_mut(AtomId((count - 1) as u32)).ast.charge = ValueAst::Lit(99);
         }
-        let images: Vec<NodeId> = (0..count).rev().map(NodeId::from).collect();
+        let images: Vec<AtomId> = (0..count).rev().map(AtomId::from).collect();
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::from_images(&images, count),
             Correspondence::from_images(&[], 0),

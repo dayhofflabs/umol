@@ -1,7 +1,7 @@
 //! Weisfeiler–Lehman featurizer: frozen color refinement over the atom graph.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
-use umol_graph_core::{EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds};
+use umol_graph_core::{EdgeId, Refinement, RefinementAlgorithm, RefinementRounds};
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::featurizer::FingerprintError;
@@ -56,7 +56,7 @@ impl WlFeaturizer {
             .collect();
 
         mol.raw_graph().refine(
-            |node: NodeId| atom_seeds[node.index()],
+            |node| atom_seeds[AtomId::from(node).index()],
             |edge: EdgeId| bond_seeds[edge.index()],
             RefinementAlgorithm::WeisfeilerLehman {
                 rounds: self.rounds,

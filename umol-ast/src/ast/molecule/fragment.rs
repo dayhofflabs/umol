@@ -5,8 +5,6 @@
 
 use std::ops::Add;
 
-use umol_graph_core::NodeId;
-
 use super::super::atom::{AtomAst, ElementAst};
 use super::super::bond::BondAst;
 use super::super::correspondence::MoleculeCorrespondence;
@@ -163,12 +161,10 @@ impl Fragment {
             });
 
         let (body, correspondence) = self.body.combine(&other.body);
-        let other_atom = AtomId::from(
-            correspondence
-                .atoms()
-                .right_of(NodeId::from(other_port_atom))
-                .expect("combine maps every atom of `other`"),
-        );
+        let other_atom = correspondence
+            .atoms()
+            .right_of(other_port_atom)
+            .expect("combine maps every atom of `other`");
         let mut editor = body.edit();
         editor.add_bond(self_atom, other_atom, bond);
         let body = editor.build();
@@ -214,12 +210,9 @@ impl Add<Fragment> for Fragment {
 fn remap_port(port: Port, correspondence: &MoleculeCorrespondence) -> Port {
     let atom = correspondence
         .atoms()
-        .right_of(NodeId::from(port.atom))
+        .right_of(port.atom)
         .expect("combine maps every atom of `other`");
-    Port {
-        atom: AtomId::from(atom),
-        ..port
-    }
+    Port { atom, ..port }
 }
 
 /// Resolve a `PortArg` to an index into `ports`. Panics if the index is out of range, or a name is

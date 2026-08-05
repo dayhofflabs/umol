@@ -4,8 +4,9 @@
 //! private overlay relation-sets directly, without exposing raw accessors.
 
 use umol_graph_core::{
-    EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, GraphCorrespondence, NodeId,
-    Ordered, ParticipantPosition, RelationData, RelationParticipant, Unordered, VarRelationSet,
+    Correspondence, EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet,
+    GraphCorrespondence, NodeId, Ordered, ParticipantPosition, RelationData, RelationParticipant,
+    Unordered, VarRelationSet,
 };
 
 use super::super::atom::AtomAst;
@@ -234,18 +235,27 @@ impl MoleculeAst {
             constraints: Constraints::new(),
         });
 
-        let left = MoleculeCorrespondence::induce(self, &object, po.left.nodes().clone());
-        let right = MoleculeCorrespondence::induce(other, &object, po.right.nodes().clone());
+        let atom_correspondence = |nodes: &Correspondence<NodeId>| {
+            Correspondence::new(
+                nodes
+                    .matched_pairs()
+                    .iter()
+                    .map(|&(left, right)| (AtomId::from(left), AtomId::from(right)))
+                    .collect(),
+                nodes.left_count(),
+                nodes.right_count(),
+            )
+            .expect("graph pushout preserves atom correspondence invariants")
+        };
+        let left =
+            MoleculeCorrespondence::induce(self, &object, atom_correspondence(po.left.nodes()));
+        let right =
+            MoleculeCorrespondence::induce(other, &object, atom_correspondence(po.right.nodes()));
 
         // Molecule-level constraints: `self`'s hold in the glue as-is (it keeps `self`'s ids); `other`'s
         // are re-anchored through the `right` embedding. Conjunction, deduplicated.
         let remapping = IdRemapping::new(
-            right
-                .atoms()
-                .matched_pairs()
-                .iter()
-                .map(|&(o, g)| (AtomId::from(o), AtomId::from(g)))
-                .collect(),
+            right.atoms().matched_pairs().iter().copied().collect(),
             right.bonds().matched_pairs().iter().copied().collect(),
             right
                 .dative_bonds()

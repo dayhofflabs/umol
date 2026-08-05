@@ -20,7 +20,7 @@ use umol_ast::ast::{
     AsLit, AtomId, BondId, MoleculeAst, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 use umol_ast::mol_dsl;
-use umol_graph_core::{NodeId, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
 use super::bit_fp::BitFp;
 use super::feature_set::FeatureSet;
@@ -82,7 +82,7 @@ impl PatternFingerprinter {
                     .atoms()
                     .matched_pairs()
                     .iter()
-                    .map(|&(_, host)| AtomId::from(host))
+                    .map(|&(_, host)| host)
                     .collect();
                 let mut bit_id = template.index;
                 for &atom in &host {
@@ -94,12 +94,12 @@ impl PatternFingerprinter {
                         .atomic_number();
                     bit_id = gboost_combine(bit_id, u32::from(atomic_number));
                 }
-                for &(query_a, query_b) in &template.bonds {
-                    let edge = mol
-                        .raw_graph()
-                        .find_edge(NodeId::from(host[query_a]), NodeId::from(host[query_b]))
+                for query_bond in 0..template.bond_count {
+                    let bond = embedding
+                        .bonds()
+                        .right_of(BondId(query_bond))
                         .expect("matched bond");
-                    let bond = mol.bond(BondId::from(edge));
+                    let bond = mol.bond(bond);
                     let bond_type = if bond.is_in_aromatic_system() {
                         12
                     } else {
@@ -122,7 +122,6 @@ struct PatternTemplate {
     pattern: MoleculeAst,
     atom_count: u32,
     bond_count: u32,
-    bonds: Vec<(usize, usize)>,
 }
 
 /// The RDKit template library, parsed once. Atom and bond order within each
@@ -144,19 +143,11 @@ static TEMPLATES: LazyLock<Vec<PatternTemplate>> = LazyLock::new(|| {
         let graph = pattern.raw_graph();
         let atom_count = graph.node_count() as u32;
         let bond_count = graph.edge_count() as u32;
-        let bonds = graph
-            .edge_ids()
-            .map(|edge| {
-                let [a, b] = graph.edge_endpoints(edge);
-                (a.index(), b.index())
-            })
-            .collect();
         PatternTemplate {
             index,
             pattern,
             atom_count,
             bond_count,
-            bonds,
         }
     })
     .collect()

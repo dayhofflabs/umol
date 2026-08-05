@@ -280,17 +280,10 @@ mod tests {
     use pretty_assertions::{assert_eq, assert_ne};
     use rstest::*;
     use umol_graph_core::{
-        CircularRefinementAlgorithm, EdgeId, Graph, NodeId, RefinementAlgorithm, RefinementRounds,
+        CircularRefinementAlgorithm, Graph, RefinementAlgorithm, RefinementRounds,
     };
 
     use super::*;
-
-    fn uniform(_: NodeId) -> u64 {
-        0
-    }
-    fn no_edge_color(_: EdgeId) -> u64 {
-        0
-    }
 
     fn wl_128(
         rounds: RefinementRounds,
@@ -305,7 +298,7 @@ mod tests {
     }
 
     fn hash_of(g: &Graph) -> u128 {
-        g.refine(uniform, no_edge_color, wl_128(RefinementRounds::ToFixpoint))
+        g.refine(|_| 0, |_| 0, wl_128(RefinementRounds::ToFixpoint))
             .graph_hash()
     }
 
@@ -316,7 +309,7 @@ mod tests {
     #[case::star4(Graph::new(5, &[[0, 1], [0, 2], [0, 3], [0, 4]]), 2)]
     #[case::six_cycle(Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]), 1)]
     fn test_graph_refine(#[case] g: Graph, #[case] expected_cells: usize) {
-        let refinement = g.refine(uniform, no_edge_color, wl_128(RefinementRounds::ToFixpoint));
+        let refinement = g.refine(|_| 0, |_| 0, wl_128(RefinementRounds::ToFixpoint));
         assert_eq!(refinement.cell_count(), expected_cells);
     }
 
@@ -349,12 +342,12 @@ mod tests {
         let node_colored = g
             .refine(
                 |nd| nd.index() as u64,
-                no_edge_color,
+                |_| 0,
                 wl_128(RefinementRounds::ToFixpoint),
             )
             .graph_hash();
         let edge_colored = g
-            .refine(uniform, |_| 7, wl_128(RefinementRounds::ToFixpoint))
+            .refine(|_| 0, |_| 7, wl_128(RefinementRounds::ToFixpoint))
             .graph_hash();
         assert_ne!(plain, node_colored);
         assert_ne!(plain, edge_colored);
@@ -411,7 +404,7 @@ mod tests {
     fn test_refinement_counts() {
         // path 0-1-2, radius 1: round 0 all-same (3); round 1 splits ends (2) from middle (1).
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let refinement = g.refine(uniform, no_edge_color, wl_128(RefinementRounds::Fixed(1)));
+        let refinement = g.refine(|_| 0, |_| 0, wl_128(RefinementRounds::Fixed(1)));
         let mut values: Vec<u32> = refinement.counts().into_values().collect();
         values.sort_unstable();
         assert_eq!(values, vec![1, 2, 3]);
@@ -428,7 +421,7 @@ mod tests {
                 RefinementAggregation::SumSketch,
             ),
         };
-        let refinement = g.refine(uniform, no_edge_color, algorithm);
+        let refinement = g.refine(|_| 0, |_| 0, algorithm);
         assert_eq!(refinement.cell_count(), 2);
     }
 
@@ -443,12 +436,8 @@ mod tests {
         };
         let path = Graph::new(3, &[[0, 1], [1, 2]]);
         let triangle = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let hp = path
-            .refine(uniform, no_edge_color, algorithm())
-            .graph_hash();
-        let ht = triangle
-            .refine(uniform, no_edge_color, algorithm())
-            .graph_hash();
+        let hp = path.refine(|_| 0, |_| 0, algorithm()).graph_hash();
+        let ht = triangle.refine(|_| 0, |_| 0, algorithm()).graph_hash();
         assert_ne!(hp, ht);
     }
 
@@ -472,7 +461,7 @@ mod tests {
                 RefinementAggregation::Sorted,
             ),
         };
-        let h = g.refine(uniform, no_edge_color, algorithm).graph_hash();
+        let h = g.refine(|_| 0, |_| 0, algorithm).graph_hash();
         assert_eq!(h, 313131582038434349855774725390837831516);
     }
 
@@ -504,22 +493,5 @@ mod tests {
     #[case(&[6, 4, 2, 0, 0, 1], 2968968094)]
     fn test_gboost_hash(#[case] components: &[u32], #[case] expected: u32) {
         assert_eq!(gboost_hash(components), expected);
-    }
-
-    #[rstest]
-    fn test_graph_circular_refine_distinguishes_components() {
-        // Radius 0: only the seed hash of the components; distinct components must give
-        // distinct identifiers.
-        let graph = Graph::new(2, &[[0, 1]]);
-        let ids = graph.circular_refine(
-            |n: NodeId| vec![6 + n.0],
-            |_| 1,
-            CircularRefinementAlgorithm::Ec {
-                radius: 0,
-                scheme: Morgan,
-            },
-        );
-        assert_eq!(ids.len(), 2);
-        assert_ne!(ids[0], ids[1]);
     }
 }

@@ -3,8 +3,8 @@
 use std::any::Any;
 
 use thiserror::Error;
-use umol_ast::ast::{MoleculeAst, ReactionAst, TryIntoAst};
-use umol_graph_core::{Correspondence, NodeId};
+use umol_ast::ast::{AtomId, MoleculeAst, ReactionAst, TryIntoAst};
+use umol_graph_core::Correspondence;
 use umol_io::smiles::{ParseError as SmilesParseError, ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
 use umol_io::table_ir::Molecule as TableMolecule;
@@ -171,7 +171,7 @@ impl Interpret for ReactionSmiles {
                 });
             }
             if let ([reactant], [product]) = (reactants.as_slice(), products.as_slice()) {
-                matched_pairs.push((NodeId(*reactant), NodeId(*product)));
+                matched_pairs.push((AtomId(*reactant), AtomId(*product)));
             }
         }
 

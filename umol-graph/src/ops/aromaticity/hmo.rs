@@ -12,7 +12,7 @@ use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, UnpairedElectronsAst,
 };
 use umol_chem::element::Element;
-use umol_graph_core::{ConnectedComponentsAlgorithm, NodeId};
+use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use crate::ops::model::ElementScope;
@@ -89,7 +89,7 @@ impl HmoAromaticity {
             .atoms()
             .matched_pairs()
             .iter()
-            .map(|&(_, host)| AtomId::from(host))
+            .map(|&(_, host)| host)
             .collect();
         sorted_host.sort_unstable();
         let components: Vec<Vec<AtomId>> = extracted
@@ -176,8 +176,8 @@ impl HmoAromaticity {
         let mut bond_positions = Vec::with_capacity(subgraph.bonds().matched_pair_count());
         for &(_, bid) in subgraph.bonds().matched_pairs() {
             let [ha, hb] = ast.bond(bid).atom_ids();
-            let i = subgraph.atoms().left_of(NodeId::from(ha)).unwrap().index();
-            let j = subgraph.atoms().left_of(NodeId::from(hb)).unwrap().index();
+            let i = subgraph.atoms().left_of(ha).unwrap().index();
+            let j = subgraph.atoms().left_of(hb).unwrap().index();
             let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(|| {
                 HmoError::MissingParameters(format!(
                     "no Van-Catledge k_XY for {:?}-{:?}",

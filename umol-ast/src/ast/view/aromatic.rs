@@ -521,9 +521,9 @@ mod tests {
         assert_eq!(
             correspondence.atoms().matched_pairs(),
             &[
-                (NodeId(0), NodeId(0)),
-                (NodeId(1), NodeId(1)),
-                (NodeId(2), NodeId(2)),
+                (AtomId(0), AtomId(0)),
+                (AtomId(1), AtomId(1)),
+                (AtomId(2), AtomId(2)),
             ],
         );
         assert_eq!(

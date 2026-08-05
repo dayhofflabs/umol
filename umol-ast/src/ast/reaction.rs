@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter::from_fn;
 
-use umol_graph_core::{Correspondence, NodeId};
+use umol_graph_core::Correspondence;
 use umol_perm::Permutation;
 
 use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
@@ -212,7 +212,7 @@ impl ReactionAst {
     /// The reaction transforming `lhs` into `rhs` under the atom correspondence `atom`: induce the
     /// full per-entity correspondence, diff the two sides into deltas, and pair them with `lhs`. The
     /// inverse of reading a reaction's two sides back off its span.
-    pub fn from_sides(lhs: MoleculeAst, rhs: MoleculeAst, atom: Correspondence<NodeId>) -> Self {
+    pub fn from_sides(lhs: MoleculeAst, rhs: MoleculeAst, atom: Correspondence<AtomId>) -> Self {
         let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom);
         let deltas = lhs.difference_to(&rhs, &correspondence);
         Self::new(lhs, deltas)
@@ -243,7 +243,7 @@ impl ReactionAst {
         let mut host_atoms = HashSet::new();
         for left in self.lhs.atoms().ids() {
             let entity = Entity::Atom(left);
-            let Some(right) = correspondence.atoms().right_of(NodeId::from(left)) else {
+            let Some(right) = correspondence.atoms().right_of(left) else {
                 return Err(ApplyError::CorrespondenceMismatch { entity });
             };
             if right.index() >= host.atoms().count() || !host_atoms.insert(right) {
@@ -303,12 +303,7 @@ impl ReactionAst {
                 return Err(ApplyError::CorrespondenceMismatch { entity });
             }
             let rule_site = self.lhs.stereo_atom(left).site_id();
-            if correspondence
-                .atoms()
-                .right_of(NodeId::from(rule_site))
-                .map(AtomId::from)
-                != Some(host_view.site_id())
-            {
+            if correspondence.atoms().right_of(rule_site) != Some(host_view.site_id()) {
                 return Err(ApplyError::CorrespondenceMismatch { entity });
             }
         }
@@ -355,8 +350,7 @@ impl ReactionAst {
         let host_atom = |id: AtomId| {
             correspondence
                 .atoms()
-                .right_of(NodeId::from(id))
-                .map(AtomId::from)
+                .right_of(id)
                 .filter(|right| right.index() < host.atoms().count())
                 .ok_or(ApplyError::CorrespondenceMismatch {
                     entity: Entity::Atom(id),
@@ -1312,13 +1306,13 @@ impl ReactionAst {
         // keep ascending order), removed atoms are left-unmatched, created atoms right-unmatched.
         // `induce` derives the bond and overlay correspondences from this atom map.
         let removed: HashSet<AtomId> = removed_host_atoms.iter().copied().collect();
-        let mut atom_matched_pairs: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut atom_matched_pairs: Vec<(AtomId, AtomId)> = Vec::new();
         let mut product_atom = 0u32;
         for host_atom in 0..host.atoms().count() as u32 {
             if removed.contains(&AtomId(host_atom)) {
                 continue;
             }
-            atom_matched_pairs.push((NodeId(host_atom), NodeId(product_atom)));
+            atom_matched_pairs.push((AtomId(host_atom), AtomId(product_atom)));
             product_atom += 1;
         }
         let atom_map = Correspondence::new(
@@ -1440,15 +1434,15 @@ fn reframe_stereo(
     let into_host = |l: &StereoLigand| {
         correspondence
             .atoms()
-            .right_of(NodeId::from(l.atom_id))
-            .map(|atom| StereoLigand::new(AtomId::from(atom), l.kind))
+            .right_of(l.atom_id)
+            .map(|atom| StereoLigand::new(atom, l.kind))
             .ok_or(ApplyError::InternalInvariant)
     };
     let from_host = |l: &StereoLigand| {
         correspondence
             .atoms()
-            .left_of(NodeId::from(l.atom_id))
-            .map(|atom| StereoLigand::new(AtomId::from(atom), l.kind))
+            .left_of(l.atom_id)
+            .map(|atom| StereoLigand::new(atom, l.kind))
             .ok_or(ApplyError::InternalInvariant)
     };
     for delta in deltas.iter_mut() {
@@ -1606,7 +1600,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             ..Default::default()
         });
-        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+        let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
             .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(
             ReactionAst::from_sides(left.clone(), right, atoms),
@@ -1674,11 +1668,10 @@ mod tests {
         #[case] atom_map: Vec<AtomId>,
         #[case] expected: MoleculeAst,
     ) {
-        let atom_images: Vec<NodeId> = atom_map.iter().map(|&a| NodeId::from(a)).collect();
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::from_images(&atom_images, host.atoms().count()),
+            Correspondence::from_images(&atom_map, host.atoms().count()),
         );
         assert_eq!(
             reaction.apply_at(&host, &correspondence).unwrap().rhs(),
@@ -1733,11 +1726,10 @@ mod tests {
         #[case] atom_map: Vec<AtomId>,
         #[case] expected: ApplyError,
     ) {
-        let images: Vec<NodeId> = atom_map.iter().map(|&a| NodeId::from(a)).collect();
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::from_images(&images, host.atoms().count()),
+            Correspondence::from_images(&atom_map, host.atoms().count()),
         );
         assert_eq!(
             reaction.apply_at(&host, &correspondence).unwrap_err(),
@@ -1766,7 +1758,7 @@ mod tests {
         ),
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
         MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(0), NodeId(1)], 2),
+            Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
             Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
@@ -1781,7 +1773,7 @@ mod tests {
         ),
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2)], 3),
+            Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2)], 3),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
@@ -1847,7 +1839,7 @@ mod tests {
             ..Default::default()
         });
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::new((0..6u32).map(|id| (NodeId(id), NodeId(id))).collect(), 6, 6)
+            Correspondence::new((0..6u32).map(|id| (AtomId(id), AtomId(id))).collect(), 6, 6)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -1925,7 +1917,7 @@ mod tests {
             ..Default::default()
         });
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::new((0..7u32).map(|id| (NodeId(id), NodeId(id))).collect(), 7, 7)
+            Correspondence::new((0..7u32).map(|id| (AtomId(id), AtomId(id))).collect(), 7, 7)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -1987,7 +1979,7 @@ mod tests {
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::from_images(&[NodeId(1), NodeId(2)], host.atoms().count()),
+            Correspondence::from_images(&[AtomId(1), AtomId(2)], host.atoms().count()),
         );
         let result = reaction.apply_at(&host, &correspondence).unwrap();
         assert_eq!(
@@ -2871,7 +2863,7 @@ mod tests {
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::from_images(&[NodeId(0), NodeId(1)], host.atoms().count()),
+            Correspondence::from_images(&[AtomId(0), AtomId(1)], host.atoms().count()),
         );
         let derivation = reaction.apply_at(&host, &correspondence).unwrap();
         assert_eq!(
@@ -2884,8 +2876,8 @@ mod tests {
         );
         assert_eq!(
             derivation.atom_map().matched_pairs(),
-            &[(NodeId(0), NodeId(0))]
+            &[(AtomId(0), AtomId(0))]
         );
-        assert_eq!(derivation.atom_map().left_unmatched(), vec![NodeId(1)]);
+        assert_eq!(derivation.atom_map().left_unmatched(), vec![AtomId(1)]);
     }
 }

@@ -56,7 +56,7 @@ fn sorted_matches(
             c.atoms()
                 .matched_pairs()
                 .iter()
-                .map(|&(_, host)| AtomId::from(host))
+                .map(|&(_, host)| host)
                 .collect()
         })
         .collect();

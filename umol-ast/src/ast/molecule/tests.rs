@@ -400,8 +400,7 @@ fn equiv_under_molecules(
             },
         )),
     });
-    let atom_correspondence =
-        Correspondence::from_images(&atom_images.map(NodeId::from), atom_images.len());
+    let atom_correspondence = Correspondence::from_images(&atom_images, atom_images.len());
     let correspondence = MoleculeCorrespondence::induce(&left, &right, atom_correspondence);
 
     (left, right, correspondence)
@@ -587,9 +586,9 @@ fn test_molecule_ast_equiv_under_rejects_partial_correspondence(
     let partial = MoleculeCorrespondence::new(
         Correspondence::new(
             vec![
-                (NodeId(0), NodeId(2)),
-                (NodeId(1), NodeId(3)),
-                (NodeId(2), NodeId(0)),
+                (AtomId(0), AtomId(2)),
+                (AtomId(1), AtomId(3)),
+                (AtomId(2), AtomId(0)),
             ],
             4,
             4,
@@ -1614,9 +1613,9 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
     assert_eq!(
         sub.atoms().matched_pairs(),
         &[
-            (NodeId(0), NodeId(0)),
-            (NodeId(1), NodeId(1)),
-            (NodeId(2), NodeId(2))
+            (AtomId(0), AtomId(0)),
+            (AtomId(1), AtomId(1)),
+            (AtomId(2), AtomId(2))
         ]
     );
     assert_eq!(
@@ -1646,7 +1645,7 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
     let sub = ast.induced_subgraph(&[AtomId(2), AtomId(3)]);
     assert_eq!(
         sub.atoms().matched_pairs(),
-        &[(NodeId(0), NodeId(2)), (NodeId(1), NodeId(3))]
+        &[(AtomId(0), AtomId(2)), (AtomId(1), AtomId(3))]
     );
     assert_eq!(
         sub.dative_bonds().matched_pairs(),
@@ -2676,7 +2675,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
         atoms: vec![AtomAst::from_element(Element::C)],
         ..Default::default()
     }),
-    vec![vec![(NodeId(0), NodeId(0))]],
+    vec![vec![(AtomId(0), AtomId(0))]],
 )]
 #[case::multiple(
     vec![
@@ -2704,15 +2703,15 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
         ..Default::default()
     }),
     vec![
-        vec![(NodeId(0), NodeId(0))],
+        vec![(AtomId(0), AtomId(0))],
         vec![],
-        vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(2))],
+        vec![(AtomId(0), AtomId(1)), (AtomId(1), AtomId(2))],
     ],
 )]
 fn test_molecule_ast_combine_all(
     #[case] molecules: Vec<MoleculeAst>,
     #[case] expected: MoleculeAst,
-    #[case] expected_atom_matched_pairs: Vec<Vec<(NodeId, NodeId)>>,
+    #[case] expected_atom_matched_pairs: Vec<Vec<(AtomId, AtomId)>>,
 ) {
     let (combined, correspondences) = MoleculeAst::combine_all(&molecules);
 
@@ -2787,8 +2786,8 @@ fn test_molecule_ast_combine() {
     assert_eq!(union.bond(BondId(1)).atom_ids(), [AtomId(2), AtomId(3)]);
     assert_eq!(union.bond(BondId(1)).ast, &BondAst::from_order(2));
     // right's ids map to their offset union ids; left's are the prefix (unchanged)
-    assert_eq!(correspondence.atoms().right_of(NodeId(0)), Some(NodeId(2)));
-    assert_eq!(correspondence.atoms().right_of(NodeId(1)), Some(NodeId(3)));
+    assert_eq!(correspondence.atoms().right_of(AtomId(0)), Some(AtomId(2)));
+    assert_eq!(correspondence.atoms().right_of(AtomId(1)), Some(AtomId(3)));
     assert_eq!(correspondence.bonds().right_of(BondId(0)), Some(BondId(1)));
 }
 
@@ -2810,8 +2809,8 @@ fn test_molecule_ast_combine_from() {
 
     assert_eq!(left.atoms().count(), 3);
     assert_eq!(left.bond(BondId(0)).atom_ids(), [AtomId(1), AtomId(2)]);
-    assert_eq!(correspondence.atoms().right_of(NodeId(0)), Some(NodeId(1)));
-    assert_eq!(correspondence.atoms().right_of(NodeId(1)), Some(NodeId(2)));
+    assert_eq!(correspondence.atoms().right_of(AtomId(0)), Some(AtomId(1)));
+    assert_eq!(correspondence.atoms().right_of(AtomId(1)), Some(AtomId(2)));
 }
 
 #[rstest]
@@ -2969,12 +2968,12 @@ fn test_molecule_ast_split() {
     let (first, first_corr) = &components[0];
     assert_eq!(first.atoms().count(), 2);
     assert_eq!(first.bond(BondId(0)).ast, &BondAst::from_order(1));
-    assert_eq!(first_corr.atoms().right_of(NodeId(0)), Some(NodeId(0)));
-    assert_eq!(first_corr.atoms().right_of(NodeId(1)), Some(NodeId(1)));
+    assert_eq!(first_corr.atoms().right_of(AtomId(0)), Some(AtomId(0)));
+    assert_eq!(first_corr.atoms().right_of(AtomId(1)), Some(AtomId(1)));
     let (second, second_corr) = &components[1];
     assert_eq!(second.bond(BondId(0)).ast, &BondAst::from_order(2));
-    assert_eq!(second_corr.atoms().right_of(NodeId(0)), Some(NodeId(2)));
-    assert_eq!(second_corr.atoms().right_of(NodeId(1)), Some(NodeId(3)));
+    assert_eq!(second_corr.atoms().right_of(AtomId(0)), Some(AtomId(2)));
+    assert_eq!(second_corr.atoms().right_of(AtomId(1)), Some(AtomId(3)));
 }
 
 #[rstest]

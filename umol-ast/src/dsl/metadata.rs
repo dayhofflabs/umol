@@ -359,7 +359,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::{Correspondence, NodeId};
+    use umol_graph_core::Correspondence;
 
     use super::*;
     use crate::ast::atom::AtomAst;
@@ -696,7 +696,7 @@ mod tests {
             .collect(),
         };
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(1), NodeId(0)], 2),
+            Correspondence::from_images(&[AtomId(1), AtomId(0)], 2),
             Correspondence::from_images(&[BondId(1), BondId(0)], 2),
             Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 2),
             Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 2),
@@ -761,7 +761,7 @@ mod tests {
             .collect(),
         };
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(0)], 1),
+            Correspondence::from_images(&[AtomId(0)], 1),
             Correspondence::from_images(&[BondId(0)], 1),
             Correspondence::new(Vec::new(), 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -798,7 +798,7 @@ mod tests {
             .collect(),
         };
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 1)
+            Correspondence::new(vec![(AtomId(1), AtomId(0))], 2, 1)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(Vec::new(), 1, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -847,7 +847,7 @@ mod tests {
             .collect(),
         };
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[NodeId(1), NodeId(0)], 2),
+            Correspondence::from_images(&[AtomId(1), AtomId(0)], 2),
             Correspondence::new(Vec::new(), 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(Vec::new(), 0, 0)
@@ -882,7 +882,7 @@ mod tests {
             atom_aliases: BiBTreeMap::new(),
         };
         let first = MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(1))], 1, 2)
+            Correspondence::new(vec![(AtomId(0), AtomId(1))], 1, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(Vec::new(), 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -900,7 +900,7 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let second = MoleculeCorrespondence::new(
-            Correspondence::new(vec![(NodeId(1), NodeId(2))], 2, 3)
+            Correspondence::new(vec![(AtomId(1), AtomId(2))], 2, 3)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(Vec::new(), 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),

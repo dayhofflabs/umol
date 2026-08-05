@@ -22,8 +22,7 @@ use umol_ast::ast::{
     EntityStructureValidator, MoleculeAst, ValueAst,
 };
 use umol_graph_core::{
-    BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NodeId,
-    NonBipartiteGraphError,
+    BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NonBipartiteGraphError,
 };
 use umol_utils::solution::Solution;
 
@@ -444,12 +443,10 @@ impl Kekulizer {
             let sub_order: Vec<AtomId> = matching_host_atoms
                 .iter()
                 .map(|&host| {
-                    AtomId::from(
-                        correspondence
-                            .atoms()
-                            .left_of(NodeId::from(host))
-                            .expect("system atom maps to the extracted molecule"),
-                    )
+                    correspondence
+                        .atoms()
+                        .left_of(host)
+                        .expect("system atom maps to the extracted molecule")
                 })
                 .collect();
             let matching = match self.config.algorithm {
@@ -489,12 +486,10 @@ impl Kekulizer {
                     .ids()
                     .filter(|&sub| !matching.is_matched(sub))
                     .map(|sub| {
-                        AtomId::from(
-                            correspondence
-                                .atoms()
-                                .right_of(NodeId::from(sub))
-                                .expect("extracted atom maps to the host molecule"),
-                        )
+                        correspondence
+                            .atoms()
+                            .right_of(sub)
+                            .expect("extracted atom maps to the host molecule")
                     })
                     .collect(),
             };
