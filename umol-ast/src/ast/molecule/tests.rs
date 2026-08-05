@@ -17,16 +17,20 @@ use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::bond::BondAst;
 use super::super::boolean::BooleanAst;
 use super::super::constraint::{
-    AtomConstraintAst, AtomConstraintsAst, BondConstraintAst, BondConstraintsAst, Constraint,
-    Constraints, DativeBondConstraintAst, DativeBondConstraintsAst, MoleculeConstraint,
-    RelationalConstraint, RingScope,
+    AromaticSystemConstraintAst, AtomConstraintAst, AtomConstraintsAst, BondConstraintAst,
+    BondConstraintsAst, Constraint, Constraints, DativeBondConstraintAst, DativeBondConstraintsAst,
+    MoleculeConstraint, MulticenterBondConstraintAst, NoncovalentBondConstraintAst,
+    RelationalConstraint, RingScope, StereoAtomConstraintAst, StereoBondConstraintAst,
+    StereogenicityAst, SubPatternAnchor,
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondAst;
 use super::super::edit::{AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
 use super::super::electrons::ElectronCountsAst;
+use super::super::entity::Entity;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondAst;
@@ -35,7 +39,7 @@ use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
 use super::super::value::ValueAst;
-use super::{MoleculeAst, MoleculeEntries, TransactionError};
+use super::{MoleculeAst, MoleculeEntries, MoleculeEntriesError, TransactionError};
 use crate::{mol_dsl, mol_dsl_ground};
 
 fn ground_atom() -> AtomAst {
@@ -72,7 +76,7 @@ fn test_molecule_ast_default_equals_new() {
 }
 
 #[rstest]
-fn test_molecule_ast_from_parts() {
+fn test_molecule_ast_from_entries() {
     let atoms = vec![
         AtomAst::from_element(Element::C),
         AtomAst::from_element(Element::O),
@@ -304,6 +308,205 @@ fn equiv_molecule_entries() -> MoleculeEntries {
             },
         )),
     }
+}
+
+#[rstest]
+#[case::bond_endpoint(
+    |entries: &mut MoleculeEntries| entries.bonds[0].0 = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::dative_donor(
+    |entries: &mut MoleculeEntries| entries.dative[0].0[0] = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::dative_acceptor(
+    |entries: &mut MoleculeEntries| entries.dative[0].1 = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::aromatic_participant(
+    |entries: &mut MoleculeEntries| entries.aromatic[0].0[0] = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::multicenter_participant(
+    |entries: &mut MoleculeEntries| entries.multicenter[0].0[0] = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::noncovalent_endpoint(
+    |entries: &mut MoleculeEntries| entries.noncovalent[0].0 = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::stereo_atom_site(
+    |entries: &mut MoleculeEntries| entries.stereo_atoms[0].0 = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::stereo_atom_ligand(
+    |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[0].atom_id = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::stereo_bond_site(
+    |entries: &mut MoleculeEntries| entries.stereo_bonds[0].0 = BondId(3),
+    Entity::Bond(BondId(3)),
+)]
+#[case::stereo_bond_ligand(
+    |entries: &mut MoleculeEntries| entries.stereo_bonds[0].1[0].atom_id = AtomId(4),
+    Entity::Atom(AtomId(4)),
+)]
+fn test_molecule_ast_try_from_entries_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] invalidate: fn(&mut MoleculeEntries),
+    #[case] entity: Entity,
+) {
+    invalidate(&mut entries);
+
+    assert_eq!(
+        MoleculeAst::try_from_entries(entries),
+        Err(MoleculeEntriesError::InvalidReference { entity }),
+    );
+}
+
+#[rstest]
+#[case::atom(Entity::Atom(AtomId(4)))]
+#[case::bond(Entity::Bond(BondId(3)))]
+#[case::dative_bond(Entity::DativeBond(DativeBondId(1)))]
+#[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(1)))]
+#[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(1)))]
+#[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(1)))]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(1)))]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(1)))]
+fn test_molecule_ast_try_from_entries_constraint_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] entity: Entity,
+) {
+    let constraint = match entity {
+        Entity::Atom(id) => Constraint::Atom(id, AtomConstraintAst::valence(ValueAst::Lit(4))),
+        Entity::Bond(id) => Constraint::Bond(id, BondConstraintAst::aromatic(false)),
+        Entity::DativeBond(id) => {
+            Constraint::DativeBond(id, DativeBondConstraintAst::aromatic(false))
+        }
+        Entity::AromaticSystem(id) => Constraint::AromaticSystem(
+            id,
+            AromaticSystemConstraintAst::electron_count(ValueAst::Lit(6)),
+        ),
+        Entity::MulticenterBond(id) => Constraint::MulticenterBond(
+            id,
+            MulticenterBondConstraintAst::electron_count(ValueAst::Lit(2)),
+        ),
+        Entity::NoncovalentBond(id) => {
+            Constraint::NoncovalentBond(id, NoncovalentBondConstraintAst::intramolecular(true))
+        }
+        Entity::StereoAtom(id) => Constraint::StereoAtom(
+            id,
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        ),
+        Entity::StereoBond(id) => Constraint::StereoBond(
+            id,
+            StereoKind::CisTrans,
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        ),
+    };
+    entries.constraints = Constraint::Not(Box::new(constraint)).into();
+
+    assert_eq!(
+        MoleculeAst::try_from_entries(entries),
+        Err(MoleculeEntriesError::InvalidReference { entity }),
+    );
+}
+
+#[rstest]
+#[case::relational_atom(
+    Constraint::Relational(RelationalConstraint::AromaticSystemContains {
+        system: AromaticSystemId(0),
+        atom: AtomId(4),
+    }),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::relational_bond(
+    Constraint::Relational(RelationalConstraint::DativeBondParallels {
+        dative: DativeBondId(0),
+        parallel: BondId(3),
+    }),
+    Entity::Bond(BondId(3)),
+)]
+#[case::atom_subset(
+    Constraint::Molecule(MoleculeConstraint::Connected {
+        atoms: Some(vec![AtomId(4)]),
+    }),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::bond_subset(
+    Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+        bonds: Some(vec![BondId(3)]),
+        sum: ValueAst::Lit(1),
+    }),
+    Entity::Bond(BondId(3)),
+)]
+fn test_molecule_ast_try_from_entries_molecule_constraint_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] constraint: Constraint,
+    #[case] entity: Entity,
+) {
+    entries.constraints = constraint.into();
+
+    assert_eq!(
+        MoleculeAst::try_from_entries(entries),
+        Err(MoleculeEntriesError::InvalidReference { entity }),
+    );
+}
+
+#[rstest]
+#[case::target(
+    {
+        let mut anchor = SubPatternAnchor::new();
+        anchor.push_atom(AtomId(4), AtomId(0));
+        anchor
+    },
+    MoleculeAst::from_entries(MoleculeEntries {
+        atoms: vec![AtomAst::default()],
+        ..Default::default()
+    }),
+    Entity::Atom(AtomId(4)),
+)]
+#[case::pattern(
+    {
+        let mut anchor = SubPatternAnchor::new();
+        anchor.push_atom(AtomId(0), AtomId(1));
+        anchor
+    },
+    MoleculeAst::from_entries(MoleculeEntries {
+        atoms: vec![AtomAst::default()],
+        ..Default::default()
+    }),
+    Entity::Atom(AtomId(1)),
+)]
+fn test_molecule_ast_try_from_entries_subpattern_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] anchor: SubPatternAnchor,
+    #[case] pattern: MoleculeAst,
+    #[case] entity: Entity,
+) {
+    entries.constraints = Constraint::Molecule(MoleculeConstraint::SubPattern {
+        anchor,
+        pattern: Box::new(pattern),
+    })
+    .into();
+
+    assert_eq!(
+        MoleculeAst::try_from_entries(entries),
+        Err(MoleculeEntriesError::InvalidReference { entity }),
+    );
+}
+
+#[rstest]
+#[should_panic(
+    expected = "invalid molecule entries: molecule entries reference unavailable atom 1"
+)]
+fn test_molecule_ast_from_entries_error() {
+    MoleculeAst::from_entries(MoleculeEntries {
+        atoms: vec![AtomAst::default()],
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+        ..Default::default()
+    });
 }
 
 #[fixture]

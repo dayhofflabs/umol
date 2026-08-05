@@ -14,6 +14,15 @@ proptest! {
     })]
 
     #[test]
+    fn test_molecule_ast_try_from_entries(
+        entries in molecule_entries_with_constraints_strategy(),
+    ) {
+        let expected = MoleculeAst::from_entries(entries.clone());
+
+        prop_assert_eq!(MoleculeAst::try_from_entries(entries), Ok(expected));
+    }
+
+    #[test]
     fn test_molecule_ast_extract(
         (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
     ) {

@@ -87,7 +87,7 @@ pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
     spec, AtomArg, Fragment, MoleculeAst, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
-    MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
+    MoleculeEntriesError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
 pub use multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 pub use noncovalent::{

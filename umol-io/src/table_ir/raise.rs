@@ -11,8 +11,8 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
-    MoleculeAst, MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, StereoCoset,
-    TetrahedralStereoAst, TryIntoAst, UnpairedElectronsAst, ValueAst,
+    MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst, NoncovalentBondAst,
+    StereoCoset, TetrahedralStereoAst, TryIntoAst, UnpairedElectronsAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_perm::{ClassKey, Permutation};
@@ -36,6 +36,8 @@ use utils::{
 /// Error variants for TableIR -> MoleculeAst raise.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RaiseError {
+    #[error(transparent)]
+    MoleculeEntries(#[from] MoleculeEntriesError),
     #[error("tetrahedral stereo at atom {atom} with {count} ligands, expected 3 or 4 ligands")]
     TetrahedralLigandCount { atom: usize, count: usize },
     #[error("directional bond {bond} not adjacent to a stereogenic double bond")]
@@ -68,7 +70,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                 }
                 Ok(atom)
             })
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_, RaiseError>>()?;
 
         let mut bonds = Vec::new();
         let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
@@ -116,7 +118,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
 
         let constraints = Constraints::new();
 
-        Ok(MoleculeAst::from_entries(MoleculeEntries {
+        MoleculeAst::try_from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative: dative_bonds,
@@ -124,7 +126,8 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             noncovalent: noncovalent_bonds,
             constraints,
             ..Default::default()
-        }))
+        })
+        .map_err(Into::into)
     }
 }
 
@@ -391,7 +394,7 @@ fn raise_cis_trans_stereo(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{AtomConstraintsAst, BondId};
+    use umol_ast::ast::{AtomConstraintsAst, BondId, Entity};
     use umol_chem::element::Element;
     use umol_chem::spin::SpinMultiplicity;
 
@@ -489,6 +492,17 @@ mod tests {
     #[case::shared_cis_trans_ligand(
         Smiles::parse_bytes(b"SSC=S1CC1\\2C=112").unwrap().into_table_ir(),
         RaiseError::DanglingBondDirection { bond: 6 }
+    )]
+    #[case::invalid_bond_endpoint(
+        {
+            let mut molecule = TableMolecule::empty();
+            molecule.atoms.push(TableAtom::from_element(Element::C));
+            molecule.bonds.push(TableBond::new(0, 1, TableBondOrder::Single));
+            molecule
+        },
+        RaiseError::MoleculeEntries(MoleculeEntriesError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        })
     )]
     fn test_table_molecule_try_into_ast_error(
         #[case] molecule: TableMolecule,

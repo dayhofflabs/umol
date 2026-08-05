@@ -341,8 +341,11 @@ creates an atom, since a partial correspondence is the case where the two forms 
   self-loops, parallel entities, chemistry, and constraint satisfiability remain validator concerns.
   Make `from_entries` use the same validation and panic on a violated asserted-construction
   contract. Add exact error tables for every reference family and properties showing that valid
-  entry sets produce the same molecule through both constructors. **Additive API with strengthened
-  asserted contract (green).** [dep: S1a]
+  entry sets produce the same molecule through both constructors. The constructor-routing audit
+  keeps DSL conversion, molecule combination, pushout, reaction-span projection, and perceived
+  molecule conversion on the asserted path because they establish references by construction;
+  TableIR raising uses the checked path, and the Python entry constructor moves to it in S1c.
+  **Additive API with strengthened asserted contract (green).** [dep: S1a] **Done.**
 - **S1c — Move the Python molecule constructor to the checked entry path.** Rename
   `MoleculeAst.from_parts` to `MoleculeAst.from_entries`, change it to return `PyResult`, and map
   `MoleculeEntriesError` to `ValueError`. Migrate all Python callers and tests without retaining the
@@ -360,7 +363,11 @@ creates an atom, since a partial correspondence is the case where the two forms 
   prohibition on an entity absent from both sides before constructing storage. Normalize every
   canonically equal `Modified` value to `Unchanged` in both paths. Test all four entity span states,
   all eight entity families, all three constraint states, every structural failure category, and
-  exact normalization. **Additive (green).** [dep: S1a]
+  exact normalization. Before adding another exhaustive constraint-reference walk, review the
+  overlap with molecule-entry and reaction-integrity validation and use a common internal traversal
+  where that reduces duplication without expanding the public API. Also avoid retaining DSL-side
+  checks that merely repeat checks owned by the checked entry constructor. **Additive (green).**
+  [dep: S1a]
 - **S2b — Route generated spans through entries.** Migrate `ReactionSpanAst::superimpose`,
   `ReactionAst::to_reaction_span`, and other constructors inside
   `ast/reaction_span.rs` to build `ReactionSpanEntries` and use the asserted constructor. Preserve

@@ -1488,7 +1488,7 @@ pub(crate) fn distinct_atoms_strategy(
         .boxed()
 }
 
-pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
+pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntries> {
     (0usize..=5)
         .prop_flat_map(|atom_count| {
             let atoms = prop::collection::vec(atom_ast_strategy(), atom_count);
@@ -1596,7 +1596,7 @@ pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::from_entries(MoleculeEntries {
+                MoleculeEntries {
                     atoms,
                     bonds,
                     dative: dative_triples,
@@ -1606,9 +1606,13 @@ pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                     stereo_atoms,
                     stereo_bonds,
                     constraints: Constraints::new(),
-                })
+                }
             },
         )
+}
+
+pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
+    molecule_entries_strategy().prop_map(MoleculeAst::from_entries)
 }
 
 /// Per-entity counts for a generated `MoleculeAst`. Carried into the
@@ -1627,6 +1631,19 @@ pub(crate) struct ConstraintCounts {
 }
 
 impl ConstraintCounts {
+    fn from_entries(entries: &MoleculeEntries) -> Self {
+        Self {
+            atom: entries.atoms.len(),
+            bond: entries.bonds.len(),
+            dative: entries.dative.len(),
+            aromatic: entries.aromatic.len(),
+            multicenter: entries.multicenter.len(),
+            noncovalent: entries.noncovalent.len(),
+            stereo_atom: entries.stereo_atoms.len(),
+            stereo_bond: entries.stereo_bonds.len(),
+        }
+    }
+
     fn from_ast(ast: &MoleculeAst) -> Self {
         Self {
             atom: ast.atoms().count(),
@@ -2190,21 +2207,25 @@ pub(crate) fn constraint_strategy(counts: ConstraintCounts) -> BoxedStrategy<Con
 }
 
 pub(crate) fn molecule_ast_with_constraints_strategy() -> impl Strategy<Value = MoleculeAst> {
-    molecule_ast_strategy().prop_flat_map(|ast| {
-        let counts = ConstraintCounts::from_ast(&ast);
+    molecule_entries_with_constraints_strategy().prop_map(MoleculeAst::from_entries)
+}
+
+pub(crate) fn molecule_entries_with_constraints_strategy() -> impl Strategy<Value = MoleculeEntries>
+{
+    molecule_entries_strategy().prop_flat_map(|entries| {
+        let counts = ConstraintCounts::from_entries(&entries);
         let max_constraints = 4usize;
         (
-            Just(ast),
+            Just(entries),
             prop::collection::vec(constraint_strategy(counts), 0..=max_constraints),
         )
-            .prop_map(|(ast, constraints)| {
+            .prop_map(|(mut entries, constraints)| {
                 let mut cs = Constraints::new();
                 for c in constraints {
                     cs.push(c);
                 }
-                let mut b = ast.edit();
-                *b.constraints_mut() = cs;
-                b.build()
+                entries.constraints = cs;
+                entries
             })
     })
 }

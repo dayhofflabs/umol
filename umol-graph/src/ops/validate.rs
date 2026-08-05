@@ -504,11 +504,16 @@ mod tests {
         ))),
     )]
     #[case::error(
-        MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
-            constraints: Constraint::Atom(AtomId(1), AtomConstraintAst::valence(0)).into(),
-            ..Default::default()
-        }),
+        {
+            let mut molecule = MoleculeAst::from_entries(MoleculeEntries {
+                atoms: vec![AtomAst::from_element(Element::C)],
+                ..Default::default()
+            });
+            molecule
+                .constraints_mut()
+                .push(Constraint::Atom(AtomId(1), AtomConstraintAst::valence(0)));
+            molecule
+        },
         Err(ValidatorError::Constraint(ConstraintError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         })),
