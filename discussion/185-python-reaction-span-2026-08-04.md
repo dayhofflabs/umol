@@ -311,7 +311,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   cases and properties over generated valid partial bijections proving sorted storage, unique
   columns, range validity, and that matched plus unmatched ids partition each declared id space.
   Preserve the existing composition, reverse, and `compose_all` properties under the checked
-  constructor. **Additive validation and tests (green).** [dep: S0a]
+  constructor. **Additive validation and tests (green).** [dep: S0a] **Done.**
 - **S0c — Move molecular atom correspondences from `NodeId` to `AtomId`.** Change the atom family
   stored by `MoleculeCorrespondence`, its `new`, `induce`, and `atoms` methods, and every molecular
   correspondence helper to `Correspondence<AtomId>`. Carry the type through molecule

@@ -105,8 +105,22 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
 
     /// A correspondence whose left space is dense (`0..images.len()`), pairing each left id `i` with
     /// `images[i]` — the shape a subgraph match / embedding induces (query index → host id). Already
-    /// sorted by left, so no sort. Injectivity is a property of `images`, not enforced (as in `new`).
+    /// sorted by left, so no sort. Panics if an image is outside the declared right id space or
+    /// occurs more than once; algorithmic producers are expected to establish these invariants.
     pub fn from_images(images: &[Id], right_count: usize) -> Self {
+        let right_bound = Id::from(right_count);
+        let mut right_ids = BTreeSet::new();
+        for &right in images {
+            assert!(
+                right < right_bound,
+                "correspondence image is out of range for the declared right id space"
+            );
+            assert!(
+                right_ids.insert(right),
+                "correspondence images must be unique"
+            );
+        }
+
         Self {
             matched_pairs: images
                 .iter()
@@ -459,6 +473,27 @@ mod tests {
         assert_eq!(c.matched_pair_count(), 3);
         assert_eq!(c.left_unmatched(), Vec::<NodeId>::new());
         assert_eq!(c.right_unmatched(), vec![n(2)]);
+    }
+
+    #[rstest]
+    #[case::at_bound(&[NodeId(2)], 2)]
+    #[case::above_bound(&[NodeId(3)], 2)]
+    #[should_panic(
+        expected = "correspondence image is out of range for the declared right id space"
+    )]
+    fn test_correspondence_from_images_range(
+        #[case] images: &[NodeId],
+        #[case] right_count: usize,
+    ) {
+        Correspondence::from_images(images, right_count);
+    }
+
+    #[rstest]
+    #[case::adjacent(&[NodeId(0), NodeId(0)])]
+    #[case::separated(&[NodeId(0), NodeId(1), NodeId(0)])]
+    #[should_panic(expected = "correspondence images must be unique")]
+    fn test_correspondence_from_images_duplicate(#[case] images: &[NodeId]) {
+        Correspondence::from_images(images, 2);
     }
 
     #[rstest]

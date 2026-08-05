@@ -1,4 +1,6 @@
-//! Algebraic properties of correspondence composition.
+//! Construction and algebraic properties of correspondences.
+
+use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 use umol_graph_core::{Correspondence, NodeId};
@@ -24,7 +26,70 @@ fn correspondence_strategy() -> impl Strategy<Value = Correspondence<NodeId>> {
     })
 }
 
+fn correspondence_images_strategy() -> impl Strategy<Value = (Vec<NodeId>, usize)> {
+    (0usize..8).prop_flat_map(|right_count| {
+        (
+            Just((0..right_count).map(NodeId::from).collect::<Vec<_>>()).prop_shuffle(),
+            0usize..=right_count,
+        )
+            .prop_map(move |(mut images, left_count)| {
+                images.truncate(left_count);
+                (images, right_count)
+            })
+    })
+}
+
 proptest! {
+    #[test]
+    fn test_correspondence_from_images(
+        (images, right_count) in correspondence_images_strategy(),
+    ) {
+        let correspondence = Correspondence::from_images(&images, right_count);
+        let matched_pairs = correspondence.matched_pairs();
+        let expected_pairs = images
+            .iter()
+            .enumerate()
+            .map(|(left, &right)| (NodeId::from(left), right))
+            .collect::<Vec<_>>();
+        let left_matched = matched_pairs
+            .iter()
+            .map(|&(left, _)| left)
+            .collect::<BTreeSet<_>>();
+        let right_matched = matched_pairs
+            .iter()
+            .map(|&(_, right)| right)
+            .collect::<BTreeSet<_>>();
+        let mut left_partition = left_matched
+            .iter()
+            .copied()
+            .chain(correspondence.left_unmatched())
+            .collect::<Vec<_>>();
+        let mut right_partition = right_matched
+            .iter()
+            .copied()
+            .chain(correspondence.right_unmatched())
+            .collect::<Vec<_>>();
+        left_partition.sort_unstable();
+        right_partition.sort_unstable();
+
+        prop_assert_eq!(matched_pairs, expected_pairs);
+        prop_assert!(matched_pairs.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        prop_assert_eq!(left_matched.len(), matched_pairs.len());
+        prop_assert_eq!(right_matched.len(), matched_pairs.len());
+        prop_assert!(matched_pairs
+            .iter()
+            .all(|&(left, right)| left < NodeId::from(images.len())
+                && right < NodeId::from(right_count)));
+        prop_assert_eq!(
+            left_partition,
+            (0..images.len()).map(NodeId::from).collect::<Vec<_>>(),
+        );
+        prop_assert_eq!(
+            right_partition,
+            (0..right_count).map(NodeId::from).collect::<Vec<_>>(),
+        );
+    }
+
     #[test]
     fn test_correspondence_compose_associativity(
         first in correspondence_strategy(),
@@ -88,5 +153,12 @@ proptest! {
             Correspondence::compose_all(correspondences),
             expected,
         );
+    }
+
+    #[test]
+    fn test_correspondence_reverse_involution(
+        correspondence in correspondence_strategy(),
+    ) {
+        prop_assert_eq!(correspondence.reverse().reverse(), correspondence);
     }
 }
