@@ -1,11 +1,12 @@
 # 185 — Expose the reaction span form on the Python surface
 
-Status: Proposed
+Status: **In Progress**
 Date: 2026-08-04
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [182](182-python-resolution-2026-08-03.md),
 [184](184-deltas-and-edits-2026-08-04.md),
-[168](168-api-hygiene-2026-07-27.md)
+[168](168-api-hygiene-2026-07-27.md),
+[188](188-developer-guide-2026-08-05.md)
 
 `ReactionSpanAst` is not exported to `umol-py`. The whitepaper's reactions section names the span form
 as the route by which an existing corpus of rules reaches \umol, so the route should be reachable
@@ -42,24 +43,30 @@ closed for lattice operations and editing.
   `try_from_entries` methods for checked runtime input; ordinary Rust construction remains
   infallible.
 - The conversion in both directions: `ReactionAst.to_reaction_span()` and
-  `ReactionSpanAst.to_reaction()`. These exist in Rust at `umol-ast/src/ast/reaction_span.rs:900` and
-  `:546`. Both directions, since the claim being supported is that the representations are equivalent.
+  `ReactionSpanAst.to_reaction()`. The former preserves DPO-invalid rules that the union span can
+  represent; the latter is fallible when the span's lhs cannot be represented as a referentially
+  intact `MoleculeAst`.
 - A public checked `Correspondence` constructor in Rust and Python. The same type returned by
   substructure matching, molecule combination, and splitting should be accepted by subsequent
   operations; raw pair lists must not form a second construction channel.
+- The correspondence API corrections required by this bridge: intrinsic constructor errors,
+  directional totality, fallible dense remapping, contextual graph and molecule induction, and
+  contextual span superimposition and molecule differencing. Doc 168 retains the repository-wide
+  audit beyond these identified consumers.
 - `ReactionAst.from_sides(lhs, rhs, atom_correspondence)` — construction from two molecules and an
   atom correspondence, which is how a rule arrives from an atom-mapped reaction.
 - Rename the atom-level correspondence accessor on `ReactionDerivation` from `atom_map` to
   `atom_correspondence` in Rust and Python. Reserve atom mapping terminology for external-format atom
   labels.
-- `lhs()`, `rhs()`, and `correspondence()` on the span. Together they project the two molecule sides
-  and their existing `MoleculeCorrespondence` from the superimposed representation.
+- Fallible `lhs()` and `rhs()`, plus infallible `correspondence()`, on the span. The side projections
+  return `MoleculeEntriesError` when a structurally intact span cannot represent that side as a
+  referentially intact `MoleculeAst`; correspondence recovery does not materialize either side.
 
 **Out:**
 
 - Direct raw-pair input to `ReactionAst.from_sides`.
 - `superimpose` and `difference_to` on the Python surface. Their Rust correspondence-precondition
-  contracts belong to the broader public-consumer audit in doc 168.
+  contracts are corrected in this work, but no Python methods are added.
 - The `EntitySpan` accessors — `atoms()`, `bonds()`, `constraints()`. The paper describes the span
   form; it does not inspect one entry by entry. Python construction uses explicit before/after
   values and does not require another eight-class wrapper family.
@@ -69,8 +76,12 @@ closed for lattice operations and editing.
 - A representation of non-bijective source identities. One reaction span encodes a partial
   bijection; an adapter must reject a source identity relation that cannot be projected into that
   model or apply a separately specified projection policy.
-- A general redesign of `GraphCorrespondence`, `MoleculeCorrespondence`, or every operation that
-  consumes them. Doc 168 owns that review.
+- Correspondence consumers beyond the graph induction, molecule induction, remapping,
+  superimposition, and differencing paths identified here. Doc 168 owns that repository-wide
+  review.
+- Public error-surface changes to `ReactionAst::reverse`, reaction composition, or reaction
+  fingerprints. Their current use of a materialized span is an implementation choice; direct span
+  projection does not change their operation-specific contracts.
 
 ## Direct span construction
 
@@ -110,13 +121,14 @@ they do not assemble `Graph`, `RelationSet`, or `BiRelationSet` storage.
 relation containers:
 
 - the topology references existing union-frame atoms, bonds, and stereo ligands;
-- a bond or overlay present on one side refers only to participants present on that side;
-- a stereo entity present on one side refers to a site and ligand frame present on that side;
-- molecule-level constraints refer to entities present on each side on which the constraint exists;
+- every bond, overlay, stereo, and constraint reference resolves in the union-frame namespace;
 - an entry cannot be absent from both sides.
 
-These are representation checks, not chemical validation. Neither construction path invokes
-chemistry models, validators, or resolvers.
+These are representation checks, not side-level semantic validation. In particular, an entity may
+be present on one side while one of its union-frame participants is absent from that side. Such a
+span is structurally representable but may fail DPO validation or side projection. Neither
+construction path invokes chemistry models, validators, resolvers, or implicit closure. The general
+boundary is defined in [doc 188](188-developer-guide-2026-08-05.md).
 
 `from_entries` is the asserted path for entries whose structural integrity is established by their
 producer. It uses the same checks and panics on a violated construction contract rather than
@@ -130,9 +142,10 @@ participants, stereo sites and ligands, and constraint references before constru
 relation storage. Python `MoleculeAst.from_entries` uses the checked Rust path and reports invalid
 runtime input as `ValueError`.
 
-The current crate-private reaction-span storage constructor is removed. The DSL parser already resolves
-entries and performs several of the side-presence checks above; those checks move into or are shared
-with `try_from_entries`. Runtime-data boundaries use the checked path; AST/DSL conversion and
+The current crate-private reaction-span storage constructor is removed. The DSL parser already
+resolves entries; union-reference checks move into or are shared with `try_from_entries`, while its
+side-presence checks are removed as semantic validation. Runtime-data boundaries use the checked
+path; AST/DSL conversion and
 internally generated spans use `from_entries` because their inputs establish the invariant by
 construction. There is no second crate-private constructor with weaker semantics. Private
 `from_parts` functions that genuinely assemble internal storage or pair ASTs with metadata are not
@@ -157,7 +170,9 @@ span = ReactionSpanAst.from_entries(
 )
 ```
 
-The pair maps to the Rust span state as follows:
+The pair maps to the Rust span state as follows. Unlike `ReactionSpanEntries`, the Python pair does
+not carry an explicit `EntitySpan` variant, so equality is the only available distinction between
+unchanged and modified input:
 
 - canonically equal values on both sides become `Unchanged`;
 - different values on both sides become `Modified`;
@@ -209,13 +224,10 @@ integers; `NodeId` and the entity-specific Rust id types do not cross the bounda
 reported as `ValueError` through the Rust `CorrespondenceError` rather than reimplemented in a
 Python-specific helper.
 
-`CorrespondenceError` also reports declared left- or right-space sizes that disagree with the
-context supplied by an operation such as `ReactionAst::from_sides`. This keeps intrinsic pair
-validation and contextual id-space validation under the same correspondence error without adding a
-one-operation error type.
-
-Its public variants are `LeftIdOutOfRange`, `RightIdOutOfRange`, `DuplicateLeftId`,
-`DuplicateRightId`, `LeftCountMismatch`, and `RightCountMismatch`.
+`CorrespondenceError` is limited to failures of the carrier's own partial-bijection invariant. Its
+public variants are `LeftIdOutOfRange`, `RightIdOutOfRange`, `DuplicateLeftId`, and
+`DuplicateRightId`. A declared id-space size that disagrees with a separately supplied graph or
+molecule is a contextual application failure and does not belong to the constructor error.
 
 `Correspondence::from_images(images, right_count)` remains infallible. It is the dense-left form
 used for algorithm-produced embeddings and remappings: left id `i` is paired with `images[i]`.
@@ -227,10 +239,25 @@ The aggregating `GraphCorrespondence::new` and `MoleculeCorrespondence::new` con
 infallible. They receive already-valid correspondences and have no graph or molecule against which
 to check contextual dimensions.
 
+`Correspondence` adds `is_total_on_left` and `is_total_on_right`; `is_total` continues to mean both.
+`GraphCorrespondence` and `MoleculeCorrespondence` aggregate the same three predicates over their
+entity families. Dense remapping conversion returns `Option`: `to_remapping` returns `None` unless
+every family is total on the left. This is a normal absence condition because a valid
+correspondence may be partial even when it was produced for the exact object pair.
+
+Graph- and molecule-level induction accept an open correspondence alongside independent objects.
+They are therefore provisionally `Option`-returning pending the repository-wide error review. They
+return `None` when declared carrier sizes disagree with the supplied objects or when the remaining
+entity correspondence is not uniquely inducible. They do not silently retain the first of several
+possible induced matches. Internal callers whose producer establishes the contextual invariant may
+assert the result; public consumers of independently supplied objects propagate absence. The
+provenance rule and the containment of fallibility are specified in
+[doc 188](188-developer-guide-2026-08-05.md).
+
 ## `from_sides`
 
-Rust `ReactionAst::from_sides` takes `Correspondence<AtomId>` and becomes fallible. Python accepts
-the constructible `Correspondence` object directly:
+Rust `ReactionAst::from_sides` takes `Correspondence<AtomId>` and provisionally returns `Option`
+pending the error review. Python accepts the constructible `Correspondence` object directly:
 
 ```python
 atom_correspondence = Correspondence([(0, 0), (1, 1)], 2, 3)
@@ -238,17 +265,24 @@ reaction = ReactionAst.from_sides(lhs, rhs, atom_correspondence)
 ```
 
 The operation checks that the correspondence's declared left and right spaces equal the atom counts
-of `lhs` and `rhs`. This is contextual coherence, distinct from the partial-bijection invariant
-established by `Correspondence::new`. Once the dimensions agree, the existing induced entity
-correspondence and molecule-difference construction remain the operation.
+of `lhs` and `rhs`, and that the remaining entity families can be induced uniquely. This is
+contextual coherence, distinct from the partial-bijection invariant established by
+`Correspondence::new`. Python maps `None` to `ValueError`; a later error review may replace the
+provisional absence with a named operation error without changing the successful call shape.
 
 No raw iterable of pairs is accepted by `from_sides`. Callers construct the reusable value once and
 can inspect, reverse, or compose it through the existing `Correspondence` API.
 
 ## Settled semantics
 
-- `to_reaction_span` returns `Contradiction` where Rust does; a reaction whose sides cannot be
-  superimposed is an ordinary failure, not a defect.
+- `ReactionAst::to_reaction_span` accepts a DPO-invalid reaction when its union-frame span is
+  structurally representable; it retains its existing `Contradiction` result for incompatible
+  deltas;
+- `ReactionSpanAst::lhs` and `rhs` return `MoleculeEntriesError` when the selected side cannot form a
+  referentially intact `MoleculeAst`;
+- `ReactionSpanAst::to_reaction` returns the same error when its lhs cannot be materialized;
+- DPO validity remains lazy: `DpoValidator` reports it when explicitly requested, while side
+  projection reports the unavailable reference when molecule construction first requires it;
 - `from_sides` accepts a partial atom correspondence; unmatched lhs and rhs atoms become removals and
   additions respectively.
 - Correspondence construction validates structural integrity only. It does not validate chemistry or
@@ -269,14 +303,23 @@ Rust verification covers:
 - exact molecule-entry reference failures through the checked path and the asserted contract of the
   infallible path;
 - direct construction of every entity family and each span state;
-- exact structural failures for missing union-frame participants and side-presence mismatches;
+- exact structural failures for missing union-frame references;
+- construction of side-inconsistent but union-valid spans, followed by exact DPO-validation and
+  projection outcomes: construction succeeds, validation reports the dangling incidence, the
+  unaffected side projects, and the affected side returns the exact unavailable reference;
 - normalization of canonically equal `Modified` entries to `Unchanged` through every construction
   path;
 - equivalence between direct construction, DSL parsing, and superimposition for the same span;
 - exact `Correspondence::new` failures for duplicate and out-of-range ids;
 - ordering and unmatched-id behavior for valid partial correspondences;
 - the asserted valid-image contract of `from_images` without changing its result type;
-- `from_sides` dimension mismatches as errors rather than indexing failures;
+- directional totality laws and `None` from dense remapping of a correspondence that is not total on
+  the left;
+- contextual graph and molecule induction failures for carrier-size mismatch and non-unique
+  incidence, while producer-established paths remain asserted;
+- contextual superimposition and differencing failures for incompatible full correspondences,
+  including acceptance of a coherent correspondence narrower than maximal induction;
+- `from_sides` dimension mismatches as contextual failure rather than indexing failures;
 - reaction/span round trips under partial correspondences.
 
 Python verification covers direct span construction from before/after pairs, construction and
@@ -291,20 +334,15 @@ creates an atom, since a partial correspondence is the case where the two forms 
 
 - **S0a — Make `Correspondence::new` establish the partial-bijection invariant.** In
   `umol-graph-core/src/correspondence.rs`, add the public `CorrespondenceError` with
-  `LeftIdOutOfRange`, `RightIdOutOfRange`, `DuplicateLeftId`, `DuplicateRightId`,
-  `LeftCountMismatch`, and `RightCountMismatch`; export it from the crate root. Change `new` to
+  `LeftIdOutOfRange`, `RightIdOutOfRange`, `DuplicateLeftId`, and `DuplicateRightId`; export it from
+  the crate root. Change `new` to
   return `Result`, reject each invalid pair set, and retain sorting by left id for valid input.
   Migrate every workspace caller in the same subitem: propagate the error at runtime-data
   boundaries and explicitly assert producer invariants where an algorithm or already-validated AST
   constructs the correspondence. Do not add a second unchecked sparse-pair constructor. Add exact
   unit tables for all four constructor error variants, valid unsorted and partial inputs, and empty
-  id spaces. The two contextual count-mismatch variants are exercised when introduced in S3a.
-  The molecule property generator must test duplicate entity incidence directly rather than use an
-  invalid induced correspondence as a uniqueness probe. `MoleculeCorrespondence::induce` retains
-  the relation containers' incidence lookup and only drops later matches to an already-used right
-  entity: duplicate-incidence input is validator-invalid, and the infallible operation guarantees a
-  non-panicking partial correspondence rather than correctness for that input. Do not build a
-  second incidence index or assign duplicate entities an arbitrary stable pairing.
+  id spaces. The molecule property generator must test duplicate entity incidence directly rather
+  than use an invalid induced correspondence as a uniqueness probe.
   **Breaking (red→green).** [dep: none] **Done.**
 - **S0b — Assert and verify dense-image construction.** Keep `from_images` infallible, but assert
   that every image is in the declared right space and occurs only once. Add exact asserted-contract
@@ -322,6 +360,36 @@ creates an atom, since a partial correspondence is the case where the two forms 
   benchmarks, unit tests, and property generators, and assert atom pairs with `AtomId` so the
   domain type is visible in the contract. Verify by source inventory that no public `umol-ast`
   signature exposes `Correspondence<NodeId>`. **Breaking (red→green).** [dep: S0a] **Done.**
+- **S0d — Separate intrinsic construction errors from contextual failures.** Remove
+  `LeftCountMismatch` and `RightCountMismatch` from `CorrespondenceError`, its formatting, and the
+  Python conversion match. Keep the four pair/range variants exhaustive and limit the type's
+  rustdoc to failures of the carrier's own partial-bijection invariant. Update this document's
+  inventories and focused constructor tables so no contextual object-size check is attributed to
+  `Correspondence::new`. **Breaking cleanup (red→green).** [dep: S0a]
+- **S0e — Make graph-correspondence context and directional totality explicit.** In
+  `umol-graph-core/src/correspondence.rs`, add `Correspondence::is_total_on_left` and
+  `is_total_on_right`, retain `is_total` as their conjunction, and aggregate the predicates on
+  `GraphCorrespondence`. Change `GraphCorrespondence::to_remapping` to return `Option<Remapping>`.
+  Make `Correspondence<NodeId>::edge_matched_pairs`, `shared_edge_count`, and
+  `GraphCorrespondence::induced` return `None` when the node carrier does not describe the supplied
+  graph pair or when parallel-edge incidence prevents a unique induced edge correspondence. Migrate
+  graph rewriting and matching callers according to provenance: algorithm-produced pairs assert
+  their contract, while public paths propagate absence. Add exact tables for left/right dimension
+  mismatch, partial and total-left remapping, and ambiguous parallel edges, plus properties relating
+  the three totality predicates. **Breaking (red→green).** [dep: S0d]
+- **S0f — Make molecule-correspondence context and remapping fallible.** In
+  `umol-ast/src/ast/correspondence.rs`, aggregate `is_total_on_left` and `is_total_on_right` over all
+  eight families, retain `is_total` as totality on both sides, and change `to_remapping` to return
+  `Option<IdRemapping>`. Change `MoleculeCorrespondence::induce` to return `Option<Self>`: require
+  the atom carrier's declared sizes to equal the two molecule atom counts and return `None` when
+  bond, overlay, or stereo incidence does not induce a unique right partner. Remove
+  `retain_unique_rights` and its first-match semantics. Migrate all workspace callers by provenance;
+  this includes changing `ReactionAst::from_sides` to return `Option<ReactionAst>`, while callers
+  using correspondences produced for the same unchanged object pair may assert the invariant. Add
+  exact tables for dimension mismatch, partial and total-left remapping, and non-unique incidence in
+  the affected entity families, plus generated properties for directional totality and successful
+  induction over structurally valid molecule pairs. The `Option` surface is provisional pending the
+  repository-wide error review. **Breaking (red→green).** [dep: S0c, S0e]
 
 ### S1 — Establish checked molecule-entry construction
 
@@ -358,29 +426,35 @@ creates an atom, since a partial correspondence is the case where the two forms 
 - **S2a — Add `ReactionSpanEntries` and its paired constructors.** In
   `ast/reaction_span.rs`, add the public flat `ReactionSpanEntries`,
   `ReactionSpanEntriesError`, `ReactionSpanAst::from_entries`, and
-  `ReactionSpanAst::try_from_entries`. Validate union-frame references, side-specific participant
-  presence, stereo sites and ligand frames, constraint references on each present side, and the
-  prohibition on an entity absent from both sides before constructing storage. Normalize every
-  canonically equal `Modified` value to `Unchanged` in both paths. Test all four entity span states,
+  `ReactionSpanAst::try_from_entries`. Validate union-frame participant, site, ligand, and constraint
+  references and the prohibition on an entity absent from both sides before constructing storage;
+  do not enforce side presence or DPO semantics. Normalize every canonically equal `Modified` value
+  to `Unchanged` in both paths. Test all four entity span states,
   all eight entity families, all three constraint states, every structural failure category, and
   exact normalization. Before adding another exhaustive constraint-reference walk, review the
   overlap with molecule-entry and reaction-integrity validation and use a common internal traversal
   where that reduces duplication without expanding the public API. Also avoid retaining DSL-side
   checks that merely repeat checks owned by the checked entry constructor. **Additive (green).**
-  [dep: S1a] **Done.**
-- **S2b — Route generated spans through entries.** Migrate `ReactionSpanAst::superimpose`,
+  [dep: S1a] **Implemented with side-semantic checks superseded by doc 188; corrected in S2b.**
+- **S2b — Correct the construction boundary and route generated spans through entries.** Remove
+  side-presence validation from `ReactionSpanAst::try_from_entries`, retaining only union-reference
+  integrity, and add exact construction cases for DPO-invalid but representable spans. Preserve the
+  explicit `DpoValidator` path rather than duplicating it in construction. Migrate
+  `ReactionSpanAst::superimpose`,
   `ReactionAst::to_reaction_span`, and other constructors inside
-  `ast/reaction_span.rs` to build `ReactionSpanEntries` and use the asserted constructor. Preserve
-  union ordering, participant remapping, constraint ordering, and side compaction. Test exact
+  `ast/reaction_span.rs` to build `ReactionSpanEntries`. Use the asserted constructor for
+  `superimpose`, whose inputs already establish the entry invariants; use the checked constructor
+  for `to_reaction_span` and retain its existing `Contradiction` contract. Preserve union ordering,
+  participant remapping, and constraint ordering. Test exact
   generated spans containing created and removed atoms, bonds, every overlay family, stereo frames,
   and constraints; compare whole span values rather than family counts. **Internal rewire (green).**
   [dep: S2a]
 - **S2c — Route the reaction-span DSL through entries.** Refactor
   `dsl/reaction_span.rs` so parsed input resolves into `ReactionSpanEntries` and calls the checked
-  constructor, mapping structural failures into the existing parse-error surface. Move duplicated
-  side-presence checks to the entry validator. Make `IntoAst` and `FromAst` use the asserted entry
-  path after their type-directed conversions. Preserve `MoleculeMetadata`, defaults, keyword, and
-  alias behavior. Add exact parsing errors plus direct-construction/DSL and
+  constructor, mapping structural failures into the existing parse-error surface. Remove semantic
+  side-presence checks rather than moving them into construction. Make `IntoAst` and `FromAst` use
+  the asserted entry path after their type-directed conversions. Preserve `MoleculeMetadata`,
+  defaults, keyword, and alias behavior. Add exact parsing errors plus direct-construction/DSL and
   DSL/superimposition equivalence cases, including canonically equal input sides normalizing to
   `Unchanged`. **Internal rewire (green).** [dep: S2a, S2b]
 - **S2d — Remove the raw-storage span constructor.** Remove the crate-private
@@ -388,26 +462,41 @@ creates an atom, since a partial correspondence is the case where the two forms 
   construction to `from_entries` or `try_from_entries` according to provenance. Verify by source
   inventory that no caller can bypass the flat entry contract, then run the complete `umol-ast`
   unit and property suites. **Breaking cleanup (red→green).** [dep: S2b, S2c]
+- **S2e — Make span superimposition contextually fallible.** Change
+  `ReactionSpanAst::superimpose` and `MoleculeAst::difference_to` to return `Option`, and migrate
+  every caller in the same subitem. Validate that each family declares the supplied molecule
+  counts and that every supplied matched bond, overlay, or stereo pair has compatible incidence
+  under the atom family. Permit a coherent correspondence to be narrower than the maximally induced
+  correspondence; unmatched entities continue to encode removal and addition. Return `None` for an
+  independently supplied incompatible full correspondence, while trusted producer paths assert
+  their established context. Add exact cases for count mismatch, incompatible bond, overlay, and
+  stereo incidence, a coherent narrower correspondence, and successful whole-span equality. The
+  `Option` surface is provisional pending the error review. **Breaking (red→green).**
+  [dep: S0f, S2d]
 
 ### S3 — Complete the Rust reaction bridge
 
-- **S3a — Make `ReactionAst::from_sides` check correspondence dimensions.** Change the method to
-  accept `Correspondence<AtomId>` and return `Result<ReactionAst, CorrespondenceError>`, require the
-  correspondence's declared left and right counts to equal the two molecule atom counts, and only
-  then induce the remaining entity correspondences and derive the reaction. Migrate every Rust
-  caller according to provenance. Add exact left/right count-mismatch tables and
-  partial-correspondence cases containing both removals and additions. **Breaking (red→green).**
-  [dep: S0c]
-- **S3b — Align reaction-derivation terminology.** Rename
+- **S3a — Align reaction-derivation terminology.** Rename
   `ReactionDerivation::atom_map` to `atom_correspondence` in Rust and migrate all callers, rustdoc,
   repr expectations, and tests. Do not retain the old accessor. **Breaking (red→green).**
   [dep: S0c]
+- **S3b — Make direct span projection faithful and fallible.** Change `ReactionSpanAst::lhs` and
+  `rhs` to return `Result<MoleculeAst, MoleculeEntriesError>`. Preserve every entity and constraint
+  present on the selected side, remap surviving references, and return the exact unavailable
+  reference instead of dropping a surviving entry whose participant is absent. Make
+  `ReactionSpanAst::to_reaction` return the same narrow error because it requires a materialized
+  lhs. Migrate Rust callers in the same subitem: operations on valid generated spans assert their
+  producer invariant, while `ReactionAst::reverse`, reaction composition, and reaction fingerprints
+  retain their current public result types and classify or avoid the internal projection failure.
+  Add exact `#[rstest]` cases showing
+  successful construction of a union-valid/DPO-invalid span, failure of only the affected side
+  projection, and successful projection of the other side. **Breaking (red→green).** [dep: S2d]
 - **S3c — State the bridge laws as Rust properties.** Extend the reaction property suite to verify
   that `from_sides` followed by span conversion preserves both projected sides under a partial atom
   correspondence; reaction → span → reaction is canonically equal; and direct entries, DSL parsing,
   and superimposition agree for generated structurally valid spans. Include unmatched atoms and
   dependent bonds or overlays rather than restricting the generator to total correspondences.
-  **Additive tests (green).** [dep: S2d, S3a]
+  **Additive tests (green).** [dep: S0f, S2e, S3b]
 
 ### S4 — Expose reusable correspondence construction in Python
 
@@ -419,14 +508,14 @@ creates an atom, since a partial correspondence is the case where the two forms 
   out-of-range construction with exact values and exceptions. **Additive (green).** [dep: S0a]
 - **S4b — Require the correspondence value in Python `from_sides`.** Change
   `ReactionAst.from_sides(lhs, rhs, atom_correspondence)` to accept `Correspondence` directly,
-  remove the raw-pair parser and its duplicate `HashSet` validation, and map the Rust method's count
-  mismatches to `ValueError`. Test reuse of a constructed correspondence, unmatched ids, both count
-  mismatches, and rejection of raw pair lists by the typed signature. **Breaking (red→green).**
-  [dep: S3a, S4a]
+  remove the raw-pair parser and its duplicate `HashSet` validation, and map the Rust method's
+  provisional `None` result to `ValueError`. Test reuse of a constructed correspondence, unmatched
+  ids, contextual incompatibility, and rejection of raw pair lists by the typed signature.
+  **Breaking (red→green).** [dep: S0f, S4a]
 - **S4c — Align the Python derivation accessor.** Rename
   `ReactionDerivation.atom_map` to `atom_correspondence`, migrate Python tests and repr expectations,
   and verify that it returns the same constructible `Correspondence` value used by `from_sides`.
-  **Breaking (red→green).** [dep: S3b, S4a]
+  **Breaking (red→green).** [dep: S3a, S4a]
 
 ### S5 — Expose `ReactionSpanAst` in Python
 
@@ -437,19 +526,21 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `ReactionSpanAst::try_from_entries` so all structural failures become `ValueError`. Reuse the
   existing AST, `StereoLigand`, and `Constraint` wrappers rather than exposing `EntitySpan` or
   graph-core storage. Test every entity family, all four entity states, constraint splitting,
-  canonical normalization, and representative union- and side-reference failures. **Additive
+  canonical normalization, representative union-reference failures, and acceptance of a
+  side-inconsistent but union-valid span. **Additive
   (green).** [dep: S2d]
 - **S5b — Bind the textual reaction-span surface.** Add `parse`, `parse_with_metadata`, `render`,
   `render_with_metadata`, and `__str__` using `ReactionSpanDsl`, keyword-only
   `MoleculeDefaults`, and `MoleculeMetadata`. Match the established `MoleculeAst` parse/render
   behavior and error mapping. Test positional rendering, metadata-preserving rendering, defaults,
   keyword and alias retention, and parse/render round trips. **Additive (green).** [dep: S5a]
-- **S5c — Bind span projections and conversions.** Add `lhs()`, `rhs()`, and
+- **S5c — Bind span projections and conversions.** Add fallible `lhs()` and `rhs()`, plus
   `correspondence()` to `ReactionSpanAst`; add `ReactionSpanAst.to_reaction()` and
-  `ReactionAst.to_reaction_span()`, mapping `Contradiction` through the existing Python error
-  surface. Test both conversion directions, projected side values, correspondence contents, and a
+  `ReactionAst.to_reaction_span()`. Map contradictory deltas through `ContradictionError` and a side
+  or target-entry integrity failure through `InvalidStructureError`. Test both conversion
+  directions, projected side values, exact projection failure, correspondence contents, and a
   round trip with an unmatched rhs atom so the bridge exercises creation rather than only relabeling.
-  **Additive (green).** [dep: S3c, S4a, S5a]
+  **Additive (green).** [dep: S3b, S3c, S4a, S5a]
 
 ### S6 — Verify and close the public bridge
 
@@ -460,16 +551,17 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `from_sides`, `atom_map`, and the raw-storage reaction-span constructor are absent, while every
   declared Python method is registered and importable. Update this document and `000-status.md`
   only after all checks pass. **Verification and documentation (green).**
-  [dep: S1c, S2d, S3c, S4c, S5b, S5c]
+  [dep: S0f, S1c, S2e, S3b, S4c, S5b, S5c]
 
 ## Plan properties
 
-- **Critical path:** S0a → S0c → S3a → S3c → S5c → S6a, converging with the span-construction
-  branch S1a → S1b → S2a → S2b → S2c → S2d and the Python branch S0a → S4a.
+- **Critical path:** S0a → S0c → S0d → S0e → S0f → S2e → S3b → S5c → S6a, converging with the
+  span-construction branch
+  S1a → S1b → S2a → S2b → S2c → S2d, and the Python branch S0a → S4a.
 - **Independent work:** S1a has no dependency on checked correspondence construction; S4a can
   proceed once S0a is complete, and S5a can proceed once S2d is complete.
 - **Green boundaries:** every stage ends with the affected crate and all workspace dependents
-  compiling and passing their focused tests; S0a, S1a, S1c, S3a, S3b, S4b, and S4c contain their
-  complete caller migrations because they change public names or signatures.
+  compiling and passing their focused tests; S0a, S0d, S0e, S0f, S1a, S1c, S2e, S3a, S3b, S4b,
+  and S4c contain their complete caller migrations because they change public names or signatures.
 - **Deferrability:** none. S0–S3 establish the safe Rust bridge required by the Python API; S4–S5
   make that bridge usable from Python; S6 establishes the advertised public contract.
