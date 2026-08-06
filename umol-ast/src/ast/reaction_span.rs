@@ -335,10 +335,10 @@ impl ReactionSpanAst {
                 .collect(),
         );
 
-        Ok(Self::from_parts(
-            Graph::new(atoms.len(), &edges),
+        Ok(Self {
+            graph: Graph::new(atoms.len(), &edges),
             atoms,
-            bond_values,
+            bonds: bond_values,
             dative_bonds,
             aromatic_systems,
             multicenter_bonds,
@@ -346,55 +346,7 @@ impl ReactionSpanAst {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        ))
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn from_parts(
-        graph: Graph,
-        atoms: Vec<EntitySpan<AtomAst>>,
-        bonds: Vec<EntitySpan<BondAst>>,
-        dative_bonds: FixedVarBirelationSet<
-            NodeId,
-            Ordered,
-            1,
-            NodeId,
-            Unordered,
-            EntitySpan<DativeBondAst>,
-        >,
-        aromatic_systems: VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemAst>>,
-        multicenter_bonds: VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondAst>>,
-        noncovalent_bonds: FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondAst>, 2>,
-        stereo_atoms: FixedVarBirelationSet<
-            NodeId,
-            Ordered,
-            1,
-            StereoLigand,
-            Ordered,
-            EntitySpan<StereoAtomAst>,
-        >,
-        stereo_bonds: FixedVarBirelationSet<
-            EdgeId,
-            Ordered,
-            1,
-            StereoLigand,
-            Ordered,
-            EntitySpan<StereoBondAst>,
-        >,
-        constraints: Vec<ConstraintSpan>,
-    ) -> Self {
-        Self {
-            graph,
-            atoms,
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-            constraints,
-        }
+        })
     }
 
     /// Superimpose two molecules over their correspondence into the reaction span. Matched entities

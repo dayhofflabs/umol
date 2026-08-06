@@ -463,7 +463,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `ReactionSpanAst::from_parts` and migrate any remaining production, fixture, property, or fuzz
   construction to `from_entries` or `try_from_entries` according to provenance. Verify by source
   inventory that no caller can bypass the flat entry contract, then run the complete `umol-ast`
-  unit and property suites. **Breaking cleanup (red→green).** [dep: S2b, S2c]
+  unit and property suites. **Breaking cleanup (red→green).** [dep: S2b, S2c] **Done.**
 - **S2e — Make span superimposition contextually fallible.** Change
   `ReactionSpanAst::superimpose` and `MoleculeAst::difference_to` to return `Option`, and migrate
   every caller in the same subitem. Validate that each family declares the supplied molecule
