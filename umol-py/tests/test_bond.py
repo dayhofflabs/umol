@@ -88,7 +88,7 @@ def test_bond_update_parse_error():
 
 def ethene():
     # two carbons joined by one double bond (bond id 0, atoms 0-1)
-    return MoleculeAst.from_parts(
+    return MoleculeAst.from_entries(
         [AtomAst(Element("C")), AtomAst(Element("C"))],
         bonds=[(0, 1, BondAst(2))],
     )
@@ -674,7 +674,7 @@ def test_bondviews_iter():
 
 
 def test_bondviews_of():
-    mol = MoleculeAst.from_parts(
+    mol = MoleculeAst.from_entries(
         [AtomAst(Element("C")), AtomAst(Element("C")), AtomAst(Element("C"))],
         bonds=[(0, 1, BondAst(1))],
     )

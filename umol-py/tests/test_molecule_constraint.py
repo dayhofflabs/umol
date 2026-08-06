@@ -83,9 +83,9 @@ def test_constraints_sequence():
     )
 
 
-def test_moleculeast_from_parts_constraints():
+def test_moleculeast_from_entries_constraints():
     entry = connected_constraint()
-    molecule = MoleculeAst.from_parts([], constraints=[entry])
+    molecule = MoleculeAst.from_entries([], constraints=[entry])
 
     assert isinstance(molecule.constraints, ConstraintsView)
     assert list(molecule.constraints) == [entry]
@@ -113,7 +113,7 @@ def test_moleculeast_constraints_set_container():
 
 
 def test_moleculeast_constraints_set_view():
-    source = MoleculeAst.from_parts([], constraints=[connected_constraint()])
+    source = MoleculeAst.from_entries([], constraints=[connected_constraint()])
     target = MoleculeAst()
 
     target.constraints = source.constraints
@@ -122,7 +122,7 @@ def test_moleculeast_constraints_set_view():
 
 
 def test_moleculeast_constraints_set_self():
-    molecule = MoleculeAst.from_parts([], constraints=[connected_constraint()])
+    molecule = MoleculeAst.from_entries([], constraints=[connected_constraint()])
 
     molecule.constraints = molecule.constraints
 

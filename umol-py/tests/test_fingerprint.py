@@ -38,7 +38,7 @@ def ethanol():
 
 @pytest.fixture
 def undetermined_molecule():
-    return MoleculeAst.from_parts([AtomAst.parse("C")])
+    return MoleculeAst.from_entries([AtomAst.parse("C")])
 
 
 @pytest.fixture

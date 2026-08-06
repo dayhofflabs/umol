@@ -61,11 +61,11 @@ def test_molecule_metadata_set_keyword_error():
 
 
 def test_molecule_metadata_remap():
-    source = MoleculeAst.from_parts(
+    source = MoleculeAst.from_entries(
         [AtomAst(Element("O")), AtomAst(Element("N"))],
         bonds=[(0, 1, BondAst(2))],
     )
-    _, correspondence = MoleculeAst.from_parts(
+    _, correspondence = MoleculeAst.from_entries(
         [AtomAst(Element("C"))]
     ).combine(source)
     metadata = MoleculeMetadata()

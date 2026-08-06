@@ -2189,7 +2189,7 @@ def test_constraintdelta_remove_match():
 
 
 def test_constraintdelta_payload_ownership():
-    source_molecule = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    source_molecule = MoleculeAst.from_entries([AtomAst(Element("C"))])
     source = Constraint.Molecule(
         MoleculeConstraint.SubPattern(SubPatternAnchor(), source_molecule)
     )

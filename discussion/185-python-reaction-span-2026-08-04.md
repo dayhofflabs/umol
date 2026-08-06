@@ -351,7 +351,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `MoleculeEntriesError` to `ValueError`. Migrate all Python callers and tests without retaining the
   old spelling. Test the full keyword-only entity-family surface and representative invalid atom,
   bond-site, ligand, and constraint references with exact exception messages. **Breaking
-  (red→green).** [dep: S1b]
+  (red→green).** [dep: S1b] **Done.**
 
 ### S2 — Establish the public reaction-span entry model
 

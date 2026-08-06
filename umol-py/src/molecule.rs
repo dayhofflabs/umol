@@ -3,6 +3,7 @@
 
 use std::str::FromStr;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AtomId as AstAtomId, BondId as AstBondId, FromAst, IntoAst, MoleculeAst as AstMoleculeAst,
@@ -109,7 +110,7 @@ impl MoleculeAst {
         self.render(None)
     }
 
-    /// A molecule from its parts. Each bond is a `(first, second, bond)` triple:
+    /// A molecule from its entries. Each bond is a `(first, second, bond)` triple:
     /// two atom indices into `atoms` and a `BondAst`. Each dative bond is a
     /// `(donors, acceptor, bond)` triple: a list of donor atom indices, one
     /// acceptor atom index, and a `DativeBondAst`. Each aromatic system is an
@@ -122,7 +123,7 @@ impl MoleculeAst {
     #[staticmethod]
     #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
     #[allow(clippy::too_many_arguments)] // one argument per entity family — the full molecule surface
-    fn from_parts(
+    fn from_entries(
         py: Python<'_>,
         atoms: Vec<Py<AtomAst>>,
         bonds: Vec<(u32, u32, Py<BondAst>)>,
@@ -133,7 +134,7 @@ impl MoleculeAst {
         stereo_atoms: Vec<(u32, Vec<StereoLigand>, Py<StereoAtomAst>)>,
         stereo_bonds: Vec<(u32, Vec<StereoLigand>, Py<StereoBondAst>)>,
         constraints: Vec<Py<Constraint>>,
-    ) -> Self {
+    ) -> PyResult<Self> {
         let ast_atoms = atoms
             .iter()
             .map(|atom| atom.bind(py).borrow().inner().clone())
@@ -210,7 +211,7 @@ impl MoleculeAst {
             .iter()
             .map(|constraint| constraint.bind(py).borrow().to_rust(py))
             .collect::<Vec<_>>();
-        MoleculeAst(AstMoleculeAst::from_entries(AstMoleculeEntries {
+        AstMoleculeAst::try_from_entries(AstMoleculeEntries {
             atoms: ast_atoms,
             bonds: ast_bonds,
             dative: ast_dative,
@@ -220,7 +221,9 @@ impl MoleculeAst {
             stereo_atoms: ast_stereo_atoms,
             stereo_bonds: ast_stereo_bonds,
             constraints: ast_constraints.into(),
-        }))
+        })
+        .map(MoleculeAst)
+        .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Ingest a determined molecule from SMILES under explicit IO, chemistry,
@@ -448,7 +451,7 @@ impl MoleculeAst {
     fn __repr__(&self) -> String {
         // Atoms and bonds always; the other entity families (dative bonds, aromatic systems,
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
-        // so a plain covalent molecule stays uncluttered. Names match the `from_parts` kwargs.
+        // so a plain covalent molecule stays uncluttered. Names match the `from_entries` kwargs.
         let mut parts = vec![
             format!("atoms={}", self.0.atoms().count()),
             format!("bonds={}", self.0.bonds().count()),
@@ -687,7 +690,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_from_parts() {
+    fn test_molecule_ast_from_entries() {
         Python::attach(|py| {
             let atoms = vec![
                 Py::new(
@@ -755,7 +758,7 @@ mod tests {
             });
             let constraints =
                 vec![into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap()];
-            let molecule = MoleculeAst::from_parts(
+            let molecule = MoleculeAst::from_entries(
                 py,
                 atoms,
                 bonds,
@@ -766,7 +769,8 @@ mod tests {
                 Vec::new(),
                 Vec::new(),
                 constraints,
-            );
+            )
+            .unwrap();
             assert_eq!(molecule.inner().atoms().count(), 3);
             assert_eq!(molecule.inner().bonds().count(), 1);
             let dative_bonds = molecule.inner().dative_bonds();

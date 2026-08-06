@@ -345,7 +345,7 @@ def test_cistransconfiguration_enum():
 
 def stereo_atom_molecule():
     # a tetrahedral stereocenter on atom 0 with four atom ligands (atoms 1-4)
-    return MoleculeAst.from_parts(
+    return MoleculeAst.from_entries(
         [AtomAst(Element("C")) for _ in range(5)],
         stereo_atoms=[
             (
@@ -413,7 +413,7 @@ def test_stereobondast_parse_roundtrip():
     )
 
 
-def test_molecule_stereo_atoms_from_parts():
+def test_molecule_stereo_atoms_from_entries():
     views = stereo_atom_molecule().stereo_atoms
     assert len(views) == 1
     view = views[0]

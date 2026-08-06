@@ -228,20 +228,20 @@ def test_return_only_value_constructor_error(value_type, message):
 def test_reactionast_constructor():
     empty = ReactionAst()
     populated = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomAst(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]),
     )
 
     assert empty.lhs == MoleculeAst()
     assert empty.deltas == Deltas()
-    assert populated.lhs == MoleculeAst.from_parts([AtomAst(Element("C"))])
+    assert populated.lhs == MoleculeAst.from_entries([AtomAst(Element("C"))])
     assert populated.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
     )
 
 
 def test_reactionast_constructor_snapshot():
-    lhs = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    lhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
     deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))])
     reaction = ReactionAst(lhs, deltas)
 
@@ -258,7 +258,7 @@ def test_reactionast_constructor_snapshot():
 
 def test_reactionast_components():
     reaction = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomAst(Element("C"))]),
         Deltas(),
     )
 
@@ -277,7 +277,7 @@ def test_reactionast_components():
 
 def test_reactionast_component_replacement():
     reaction = ReactionAst()
-    lhs = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    lhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
     deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))])
 
     reaction.lhs = lhs
@@ -295,7 +295,7 @@ def test_reactionast_component_replacement():
 
 def test_reactionast_component_replacement_self():
     reaction = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomAst(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]),
     )
     expected = ReactionAst(reaction.lhs, reaction.deltas)
@@ -308,7 +308,7 @@ def test_reactionast_component_replacement_self():
 
 def test_reactionast_value():
     reaction = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomAst(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]),
     )
 
@@ -540,7 +540,7 @@ def test_reactionast_parse_with_metadata_defaults():
     )
 
     assert reaction == ReactionAst(
-        MoleculeAst.from_parts(
+        MoleculeAst.from_entries(
             [
                 AtomAst.parse(
                     "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
@@ -582,7 +582,7 @@ def test_reactionast_parse_with_metadata_keyword_error():
     [
         pytest.param(
             ReactionAst(
-                MoleculeAst.from_parts([AtomAst(Element("C"))]),
+                MoleculeAst.from_entries([AtomAst(Element("C"))]),
                 Deltas(
                     [
                         Delta.Atom(
@@ -601,7 +601,7 @@ def test_reactionast_parse_with_metadata_keyword_error():
         ),
         pytest.param(
             ReactionAst(
-                MoleculeAst.from_parts(
+                MoleculeAst.from_entries(
                     [
                         AtomAst.parse(
                             "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
@@ -667,7 +667,7 @@ def test_reactionast_render_with_metadata_error():
         ),
     ):
         ReactionAst(
-            MoleculeAst.from_parts([AtomAst(Element("C"))]),
+            MoleculeAst.from_entries([AtomAst(Element("C"))]),
         ).render_with_metadata(metadata)
 
 
@@ -686,12 +686,12 @@ def test_reactionast_render_with_metadata_keyword_error():
 
 
 def test_reactionast_from_sides():
-    lhs = MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))])
-    rhs = MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("N"))])
-    lhs_snapshot = MoleculeAst.from_parts(
+    lhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))])
+    rhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("N"))])
+    lhs_snapshot = MoleculeAst.from_entries(
         [AtomAst(Element("C")), AtomAst(Element("O"))]
     )
-    rhs_snapshot = MoleculeAst.from_parts(
+    rhs_snapshot = MoleculeAst.from_entries(
         [AtomAst(Element("C")), AtomAst(Element("N"))]
     )
 
@@ -716,8 +716,8 @@ def test_reactionast_from_sides():
 
 
 def test_reactionast_from_sides_snapshot():
-    lhs = MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))])
-    rhs = MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("N"))])
+    lhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))])
+    rhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("N"))])
     reaction = ReactionAst.from_sides(lhs, rhs, [(0, 0)])
     expected = ReactionAst(reaction.lhs, reaction.deltas)
 
@@ -772,8 +772,8 @@ def test_reactionast_from_sides_snapshot():
     ],
 )
 def test_reactionast_from_sides_error(lhs_count, rhs_count, atom_pairs, message):
-    lhs = MoleculeAst.from_parts([AtomAst(Element("C")) for _ in range(lhs_count)])
-    rhs = MoleculeAst.from_parts([AtomAst(Element("C")) for _ in range(rhs_count)])
+    lhs = MoleculeAst.from_entries([AtomAst(Element("C")) for _ in range(lhs_count)])
+    rhs = MoleculeAst.from_entries([AtomAst(Element("C")) for _ in range(rhs_count)])
 
     with pytest.raises(ValueError, match=f"^{message}$"):
         ReactionAst.from_sides(
@@ -1104,7 +1104,7 @@ def test_reactionast_parse_repr():
 
 def test_reactionast_canonicalize():
     source = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C"), charge=0)]),
+        MoleculeAst.from_entries([AtomAst(Element("C"), charge=0)]),
         Deltas(
             [
                 Delta.Atom(
@@ -1155,7 +1155,7 @@ def test_reactionast_canonicalize():
 
 def test_reactionast_canonicalize_error():
     source = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C"), charge=0)]),
+        MoleculeAst.from_entries([AtomAst(Element("C"), charge=0)]),
         Deltas(
             [
                 Delta.Atom(
@@ -1187,7 +1187,7 @@ def test_reactionast_canonicalize_error():
 
 def test_reactionast_canonical_eq():
     source = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))]),
+        MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1210,7 +1210,7 @@ def test_reactionast_canonical_eq():
         ),
     )
     reordered = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("C")), AtomAst(Element("O"))]),
+        MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1233,7 +1233,7 @@ def test_reactionast_canonical_eq():
         ),
     )
     renumbered = ReactionAst(
-        MoleculeAst.from_parts([AtomAst(Element("O")), AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomAst(Element("O")), AtomAst(Element("C"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1270,7 +1270,7 @@ def test_reactionast_reverse():
     reversed_reaction = source.reverse()
     roundtrip = reversed_reaction.reverse()
 
-    assert reversed_reaction.lhs == MoleculeAst.from_parts(
+    assert reversed_reaction.lhs == MoleculeAst.from_entries(
         [AtomAst(Element("C")), AtomAst(Element("N"))]
     )
     assert roundtrip.canonicalize() == source.canonicalize()
