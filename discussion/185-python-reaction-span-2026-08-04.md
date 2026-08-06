@@ -367,7 +367,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   overlap with molecule-entry and reaction-integrity validation and use a common internal traversal
   where that reduces duplication without expanding the public API. Also avoid retaining DSL-side
   checks that merely repeat checks owned by the checked entry constructor. **Additive (green).**
-  [dep: S1a]
+  [dep: S1a] **Done.**
 - **S2b — Route generated spans through entries.** Migrate `ReactionSpanAst::superimpose`,
   `ReactionAst::to_reaction_span`, and other constructors inside
   `ast/reaction_span.rs` to build `ReactionSpanEntries` and use the asserted constructor. Preserve

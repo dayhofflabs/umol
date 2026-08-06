@@ -8,7 +8,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
+use std::iter;
 
+use thiserror::Error;
 use umol_graph_core::{
     Compaction, Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
     Ordered, RelationId, Unordered, VarRelationSet,
@@ -27,13 +29,14 @@ use super::delta::{
     ConstraintDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
+use super::entity::Entity;
 use super::error::Contradiction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::molecule::{MoleculeAst, MoleculeEntries};
+use super::molecule::{validate_constraint_references, MoleculeAst, MoleculeEntries};
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::reaction::ReactionAst;
@@ -59,6 +62,32 @@ pub struct ReactionSpanAst {
     stereo_bonds:
         FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoBondAst>>,
     constraints: Vec<ConstraintSpan>,
+}
+
+/// Flat constructor input for [`ReactionSpanAst::from_entries`]. Each [`EntitySpan`] is present on
+/// at least one side by construction; a value absent from both sides has no entry representation.
+#[derive(Clone, Debug, Default)]
+pub struct ReactionSpanEntries {
+    pub atoms: Vec<EntitySpan<AtomAst>>,
+    pub bonds: Vec<(AtomId, AtomId, EntitySpan<BondAst>)>,
+    pub dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondAst>)>,
+    pub aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemAst>)>,
+    pub multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondAst>)>,
+    pub noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondAst>)>,
+    pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomAst>)>,
+    pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondAst>)>,
+    pub constraints: Vec<ConstraintSpan>,
+}
+
+/// Failure to construct a reaction span from structurally inconsistent entries.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ReactionSpanEntriesError {
+    #[error("reaction span entries reference unavailable {entity}")]
+    InvalidReference { entity: Entity },
+    #[error("reaction span entries reference {entity} absent on the left")]
+    AbsentOnLeft { entity: Entity },
+    #[error("reaction span entries reference {entity} absent on the right")]
+    AbsentOnRight { entity: Entity },
 }
 
 /// R id → union id for one entity family: a matched right id reuses its left partner; a
@@ -118,8 +147,278 @@ impl MoleculeAst {
     }
 }
 
+fn span_is_present<T>(span: &EntitySpan<T>, side: Side) -> bool {
+    entity_side(span, side).is_some()
+}
+
+fn entry_is_present(entries: &ReactionSpanEntries, entity: Entity, side: Side) -> Option<bool> {
+    match entity {
+        Entity::Atom(id) => entries
+            .atoms
+            .get(id.index())
+            .map(|span| span_is_present(span, side)),
+        Entity::Bond(id) => entries
+            .bonds
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.2, side)),
+        Entity::DativeBond(id) => entries
+            .dative
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.2, side)),
+        Entity::AromaticSystem(id) => entries
+            .aromatic
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.1, side)),
+        Entity::MulticenterBond(id) => entries
+            .multicenter
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.1, side)),
+        Entity::NoncovalentBond(id) => entries
+            .noncovalent
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.2, side)),
+        Entity::StereoAtom(id) => entries
+            .stereo_atoms
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.2, side)),
+        Entity::StereoBond(id) => entries
+            .stereo_bonds
+            .get(id.index())
+            .map(|entry| span_is_present(&entry.2, side)),
+    }
+}
+
+fn contains_entry(entries: &ReactionSpanEntries, entity: Entity) -> bool {
+    entry_is_present(entries, entity, Side::Left).is_some()
+}
+
+fn require_entry_on_side(
+    entries: &ReactionSpanEntries,
+    entity: Entity,
+    side: Side,
+) -> Result<(), ReactionSpanEntriesError> {
+    match entry_is_present(entries, entity, side) {
+        None => Err(ReactionSpanEntriesError::InvalidReference { entity }),
+        Some(true) => Ok(()),
+        Some(false) => Err(match side {
+            Side::Left => ReactionSpanEntriesError::AbsentOnLeft { entity },
+            Side::Right => ReactionSpanEntriesError::AbsentOnRight { entity },
+        }),
+    }
+}
+
+fn validate_span_references<T>(
+    entries: &ReactionSpanEntries,
+    span: &EntitySpan<T>,
+    references: &[Entity],
+) -> Result<(), ReactionSpanEntriesError> {
+    for side in [Side::Left, Side::Right] {
+        if entity_side(span, side).is_some() {
+            for &entity in references {
+                require_entry_on_side(entries, entity, side)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_reaction_span_entries(
+    entries: &ReactionSpanEntries,
+) -> Result<(), ReactionSpanEntriesError> {
+    for (first, second, span) in &entries.bonds {
+        validate_span_references(
+            entries,
+            span,
+            &[Entity::Atom(*first), Entity::Atom(*second)],
+        )?;
+    }
+    for (donors, acceptor, span) in &entries.dative {
+        let references: Vec<Entity> = iter::once(Entity::Atom(*acceptor))
+            .chain(donors.iter().copied().map(Entity::Atom))
+            .collect();
+        validate_span_references(entries, span, &references)?;
+    }
+    for (atoms, span) in &entries.aromatic {
+        let references: Vec<Entity> = atoms.iter().copied().map(Entity::Atom).collect();
+        validate_span_references(entries, span, &references)?;
+    }
+    for (atoms, span) in &entries.multicenter {
+        let references: Vec<Entity> = atoms.iter().copied().map(Entity::Atom).collect();
+        validate_span_references(entries, span, &references)?;
+    }
+    for (first, second, span) in &entries.noncovalent {
+        validate_span_references(
+            entries,
+            span,
+            &[Entity::Atom(*first), Entity::Atom(*second)],
+        )?;
+    }
+    for (site, ligands, span) in &entries.stereo_atoms {
+        let references: Vec<Entity> = iter::once(Entity::Atom(*site))
+            .chain(ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)))
+            .collect();
+        validate_span_references(entries, span, &references)?;
+    }
+    for (site, ligands, span) in &entries.stereo_bonds {
+        let references: Vec<Entity> = iter::once(Entity::Bond(*site))
+            .chain(ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)))
+            .collect();
+        validate_span_references(entries, span, &references)?;
+    }
+
+    let contains = |entity| contains_entry(entries, entity);
+    for span in &entries.constraints {
+        for constraint in [span.lhs(), span.rhs()].into_iter().flatten() {
+            validate_constraint_references(constraint, &contains)
+                .map_err(|entity| ReactionSpanEntriesError::InvalidReference { entity })?;
+        }
+    }
+    for side in [Side::Left, Side::Right] {
+        let contains = |entity| entry_is_present(entries, entity, side) == Some(true);
+        for span in &entries.constraints {
+            let constraint = match side {
+                Side::Left => span.lhs(),
+                Side::Right => span.rhs(),
+            };
+            if let Some(constraint) = constraint {
+                validate_constraint_references(constraint, &contains).map_err(
+                    |entity| match side {
+                        Side::Left => ReactionSpanEntriesError::AbsentOnLeft { entity },
+                        Side::Right => ReactionSpanEntriesError::AbsentOnRight { entity },
+                    },
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn normalize_entity_span<T: Canonicalize + Clone>(span: &mut EntitySpan<T>) {
+    let unchanged = match span {
+        EntitySpan::Modified { lhs, rhs } if lhs.canonical_eq(rhs) => Some(lhs.clone()),
+        _ => None,
+    };
+    if let Some(value) = unchanged {
+        *span = EntitySpan::Unchanged(value);
+    }
+}
+
+fn normalize_reaction_span_entries(entries: &mut ReactionSpanEntries) {
+    for span in &mut entries.atoms {
+        normalize_entity_span(span);
+    }
+    for (_, _, span) in &mut entries.bonds {
+        normalize_entity_span(span);
+    }
+    for (_, _, span) in &mut entries.dative {
+        normalize_entity_span(span);
+    }
+    for (_, span) in &mut entries.aromatic {
+        normalize_entity_span(span);
+    }
+    for (_, span) in &mut entries.multicenter {
+        normalize_entity_span(span);
+    }
+    for (_, _, span) in &mut entries.noncovalent {
+        normalize_entity_span(span);
+    }
+    for (_, _, span) in &mut entries.stereo_atoms {
+        normalize_entity_span(span);
+    }
+    for (_, _, span) in &mut entries.stereo_bonds {
+        normalize_entity_span(span);
+    }
+}
+
 #[allow(clippy::type_complexity)]
 impl ReactionSpanAst {
+    /// Construct a reaction span from entries whose structural integrity is established by the
+    /// caller.
+    pub fn from_entries(entries: ReactionSpanEntries) -> Self {
+        Self::try_from_entries(entries)
+            .unwrap_or_else(|error| panic!("invalid reaction span entries: {error}"))
+    }
+
+    /// Construct a reaction span after checking union-frame and side-presence references.
+    pub fn try_from_entries(
+        mut entries: ReactionSpanEntries,
+    ) -> Result<Self, ReactionSpanEntriesError> {
+        normalize_reaction_span_entries(&mut entries);
+        validate_reaction_span_entries(&entries)?;
+
+        let ReactionSpanEntries {
+            atoms,
+            bonds,
+            dative,
+            aromatic,
+            multicenter,
+            noncovalent,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        } = entries;
+        let edges: Vec<[u32; 2]> = bonds
+            .iter()
+            .map(|(first, second, _)| [first.0, second.0])
+            .collect();
+        let bond_values = bonds.into_iter().map(|(_, _, span)| span).collect();
+        let dative_bonds = FixedVarBirelationSet::new(
+            dative
+                .into_iter()
+                .map(|(donors, acceptor, span)| {
+                    (
+                        [NodeId::from(acceptor)],
+                        donors.into_iter().map(NodeId::from).collect(),
+                        span,
+                    )
+                })
+                .collect(),
+        );
+        let aromatic_systems = VarRelationSet::new(
+            aromatic
+                .into_iter()
+                .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
+                .collect(),
+        );
+        let multicenter_bonds = VarRelationSet::new(
+            multicenter
+                .into_iter()
+                .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
+                .collect(),
+        );
+        let noncovalent_bonds = FixedRelationSet::new(
+            noncovalent
+                .into_iter()
+                .map(|(first, second, span)| ([NodeId::from(first), NodeId::from(second)], span))
+                .collect(),
+        );
+        let stereo_atoms = FixedVarBirelationSet::new(
+            stereo_atoms
+                .into_iter()
+                .map(|(site, ligands, span)| ([NodeId::from(site)], ligands, span))
+                .collect(),
+        );
+        let stereo_bonds = FixedVarBirelationSet::new(
+            stereo_bonds
+                .into_iter()
+                .map(|(site, ligands, span)| ([EdgeId::from(site)], ligands, span))
+                .collect(),
+        );
+
+        Ok(Self::from_parts(
+            Graph::new(atoms.len(), &edges),
+            atoms,
+            bond_values,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        ))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_parts(
         graph: Graph,
@@ -1521,7 +1820,12 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
-    use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
+    use super::super::constraint::{
+        AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
+        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
+        NoncovalentBondConstraintAst, StereoAtomConstraintAst, StereoBondConstraintAst,
+        StereogenicityAst,
+    };
     use super::super::delta::Deltas;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
@@ -1529,6 +1833,632 @@ mod tests {
     use super::super::stereo::{StereoConfigurationAst, StereoCoset, StereoKind};
     use super::super::value::ValueAst;
     use super::*;
+
+    #[rstest]
+    fn test_reaction_span_ast_from_entries() {
+        let span = ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Modified {
+                    lhs: AtomAst::from_element(Element::C),
+                    rhs: AtomAst::from_element(Element::N),
+                },
+                EntitySpan::Added(AtomAst::from_element(Element::O)),
+                EntitySpan::Removed(AtomAst::from_element(Element::F)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::Cl)),
+            ],
+            bonds: vec![
+                (
+                    AtomId(0),
+                    AtomId(4),
+                    EntitySpan::Unchanged(BondAst::from_order(1)),
+                ),
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Modified {
+                        lhs: BondAst::from_order(1),
+                        rhs: BondAst::from_order(2),
+                    },
+                ),
+                (
+                    AtomId(1),
+                    AtomId(2),
+                    EntitySpan::Added(BondAst::from_order(1)),
+                ),
+                (
+                    AtomId(1),
+                    AtomId(3),
+                    EntitySpan::Removed(BondAst::from_order(1)),
+                ),
+            ],
+            dative: vec![(
+                vec![AtomId(1)],
+                AtomId(0),
+                EntitySpan::Unchanged(DativeBondAst::default()),
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(4)],
+                EntitySpan::Unchanged(AromaticSystemAst::default()),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(4)],
+                EntitySpan::Unchanged(MulticenterBondAst::default()),
+            )],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(4),
+                EntitySpan::Unchanged(NoncovalentBondAst::default()),
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                EntitySpan::Unchanged(StereoAtomAst::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                EntitySpan::Unchanged(StereoBondAst::default()),
+            )],
+            constraints: vec![
+                ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(0), AtomId(1)]),
+                })),
+                ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(1), AtomId(2)]),
+                })),
+                ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(1), AtomId(3)]),
+                })),
+            ],
+        });
+
+        assert_eq!(
+            span.lhs(),
+            MoleculeAst::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::F),
+                    AtomAst::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                    (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                ],
+                dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::default())],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(3)],
+                    AromaticSystemAst::default(),
+                )],
+                multicenter: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(3)],
+                    MulticenterBondAst::default(),
+                )],
+                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondAst::default(),)],
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::default(),
+                )],
+                stereo_bonds: vec![(
+                    BondId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    ],
+                    StereoBondAst::default(),
+                )],
+                constraints: Constraints::from_iter([
+                    Constraint::Molecule(MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(0), AtomId(1)]),
+                    }),
+                    Constraint::Molecule(MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(1), AtomId(2)]),
+                    }),
+                ]),
+            }),
+        );
+        assert_eq!(
+            span.rhs(),
+            MoleculeAst::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::N),
+                    AtomAst::from_element(Element::O),
+                    AtomAst::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(1), BondAst::from_order(2)),
+                    (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                ],
+                dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::default())],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(3)],
+                    AromaticSystemAst::default(),
+                )],
+                multicenter: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(3)],
+                    MulticenterBondAst::default(),
+                )],
+                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondAst::default(),)],
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::default(),
+                )],
+                stereo_bonds: vec![(
+                    BondId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    ],
+                    StereoBondAst::default(),
+                )],
+                constraints: Constraints::from_iter([
+                    Constraint::Molecule(MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(0), AtomId(1)]),
+                    }),
+                    Constraint::Molecule(MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(1), AtomId(2)]),
+                    }),
+                ]),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_from_entries_normalization() {
+        let lhs_atom = AtomAst::from_element(Element::C).with_charge(ValueAst::Lit(1));
+        let rhs_atom = AtomAst::from_element(Element::C).with_charge(ValueAst::lit_set([1_i64]));
+        assert_ne!(lhs_atom, rhs_atom);
+        let span = ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Modified {
+                    lhs: lhs_atom.clone(),
+                    rhs: rhs_atom,
+                },
+                EntitySpan::Unchanged(AtomAst::from_element(Element::O)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Modified {
+                    lhs: BondAst::default(),
+                    rhs: BondAst::default(),
+                },
+            )],
+            dative: vec![(
+                vec![AtomId(1)],
+                AtomId(0),
+                EntitySpan::Modified {
+                    lhs: DativeBondAst::default(),
+                    rhs: DativeBondAst::default(),
+                },
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Modified {
+                    lhs: AromaticSystemAst::default(),
+                    rhs: AromaticSystemAst::default(),
+                },
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Modified {
+                    lhs: MulticenterBondAst::default(),
+                    rhs: MulticenterBondAst::default(),
+                },
+            )],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondAst::default(),
+                    rhs: NoncovalentBondAst::default(),
+                },
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                EntitySpan::Modified {
+                    lhs: StereoAtomAst::default(),
+                    rhs: StereoAtomAst::default(),
+                },
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                EntitySpan::Modified {
+                    lhs: StereoBondAst::default(),
+                    rhs: StereoBondAst::default(),
+                },
+            )],
+            constraints: Vec::new(),
+        });
+
+        assert_eq!(span.atoms()[0], EntitySpan::Unchanged(lhs_atom));
+        assert_eq!(span.bonds()[0], EntitySpan::Unchanged(BondAst::default()));
+        assert_eq!(
+            span.dative_bonds().data(RelationId(0)),
+            &EntitySpan::Unchanged(DativeBondAst::default())
+        );
+        assert_eq!(
+            span.aromatic_systems().data(RelationId(0)),
+            &EntitySpan::Unchanged(AromaticSystemAst::default())
+        );
+        assert_eq!(
+            span.multicenter_bonds().data(RelationId(0)),
+            &EntitySpan::Unchanged(MulticenterBondAst::default())
+        );
+        assert_eq!(
+            span.noncovalent_bonds().data(RelationId(0)),
+            &EntitySpan::Unchanged(NoncovalentBondAst::default())
+        );
+        assert_eq!(
+            span.stereo_atoms().data(RelationId(0)),
+            &EntitySpan::Unchanged(StereoAtomAst::default())
+        );
+        assert_eq!(
+            span.stereo_bonds().data(RelationId(0)),
+            &EntitySpan::Unchanged(StereoBondAst::default())
+        );
+    }
+
+    #[rstest]
+    #[should_panic(
+        expected = "invalid reaction span entries: reaction span entries reference unavailable atom 1"
+    )]
+    fn test_reaction_span_ast_from_entries_error() {
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondAst::default()),
+            )],
+            ..Default::default()
+        });
+    }
+
+    #[rstest]
+    #[case::bond_union(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondAst::default()))],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::bond_left(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Removed(BondAst::default()))],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::bond_right(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Removed(AtomAst::default()),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondAst::default()))],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnRight { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::dative_left(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            dative: vec![(
+                vec![AtomId(1)],
+                AtomId(0),
+                EntitySpan::Removed(DativeBondAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::aromatic_union(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Unchanged(AromaticSystemAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::aromatic_left(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Removed(AromaticSystemAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::multicenter_left(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Removed(MulticenterBondAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::noncovalent_left(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Removed(NoncovalentBondAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::stereo_atom_site(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            stereo_atoms: vec![(
+                AtomId(1),
+                Vec::new(),
+                EntitySpan::Unchanged(StereoAtomAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::stereo_atom_ligand(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                EntitySpan::Removed(StereoAtomAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::stereo_bond_site_union(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            stereo_bonds: vec![(
+                BondId(0),
+                Vec::new(),
+                EntitySpan::Unchanged(StereoBondAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::InvalidReference { entity: Entity::Bond(BondId(0)) },
+    )]
+    #[case::stereo_bond_site_right(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            bonds: vec![(AtomId(0), AtomId(0), EntitySpan::Removed(BondAst::default()))],
+            stereo_bonds: vec![(
+                BondId(0),
+                Vec::new(),
+                EntitySpan::Added(StereoBondAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnRight { entity: Entity::Bond(BondId(0)) },
+    )]
+    #[case::stereo_bond_ligand_right(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Removed(AtomAst::default()),
+            ],
+            bonds: vec![(AtomId(0), AtomId(0), EntitySpan::Unchanged(BondAst::default()))],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                EntitySpan::Added(StereoBondAst::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnRight { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::constraint_union(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomAst::default())],
+            constraints: vec![ConstraintSpan::Unchanged(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: Some(vec![AtomId(1)]) },
+            ))],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::constraint_left(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Added(AtomAst::default()),
+            ],
+            constraints: vec![ConstraintSpan::Removed(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: Some(vec![AtomId(1)]) },
+            ))],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Atom(AtomId(1)) },
+    )]
+    #[case::constraint_right(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::default()),
+                EntitySpan::Removed(AtomAst::default()),
+            ],
+            constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: Some(vec![AtomId(1)]) },
+            ))],
+            ..Default::default()
+        },
+        ReactionSpanEntriesError::AbsentOnRight { entity: Entity::Atom(AtomId(1)) },
+    )]
+    fn test_reaction_span_ast_try_from_entries_error(
+        #[case] entries: ReactionSpanEntries,
+        #[case] expected: ReactionSpanEntriesError,
+    ) {
+        assert_eq!(ReactionSpanAst::try_from_entries(entries), Err(expected));
+    }
+
+    #[rstest]
+    #[case::atom(
+        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(ValueAst::Lit(4))),
+        Entity::Atom(AtomId(0))
+    )]
+    #[case::bond(
+        Constraint::Bond(BondId(0), BondConstraintAst::aromatic(false)),
+        Entity::Bond(BondId(0))
+    )]
+    #[case::dative_bond(
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(false)),
+        Entity::DativeBond(DativeBondId(0))
+    )]
+    #[case::aromatic_system(
+        Constraint::AromaticSystem(
+            AromaticSystemId(0),
+            AromaticSystemConstraintAst::electron_count(ValueAst::Lit(2)),
+        ),
+        Entity::AromaticSystem(AromaticSystemId(0))
+    )]
+    #[case::multicenter_bond(
+        Constraint::MulticenterBond(
+            MulticenterBondId(0),
+            MulticenterBondConstraintAst::electron_count(ValueAst::Lit(2)),
+        ),
+        Entity::MulticenterBond(MulticenterBondId(0))
+    )]
+    #[case::noncovalent_bond(
+        Constraint::NoncovalentBond(
+            NoncovalentBondId(0),
+            NoncovalentBondConstraintAst::intramolecular(true),
+        ),
+        Entity::NoncovalentBond(NoncovalentBondId(0))
+    )]
+    #[case::stereo_atom(
+        Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        ),
+        Entity::StereoAtom(StereoAtomId(0))
+    )]
+    #[case::stereo_bond(
+        Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        ),
+        Entity::StereoBond(StereoBondId(0))
+    )]
+    fn test_reaction_span_ast_try_from_entries_constraint_error(
+        #[case] constraint: Constraint,
+        #[case] entity: Entity,
+    ) {
+        let entries = ReactionSpanEntries {
+            atoms: vec![EntitySpan::Added(AtomAst::default())],
+            bonds: vec![(AtomId(0), AtomId(0), EntitySpan::Added(BondAst::default()))],
+            dative: vec![(
+                vec![AtomId(0)],
+                AtomId(0),
+                EntitySpan::Added(DativeBondAst::default()),
+            )],
+            aromatic: vec![(
+                vec![AtomId(0)],
+                EntitySpan::Added(AromaticSystemAst::default()),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0)],
+                EntitySpan::Added(MulticenterBondAst::default()),
+            )],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(0),
+                EntitySpan::Added(NoncovalentBondAst::default()),
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)],
+                EntitySpan::Added(StereoAtomAst::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)],
+                EntitySpan::Added(StereoBondAst::default()),
+            )],
+            constraints: vec![ConstraintSpan::Removed(constraint)],
+        };
+
+        assert_eq!(
+            ReactionSpanAst::try_from_entries(entries),
+            Err(ReactionSpanEntriesError::AbsentOnLeft { entity }),
+        );
+    }
+
+    #[rstest]
+    #[case::invalid(
+        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(3)) },
+        "reaction span entries reference unavailable atom 3",
+    )]
+    #[case::left(
+        ReactionSpanEntriesError::AbsentOnLeft { entity: Entity::Bond(BondId(2)) },
+        "reaction span entries reference bond 2 absent on the left",
+    )]
+    #[case::right(
+        ReactionSpanEntriesError::AbsentOnRight { entity: Entity::Bond(BondId(2)) },
+        "reaction span entries reference bond 2 absent on the right",
+    )]
+    fn test_reaction_span_entries_error_display(
+        #[case] error: ReactionSpanEntriesError,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(error.to_string(), expected);
+    }
 
     #[rstest]
     fn test_reaction_ast_to_reaction_span() {

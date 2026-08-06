@@ -93,6 +93,11 @@ pub enum MoleculeEntriesError {
 }
 
 fn validate_entry_references(entries: &MoleculeEntries) -> Result<(), MoleculeEntriesError> {
+    validate_entry_references_inner(entries)
+        .map_err(|entity| MoleculeEntriesError::InvalidReference { entity })
+}
+
+fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Entity> {
     let contains = |entity| match entity {
         Entity::Atom(id) => id.index() < entries.atoms.len(),
         Entity::Bond(id) => id.index() < entries.bonds.len(),
@@ -142,31 +147,28 @@ fn validate_entry_references(entries: &MoleculeEntries) -> Result<(), MoleculeEn
     Ok(())
 }
 
-fn require_reference(
-    contains: &dyn Fn(Entity) -> bool,
-    entity: Entity,
-) -> Result<(), MoleculeEntriesError> {
+fn require_reference(contains: &dyn Fn(Entity) -> bool, entity: Entity) -> Result<(), Entity> {
     if contains(entity) {
         Ok(())
     } else {
-        Err(MoleculeEntriesError::InvalidReference { entity })
+        Err(entity)
     }
 }
 
 fn require_references(
     contains: &dyn Fn(Entity) -> bool,
     entities: impl IntoIterator<Item = Entity>,
-) -> Result<(), MoleculeEntriesError> {
+) -> Result<(), Entity> {
     for entity in entities {
         require_reference(contains, entity)?;
     }
     Ok(())
 }
 
-fn validate_constraint_references(
+pub(super) fn validate_constraint_references(
     constraint: &Constraint,
     contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), MoleculeEntriesError> {
+) -> Result<(), Entity> {
     match constraint {
         Constraint::Atom(id, _) => require_reference(contains, Entity::Atom(*id)),
         Constraint::Bond(id, _) => require_reference(contains, Entity::Bond(*id)),
@@ -201,7 +203,7 @@ fn validate_constraint_references(
 fn validate_relational_constraint_references(
     constraint: &RelationalConstraint,
     contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), MoleculeEntriesError> {
+) -> Result<(), Entity> {
     match constraint {
         RelationalConstraint::DativeBondDonors { bond, atoms }
         | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
@@ -294,7 +296,7 @@ fn validate_relational_constraint_references(
 fn validate_molecule_constraint_references(
     constraint: &MoleculeConstraint,
     contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), MoleculeEntriesError> {
+) -> Result<(), Entity> {
     match constraint {
         MoleculeConstraint::ChargeSum { atoms, .. }
         | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
