@@ -450,7 +450,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   participant remapping, and constraint ordering. Test exact
   generated spans containing created and removed atoms, bonds, every overlay family, stereo frames,
   and constraints; compare whole span values rather than family counts. **Internal rewire (green).**
-  [dep: S2a]
+  [dep: S2a] **Done.**
 - **S2c — Route the reaction-span DSL through entries.** Refactor
   `dsl/reaction_span.rs` so parsed input resolves into `ReactionSpanEntries` and calls the checked
   constructor, mapping structural failures into the existing parse-error surface. Remove semantic
