@@ -21,7 +21,7 @@ proptest! {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
                 ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
-            prop_assert_eq!(rebuilt, span);
+            prop_assert_eq!(rebuilt, Some(span));
         }
     }
 
@@ -37,7 +37,7 @@ proptest! {
                     &span.lhs(),
                     &span.correspondence().reverse(),
                 );
-                prop_assert_eq!(reverse_span, expected);
+                prop_assert_eq!(Some(reverse_span), expected);
             }
         }
     }
@@ -51,7 +51,7 @@ proptest! {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
                 ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
-            prop_assert_eq!(rebuilt, span);
+            prop_assert_eq!(rebuilt, Some(span));
         }
     }
 

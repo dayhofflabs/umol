@@ -130,16 +130,204 @@ where
 impl MoleculeAst {
     /// The deltas transforming `self` (`L`) into `rhs` (`R`) under the per-entity correspondence
     /// `correspondence`: superimpose the two sides into a span, then read off its operational
-    /// reaction. Applying the result to `self` reconstructs `rhs` (up to appended-atom renumbering).
+    /// reaction. Returns `None` when the correspondence does not describe the supplied molecules.
+    ///
+    /// # Semantic properties
+    ///
+    /// Applying a returned delta collection to `self` reconstructs `rhs`, up to appended-atom
+    /// renumbering.
     pub fn difference_to(
         &self,
         rhs: &MoleculeAst,
         correspondence: &MoleculeCorrespondence,
-    ) -> Deltas {
-        ReactionSpanAst::superimpose(self, rhs, correspondence)
-            .to_reaction()
-            .deltas
+    ) -> Option<Deltas> {
+        Some(
+            ReactionSpanAst::superimpose(self, rhs, correspondence)?
+                .to_reaction()
+                .deltas,
+        )
     }
+}
+
+fn correspondence_describes_molecules(
+    lhs: &MoleculeAst,
+    rhs: &MoleculeAst,
+    correspondence: &MoleculeCorrespondence,
+) -> bool {
+    let counts = [
+        (
+            correspondence.atoms().left_count(),
+            lhs.atoms().count(),
+            correspondence.atoms().right_count(),
+            rhs.atoms().count(),
+        ),
+        (
+            correspondence.bonds().left_count(),
+            lhs.bonds().count(),
+            correspondence.bonds().right_count(),
+            rhs.bonds().count(),
+        ),
+        (
+            correspondence.dative_bonds().left_count(),
+            lhs.dative_bonds().count(),
+            correspondence.dative_bonds().right_count(),
+            rhs.dative_bonds().count(),
+        ),
+        (
+            correspondence.aromatic_systems().left_count(),
+            lhs.aromatic_systems().count(),
+            correspondence.aromatic_systems().right_count(),
+            rhs.aromatic_systems().count(),
+        ),
+        (
+            correspondence.multicenter_bonds().left_count(),
+            lhs.multicenter_bonds().count(),
+            correspondence.multicenter_bonds().right_count(),
+            rhs.multicenter_bonds().count(),
+        ),
+        (
+            correspondence.noncovalent_bonds().left_count(),
+            lhs.noncovalent_bonds().count(),
+            correspondence.noncovalent_bonds().right_count(),
+            rhs.noncovalent_bonds().count(),
+        ),
+        (
+            correspondence.stereo_atoms().left_count(),
+            lhs.stereo_atoms().count(),
+            correspondence.stereo_atoms().right_count(),
+            rhs.stereo_atoms().count(),
+        ),
+        (
+            correspondence.stereo_bonds().left_count(),
+            lhs.stereo_bonds().count(),
+            correspondence.stereo_bonds().right_count(),
+            rhs.stereo_bonds().count(),
+        ),
+    ];
+    if counts.into_iter().any(
+        |(declared_left, actual_left, declared_right, actual_right)| {
+            declared_left != actual_left || declared_right != actual_right
+        },
+    ) {
+        return false;
+    }
+
+    let atoms = correspondence.atoms();
+    let same_atom_set = |left: Vec<AtomId>, mut right: Vec<AtomId>| {
+        let Some(mut mapped): Option<Vec<_>> =
+            left.into_iter().map(|atom| atoms.right_of(atom)).collect()
+        else {
+            return false;
+        };
+        mapped.sort_unstable();
+        right.sort_unstable();
+        mapped == right
+    };
+    let same_ligand_set = |left: Vec<StereoLigand>, mut right: Vec<StereoLigand>| {
+        let Some(mut mapped): Option<Vec<_>> = left
+            .into_iter()
+            .map(|ligand| {
+                atoms
+                    .right_of(ligand.atom_id)
+                    .map(|atom| StereoLigand::new(atom, ligand.kind))
+            })
+            .collect()
+        else {
+            return false;
+        };
+        mapped.sort_unstable();
+        right.sort_unstable();
+        mapped == right
+    };
+
+    if !correspondence
+        .bonds()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            same_atom_set(
+                lhs.bond(left).atom_ids().to_vec(),
+                rhs.bond(right).atom_ids().to_vec(),
+            )
+        })
+    {
+        return false;
+    }
+    if !correspondence
+        .dative_bonds()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            let lhs = lhs.dative_bond(left);
+            let rhs = rhs.dative_bond(right);
+            atoms.right_of(lhs.acceptor_id()) == Some(rhs.acceptor_id())
+                && same_atom_set(lhs.donor_ids().collect(), rhs.donor_ids().collect())
+        })
+    {
+        return false;
+    }
+    if !correspondence
+        .aromatic_systems()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            same_atom_set(
+                lhs.aromatic_system(left).atom_ids().collect(),
+                rhs.aromatic_system(right).atom_ids().collect(),
+            )
+        })
+    {
+        return false;
+    }
+    if !correspondence
+        .multicenter_bonds()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            same_atom_set(
+                lhs.multicenter_bond(left).atom_ids().collect(),
+                rhs.multicenter_bond(right).atom_ids().collect(),
+            )
+        })
+    {
+        return false;
+    }
+    if !correspondence
+        .noncovalent_bonds()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            same_atom_set(
+                lhs.noncovalent_bond(left).atom_ids().to_vec(),
+                rhs.noncovalent_bond(right).atom_ids().to_vec(),
+            )
+        })
+    {
+        return false;
+    }
+    if !correspondence
+        .stereo_atoms()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            let lhs = lhs.stereo_atom(left);
+            let rhs = rhs.stereo_atom(right);
+            atoms.right_of(lhs.site_id()) == Some(rhs.site_id())
+                && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+        })
+    {
+        return false;
+    }
+    correspondence
+        .stereo_bonds()
+        .matched_pairs()
+        .iter()
+        .all(|&(left, right)| {
+            let lhs = lhs.stereo_bond(left);
+            let rhs = rhs.stereo_bond(right);
+            correspondence.bonds().right_of(lhs.site_id()) == Some(rhs.site_id())
+                && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+        })
 }
 
 fn contains_entry(entries: &ReactionSpanEntries, entity: Entity) -> bool {
@@ -353,12 +541,24 @@ impl ReactionSpanAst {
     /// become `Unchanged` / `Modified` carrying both molecules' actual values; entities unmatched
     /// on the lhs become `Removed`, those unmatched on the rhs `Added`. Lhs-anchored: lhs ids kept,
     /// right-unmatched entities appended, rhs participants and constraints remapped into that union
-    /// frame.
+    /// frame. Returns `None` when any correspondence family declares counts different from the
+    /// supplied molecules or a matched bond, overlay, or stereo entity has incompatible incidence
+    /// under the atom correspondence. A compatible correspondence may leave otherwise matchable
+    /// entities unmatched; they are represented as removals and additions.
+    ///
+    /// # Semantic properties
+    ///
+    /// For a compatible correspondence, projecting the returned span recovers the supplied lhs and
+    /// rhs, and recovering its correspondence reproduces the supplied correspondence.
     pub fn superimpose(
         lhs: &MoleculeAst,
         rhs: &MoleculeAst,
         correspondence: &MoleculeCorrespondence,
-    ) -> ReactionSpanAst {
+    ) -> Option<ReactionSpanAst> {
+        if !correspondence_describes_molecules(lhs, rhs, correspondence) {
+            return None;
+        }
+
         let atoms_corr = correspondence.atoms();
         let bonds_corr = correspondence.bonds();
         let lhs_atom_count = lhs.atoms().count();
@@ -569,7 +769,7 @@ impl ReactionSpanAst {
             }
         }
 
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
+        Some(ReactionSpanAst::from_entries(ReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -579,12 +779,12 @@ impl ReactionSpanAst {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        })
+        }))
     }
 
     /// Recover the per-family correspondence between the two sides, forgetting the values — the
-    /// inverse of `superimpose`: `superimpose(self.lhs(), self.rhs(), &self.correspondence())`
-    /// reproduces `self`.
+    /// inverse of `superimpose`: for a span with projectable sides,
+    /// `superimpose(self.lhs(), self.rhs(), &self.correspondence())` reproduces `Some(self)`.
     pub fn correspondence(&self) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
             recover_correspondence(self.atoms.iter()),
@@ -3357,7 +3557,7 @@ mod tests {
 
         assert_eq!(
             ReactionSpanAst::superimpose(&left, &right, &correspondence),
-            ReactionSpanAst::from_entries(ReactionSpanEntries {
+            Some(ReactionSpanAst::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
@@ -3480,7 +3680,213 @@ mod tests {
                         atoms: Some(vec![AtomId(1), AtomId(4)]),
                     },)),
                 ],
-            }),
+            })),
+        );
+    }
+
+    #[rstest]
+    #[case::count(
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        }),
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        }),
+        MoleculeCorrespondence::new(
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+        ),
+    )]
+    #[case::bond(
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(2), BondAst::from_order(1))],
+            ..Default::default()
+        }),
+        MoleculeCorrespondence::new(
+            Correspondence::new(
+                vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))],
+                2,
+                3,
+            )
+            .unwrap(),
+            Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+        ),
+    )]
+    #[case::aromatic_system(
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemAst::default(),
+            )],
+            ..Default::default()
+        }),
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(2)],
+                AromaticSystemAst::default(),
+            )],
+            ..Default::default()
+        }),
+        MoleculeCorrespondence::new(
+            Correspondence::new(
+                vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))],
+                2,
+                3,
+            )
+            .unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(
+                vec![(AromaticSystemId(0), AromaticSystemId(0))],
+                1,
+                1,
+            )
+            .unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+        ),
+    )]
+    #[case::stereo_atom(
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                StereoAtomAst::default(),
+            )],
+            ..Default::default()
+        }),
+        MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+                StereoAtomAst::default(),
+            )],
+            ..Default::default()
+        }),
+        MoleculeCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (AtomId(0), AtomId(0)),
+                    (AtomId(1), AtomId(1)),
+                    (AtomId(2), AtomId(2)),
+                ],
+                3,
+                3,
+            )
+            .unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+        ),
+    )]
+    fn test_reaction_span_ast_superimpose_invalid_context(
+        #[case] lhs: MoleculeAst,
+        #[case] rhs: MoleculeAst,
+        #[case] correspondence: MoleculeCorrespondence,
+    ) {
+        assert_eq!(
+            ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence),
+            None,
+        );
+        assert_eq!(lhs.difference_to(&rhs, &correspondence), None);
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_superimpose_narrow_correspondence() {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let rhs = lhs.clone();
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
+                .unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 0, 0).unwrap(),
+        );
+
+        assert_eq!(
+            ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence),
+            Some(ReactionSpanAst::from_entries(ReactionSpanEntries {
+                atoms: vec![
+                    EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                    EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                ],
+                bonds: vec![
+                    (
+                        AtomId(0),
+                        AtomId(1),
+                        EntitySpan::Removed(BondAst::from_order(1)),
+                    ),
+                    (
+                        AtomId(0),
+                        AtomId(1),
+                        EntitySpan::Added(BondAst::from_order(1)),
+                    ),
+                ],
+                ..Default::default()
+            })),
         );
     }
 
@@ -3506,13 +3912,13 @@ mod tests {
             .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms)
             .expect("the atom correspondence describes the molecule pair");
-        let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
+        let span = ReactionSpanAst::superimpose(&left, &right, &correspondence).unwrap();
 
         // recovers the input correspondence, and inverts `superimpose`.
         assert_eq!(span.correspondence(), correspondence);
         assert_eq!(
             ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence()),
-            span
+            Some(span)
         );
     }
 
@@ -3541,13 +3947,13 @@ mod tests {
             .expect("the atom correspondence describes the molecule pair");
         assert_eq!(
             left.difference_to(&right, &correspondence),
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+            Some(Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),
                     new: ValueAst::Lit(2),
                 },
-            })]),
+            })])),
         );
     }
 }

@@ -56,7 +56,9 @@ impl ReactionDerivation {
     pub fn to_reaction(&self) -> ReactionAst {
         ReactionAst::new(
             self.lhs.clone(),
-            self.lhs.difference_to(&self.rhs, &self.comap),
+            self.lhs
+                .difference_to(&self.rhs, &self.comap)
+                .expect("reaction derivation comap describes its molecule sides"),
         )
     }
 

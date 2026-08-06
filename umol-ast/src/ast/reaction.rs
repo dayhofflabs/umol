@@ -220,7 +220,9 @@ impl ReactionAst {
         atom_correspondence: Correspondence<AtomId>,
     ) -> Option<Self> {
         let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom_correspondence)?;
-        let deltas = lhs.difference_to(&rhs, &correspondence);
+        let deltas = lhs
+            .difference_to(&rhs, &correspondence)
+            .expect("induced molecule correspondence describes its source molecules");
         Some(Self::new(lhs, deltas))
     }
 

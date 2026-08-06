@@ -1797,7 +1797,7 @@ mod tests {
         });
         let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0))], 2, 2).unwrap();
         let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atoms).unwrap();
-        let expected = ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence);
+        let expected = ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence).unwrap();
         let defaults = MoleculeDefaults::default();
 
         assert_eq!(

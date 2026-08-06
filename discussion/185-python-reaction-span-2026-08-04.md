@@ -474,7 +474,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   their established context. Add exact cases for count mismatch, incompatible bond, overlay, and
   stereo incidence, a coherent narrower correspondence, and successful whole-span equality. The
   `Option` surface is provisional pending the error review. **Breaking (red→green).**
-  [dep: S0f, S2d]
+  [dep: S0f, S2d] **Done.**
 
 ### S3 — Complete the Rust reaction bridge
 
