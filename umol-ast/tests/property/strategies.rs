@@ -4265,6 +4265,7 @@ pub(crate) fn replacement_reaction_strategy() -> impl Strategy<Value = ReactionA
             Correspondence::new(Vec::new(), lhs.atoms().count(), rhs.atoms().count())
                 .expect("correspondence producer preserves partial-bijection invariants");
         ReactionAst::from_sides(lhs, rhs, correspondence)
+            .expect("an empty atom correspondence uniquely relates replacement sides")
     })
 }
 

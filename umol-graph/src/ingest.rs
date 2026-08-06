@@ -183,7 +183,8 @@ impl Interpret for ReactionSmiles {
             Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count())
                 .expect("correspondence producer preserves partial-bijection invariants");
 
-        Ok(ReactionAst::from_sides(lhs, rhs, atom_correspondence))
+        Ok(ReactionAst::from_sides(lhs, rhs, atom_correspondence)
+            .expect("interpreted reaction sides preserve unique entity incidence"))
     }
 }
 

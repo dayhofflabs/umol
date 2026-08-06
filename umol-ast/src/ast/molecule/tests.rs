@@ -604,7 +604,8 @@ fn equiv_under_molecules(
         )),
     });
     let atom_correspondence = Correspondence::from_images(&atom_images, atom_images.len());
-    let correspondence = MoleculeCorrespondence::induce(&left, &right, atom_correspondence);
+    let correspondence = MoleculeCorrespondence::induce(&left, &right, atom_correspondence)
+        .expect("the atom correspondence describes the molecule pair");
 
     (left, right, correspondence)
 }
@@ -3179,6 +3180,36 @@ fn test_molecule_ast_split() {
     assert_eq!(second.bond(BondId(0)).ast, &BondAst::from_order(2));
     assert_eq!(second_corr.atoms().right_of(AtomId(0)), Some(AtomId(2)));
     assert_eq!(second_corr.atoms().right_of(AtomId(1)), Some(AtomId(3)));
+}
+
+#[rstest]
+fn test_molecule_ast_split_duplicate_incidence() {
+    let bond = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
+    let mol = MoleculeAst::from_entries(MoleculeEntries {
+        atoms: vec![AtomAst::from_element(Element::C); 3],
+        noncovalent: vec![
+            (AtomId(0), AtomId(1), bond.clone()),
+            (AtomId(0), AtomId(1), bond),
+        ],
+        ..Default::default()
+    });
+
+    let components = mol.split();
+
+    assert_eq!(components.len(), 2);
+    assert_eq!(components[0].0.noncovalent_bonds().count(), 2);
+    assert_eq!(
+        components[0].1.noncovalent_bonds(),
+        &Correspondence::new(
+            vec![
+                (NoncovalentBondId(0), NoncovalentBondId(0)),
+                (NoncovalentBondId(1), NoncovalentBondId(1)),
+            ],
+            2,
+            2,
+        )
+        .expect("split assigns each component noncovalent bond its original id"),
+    );
 }
 
 #[rstest]

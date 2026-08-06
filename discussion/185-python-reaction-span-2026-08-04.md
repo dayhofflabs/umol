@@ -198,10 +198,9 @@ rendering without metadata. The span has one union-frame namespace, so `Molecule
 
 ## Correspondence construction
 
-Rust's `from_sides` currently takes a `Correspondence<NodeId>`, and `MoleculeCorrespondence` stores
-the same graph-core id type for its atom family. These are molecular APIs: migrate that family to
-`Correspondence<AtomId>` throughout `umol-ast`, converting to or from `NodeId` only where a
-graph-core operation is actually called. `GraphCorrespondence` remains node- and edge-typed.
+Rust's `from_sides` takes a `Correspondence<AtomId>`, and `MoleculeCorrespondence` stores the same
+domain id type for its atom family. Conversion to or from `NodeId` occurs only where a graph-core
+operation is called. `GraphCorrespondence` remains node- and edge-typed.
 
 Python currently exposes `Correspondence` read-only and compensates by accepting raw pairs in
 `from_sides`. This duplicates construction and validation at one consumer instead of making the
@@ -391,7 +390,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   exact tables for dimension mismatch, partial and total-left remapping, and non-unique incidence in
   the affected entity families, plus generated properties for directional totality and successful
   induction over structurally valid molecule pairs. The `Option` surface is provisional pending the
-  repository-wide error review. **Breaking (red→green).** [dep: S0c, S0e]
+  repository-wide error review. **Breaking (red→green).** [dep: S0c, S0e] **Done.**
 
 ### S1 — Establish checked molecule-entry construction
 

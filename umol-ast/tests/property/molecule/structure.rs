@@ -32,7 +32,7 @@ proptest! {
             &extracted,
             &ast,
             correspondence.atoms().clone(),
-        );
+        ).expect("extraction preserves unique entity incidence");
 
         prop_assert_eq!(&reinduced, &correspondence);
         prop_assert_eq!(ast.extract(&reinduced), extracted);

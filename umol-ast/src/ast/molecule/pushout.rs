@@ -248,9 +248,9 @@ impl MoleculeAst {
             .expect("graph pushout preserves atom correspondence invariants")
         };
         let left =
-            MoleculeCorrespondence::induce(self, &object, atom_correspondence(po.left.nodes()));
+            MoleculeCorrespondence::induce(self, &object, atom_correspondence(po.left.nodes()))?;
         let right =
-            MoleculeCorrespondence::induce(other, &object, atom_correspondence(po.right.nodes()));
+            MoleculeCorrespondence::induce(other, &object, atom_correspondence(po.right.nodes()))?;
 
         // Molecule-level constraints: `self`'s hold in the glue as-is (it keeps `self`'s ids); `other`'s
         // are re-anchored through the `right` embedding. Conjunction, deduplicated.

@@ -4,7 +4,9 @@
 //! `Correspondence` over their entity id. Valueless — pairing only; adding values and a direction
 //! lifts it to a reaction span.
 
-use umol_graph_core::{Correspondence, NodeId};
+use std::collections::BTreeMap;
+
+use umol_graph_core::Correspondence;
 
 use super::entity::Entity;
 use super::id::{
@@ -61,18 +63,24 @@ impl MoleculeCorrespondence {
     /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
     /// constituents are not all matched is unmatched.
     ///
-    /// Duplicate-incidence entities violate the entity-structure validator and do not have a unique
-    /// induced pairing. To keep this infallible operation from panicking on such input, the first
-    /// left entity found retains the right match and later collisions remain unmatched. No semantic
-    /// correctness beyond a valid partial correspondence is promised for invalid input.
-    pub fn induce(lhs: &MoleculeAst, rhs: &MoleculeAst, atoms: Correspondence<AtomId>) -> Self {
-        let bonds = induced_bonds(lhs, rhs, &atoms);
-        let dative_bonds = induced_dative_bonds(lhs, rhs, &atoms);
-        let aromatic_systems = induced_aromatic_systems(lhs, rhs, &atoms);
-        let multicenter_bonds = induced_multicenter_bonds(lhs, rhs, &atoms);
-        let noncovalent_bonds = induced_noncovalent_bonds(lhs, rhs, &atoms);
+    /// Returns `None` when the atom correspondence does not describe the supplied molecule pair, or
+    /// when entity incidence does not induce a unique right partner.
+    pub fn induce(
+        lhs: &MoleculeAst,
+        rhs: &MoleculeAst,
+        atoms: Correspondence<AtomId>,
+    ) -> Option<Self> {
+        if atoms.left_count() != lhs.atoms().count() || atoms.right_count() != rhs.atoms().count() {
+            return None;
+        }
 
-        let stereo_atom = retain_unique_rights(
+        let bonds = induced_bonds(lhs, rhs, &atoms)?;
+        let dative_bonds = induced_dative_bonds(lhs, rhs, &atoms)?;
+        let aromatic_systems = induced_aromatic_systems(lhs, rhs, &atoms)?;
+        let multicenter_bonds = induced_multicenter_bonds(lhs, rhs, &atoms)?;
+        let noncovalent_bonds = induced_noncovalent_bonds(lhs, rhs, &atoms)?;
+
+        let stereo_atoms = induce_family(
             lhs.stereo_atoms().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     map_atom(&atoms, stereo.site_id()),
@@ -80,21 +88,19 @@ impl MoleculeCorrespondence {
                 ) else {
                     return None;
                 };
-                rhs.stereo_atoms()
-                    .of_id(site, &ligands)
-                    .map(|right| (stereo.id, right))
+                Some((stereo.id, (site, sorted_ligands(ligands))))
+            }),
+            lhs.stereo_atoms().count(),
+            rhs.stereo_atoms().iter().map(|stereo| {
+                (
+                    stereo.id,
+                    (stereo.site_id(), sorted_ligands(stereo.ligand_frame())),
+                )
             }),
             rhs.stereo_atoms().count(),
-            StereoAtomId::index,
-        );
-        let stereo_atoms = Correspondence::new(
-            stereo_atom,
-            lhs.stereo_atoms().count(),
-            rhs.stereo_atoms().count(),
-        )
-        .expect("correspondence producer preserves partial-bijection invariants");
+        )?;
 
-        let stereo_bond = retain_unique_rights(
+        let stereo_bonds = induce_family(
             lhs.stereo_bonds().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     bonds.right_of(stereo.site_id()),
@@ -102,21 +108,19 @@ impl MoleculeCorrespondence {
                 ) else {
                     return None;
                 };
-                rhs.stereo_bonds()
-                    .of_id(site, &ligands)
-                    .map(|right| (stereo.id, right))
+                Some((stereo.id, (site, sorted_ligands(ligands))))
+            }),
+            lhs.stereo_bonds().count(),
+            rhs.stereo_bonds().iter().map(|stereo| {
+                (
+                    stereo.id,
+                    (stereo.site_id(), sorted_ligands(stereo.ligand_frame())),
+                )
             }),
             rhs.stereo_bonds().count(),
-            StereoBondId::index,
-        );
-        let stereo_bonds = Correspondence::new(
-            stereo_bond,
-            lhs.stereo_bonds().count(),
-            rhs.stereo_bonds().count(),
-        )
-        .expect("correspondence producer preserves partial-bijection invariants");
+        )?;
 
-        Self::new(
+        Some(Self::new(
             atoms,
             bonds,
             dative_bonds,
@@ -125,7 +129,7 @@ impl MoleculeCorrespondence {
             noncovalent_bonds,
             stereo_atoms,
             stereo_bonds,
-        )
+        ))
     }
 
     /// Relational composition, per entity family: `self` (lhs↔middle) followed by `other`
@@ -211,35 +215,42 @@ impl MoleculeCorrespondence {
         }
     }
 
-    /// Whether every id in all eight entity families is matched on both sides.
-    pub fn is_total(&self) -> bool {
-        self.atoms.is_total()
-            && self.bonds.is_total()
-            && self.dative_bonds.is_total()
-            && self.aromatic_systems.is_total()
-            && self.multicenter_bonds.is_total()
-            && self.noncovalent_bonds.is_total()
-            && self.stereo_atoms.is_total()
-            && self.stereo_bonds.is_total()
+    /// Whether every id in all eight entity families on the left is matched.
+    pub fn is_total_on_left(&self) -> bool {
+        self.atoms.is_total_on_left()
+            && self.bonds.is_total_on_left()
+            && self.dative_bonds.is_total_on_left()
+            && self.aromatic_systems.is_total_on_left()
+            && self.multicenter_bonds.is_total_on_left()
+            && self.noncovalent_bonds.is_total_on_left()
+            && self.stereo_atoms.is_total_on_left()
+            && self.stereo_bonds.is_total_on_left()
     }
 
-    /// This correspondence as an [`IdRemapping`]. Requires every entity family to be total on the
-    /// left: each left id maps to its matched right id.
-    pub fn to_remapping(&self) -> IdRemapping {
-        debug_assert!(
-            self.atoms.matched_pair_count() == self.atoms.left_count()
-                && self.bonds.matched_pair_count() == self.bonds.left_count()
-                && self.dative_bonds.matched_pair_count() == self.dative_bonds.left_count()
-                && self.aromatic_systems.matched_pair_count() == self.aromatic_systems.left_count()
-                && self.multicenter_bonds.matched_pair_count()
-                    == self.multicenter_bonds.left_count()
-                && self.noncovalent_bonds.matched_pair_count()
-                    == self.noncovalent_bonds.left_count()
-                && self.stereo_atoms.matched_pair_count() == self.stereo_atoms.left_count()
-                && self.stereo_bonds.matched_pair_count() == self.stereo_bonds.left_count(),
-            "to_remapping requires every entity family to be total on the left",
-        );
-        IdRemapping::new(
+    /// Whether every id in all eight entity families on the right is matched.
+    pub fn is_total_on_right(&self) -> bool {
+        self.atoms.is_total_on_right()
+            && self.bonds.is_total_on_right()
+            && self.dative_bonds.is_total_on_right()
+            && self.aromatic_systems.is_total_on_right()
+            && self.multicenter_bonds.is_total_on_right()
+            && self.noncovalent_bonds.is_total_on_right()
+            && self.stereo_atoms.is_total_on_right()
+            && self.stereo_bonds.is_total_on_right()
+    }
+
+    /// Whether every id in all eight entity families is matched on both sides.
+    pub fn is_total(&self) -> bool {
+        self.is_total_on_left() && self.is_total_on_right()
+    }
+
+    /// This correspondence as an [`IdRemapping`], or `None` unless every entity family is total on
+    /// the left. Each left id then maps to its matched right id.
+    pub fn to_remapping(&self) -> Option<IdRemapping> {
+        if !self.is_total_on_left() {
+            return None;
+        }
+        Some(IdRemapping::new(
             self.atoms.matched_pairs().iter().copied().collect(),
             self.bonds.matched_pairs().iter().copied().collect(),
             self.dative_bonds.matched_pairs().iter().copied().collect(),
@@ -260,7 +271,7 @@ impl MoleculeCorrespondence {
                 .collect(),
             self.stereo_atoms.matched_pairs().iter().copied().collect(),
             self.stereo_bonds.matched_pairs().iter().copied().collect(),
-        )
+        ))
     }
 
     /// The atom correspondence — the spine the other families are induced from.
@@ -310,21 +321,22 @@ pub(crate) fn induced_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<AtomId>,
-) -> Correspondence<BondId> {
-    let matched_pairs = left.bonds().iter().filter_map(|bond| {
-        let [first, second] = bond.atom_ids();
-        let (first, second) = (atoms.right_of(first)?, atoms.right_of(second)?);
-        let right_bond = right
-            .raw_graph()
-            .find_edge(NodeId::from(first), NodeId::from(second))?;
-        Some((bond.id, BondId::from(right_bond)))
-    });
-    Correspondence::new(
-        retain_unique_rights(matched_pairs, right.bonds().count(), BondId::index),
+) -> Option<Correspondence<BondId>> {
+    induce_family(
+        left.bonds().iter().filter_map(|bond| {
+            let [first, second] = bond.atom_ids();
+            Some((
+                bond.id,
+                ordered_pair(atoms.right_of(first)?, atoms.right_of(second)?),
+            ))
+        }),
         left.bonds().count(),
+        right
+            .bonds()
+            .iter()
+            .map(|bond| (bond.id, ordered_pair_from(bond.atom_ids()))),
         right.bonds().count(),
     )
-    .expect("correspondence producer preserves partial-bijection invariants")
 }
 
 /// The dative-bond correspondence induced by an atom correspondence: each left dative bond whose
@@ -333,8 +345,8 @@ pub(crate) fn induced_dative_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<AtomId>,
-) -> Correspondence<DativeBondId> {
-    let matched_pairs = retain_unique_rights(
+) -> Option<Correspondence<DativeBondId>> {
+    induce_family(
         left.dative_bonds().iter().filter_map(|dative| {
             let (Some(acceptor), Some(donors)) = (
                 map_atom(atoms, dative.acceptor_id()),
@@ -342,20 +354,17 @@ pub(crate) fn induced_dative_bonds(
             ) else {
                 return None;
             };
-            right
-                .dative_bonds()
-                .of_id(acceptor, &donors)
-                .map(|right| (dative.id, right))
+            Some((dative.id, (acceptor, sorted_atoms(donors))))
+        }),
+        left.dative_bonds().count(),
+        right.dative_bonds().iter().map(|dative| {
+            (
+                dative.id,
+                (dative.acceptor_id(), sorted_atoms(dative.donor_ids())),
+            )
         }),
         right.dative_bonds().count(),
-        DativeBondId::index,
-    );
-    Correspondence::new(
-        matched_pairs,
-        left.dative_bonds().count(),
-        right.dative_bonds().count(),
     )
-    .expect("correspondence producer preserves partial-bijection invariants")
 }
 
 /// The aromatic-system correspondence induced by an atom correspondence: each left system whose
@@ -364,24 +373,21 @@ pub(crate) fn induced_aromatic_systems(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<AtomId>,
-) -> Correspondence<AromaticSystemId> {
-    let matched_pairs = retain_unique_rights(
+) -> Option<Correspondence<AromaticSystemId>> {
+    induce_family(
         left.aromatic_systems().iter().filter_map(|aromatic| {
-            let mapped = map_atoms(atoms, aromatic.atom_ids())?;
-            right
-                .aromatic_systems()
-                .of_id(mapped)
-                .map(|right| (aromatic.id, right))
+            Some((
+                aromatic.id,
+                sorted_atoms(map_atoms(atoms, aromatic.atom_ids())?),
+            ))
         }),
-        right.aromatic_systems().count(),
-        AromaticSystemId::index,
-    );
-    Correspondence::new(
-        matched_pairs,
         left.aromatic_systems().count(),
+        right
+            .aromatic_systems()
+            .iter()
+            .map(|aromatic| (aromatic.id, sorted_atoms(aromatic.atom_ids()))),
         right.aromatic_systems().count(),
     )
-    .expect("correspondence producer preserves partial-bijection invariants")
 }
 
 /// The multicenter-bond correspondence induced by an atom correspondence: each left bond whose
@@ -390,24 +396,21 @@ pub(crate) fn induced_multicenter_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<AtomId>,
-) -> Correspondence<MulticenterBondId> {
-    let matched_pairs = retain_unique_rights(
+) -> Option<Correspondence<MulticenterBondId>> {
+    induce_family(
         left.multicenter_bonds().iter().filter_map(|multicenter| {
-            let mapped = map_atoms(atoms, multicenter.atom_ids())?;
-            right
-                .multicenter_bonds()
-                .of_id(mapped)
-                .map(|right| (multicenter.id, right))
+            Some((
+                multicenter.id,
+                sorted_atoms(map_atoms(atoms, multicenter.atom_ids())?),
+            ))
         }),
-        right.multicenter_bonds().count(),
-        MulticenterBondId::index,
-    );
-    Correspondence::new(
-        matched_pairs,
         left.multicenter_bonds().count(),
+        right
+            .multicenter_bonds()
+            .iter()
+            .map(|multicenter| (multicenter.id, sorted_atoms(multicenter.atom_ids()))),
         right.multicenter_bonds().count(),
     )
-    .expect("correspondence producer preserves partial-bijection invariants")
 }
 
 /// The noncovalent-bond correspondence induced by an atom correspondence: each left bond whose two
@@ -416,28 +419,22 @@ pub(crate) fn induced_noncovalent_bonds(
     left: &MoleculeAst,
     right: &MoleculeAst,
     atoms: &Correspondence<AtomId>,
-) -> Correspondence<NoncovalentBondId> {
-    let matched_pairs = retain_unique_rights(
+) -> Option<Correspondence<NoncovalentBondId>> {
+    induce_family(
         left.noncovalent_bonds().iter().filter_map(|noncovalent| {
             let [first, second] = noncovalent.atom_ids();
-            let (Some(first), Some(second)) = (map_atom(atoms, first), map_atom(atoms, second))
-            else {
-                return None;
-            };
-            right
-                .noncovalent_bonds()
-                .of_id(first, second)
-                .map(|right| (noncovalent.id, right))
+            Some((
+                noncovalent.id,
+                ordered_pair(map_atom(atoms, first)?, map_atom(atoms, second)?),
+            ))
         }),
-        right.noncovalent_bonds().count(),
-        NoncovalentBondId::index,
-    );
-    Correspondence::new(
-        matched_pairs,
         left.noncovalent_bonds().count(),
+        right
+            .noncovalent_bonds()
+            .iter()
+            .map(|noncovalent| (noncovalent.id, ordered_pair_from(noncovalent.atom_ids()))),
         right.noncovalent_bonds().count(),
     )
-    .expect("correspondence producer preserves partial-bijection invariants")
 }
 
 /// The rhs partner of a lhs atom under the atom correspondence, if matched.
@@ -467,30 +464,57 @@ pub(crate) fn map_ligands(
         .collect()
 }
 
-/// Preserve the first match to each right entity and drop later collisions. Collisions are possible
-/// only for duplicate-incidence input rejected by the entity-structure validator; this guard keeps
-/// induction non-panicking without assigning semantics to invalid input.
-fn retain_unique_rights<Id>(
-    pairs: impl IntoIterator<Item = (Id, Id)>,
+fn induce_family<Id, Key>(
+    left: impl IntoIterator<Item = (Id, Key)>,
+    left_count: usize,
+    right: impl IntoIterator<Item = (Id, Key)>,
     right_count: usize,
-    index: impl Fn(Id) -> usize,
-) -> Vec<(Id, Id)>
+) -> Option<Correspondence<Id>>
 where
-    Id: Copy,
+    Id: Copy + Ord + From<usize>,
+    Key: Ord,
 {
-    let mut used = vec![false; right_count];
-    pairs
-        .into_iter()
-        .filter(|&(_, right)| {
-            let used = &mut used[index(right)];
-            if *used {
-                false
-            } else {
-                *used = true;
-                true
-            }
-        })
-        .collect()
+    let mut right_by_key = BTreeMap::new();
+    for (id, key) in right {
+        right_by_key
+            .entry(key)
+            .and_modify(|entry| *entry = None)
+            .or_insert(Some(id));
+    }
+
+    let mut matched_pairs = Vec::new();
+    for (left, key) in left {
+        match right_by_key.get(&key) {
+            Some(Some(right)) => matched_pairs.push((left, *right)),
+            Some(None) => return None,
+            None => {}
+        }
+    }
+    Correspondence::new(matched_pairs, left_count, right_count).ok()
+}
+
+fn ordered_pair<Id: Ord>(first: Id, second: Id) -> [Id; 2] {
+    if first <= second {
+        [first, second]
+    } else {
+        [second, first]
+    }
+}
+
+fn ordered_pair_from<Id: Ord>([first, second]: [Id; 2]) -> [Id; 2] {
+    ordered_pair(first, second)
+}
+
+fn sorted_atoms(atoms: impl IntoIterator<Item = AtomId>) -> Vec<AtomId> {
+    let mut atoms: Vec<_> = atoms.into_iter().collect();
+    atoms.sort_unstable();
+    atoms
+}
+
+fn sorted_ligands(ligands: impl IntoIterator<Item = StereoLigand>) -> Vec<StereoLigand> {
+    let mut ligands: Vec<_> = ligands.into_iter().collect();
+    ligands.sort_unstable();
+    ligands
 }
 
 #[cfg(test)]
@@ -502,10 +526,13 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::dative::DativeBondAst;
+    use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::NoncovalentBondAst;
+    use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
 
     #[fixture]
     fn correspondence() -> MoleculeCorrespondence {
@@ -659,7 +686,8 @@ mod tests {
         )
         .expect("correspondence producer preserves partial-bijection invariants");
 
-        let c = MoleculeCorrespondence::induce(&lhs, &rhs, atoms);
+        let c = MoleculeCorrespondence::induce(&lhs, &rhs, atoms)
+            .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
             c.atoms().matched_pairs(),
@@ -681,32 +709,153 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_correspondence_induce_partial() {
+    #[case::left_count(1, 2, 0, 2)]
+    #[case::right_count(1, 2, 1, 1)]
+    fn test_molecule_correspondence_induce_dimension_error(
+        #[case] left_atom_count: usize,
+        #[case] right_atom_count: usize,
+        #[case] declared_left_count: usize,
+        #[case] declared_right_count: usize,
+    ) {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 2],
-            noncovalent: vec![
-                (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
-                (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
-            ],
+            atoms: vec![AtomAst::from_element(Element::C); left_atom_count],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 2],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
+            atoms: vec![AtomAst::from_element(Element::C); right_atom_count],
             ..Default::default()
         });
+        let atoms = Correspondence::new(Vec::new(), declared_left_count, declared_right_count)
+            .expect("the empty correspondence is a partial bijection");
 
-        let correspondence = MoleculeCorrespondence::induce(
-            &lhs,
-            &rhs,
-            Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
-        );
+        assert_eq!(MoleculeCorrespondence::induce(&lhs, &rhs, atoms), None);
+    }
 
-        assert_eq!(
-            correspondence.noncovalent_bonds(),
-            &Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 2, 1,)
-                .expect("the guarded induced correspondence is a partial bijection"),
-        );
+    #[rstest]
+    fn test_molecule_correspondence_induce_incidence_error() {
+        let atoms = vec![AtomAst::from_element(Element::C); 2];
+        let entry_pairs = vec![
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    bonds: vec![
+                        (AtomId(0), AtomId(1), BondAst::default()),
+                        (AtomId(0), AtomId(1), BondAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                    ..Default::default()
+                },
+            ),
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    dative: vec![
+                        (vec![AtomId(0)], AtomId(1), DativeBondAst::default()),
+                        (vec![AtomId(0)], AtomId(1), DativeBondAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
+                    ..Default::default()
+                },
+            ),
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    aromatic: vec![
+                        (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
+                        (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+                    ..Default::default()
+                },
+            ),
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    multicenter: vec![
+                        (vec![AtomId(0), AtomId(1)], MulticenterBondAst::default()),
+                        (vec![AtomId(0), AtomId(1)], MulticenterBondAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondAst::default())],
+                    ..Default::default()
+                },
+            ),
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    noncovalent: vec![
+                        (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
+                        (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
+                    ..Default::default()
+                },
+            ),
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    stereo_atoms: vec![
+                        (AtomId(0), Vec::new(), StereoAtomAst::default()),
+                        (AtomId(0), Vec::new(), StereoAtomAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    stereo_atoms: vec![(AtomId(0), Vec::new(), StereoAtomAst::default())],
+                    ..Default::default()
+                },
+            ),
+            (
+                MoleculeEntries {
+                    atoms: atoms.clone(),
+                    bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                    stereo_bonds: vec![
+                        (BondId(0), Vec::new(), StereoBondAst::default()),
+                        (BondId(0), Vec::new(), StereoBondAst::default()),
+                    ],
+                    ..Default::default()
+                },
+                MoleculeEntries {
+                    atoms,
+                    bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                    stereo_bonds: vec![(BondId(0), Vec::new(), StereoBondAst::default())],
+                    ..Default::default()
+                },
+            ),
+        ];
+
+        for (duplicate, unique) in entry_pairs {
+            for (lhs, rhs) in [(unique.clone(), duplicate.clone()), (duplicate, unique)] {
+                assert_eq!(
+                    MoleculeCorrespondence::induce(
+                        &MoleculeAst::from_entries(lhs),
+                        &MoleculeAst::from_entries(rhs),
+                        Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
+                    ),
+                    None,
+                );
+            }
+        }
     }
 
     #[rstest]
@@ -930,33 +1079,72 @@ mod tests {
         stereo_bond_unmatched.stereo_bonds = Correspondence::new(Vec::new(), 1, 1)
             .expect("correspondence producer preserves partial-bijection invariants");
 
-        assert!(complete.is_total());
+        assert_eq!(
+            (
+                complete.is_total_on_left(),
+                complete.is_total_on_right(),
+                complete.is_total(),
+            ),
+            (true, true, true),
+        );
         assert_eq!(
             [
-                atom_unmatched.is_total(),
-                bond_unmatched.is_total(),
-                dative_unmatched.is_total(),
-                aromatic_unmatched.is_total(),
-                multicenter_unmatched.is_total(),
-                noncovalent_unmatched.is_total(),
-                stereo_atom_unmatched.is_total(),
-                stereo_bond_unmatched.is_total(),
+                (
+                    atom_unmatched.is_total_on_left(),
+                    atom_unmatched.is_total_on_right(),
+                    atom_unmatched.is_total(),
+                ),
+                (
+                    bond_unmatched.is_total_on_left(),
+                    bond_unmatched.is_total_on_right(),
+                    bond_unmatched.is_total(),
+                ),
+                (
+                    dative_unmatched.is_total_on_left(),
+                    dative_unmatched.is_total_on_right(),
+                    dative_unmatched.is_total(),
+                ),
+                (
+                    aromatic_unmatched.is_total_on_left(),
+                    aromatic_unmatched.is_total_on_right(),
+                    aromatic_unmatched.is_total(),
+                ),
+                (
+                    multicenter_unmatched.is_total_on_left(),
+                    multicenter_unmatched.is_total_on_right(),
+                    multicenter_unmatched.is_total(),
+                ),
+                (
+                    noncovalent_unmatched.is_total_on_left(),
+                    noncovalent_unmatched.is_total_on_right(),
+                    noncovalent_unmatched.is_total(),
+                ),
+                (
+                    stereo_atom_unmatched.is_total_on_left(),
+                    stereo_atom_unmatched.is_total_on_right(),
+                    stereo_atom_unmatched.is_total(),
+                ),
+                (
+                    stereo_bond_unmatched.is_total_on_left(),
+                    stereo_bond_unmatched.is_total_on_right(),
+                    stereo_bond_unmatched.is_total(),
+                ),
             ],
-            [false; 8],
+            [(false, false, false); 8],
         );
     }
 
     #[rstest]
     fn test_molecule_correspondence_to_remapping() {
         let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[AtomId(1), AtomId(0)], 2),
-            Correspondence::from_images(&[BondId(1), BondId(0)], 2),
-            Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 2),
-            Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 2),
-            Correspondence::from_images(&[MulticenterBondId(1), MulticenterBondId(0)], 2),
-            Correspondence::from_images(&[NoncovalentBondId(1), NoncovalentBondId(0)], 2),
-            Correspondence::from_images(&[StereoAtomId(1), StereoAtomId(0)], 2),
-            Correspondence::from_images(&[StereoBondId(1), StereoBondId(0)], 2),
+            Correspondence::from_images(&[AtomId(1), AtomId(0)], 3),
+            Correspondence::from_images(&[BondId(1), BondId(0)], 3),
+            Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 3),
+            Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 3),
+            Correspondence::from_images(&[MulticenterBondId(1), MulticenterBondId(0)], 3),
+            Correspondence::from_images(&[NoncovalentBondId(1), NoncovalentBondId(0)], 3),
+            Correspondence::from_images(&[StereoAtomId(1), StereoAtomId(0)], 3),
+            Correspondence::from_images(&[StereoBondId(1), StereoBondId(0)], 3),
         );
         let expected = IdRemapping::new(
             HashMap::from([(AtomId(0), AtomId(1)), (AtomId(1), AtomId(0))]),
@@ -987,6 +1175,18 @@ mod tests {
             ]),
         );
 
-        assert_eq!(correspondence.to_remapping(), expected);
+        assert_eq!(
+            (
+                correspondence.is_total_on_left(),
+                correspondence.is_total_on_right(),
+                correspondence.to_remapping(),
+            ),
+            (true, false, Some(expected)),
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_to_remapping_partial(correspondence: MoleculeCorrespondence) {
+        assert_eq!(correspondence.to_remapping(), None);
     }
 }

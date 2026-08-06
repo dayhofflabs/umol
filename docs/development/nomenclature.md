@@ -350,9 +350,9 @@ classifications that a resolver may still act on).
 ### Correspondence
 
 A **correspondence** is a partial bijection between two structures' id spaces, held per entity
-family. The atom part is a node-level `Correspondence<NodeId>` aligned with the molecular graph, so
-the bond correspondence is its *induced* edge correspondence; the seven other families each carry
-their own over their entity id.
+family. The atom part is a `Correspondence<AtomId>` aligned with the molecular graph, so the bond
+correspondence is its *induced* edge correspondence; the seven other families each carry their own
+over their entity id.
 
 A correspondence is **valueless** — it records pairing and nothing else. Adding values and a
 direction is what lifts it to a reaction span.

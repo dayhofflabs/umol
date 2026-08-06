@@ -933,26 +933,32 @@ mod tests {
         let pattern_before = pattern.inner().clone();
         let host_before = host.inner().clone();
         let expected = vec![
-            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::induce(
-                pattern.inner(),
-                host.inner(),
-                GraphCoreCorrespondence::new(
-                    vec![(AstAtomId(0), AstAtomId(0)), (AstAtomId(1), AstAtomId(1))],
-                    2,
-                    3,
+            MoleculeCorrespondence::from_rust(
+                AstMoleculeCorrespondence::induce(
+                    pattern.inner(),
+                    host.inner(),
+                    GraphCoreCorrespondence::new(
+                        vec![(AstAtomId(0), AstAtomId(0)), (AstAtomId(1), AstAtomId(1))],
+                        2,
+                        3,
+                    )
+                    .expect("correspondence producer preserves partial-bijection invariants"),
                 )
-                .expect("correspondence producer preserves partial-bijection invariants"),
-            )),
-            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::induce(
-                pattern.inner(),
-                host.inner(),
-                GraphCoreCorrespondence::new(
-                    vec![(AstAtomId(0), AstAtomId(1)), (AstAtomId(1), AstAtomId(0))],
-                    2,
-                    3,
+                .expect("the atom correspondence describes the molecule pair"),
+            ),
+            MoleculeCorrespondence::from_rust(
+                AstMoleculeCorrespondence::induce(
+                    pattern.inner(),
+                    host.inner(),
+                    GraphCoreCorrespondence::new(
+                        vec![(AstAtomId(0), AstAtomId(1)), (AstAtomId(1), AstAtomId(0))],
+                        2,
+                        3,
+                    )
+                    .expect("correspondence producer preserves partial-bijection invariants"),
                 )
-                .expect("correspondence producer preserves partial-bijection invariants"),
-            )),
+                .expect("the atom correspondence describes the molecule pair"),
+            ),
         ];
 
         assert_eq!(pattern.substructure_matches(&host, None), expected);
@@ -986,7 +992,8 @@ mod tests {
                     3,
                 )
                 .expect("correspondence producer preserves partial-bijection invariants"),
-            ),
+            )
+            .expect("the atom correspondence describes the molecule pair"),
         )];
         let config = SubstructureSearchConfig::from_rust(AstSubstructureMatchConfig {
             match_algorithm: AstSubstructureMatchAlgorithm::Incidence,

@@ -3499,7 +3499,8 @@ mod tests {
             4,
         )
         .expect("correspondence producer preserves partial-bijection invariants");
-        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
+        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms)
+            .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
             ReactionSpanAst::superimpose(&left, &right, &correspondence),
@@ -3650,7 +3651,8 @@ mod tests {
         });
         let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 3, 3)
             .expect("correspondence producer preserves partial-bijection invariants");
-        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
+        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms)
+            .expect("the atom correspondence describes the molecule pair");
         let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
 
         // recovers the input correspondence, and inverts `superimpose`.
@@ -3682,7 +3684,8 @@ mod tests {
         });
         let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
             .expect("correspondence producer preserves partial-bijection invariants");
-        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
+        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms)
+            .expect("the atom correspondence describes the molecule pair");
         assert_eq!(
             left.difference_to(&right, &correspondence),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {

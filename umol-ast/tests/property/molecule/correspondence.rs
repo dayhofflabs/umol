@@ -31,8 +31,23 @@ proptest! {
             &extracted,
             &ast,
             correspondence.atoms().clone(),
-        );
+        ).expect("extraction preserves unique entity incidence");
         prop_assert_eq!(induced, correspondence);
+    }
+
+    #[test]
+    fn test_molecule_correspondence_is_total(
+        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+    ) {
+        let correspondence = ast.induced_subgraph(&atoms);
+        let reverse = correspondence.reverse();
+
+        prop_assert_eq!(
+            correspondence.is_total(),
+            correspondence.is_total_on_left() && correspondence.is_total_on_right(),
+        );
+        prop_assert_eq!(correspondence.is_total_on_left(), reverse.is_total_on_right());
+        prop_assert_eq!(correspondence.is_total_on_right(), reverse.is_total_on_left());
     }
 
     #[test]
@@ -43,7 +58,9 @@ proptest! {
         let identity = correspondence.compose(&correspondence.reverse());
 
         prop_assert!(identity.is_total());
-        let remapping = identity.to_remapping();
+        let remapping = identity
+            .to_remapping()
+            .expect("the composed identity is total on the left");
         for index in 0..identity.atoms().left_count() {
             let id = AtomId(index as u32);
             prop_assert_eq!(remapping.map_atom(id), id);

@@ -31,7 +31,8 @@ proptest! {
                 span.lhs(),
                 span.rhs(),
                 span.correspondence().atoms().clone(),
-            );
+            )
+            .expect("a reaction span induces a unique molecule correspondence");
             let rebuilt_span = rebuilt.to_reaction_span().map_err(|error| {
                 TestCaseError::fail(format!("rebuilt reaction did not materialize: {error}"))
             })?;
@@ -47,7 +48,8 @@ proptest! {
             &reaction.lhs,
             &reaction.lhs,
             Correspondence::from_images(&atom_images, atom_count),
-        );
+        )
+        .expect("identity atom correspondence induces a molecule correspondence");
         let direct = reaction.apply_at(&reaction.lhs, &correspondence).map_err(|error| {
             TestCaseError::fail(format!("identity application failed: {error}"))
         })?;
@@ -82,7 +84,8 @@ proptest! {
             &reaction.lhs,
             &reaction.lhs,
             Correspondence::from_images(&atom_images, atom_count),
-        );
+        )
+        .expect("identity atom correspondence induces a molecule correspondence");
         let derivation = reaction.apply_at(&reaction.lhs, &correspondence).map_err(|error| {
             TestCaseError::fail(format!("identity application failed: {error}"))
         })?;
@@ -94,7 +97,8 @@ proptest! {
             derivation.lhs(),
             derivation.lhs(),
             correspondence.atoms().clone(),
-        );
+        )
+        .expect("identity atom correspondence induces a molecule correspondence");
         let recovered_derivation = recovered
             .apply_at(derivation.lhs(), &recovered_correspondence)
             .map_err(|error| {

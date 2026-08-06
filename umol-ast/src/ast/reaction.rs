@@ -209,13 +209,19 @@ impl ReactionAst {
         Self { lhs, deltas }
     }
 
-    /// The reaction transforming `lhs` into `rhs` under the atom correspondence `atom`: induce the
-    /// full per-entity correspondence, diff the two sides into deltas, and pair them with `lhs`. The
-    /// inverse of reading a reaction's two sides back off its span.
-    pub fn from_sides(lhs: MoleculeAst, rhs: MoleculeAst, atom: Correspondence<AtomId>) -> Self {
-        let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom);
+    /// The reaction transforming `lhs` into `rhs` under `atom_correspondence`: induce the full
+    /// per-entity correspondence, diff the two sides into deltas, and pair them with `lhs`. The
+    /// inverse of reading a reaction's two sides back off its span. Returns `None` when the atom
+    /// correspondence does not describe the supplied sides or their entity incidence does not
+    /// induce unique partners.
+    pub fn from_sides(
+        lhs: MoleculeAst,
+        rhs: MoleculeAst,
+        atom_correspondence: Correspondence<AtomId>,
+    ) -> Option<Self> {
+        let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom_correspondence)?;
         let deltas = lhs.difference_to(&rhs, &correspondence);
-        Self::new(lhs, deltas)
+        Some(Self::new(lhs, deltas))
     }
 
     /// Apply the reaction at one match of `lhs` into `host` — the injective pattern→host
@@ -251,8 +257,13 @@ impl ReactionAst {
             }
         }
 
-        let induced =
-            MoleculeCorrespondence::induce(&self.lhs, host, correspondence.atoms().clone());
+        let Some(induced) =
+            MoleculeCorrespondence::induce(&self.lhs, host, correspondence.atoms().clone())
+        else {
+            return Err(ApplyError::CorrespondenceMismatch {
+                entity: Entity::Atom(AtomId(0)),
+            });
+        };
         macro_rules! require_induced_family {
             ($family:ident, $entity:ident, $fallback:expr) => {{
                 let supplied = correspondence.$family();
@@ -1321,7 +1332,8 @@ impl ReactionAst {
             product.atoms().count(),
         )
         .expect("correspondence producer preserves partial-bijection invariants");
-        let comap = MoleculeCorrespondence::induce(host, &product, atom_map);
+        let comap = MoleculeCorrespondence::induce(host, &product, atom_map)
+            .expect("successful reaction application preserves unique entity incidence");
         Ok(ReactionDerivation::new(host.clone(), product, comap))
     }
 
@@ -1604,7 +1616,7 @@ mod tests {
             .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(
             ReactionAst::from_sides(left.clone(), right, atoms),
-            ReactionAst::new(
+            Some(ReactionAst::new(
                 left,
                 Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
@@ -1613,7 +1625,7 @@ mod tests {
                         new: ValueAst::Lit(2),
                     },
                 })]),
-            ),
+            )),
         );
     }
 
@@ -1672,7 +1684,8 @@ mod tests {
             &reaction.lhs,
             &host,
             Correspondence::from_images(&atom_map, host.atoms().count()),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         assert_eq!(
             reaction.apply_at(&host, &correspondence).unwrap().rhs(),
             &expected
@@ -1730,7 +1743,8 @@ mod tests {
             &reaction.lhs,
             &host,
             Correspondence::from_images(&atom_map, host.atoms().count()),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         assert_eq!(
             reaction.apply_at(&host, &correspondence).unwrap_err(),
             expected
@@ -1980,7 +1994,8 @@ mod tests {
             &reaction.lhs,
             &host,
             Correspondence::from_images(&[AtomId(1), AtomId(2)], host.atoms().count()),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let result = reaction.apply_at(&host, &correspondence).unwrap();
         assert_eq!(
             result.rhs().constraints(),
@@ -2086,7 +2101,8 @@ mod tests {
             &host,
             Correspondence::new(Vec::new(), 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let result = reaction.apply_at(&host, &correspondence).unwrap();
 
         assert_eq!(result.rhs().constraints(), &Constraints::from(constraint));
@@ -2864,7 +2880,8 @@ mod tests {
             &reaction.lhs,
             &host,
             Correspondence::from_images(&[AtomId(0), AtomId(1)], host.atoms().count()),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let derivation = reaction.apply_at(&host, &correspondence).unwrap();
         assert_eq!(
             derivation.rhs(),

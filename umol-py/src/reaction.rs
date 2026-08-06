@@ -340,7 +340,10 @@ impl ReactionAst {
             .collect::<PyResult<Vec<_>>>()?;
         let atom = atom_correspondence(atom_pairs, lhs.atoms().count(), rhs.atoms().count())?;
 
-        Self::from_rust(py, AstReactionAst::from_sides(lhs, rhs, atom))
+        let reaction = AstReactionAst::from_sides(lhs, rhs, atom).ok_or_else(|| {
+            PyValueError::new_err("atom correspondence is incompatible with the reaction sides")
+        })?;
+        Self::from_rust(py, reaction)
     }
 
     /// Ingest a determined reaction from reaction SMILES under explicit IO,
@@ -2964,7 +2967,8 @@ mod tests {
                 2,
             )
             .expect("correspondence producer preserves partial-bijection invariants"),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let derivation = reaction.apply_at(&host, &correspondence).unwrap();
         (derivation, host)
     }
@@ -3037,7 +3041,8 @@ mod tests {
                 2,
             )
             .expect("correspondence producer preserves partial-bijection invariants"),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let second = reaction.apply_at(&middle, &correspondence).unwrap();
         let first_value = ReactionDerivation::from_rust(first.clone());
         let second_value = ReactionDerivation::from_rust(second.clone());
@@ -3204,6 +3209,7 @@ mod tests {
                     &host,
                     Correspondence::from_images(&[host_atom], host.atoms().count()),
                 )
+                .expect("the atom correspondence describes the molecule pair")
             })
             .collect();
         (reaction, host, correspondences)
@@ -3315,6 +3321,7 @@ mod tests {
                     &host,
                     Correspondence::from_images(&[host_atom], host.atoms().count()),
                 )
+                .expect("the atom correspondence describes the molecule pair")
             })
             .collect();
         let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
@@ -3370,7 +3377,8 @@ mod tests {
             &reaction.lhs,
             &host,
             Correspondence::from_images(&[AstAtomId(0)], 1),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let mut application = ReactionApplicationIter::new(
             reaction,
             host,

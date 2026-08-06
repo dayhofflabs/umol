@@ -312,9 +312,9 @@ impl MoleculeAst {
         atoms: Correspondence<AtomId>,
     ) -> Option<MoleculeCorrespondence> {
         let pattern = self;
-        let bonds = induced_bonds(pattern, host, &atoms);
+        let bonds = induced_bonds(pattern, host, &atoms)?;
 
-        let dative_bonds = induced_dative_bonds(pattern, host, &atoms);
+        let dative_bonds = induced_dative_bonds(pattern, host, &atoms)?;
         if dative_bonds.matched_pair_count() != pattern.dative_bonds().count() {
             return None;
         }
@@ -324,7 +324,7 @@ impl MoleculeAst {
             }
         }
 
-        let aromatic_systems = induced_aromatic_systems(pattern, host, &atoms);
+        let aromatic_systems = induced_aromatic_systems(pattern, host, &atoms)?;
         if aromatic_systems.matched_pair_count() != pattern.aromatic_systems().count() {
             return None;
         }
@@ -338,7 +338,7 @@ impl MoleculeAst {
             }
         }
 
-        let multicenter_bonds = induced_multicenter_bonds(pattern, host, &atoms);
+        let multicenter_bonds = induced_multicenter_bonds(pattern, host, &atoms)?;
         if multicenter_bonds.matched_pair_count() != pattern.multicenter_bonds().count() {
             return None;
         }
@@ -352,7 +352,7 @@ impl MoleculeAst {
             }
         }
 
-        let noncovalent_bonds = induced_noncovalent_bonds(pattern, host, &atoms);
+        let noncovalent_bonds = induced_noncovalent_bonds(pattern, host, &atoms)?;
         if noncovalent_bonds.matched_pair_count() != pattern.noncovalent_bonds().count() {
             return None;
         }
@@ -400,7 +400,7 @@ impl MoleculeAst {
             pattern.stereo_atoms().count(),
             host.stereo_atoms().count(),
         )
-        .expect("correspondence producer preserves partial-bijection invariants");
+        .ok()?;
 
         let mut stereo_bond = Vec::new();
         for sp in pattern.stereo_bonds().iter() {
@@ -424,7 +424,7 @@ impl MoleculeAst {
             pattern.stereo_bonds().count(),
             host.stereo_bonds().count(),
         )
-        .expect("correspondence producer preserves partial-bijection invariants");
+        .ok()?;
 
         Some(MoleculeCorrespondence::new(
             atoms,

@@ -117,7 +117,8 @@ mod tests {
             &rhs,
             Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         (lhs, rhs, comap)
     }
 
@@ -253,13 +254,15 @@ mod tests {
             &mid,
             Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let second_comap = MoleculeCorrespondence::induce(
             &mid,
             &rhs,
             Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
-        );
+        )
+        .expect("the atom correspondence describes the molecule pair");
         let first = ReactionDerivation::new(lhs.clone(), mid.clone(), first_comap.clone());
         let second = ReactionDerivation::new(mid, rhs.clone(), second_comap.clone());
         assert_eq!(

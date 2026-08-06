@@ -44,7 +44,7 @@ fn compose_overlap(
         derivation_a.rhs().clone(),
         derivation_b.rhs().clone(),
         correspondence,
-    );
+    )?;
     Some(ReactionAst::new(
         composite.lhs,
         composite.deltas.canonicalize().ok()?,
