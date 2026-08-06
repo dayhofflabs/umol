@@ -1,29 +1,96 @@
 //! Construction and algebraic properties of correspondences.
 
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 use proptest::prelude::*;
-use umol_graph_core::{Correspondence, NodeId};
+use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
 
-fn correspondence_strategy() -> impl Strategy<Value = Correspondence<NodeId>> {
+use super::strategy;
+
+fn correspondence_strategy<Id>() -> impl Strategy<Value = Correspondence<Id>>
+where
+    Id: Copy + Debug + Ord + From<usize> + 'static,
+{
     (0usize..8, 0usize..8).prop_flat_map(|(left_count, right_count)| {
-        let pair_count = left_count.min(right_count);
-        (
-            Just((0..left_count).map(NodeId::from).collect::<Vec<_>>()).prop_shuffle(),
-            Just((0..right_count).map(NodeId::from).collect::<Vec<_>>()).prop_shuffle(),
-            0usize..=pair_count,
-        )
-            .prop_map(move |(mut left, mut right, count)| {
-                left.truncate(count);
-                right.truncate(count);
-                Correspondence::new(
-                    left.into_iter().zip(right).collect(),
-                    left_count,
-                    right_count,
-                )
-                .expect("correspondence producer preserves partial-bijection invariants")
-            })
+        correspondence_with_counts_strategy(left_count, right_count)
     })
+}
+
+fn correspondence_with_counts_strategy<Id>(
+    left_count: usize,
+    right_count: usize,
+) -> impl Strategy<Value = Correspondence<Id>>
+where
+    Id: Copy + Debug + Ord + From<usize> + 'static,
+{
+    let pair_count = left_count.min(right_count);
+    (
+        Just((0..left_count).map(Id::from).collect::<Vec<_>>()).prop_shuffle(),
+        Just((0..right_count).map(Id::from).collect::<Vec<_>>()).prop_shuffle(),
+        0usize..=pair_count,
+    )
+        .prop_map(move |(mut left, mut right, count)| {
+            left.truncate(count);
+            right.truncate(count);
+            Correspondence::new(
+                left.into_iter().zip(right).collect(),
+                left_count,
+                right_count,
+            )
+            .expect("correspondence producer preserves partial-bijection invariants")
+        })
+}
+
+fn graph_context_strategy() -> impl Strategy<Value = (Graph, Graph, Correspondence<NodeId>)> {
+    (strategy::multigraph(6, 10), strategy::multigraph(6, 10)).prop_flat_map(|(left, right)| {
+        let correspondence =
+            correspondence_with_counts_strategy(left.node_count(), right.node_count());
+        (Just(left), Just(right), correspondence)
+    })
+}
+
+fn graph_correspondence_strategy() -> impl Strategy<Value = GraphCorrespondence> {
+    (
+        correspondence_strategy::<NodeId>(),
+        correspondence_strategy::<EdgeId>(),
+    )
+        .prop_map(|(nodes, edges)| GraphCorrespondence::new(nodes, edges))
+}
+
+fn reference_edge_matched_pairs(
+    left: &Graph,
+    right: &Graph,
+    correspondence: &Correspondence<NodeId>,
+) -> Option<Vec<(EdgeId, EdgeId)>> {
+    let mut matched_pairs = Vec::new();
+    for left_edge in left.edge_ids() {
+        let [left_first, left_second] = left.edge_endpoints(left_edge);
+        let (Some(right_first), Some(right_second)) = (
+            correspondence.right_of(left_first),
+            correspondence.right_of(left_second),
+        ) else {
+            continue;
+        };
+        let mut mapped_endpoints = [right_first, right_second];
+        mapped_endpoints.sort_unstable();
+        for right_edge in right.edge_ids() {
+            if right.edge_endpoints(right_edge) == mapped_endpoints {
+                matched_pairs.push((left_edge, right_edge));
+            }
+        }
+    }
+
+    let mut left_edges = BTreeSet::new();
+    let mut right_edges = BTreeSet::new();
+    if matched_pairs
+        .iter()
+        .any(|&(left, right)| !left_edges.insert(left) || !right_edges.insert(right))
+    {
+        None
+    } else {
+        Some(matched_pairs)
+    }
 }
 
 fn correspondence_images_strategy() -> impl Strategy<Value = (Vec<NodeId>, usize)> {
@@ -91,10 +158,25 @@ proptest! {
     }
 
     #[test]
+    fn test_correspondence_is_total(
+        correspondence in correspondence_strategy::<NodeId>(),
+    ) {
+        let total_on_left = correspondence.matched_pair_count() == correspondence.left_count();
+        let total_on_right = correspondence.matched_pair_count() == correspondence.right_count();
+        let reverse = correspondence.reverse();
+
+        prop_assert_eq!(correspondence.is_total_on_left(), total_on_left);
+        prop_assert_eq!(correspondence.is_total_on_right(), total_on_right);
+        prop_assert_eq!(correspondence.is_total(), total_on_left && total_on_right);
+        prop_assert_eq!(reverse.is_total_on_left(), total_on_right);
+        prop_assert_eq!(reverse.is_total_on_right(), total_on_left);
+    }
+
+    #[test]
     fn test_correspondence_compose_associativity(
-        first in correspondence_strategy(),
-        second in correspondence_strategy(),
-        third in correspondence_strategy(),
+        first in correspondence_strategy::<NodeId>(),
+        second in correspondence_strategy::<NodeId>(),
+        third in correspondence_strategy::<NodeId>(),
     ) {
         prop_assert_eq!(
             first.compose(&second).compose(&third),
@@ -104,7 +186,7 @@ proptest! {
 
     #[test]
     fn test_correspondence_compose_identity(
-        correspondence in correspondence_strategy(),
+        correspondence in correspondence_strategy::<NodeId>(),
     ) {
         let left_images = (0..correspondence.left_count())
             .map(NodeId::from)
@@ -123,9 +205,9 @@ proptest! {
 
     #[test]
     fn test_correspondence_compose_all(
-        first in correspondence_strategy(),
-        second in correspondence_strategy(),
-        third in correspondence_strategy(),
+        first in correspondence_strategy::<NodeId>(),
+        second in correspondence_strategy::<NodeId>(),
+        third in correspondence_strategy::<NodeId>(),
     ) {
         let expected = first.compose(&second).compose(&third);
 
@@ -137,7 +219,7 @@ proptest! {
 
     #[test]
     fn test_correspondence_compose_all_concatenation(
-        correspondences in prop::collection::vec(correspondence_strategy(), 0..8),
+        correspondences in prop::collection::vec(correspondence_strategy::<NodeId>(), 0..8),
         split in any::<usize>(),
     ) {
         let split = split.min(correspondences.len());
@@ -157,8 +239,76 @@ proptest! {
 
     #[test]
     fn test_correspondence_reverse_involution(
-        correspondence in correspondence_strategy(),
+        correspondence in correspondence_strategy::<NodeId>(),
     ) {
         prop_assert_eq!(correspondence.reverse().reverse(), correspondence);
+    }
+
+    #[test]
+    fn test_correspondence_edge_matched_pairs(
+        (left, right, correspondence) in graph_context_strategy(),
+    ) {
+        let expected = reference_edge_matched_pairs(&left, &right, &correspondence);
+
+        prop_assert_eq!(
+            correspondence.edge_matched_pairs(&left, &right),
+            expected.clone(),
+        );
+        prop_assert_eq!(
+            correspondence.shared_edge_count(&left, &right),
+            expected.as_ref().map(Vec::len),
+        );
+
+        let expected = expected.map(|matched_pairs| {
+            GraphCorrespondence::new(
+                correspondence.clone(),
+                Correspondence::new(matched_pairs, left.edge_count(), right.edge_count())
+                    .expect("reference relation is a partial bijection"),
+            )
+        });
+        prop_assert_eq!(
+            GraphCorrespondence::induced(&left, &right, correspondence),
+            expected,
+        );
+    }
+
+    #[test]
+    fn test_graph_correspondence_is_total(
+        correspondence in graph_correspondence_strategy(),
+    ) {
+        let total_on_left = correspondence.nodes().is_total_on_left()
+            && correspondence.edges().is_total_on_left();
+        let total_on_right = correspondence.nodes().is_total_on_right()
+            && correspondence.edges().is_total_on_right();
+
+        prop_assert_eq!(correspondence.is_total_on_left(), total_on_left);
+        prop_assert_eq!(correspondence.is_total_on_right(), total_on_right);
+        prop_assert_eq!(correspondence.is_total(), total_on_left && total_on_right);
+    }
+
+    #[test]
+    fn test_graph_correspondence_to_remapping(
+        correspondence in graph_correspondence_strategy(),
+    ) {
+        let remapping = correspondence.to_remapping();
+        if correspondence.is_total_on_left() {
+            let remapping = remapping.expect("total-left correspondence defines a remapping");
+            for left in 0..correspondence.nodes().left_count() {
+                let left = NodeId::from(left);
+                prop_assert_eq!(
+                    Some(remapping.map_node(left)),
+                    correspondence.nodes().right_of(left),
+                );
+            }
+            for left in 0..correspondence.edges().left_count() {
+                let left = EdgeId::from(left);
+                prop_assert_eq!(
+                    Some(remapping.map_edge(left)),
+                    correspondence.edges().right_of(left),
+                );
+            }
+        } else {
+            prop_assert_eq!(remapping, None);
+        }
     }
 }

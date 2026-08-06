@@ -365,7 +365,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   Python conversion match. Keep the four pair/range variants exhaustive and limit the type's
   rustdoc to failures of the carrier's own partial-bijection invariant. Update this document's
   inventories and focused constructor tables so no contextual object-size check is attributed to
-  `Correspondence::new`. **Breaking cleanup (red→green).** [dep: S0a]
+  `Correspondence::new`. **Breaking cleanup (red→green).** [dep: S0a] **Done.**
 - **S0e — Make graph-correspondence context and directional totality explicit.** In
   `umol-graph-core/src/correspondence.rs`, add `Correspondence::is_total_on_left` and
   `is_total_on_right`, retain `is_total` as their conjunction, and aggregate the predicates on
@@ -375,8 +375,10 @@ creates an atom, since a partial correspondence is the case where the two forms 
   graph pair or when parallel-edge incidence prevents a unique induced edge correspondence. Migrate
   graph rewriting and matching callers according to provenance: algorithm-produced pairs assert
   their contract, while public paths propagate absence. Add exact tables for left/right dimension
-  mismatch, partial and total-left remapping, and ambiguous parallel edges, plus properties relating
-  the three totality predicates. **Breaking (red→green).** [dep: S0d]
+  mismatch, partial and total-left remapping, and ambiguous parallel edges. Add properties comparing
+  induced edge matching against an exhaustive reference relation over generated multigraphs and
+  relating aggregate graph totality and remapping to the component correspondences. **Breaking
+  (red→green).** [dep: S0d] **Done.**
 - **S0f — Make molecule-correspondence context and remapping fallible.** In
   `umol-ast/src/ast/correspondence.rs`, aggregate `is_total_on_left` and `is_total_on_right` over all
   eight families, retain `is_total` as totality on both sides, and change `to_remapping` to return

@@ -6,7 +6,7 @@
 //! entity family (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally exposes the
 //! induced edge correspondence over the two graphs.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
@@ -143,10 +143,20 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
         self.right_count
     }
 
+    /// Whether every left id is matched.
+    pub fn is_total_on_left(&self) -> bool {
+        self.matched_pairs.len() == self.left_count
+    }
+
+    /// Whether every right id is matched.
+    pub fn is_total_on_right(&self) -> bool {
+        self.matched_pairs.len() == self.right_count
+    }
+
     /// Whether every id on both sides is matched — a total bijection with no unmatched ids. A diff
     /// through such a correspondence adds and removes nothing.
     pub fn is_total(&self) -> bool {
-        self.matched_pairs.len() == self.left_count && self.matched_pairs.len() == self.right_count
+        self.is_total_on_left() && self.is_total_on_right()
     }
 
     /// The right partner of a left id, if matched. Binary search (pairs sorted by left).
@@ -221,21 +231,51 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
 
 impl Correspondence<NodeId> {
     /// The induced edge correspondence: `(left_edge, right_edge)` pairs whose endpoints are matched
-    /// to an edge on the other side.
-    pub fn edge_matched_pairs(&self, left: &Graph, right: &Graph) -> Vec<(EdgeId, EdgeId)> {
-        left.edge_ids()
-            .filter_map(|left_edge| {
-                let [u, v] = left.edge_endpoints(left_edge);
-                let right_edge = right.find_edge(self.right_of(u)?, self.right_of(v)?)?;
-                Some((left_edge, right_edge))
-            })
-            .collect()
+    /// to a unique edge on the other side. Returns `None` when the declared node spaces do not
+    /// describe `left` and `right`, or when parallel edges make the induced pairing non-unique.
+    pub fn edge_matched_pairs(&self, left: &Graph, right: &Graph) -> Option<Vec<(EdgeId, EdgeId)>> {
+        if self.left_count != left.node_count() || self.right_count != right.node_count() {
+            return None;
+        }
+
+        let mut right_edges: HashMap<[NodeId; 2], (EdgeId, bool)> = HashMap::new();
+        for edge in right.edge_ids() {
+            right_edges
+                .entry(right.edge_endpoints(edge))
+                .and_modify(|(_, unique)| *unique = false)
+                .or_insert((edge, true));
+        }
+
+        let mut used_right = BTreeSet::new();
+        let mut matched_pairs = Vec::new();
+        for left_edge in left.edge_ids() {
+            let [left_first, left_second] = left.edge_endpoints(left_edge);
+            let (Some(right_first), Some(right_second)) =
+                (self.right_of(left_first), self.right_of(left_second))
+            else {
+                continue;
+            };
+            let endpoints = if right_first <= right_second {
+                [right_first, right_second]
+            } else {
+                [right_second, right_first]
+            };
+            let Some(&(right_edge, unique)) = right_edges.get(&endpoints) else {
+                continue;
+            };
+            if !unique || !used_right.insert(right_edge) {
+                return None;
+            }
+            matched_pairs.push((left_edge, right_edge));
+        }
+        Some(matched_pairs)
     }
 
     /// The number of edges shared under the node matching (the maximum-common-edge-subgraph
-    /// objective).
-    pub fn shared_edge_count(&self, left: &Graph, right: &Graph) -> usize {
-        self.edge_matched_pairs(left, right).len()
+    /// objective), or `None` when the edge correspondence is not uniquely induced.
+    pub fn shared_edge_count(&self, left: &Graph, right: &Graph) -> Option<usize> {
+        self.edge_matched_pairs(left, right)
+            .map(|pairs| pairs.len())
     }
 }
 
@@ -258,15 +298,16 @@ impl GraphCorrespondence {
     /// is the induced edge correspondence (an edge matched when both endpoints are matched). Exact
     /// for a subiso match or a common *induced* subgraph — the two cases where every structurally
     /// matched edge is admissible; not for an edge-subgraph result under a nontrivial edge predicate
-    /// (there the producer supplies the edge family directly).
-    pub fn induced(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Self {
+    /// (there the producer supplies the edge family directly). Returns `None` when the node
+    /// correspondence does not describe the supplied graphs or does not induce unique edge pairs.
+    pub fn induced(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Option<Self> {
         let edges = Correspondence::new(
-            nodes.edge_matched_pairs(left, right),
+            nodes.edge_matched_pairs(left, right)?,
             left.edge_count(),
             right.edge_count(),
         )
         .expect("an induced edge correspondence is valid");
-        Self { nodes, edges }
+        Some(Self { nodes, edges })
     }
 
     pub fn nodes(&self) -> &Correspondence<NodeId> {
@@ -293,27 +334,41 @@ impl GraphCorrespondence {
             .reduce(|left, right| left.compose(&right))
     }
 
+    /// Whether every node and edge on the left is matched.
+    pub fn is_total_on_left(&self) -> bool {
+        self.nodes.is_total_on_left() && self.edges.is_total_on_left()
+    }
+
+    /// Whether every node and edge on the right is matched.
+    pub fn is_total_on_right(&self) -> bool {
+        self.nodes.is_total_on_right() && self.edges.is_total_on_right()
+    }
+
+    /// Whether every node and edge on both sides is matched.
+    pub fn is_total(&self) -> bool {
+        self.is_total_on_left() && self.is_total_on_right()
+    }
+
     /// This correspondence as a [`Remapping`] — a dense old→new relabel of both id spaces. Requires
     /// it be **total on the left** (every left id matched), as a pushout's coprojection is: left id `i`
     /// maps to its partner.
-    pub fn to_remapping(&self) -> Remapping {
-        Remapping::new(dense_images(&self.nodes), dense_images(&self.edges))
+    pub fn to_remapping(&self) -> Option<Remapping> {
+        if !self.is_total_on_left() {
+            return None;
+        }
+        Some(Remapping::new(
+            self.nodes
+                .matched_pairs()
+                .iter()
+                .map(|&(_, right)| right)
+                .collect(),
+            self.edges
+                .matched_pairs()
+                .iter()
+                .map(|&(_, right)| right)
+                .collect(),
+        ))
     }
-}
-
-/// The image column of a total-on-left correspondence: `out[i]` is the partner of left id `i` (the
-/// matched pairs are sorted by left, and totality fills `0..left_count`).
-fn dense_images<Id: Copy + Ord + From<usize>>(correspondence: &Correspondence<Id>) -> Vec<Id> {
-    debug_assert_eq!(
-        correspondence.matched_pair_count(),
-        correspondence.left_count(),
-        "to_remapping requires a total-on-left correspondence",
-    );
-    correspondence
-        .matched_pairs()
-        .iter()
-        .map(|&(_, right)| right)
-        .collect()
 }
 
 /// The ids `0..count` absent from `sorted_matched` (which must be ascending, no duplicates) — a
@@ -496,13 +551,57 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_correspondence() {
+    fn test_graph_correspondence_new() {
         let c = GraphCorrespondence::new(
             Correspondence::from_images(&[n(1), n(0)], 3),
             Correspondence::from_images(&[e(2)], 4),
         );
         assert_eq!(c.nodes().matched_pairs(), &[(n(0), n(1)), (n(1), n(0))]);
         assert_eq!(c.edges().matched_pairs(), &[(e(0), e(2))]);
+    }
+
+    #[rstest]
+    fn test_graph_correspondence_induced(paths: (Graph, Graph, Correspondence<NodeId>)) {
+        let (left, right, nodes) = paths;
+        assert_eq!(
+            GraphCorrespondence::induced(&left, &right, nodes.clone()),
+            Some(GraphCorrespondence::new(
+                nodes,
+                Correspondence::new(vec![(e(0), e(1)), (e(1), e(2))], 2, 3)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+            )),
+        );
+    }
+
+    #[rstest]
+    #[case::left_count(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::new(vec![(n(0), n(0))], 1, 2)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    )]
+    #[case::right_count(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::new(vec![(n(0), n(0))], 2, 1)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    )]
+    #[case::parallel_left(
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::from_images(&[n(0), n(1)], 2),
+    )]
+    #[case::parallel_right(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        Correspondence::from_images(&[n(0), n(1)], 2),
+    )]
+    fn test_graph_correspondence_induced_error(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] nodes: Correspondence<NodeId>,
+    ) {
+        assert_eq!(GraphCorrespondence::induced(&left, &right, nodes), None);
     }
 
     #[rstest]
@@ -547,18 +646,79 @@ mod tests {
     }
 
     #[rstest]
+    #[case::total(
+        GraphCorrespondence::new(
+            Correspondence::from_images(&[n(0)], 1),
+            Correspondence::from_images(&[e(0)], 1),
+        ),
+        (true, true, true),
+    )]
+    #[case::left(
+        GraphCorrespondence::new(
+            Correspondence::from_images(&[n(0)], 2),
+            Correspondence::from_images(&[e(0)], 2),
+        ),
+        (true, false, false),
+    )]
+    #[case::right(
+        GraphCorrespondence::new(
+            Correspondence::new(vec![(n(0), n(0))], 2, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(e(0), e(0))], 2, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        ),
+        (false, true, false),
+    )]
+    #[case::mixed_families(
+        GraphCorrespondence::new(
+            Correspondence::from_images(&[n(0)], 2),
+            Correspondence::new(vec![(e(0), e(0))], 2, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        ),
+        (false, false, false),
+    )]
+    fn test_graph_correspondence_is_total(
+        #[case] correspondence: GraphCorrespondence,
+        #[case] expected: (bool, bool, bool),
+    ) {
+        assert_eq!(
+            (
+                correspondence.is_total_on_left(),
+                correspondence.is_total_on_right(),
+                correspondence.is_total(),
+            ),
+            expected,
+        );
+    }
+
+    #[rstest]
     fn test_graph_correspondence_to_remapping() {
         // total-on-left node map 0→2, 1→0, 2→1 and edge map 0→1, 1→0.
         let c = GraphCorrespondence::new(
             Correspondence::from_images(&[n(2), n(0), n(1)], 3),
             Correspondence::from_images(&[e(1), e(0)], 2),
         );
-        let remapping = c.to_remapping();
-        assert_eq!(remapping.map_node(n(0)), n(2));
-        assert_eq!(remapping.map_node(n(1)), n(0));
-        assert_eq!(remapping.map_node(n(2)), n(1));
-        assert_eq!(remapping.map_edge(e(0)), e(1));
-        assert_eq!(remapping.map_edge(e(1)), e(0));
+        assert_eq!(
+            c.to_remapping(),
+            Some(Remapping::new(vec![n(2), n(0), n(1)], vec![e(1), e(0)],)),
+        );
+    }
+
+    #[rstest]
+    #[case::nodes(GraphCorrespondence::new(
+        Correspondence::new(vec![(n(0), n(0))], 2, 1)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+        Correspondence::new(Vec::new(), 0, 0)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    ))]
+    #[case::edges(GraphCorrespondence::new(
+        Correspondence::new(Vec::new(), 0, 0)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+        Correspondence::new(vec![(e(0), e(0))], 2, 1)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    ))]
+    fn test_graph_correspondence_to_remapping_partial(#[case] correspondence: GraphCorrespondence) {
+        assert_eq!(correspondence.to_remapping(), None);
     }
 
     #[rstest]
@@ -600,31 +760,87 @@ mod tests {
         let (left, right, c) = paths;
         assert_eq!(
             c.edge_matched_pairs(&left, &right),
-            vec![(e(0), e(1)), (e(1), e(2))]
+            Some(vec![(e(0), e(1)), (e(1), e(2))]),
         );
+    }
+
+    #[rstest]
+    #[case::left_count(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::new(vec![(n(0), n(0))], 1, 2)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    )]
+    #[case::right_count(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::new(vec![(n(0), n(0))], 2, 1)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    )]
+    #[case::parallel_left(
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::from_images(&[n(0), n(1)], 2),
+    )]
+    #[case::parallel_right(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        Correspondence::from_images(&[n(0), n(1)], 2),
+    )]
+    fn test_correspondence_edge_matched_pairs_error(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] correspondence: Correspondence<NodeId>,
+    ) {
+        assert_eq!(correspondence.edge_matched_pairs(&left, &right), None);
     }
 
     #[rstest]
     fn test_correspondence_shared_edge_count(paths: (Graph, Graph, Correspondence<NodeId>)) {
         let (left, right, c) = paths;
-        assert_eq!(c.shared_edge_count(&left, &right), 2);
+        assert_eq!(c.shared_edge_count(&left, &right), Some(2));
     }
 
     #[rstest]
-    #[case::total(vec![(n(0), n(0)), (n(1), n(1))], 2, 2, true)]
-    #[case::left_unmatched(vec![(n(0), n(0))], 2, 1, false)]
-    #[case::right_unmatched(vec![(n(0), n(0))], 1, 2, false)]
+    #[case::count(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::new(vec![(n(0), n(0))], 1, 2)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+    )]
+    #[case::parallel(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        Correspondence::from_images(&[n(0), n(1)], 2),
+    )]
+    fn test_correspondence_shared_edge_count_error(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] correspondence: Correspondence<NodeId>,
+    ) {
+        assert_eq!(correspondence.shared_edge_count(&left, &right), None);
+    }
+
+    #[rstest]
+    #[case::total(vec![(n(0), n(0)), (n(1), n(1))], 2, 2, (true, true, true))]
+    #[case::left_unmatched(vec![(n(0), n(0))], 2, 1, (false, true, false))]
+    #[case::right_unmatched(vec![(n(0), n(0))], 1, 2, (true, false, false))]
+    #[case::both_unmatched(vec![(n(0), n(0))], 2, 2, (false, false, false))]
     fn test_correspondence_is_total(
         #[case] matched_pairs: Vec<(NodeId, NodeId)>,
         #[case] left_count: usize,
         #[case] right_count: usize,
-        #[case] expected: bool,
+        #[case] expected: (bool, bool, bool),
     ) {
+        let correspondence = Correspondence::new(matched_pairs, left_count, right_count)
+            .expect("correspondence producer preserves partial-bijection invariants");
         assert_eq!(
-            Correspondence::new(matched_pairs, left_count, right_count)
-                .expect("correspondence producer preserves partial-bijection invariants")
-                .is_total(),
-            expected
+            (
+                correspondence.is_total_on_left(),
+                correspondence.is_total_on_right(),
+                correspondence.is_total(),
+            ),
+            expected,
         );
     }
 

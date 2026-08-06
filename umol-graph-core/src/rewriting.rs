@@ -300,6 +300,7 @@ mod tests {
         )
         .expect("correspondence producer preserves partial-bijection invariants");
         GraphCorrespondence::induced(left, right, nodes)
+            .expect("simple graph overlap induces a unique graph correspondence")
     }
 
     #[rstest]
@@ -340,7 +341,8 @@ mod tests {
             &Graph::new(3, &[[0, 1], [1, 2]]),
             &host,
             Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2)], 4),
-        );
+        )
+        .expect("simple graph match induces a unique graph correspondence");
         // K = the two endpoints of L (nodes 0 and 2), no edges — the rest is deleted.
         let interface = GraphCorrespondence::new(
             Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3)
@@ -366,7 +368,8 @@ mod tests {
             &Graph::new(3, &[[0, 1], [1, 2]]),
             &host,
             Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2)], 4),
-        );
+        )
+        .expect("simple graph match induces a unique graph correspondence");
         // K keeps both endpoints and both edges; only L node 1 is deleted → it dangles.
         let interface = GraphCorrespondence::new(
             Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3)

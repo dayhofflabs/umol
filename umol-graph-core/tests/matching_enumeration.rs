@@ -36,7 +36,8 @@ fn test_matching_enumeration_relabeling(#[case] source: &str, #[case] permutatio
             &permutation.iter().copied().map(NodeId).collect::<Vec<_>>(),
             relabeled.node_count(),
         ),
-    );
+    )
+    .expect("relabeling a simple graph induces a unique graph correspondence");
     let canonical_original = |matchings: Vec<umol_graph_core::Matching>| {
         let mut canonical: Vec<_> = matchings
             .into_iter()
@@ -107,7 +108,8 @@ fn test_matching_enumeration_relabeling_property() {
                     &permutation.iter().copied().map(NodeId).collect::<Vec<_>>(),
                     relabeled.node_count(),
                 ),
-            );
+            )
+            .expect("relabeling a simple graph induces a unique graph correspondence");
 
             for (original_matchings, relabeled_matchings) in [
                 (
