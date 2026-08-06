@@ -436,8 +436,8 @@ creates an atom, since a partial correspondence is the case where the two forms 
   overlap with molecule-entry and reaction-integrity validation and use a common internal traversal
   where that reduces duplication without expanding the public API. Also avoid retaining DSL-side
   checks that merely repeat checks owned by the checked entry constructor. **Additive (green).**
-  [dep: S1a] **Implemented with side-semantic checks superseded by the data type guide; corrected in
-  S2b.**
+  [dep: S1a] **Done. The initially implemented side-semantic checks are superseded by the data type
+  guide and are removed in S2b.**
 - **S2b — Correct the construction boundary and route generated spans through entries.** Remove
   side-presence validation from `ReactionSpanAst::try_from_entries`, retaining only union-reference
   integrity, and add exact construction cases for DPO-invalid but representable spans. Preserve the
