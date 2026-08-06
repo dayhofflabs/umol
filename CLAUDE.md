@@ -38,6 +38,16 @@
 - Do not create manual implementations, where well-designed and supported external libraries exist.
 - Do not offer unsolicited recommendations when asked to present options.
 
+## Development guides
+
+- `docs/development/data-types.md` is normative for construction, conversion, validation,
+  transformation, provenance, and contextual fallibility.
+- `docs/development/nomenclature.md` is normative for repository-specific terms and public names.
+- `docs/development/property-tests.md` is normative for executable-specification, evidence, and
+  property-suite organization policy.
+- Dated files under `discussion/` record rationale and work status; they are not normative developer
+  documentation and must not be cited from source comments or public rustdoc.
+
 ## Session Memory
 - Learn user corrections and preferences within the session.
 - Apply them silently. Do not re-announce learned behavior.

@@ -4,6 +4,9 @@ description: MANDATORY — load and apply before creating or editing ANY test in
 
 # umol test-writing conventions
 
+When creating, editing, reviewing, or reorganizing property tests, read
+`docs/development/property-tests.md` completely before taking task actions.
+
 ## Conformance (non-negotiable)
 
 - **Every new or edited test follows these conventions** — always, whether the test is the whole task or a small part of a larger change (a feature, a bug fix, a refactor). Apply them as you write, not only when tests are explicitly requested.

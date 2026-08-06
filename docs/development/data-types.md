@@ -1,11 +1,4 @@
-# 188 — Developer guide
-
-Status: **Informational**
-Date: 2026-08-05
-Relates: [118](118-validator-architecture-2026-06-20.md),
-[134](134-reaction-application-overlays-2026-06-26.md),
-[177](177-nomenclature-guide-2026-07-31.md),
-[185](185-python-reaction-span-2026-08-04.md)
+# Data type contracts
 
 ## Purpose
 
@@ -23,8 +16,7 @@ operation capable of checking it. A caller may request an explicit validator ear
 not, a later conversion or operation reports the failure when that invariant becomes a precondition
 of producing its result.
 
-This distinction was already applied to DPO validation in
-[doc 134](134-reaction-application-overlays-2026-06-26.md): a dangling reaction is constructible but
+This distinction is already applied to DPO validation: a dangling reaction is constructible but
 DPO-invalid until checked. This guide generalizes that decision and makes it available independently
 of the reaction implementation history.
 

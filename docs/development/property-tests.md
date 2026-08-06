@@ -1,14 +1,5 @@
 # Property tests as executable specifications
 
-Status: **Informational**
-Date: 2026-07-25
-Continued as the living [property-test guide](../docs/development/property-tests.md). This dated
-document is retained as the original snapshot and is no longer updated.
-
-Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
-[158](158-ring-model-and-enumeration-2026-07-22.md),
-[160](160-relevant-cycle-algs-2026-07-25.md)
-
 ## Scope
 
 Property tests have two distinct roles in umol:
@@ -27,8 +18,7 @@ properties are predominantly topological, and `umol-ast` as the more realistic
 case, where one public operation is commonly exercised over several distinct
 operational domains.
 
-This is not an implementation plan and does not claim that every existing
-property is already documented publicly.
+This guide does not claim that every existing property is already documented publicly.
 
 ## Specification and evidence
 
@@ -129,12 +119,12 @@ Use a more specific term inside the section where helpful:
 but the public documentation should prefer the concrete transformation when
 one is available.
 
-### Validation descriptions belong below the contract
+### Validation evidence remains separate from the contract
 
-A short `# Validation` section may identify the kinds of evidence supporting
-the semantic properties. It should remain stable across routine changes to
-strategy weights or CI case counts. Exact run counts belong in test
-configuration and CI output, not in the public contract.
+A stable description of the evidence supporting a property may follow the contract in crate-,
+module-, trait-, or operation-family documentation. Do not require a separate `# Validation`
+section on every method. Exact strategy weights and run counts belong in test configuration and CI
+output rather than public rustdoc.
 
 For example:
 
@@ -145,16 +135,12 @@ For example:
 /// `x.update(&x.difference_to(y)) == *y`.
 ///
 /// An update derived from `x` to itself is empty.
-///
-/// # Validation
-///
-/// The properties are checked generatively for every entity AST family,
-/// including values with independently undetermined spin fields.
 ```
 
-The example is a documentation shape, not a requirement to repeat the same
-text on eight implementations. A shared trait or operation-family
-documentation is preferable when it accurately states the common contract.
+The operation-family documentation may then state that the properties are checked generatively for
+every entity AST family, including values with independently undetermined spin fields. The example
+is not a requirement to repeat the same text on eight implementations. A shared trait or
+operation-family location is preferable when it accurately states the common contract.
 
 ### The property target remains the authoritative inventory
 
@@ -188,6 +174,65 @@ Where the connection is not obvious from the operation under test, a short
 comment should name the documented property. Test names continue to follow the
 workspace test-writing conventions; they are not a substitute for the
 specification.
+
+## Property-suite organization
+
+Organize a property suite along three independent axes:
+
+| Concern | Location |
+| --- | --- |
+| Semantic property | Subject and operation modules |
+| Operational domain | Domain-specific strategy modules |
+| Validation method | Operation-local reference support, exhaustive support, captured results, or literature fixtures |
+
+The property modules are the executable inventory. Their hierarchy should make the public subject
+and operation visible without reproducing the production source tree mechanically. Uniform law
+families such as lattice laws or entity-update laws may remain together even when they cover many
+types; molecule, reaction, stereo, or algorithm families should split by operation once one flat
+module obscures the asserted properties.
+
+### Strategy modules
+
+- Split strategies by the domain generated: values, entity ASTs, molecules, reactions, edits,
+  metadata, and other independently meaningful domains.
+- Import production symbols directly in the property module that tests them. A strategy module must
+  not act as a wildcard prelude that re-exports the production API.
+- Import only the strategies a property module uses, so its operational domain is visible at the
+  call site.
+- Keep an operation-specific scenario beside that operation's properties unless more than one
+  property family genuinely shares it.
+- Generate simple independent parameters and derive structurally valid aggregates deterministically
+  where practical. Prefer this to broad rejection with `prop_filter`, which hides the admitted
+  domain and weakens shrinking.
+- Generate invalid inputs by applying one named defect to a valid base when the property concerns an
+  exact failure boundary. Carry independently derived expected information in a scenario value when
+  recomputing it through the production operation would make the assertion circular.
+- Keep raw, canonical, ground, structurally valid, semantically valid, and deliberately malformed
+  domains distinct. A strategy's name and documentation must say which domain it emits.
+
+### Reference and fixture support
+
+- Keep definition-level reference implementations independent of the optimized production path and
+  separate from data generation.
+- Locate reference support with the operation it validates. Do not accumulate unrelated references
+  in a global helper module.
+- Preserve the provenance of captured and literature results. Checked-in captured output must not
+  make the external producer a runtime test dependency.
+- Keep regression files at the nearest stable subject root so reorganizing operation modules does
+  not orphan minimized failures.
+
+### Structural constraints
+
+- Follow the repository module convention of `<module>.rs` plus `<module>/<child>.rs`; do not use
+  `<module>/mod.rs`.
+- Use the narrowest test-crate visibility supported by the hierarchy without widening production
+  visibility.
+- Avoid `common`, `shared`, or `utils` dumping grounds. Name support by its domain or validation
+  role.
+- Module documentation states the properties, operational domains, and validation methods represented
+  below it, including why deliberate overlaps are distinct.
+- Do not create a property-suite README or a manually maintained property table. The test target and
+  `cargo test --test property -- --list` remain authoritative.
 
 ## `umol-graph-core`: clear topological properties
 
@@ -384,7 +429,7 @@ application property using `GraphAndOverlays` and VF2 validates the operation
 under those selected algorithms; it must not imply that an unmentioned hidden
 default is part of the semantic contract.
 
-## Proposed documentation shape
+## Public documentation shape
 
 The preferred public shape is:
 
@@ -396,14 +441,12 @@ The preferred public shape is:
 /// - State the property and its preconditions.
 /// - Name the equality or equivalence relation.
 /// - State exact failure behavior where it is part of the contract.
-///
-/// # Validation
-///
-/// State the stable evidence categories and operational domains. Link to a
-/// definition or published source where one governs the assertion.
 ```
 
-Not every method needs both sections. Trivial accessors need neither, and a
+Stable evidence categories and operational domains belong in the applicable crate-, module-,
+trait-, or operation-family documentation, with links to definitions or published sources where
+they govern the assertion. Not every method needs a semantic-properties section. Trivial accessors
+need none, and a
 family of operations should document a common law once when the shared
 location is discoverable. The documentation is warranted when the property
 clarifies semantics that are not apparent from the type signature.

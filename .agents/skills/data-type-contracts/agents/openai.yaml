@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Type Contracts"
+  short_description: "Review public data type semantic contracts"
+  default_prompt: "Use $data-type-contracts to review this public data type and its construction semantics."

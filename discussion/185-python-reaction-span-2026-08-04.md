@@ -6,7 +6,7 @@ Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [182](182-python-resolution-2026-08-03.md),
 [184](184-deltas-and-edits-2026-08-04.md),
 [168](168-api-hygiene-2026-07-27.md),
-[188](188-developer-guide-2026-08-05.md)
+[data type guide](../docs/development/data-types.md)
 
 `ReactionSpanAst` is not exported to `umol-py`. The whitepaper's reactions section names the span form
 as the route by which an existing corpus of rules reaches \umol, so the route should be reachable
@@ -128,7 +128,7 @@ These are representation checks, not side-level semantic validation. In particul
 be present on one side while one of its union-frame participants is absent from that side. Such a
 span is structurally representable but may fail DPO validation or side projection. Neither
 construction path invokes chemistry models, validators, resolvers, or implicit closure. The general
-boundary is defined in [doc 188](188-developer-guide-2026-08-05.md).
+boundary is defined in the [data type guide](../docs/development/data-types.md).
 
 `from_entries` is the asserted path for entries whose structural integrity is established by their
 producer. It uses the same checks and panics on a violated construction contract rather than
@@ -252,7 +252,7 @@ entity correspondence is not uniquely inducible. They do not silently retain the
 possible induced matches. Internal callers whose producer establishes the contextual invariant may
 assert the result; public consumers of independently supplied objects propagate absence. The
 provenance rule and the containment of fallibility are specified in
-[doc 188](188-developer-guide-2026-08-05.md).
+[data type guide](../docs/development/data-types.md).
 
 ## `from_sides`
 
@@ -437,7 +437,8 @@ creates an atom, since a partial correspondence is the case where the two forms 
   overlap with molecule-entry and reaction-integrity validation and use a common internal traversal
   where that reduces duplication without expanding the public API. Also avoid retaining DSL-side
   checks that merely repeat checks owned by the checked entry constructor. **Additive (green).**
-  [dep: S1a] **Implemented with side-semantic checks superseded by doc 188; corrected in S2b.**
+  [dep: S1a] **Implemented with side-semantic checks superseded by the data type guide; corrected in
+  S2b.**
 - **S2b — Correct the construction boundary and route generated spans through entries.** Remove
   side-presence validation from `ReactionSpanAst::try_from_entries`, retaining only union-reference
   integrity, and add exact construction cases for DPO-invalid but representable spans. Preserve the

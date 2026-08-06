@@ -1,16 +1,4 @@
-# 177 — Nomenclature guide
-
-Status: **Informational**
-Date: 2026-07-31
-Continued as the living [nomenclature guide](../docs/development/nomenclature.md). This dated
-document is retained as the original snapshot and is no longer updated.
-
-Relates: [117](117-entity-model-extensibility-2026-06-20.md),
-[125](125-constraints-as-projections-2026-06-22.md),
-[166](166-molecule-ops-2026-07-27.md),
-[171](171-aromaticity-inconsistency-policy-2026-07-29.md),
-[176](176-ast-naming-2026-07-31.md),
-[179](179-python-editing-and-transactions-2026-08-02.md)
+# Nomenclature guide
 
 ## Purpose
 
@@ -22,9 +10,6 @@ separate migration task.
 Prefer the established domain noun over a newly generalized synonym. Public names need not be
 artificially parallel when the underlying constraints, entities, or operations have different names.
 A shared name is useful only when the semantics and available operations are genuinely shared.
-
-Doc 176 separately considers the unsettled `Ast` suffix and crate naming. This guide does not decide
-that proposal.
 
 ## How to use this guide
 
@@ -44,11 +29,11 @@ that proposal.
 Orientation, read once. The contrasts below are the ones most often collapsed; each participant has
 its own glossary entry.
 
-**Operations.** Three disjoint kinds, established in [doc 166](166-molecule-ops-2026-07-27.md):
-*resolution* fills undetermined state using a chemistry model; *transformation* rewrites one resolved
-representation into another; *validation* checks integrity, model-independent invariants, and
-model-dependent conformance without mutation. Kekulization, aromatization, and charge delocalization
-are transformations, not resolver behaviour, because they alter determined representation.
+**Operations.** Three disjoint kinds: *resolution* fills undetermined state using a chemistry model;
+*transformation* rewrites one resolved representation into another; *validation* checks integrity,
+model-independent invariants, and model-dependent conformance without mutation. Kekulization,
+aromatization, and charge delocalization are transformations, not resolver behaviour, because they
+alter determined representation.
 
 **Validation tiers.** *Integrity* (well-formed storage and shape, no model), *invariants*
 (model-independent physics), *conformance* (accepted by a selected chemistry model). Distinct tiers,
@@ -93,10 +78,10 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 | `*Error` | operational or setup failure, the `Err` side | 58 | all |
 | `*Validator` | performs one validation tier or one check within it | 12 | ast, graph |
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
-| `*Ast` / `*Dsl` | internal representation / boundary surface | 77 / 38 | ast — **under review, doc 176** |
+| `*Ast` / `*Dsl` | internal representation / boundary surface | 77 / 38 | ast — **under review** |
 
 Families with no member yet, named in settled vocabulary and expected to gain one:
-`*Failure` (doc 171), transformers (doc 166 — see *Transformer naming* below).
+`*Failure` and transformers (see *Transformer naming* below).
 
 ### Stacking order
 
@@ -142,7 +127,6 @@ store.
 
 **Not:** using the plural for a `Vec<Constraint>` parameter.
 **In code:** `AtomConstraintAst` against `AtomConstraintsAst`; likewise for every entity kind.
-**Settled by:** 138.
 
 ### View and Views
 
@@ -162,7 +146,6 @@ one propagates a borrow through a signature that did not need it.
 
 **Not:** the owned representation, which is the `*Ast` type. A view does not survive its molecule.
 **In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.
-**Settled by:** 086.
 
 ### Delta and Update
 
@@ -171,7 +154,6 @@ applied to one entity. They are not interchangeable and exist per entity kind in
 
 **Not:** each other. `AtomDelta` is reaction-side change encoding; `AtomUpdate` is an entity edit.
 **In code:** `AtomDelta`, `Deltas`, `ConstraintDelta` against `AtomUpdate`, `AtomFieldChange`.
-**Settled by:** 134.
 
 ### Defaults and Overrides
 
@@ -180,22 +162,21 @@ state.
 
 **Not:** each other. The difference is whether the input spoke.
 **In code:** `MoleculeDefaults`, `AtomDefaults` against `MoleculeOverrides`, `AtomOverrides`.
-**Settled by:** 094 for defaults. `*Overrides` has no owning document.
 
 ### Transformer naming — unsettled
 
-Three patterns are in use for the same family, and doc 166 adds two more members:
+Three patterns are in use for the same family:
 
 - agent noun: `Kekulizer`, `Aromatizer`, each having grown `*Error` and `*Config`;
 - verb phrase: `DelocalizeCharge`;
-- target phrase: `ToExplicitHydrogens`, `ToImplicitHydrogens` (doc 166, not yet written).
+- target phrase: `ToExplicitHydrogens`, `ToImplicitHydrogens` (planned).
 
 The house pattern for a thing that performs an operation is the agent noun — `Resolver`, `Validator`,
 `Kekulizer`. The counter-argument is that `Kekulizer` and `Aromatizer` are configured engines with
 their own error and config types, while `DelocalizeCharge` and the hydrogen transforms are
 parameterless operations, which may justify two conventions rather than one.
 
-This needs a decision before doc 166 lands its three transformers, not after.
+This needs a decision before the planned transformers land, not after.
 
 ## Retired and discouraged
 
@@ -222,19 +203,18 @@ text changes at the same time.
 
 | # | Issue | Where | Kind |
 | --- | --- | --- | --- |
-| 1 | Transformer naming has three patterns in use — agent noun (`Kekulizer`, `Aromatizer`), verb phrase (`DelocalizeCharge`), target phrase (`ToExplicitHydrogens`) — and doc 166 adds two more members. Needs deciding before they land. | *Transformer naming* | decision |
+| 1 | Transformer naming has three patterns in use — agent noun (`Kekulizer`, `Aromatizer`), verb phrase (`DelocalizeCharge`), target phrase (`ToExplicitHydrogens`). Needs deciding before the planned members land. | *Transformer naming* | decision |
 | 2 | `IncidenceNodeSelection::OVERLAYS` covers four of the six overlay kinds, with `STEREO` separate. The same word means four kinds there and six everywhere else. Either the flag or the term should change. | *Overlay* | scope conflict |
 | 3 | One patch law, two spellings: `apply`/`diff` on `EntityPatch`, `update`/`difference_to` on the entity update surface. | *Patch algebra* | naming split |
 | 4 | `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`; the `CosetSpace` doc on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so line 25 is wrong. | *Coset* | doc error |
-| 5 | `*Ast` and `*Dsl` are under review in doc 176; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on doc 176 |
+| 5 | `*Ast` and `*Dsl` are under review; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on naming decision |
 | 6 | `*Failure` and the transformer family are named in settled vocabulary but have no members yet, so the conventions are untested. | *Suffixes* | latent |
 | 7 | Six of eleven `Solution` accessors have no call sites outside `umol-utils`: `into_determined`, `into_data`, `into_contradiction`, `is_determined`, `is_underdetermined`, `contradiction`. API surface rather than nomenclature, but cheap to trim now. | *Solution* | unused surface |
 | 8 | `Derivation`, `Failure` and `Projection` have no `In code` names. | those entries | incomplete |
 
 ## Glossary
 
-Alphabetical by concept. Entry shape: definition, optional detail, then `Not:`, `In code:`,
-`Settled by:`.
+Alphabetical by concept. Entry shape: definition, optional detail, then `Not:` and `In code:`.
 
 ### Algorithm
 
@@ -245,7 +225,6 @@ higher layers follow the same suffix.
 **Not:** config (which may *contain* an algorithm selection), model, policy.
 **In code:** `*Algorithm` enums in `umol-graph-core`, e.g. `CommonSubgraphEnumerationAlgorithm`,
 `RelevantCycleEnumerationAlgorithm`; also higher-layer selectors such as `SubstructureMatchAlgorithm`.
-**Settled by:** 171.
 
 ### Application
 
@@ -254,7 +233,6 @@ every edit succeeds.
 
 **Not:** plan (which is derived without mutating), transformation.
 **In code:** `apply`, `apply_at`.
-**Settled by:** 166.
 
 ### Canonical and canonicalize
 
@@ -270,7 +248,6 @@ semantic, so it can key a map for semantic deduplication.
 **Not:** *canonical labeling*, which is the graph relabeling that makes isomorphic structures
 comparable. Two unrelated canonical forms, one over attribute values and one over graphs.
 **In code:** `Canonicalize`, `canonicalize`, `canonical`, `canonical_eq`, `Canonical<T>`.
-**Settled by:** 113.
 
 ### Class
 
@@ -284,7 +261,6 @@ Named families: `Symmetric(n)`, `Alternating(n)`, `Cyclic(n)`, `Dihedral(n)`. Ge
 **Not:** *kind*, which discriminates entity families. A stereo atom's kind is `StereoKind`; its class
 is `ClassKey`.
 **In code:** `ClassKey`, and the `class` field of the stereo `:type` payload.
-**Settled by:** 104.
 
 ### Combine
 
@@ -295,7 +271,6 @@ to gain analogues, so it is recorded rather than generative.
 
 **Not:** *join*, which is the lattice least upper bound.
 **In code:** `combine`, `combine_all`, `combine_from`.
-**Settled by:** 151.
 
 ### Compaction and remapping
 
@@ -323,7 +298,6 @@ them.
 structures rather than two id spaces of one.
 **In code:** `IdCompaction`, `IdRemapping`, `UndoCompaction`, `umol_graph_core::Compaction`;
 `compact_*`, `uncompact_*`, `forward`, `reverse`, `compose`.
-**Settled by:** 148.
 
 ### Config
 
@@ -336,7 +310,6 @@ algorithm selectors directly.
 **Not:** model, policy.
 **In code:** `*Config`, e.g. `ResolveConfig`, `ValidateConfig`, `SubstructureSearchConfig`,
 `ConstraintValidateConfig`, `SmilesIoConfig`.
-**Settled by:** 171.
 
 ### Configuration
 
@@ -346,7 +319,6 @@ when a proper rotation relates them, so the observable descriptor is the coset r
 **Not:** *coset*, which is the equivalence class the configuration falls into; not *conformation*,
 which umol does not represent.
 **In code:** `StereoConfigurationAst`; the `configuration` attribute of stereo atoms and bonds.
-**Settled by:** 104.
 
 ### Conformance
 
@@ -356,7 +328,6 @@ contradiction.
 
 **Not:** integrity, invariant. All three are validation tiers and are not interchangeable.
 **In code:** `validate_conformance`, `*ConformanceValidator`.
-**Settled by:** 171.
 
 ### Constraint
 
@@ -366,7 +337,6 @@ the public repository term.
 **Not:** `projection`, `predicate`, or `representation`, when naming the stored object or an
 operation over it.
 **In code:** `AtomConstraintAst`, `AtomConstraintsAst`, and the per-entity equivalents.
-**Settled by:** 125, 171.
 
 ### Contradiction
 
@@ -376,7 +346,6 @@ no recovery policy: every determined failure or mismatch in their scope becomes 
 **Not:** error (operational, outside `Solution`), failure or inconsistency (policy-free
 classifications that a resolver may still act on).
 **In code:** `Solution::Contradictory`, `*Contradiction`.
-**Settled by:** 083; validator obligations in 171.
 
 ### Correspondence
 
@@ -395,7 +364,6 @@ and `to_remapping` converts one into the total relabeling when no removals are i
 A correspondence relates two different structures.
 **In code:** `MoleculeCorrespondence`, `Correspondence<T>`, `GraphCorrespondence`, `induce`,
 `compose`, `reverse`, `left_of`, `right_of`, `is_total`, `to_remapping`.
-**Settled by:** 134.
 
 ### Coset
 
@@ -417,7 +385,6 @@ coset, not the configuration, is what the notation stores and what `#T` and `#C`
 acts, but the stored descriptor is a coset of the rotation subgroup.
 **In code:** `CosetSpace`, `coset_rep`, `observable_coset`, `orbit_reps`; the coset index in
 `#T<n>` / `#C<n>`.
-**Settled by:** 104, 113.
 
 **Notation slip to fix:** `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`, and the
 `CosetSpace` doc comment on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so `R\P` is
@@ -449,7 +416,6 @@ Not *total valence* (`#V`), which sums contributions rather than gains. See *Val
 side by side.
 **In code:** `AtomView::covalence`, `AtomView::aromatic_covalence`, `aromatic_covalence`;
 `target_covalences` in the valence table.
-**Settled by:** —
 
 ### Deltas
 
@@ -460,7 +426,6 @@ applied to the left-hand side. The plural names the container, following the sam
 **Not:** a `Vec<Delta>` parameter. The plural type is the reaction's transformation, not any
 sequence of deltas.
 **In code:** `Deltas`, `Delta`.
-**Settled by:** 134.
 
 ### Derivation
 
@@ -473,12 +438,11 @@ coined sense collides with the established one.
   uses. `ReactionDerivation` is `apply`'s codomain; a rule is to a derivation as a function is to one
   evaluation.
 - **Perception derivation** — the policy-free result of perception, including candidates and exact
-  inconsistencies. Coined in doc 171.
+  inconsistencies.
 
 **Not:** resolution (which applies policy), validation. The two senses are not related; the second
 would be the one to rename if either were.
 **In code:** `ReactionDerivation`, `apply`, `to_reaction`.
-**Settled by:** 131 for the reaction sense; 171 for the perception sense.
 
 ### Determined
 
@@ -487,7 +451,6 @@ would be the one to rename if either were.
 **Not:** *ground*, which is a property of stored state rather than of an outcome. An operation may
 return `Determined` with a payload that is not ground if the operation's own contract is satisfied.
 **In code:** `Solution::Determined`, `is_determined`, `into_determined`.
-**Settled by:** 083.
 
 ### Donor and acceptor
 
@@ -500,7 +463,6 @@ dative bond from a multicenter bond over the same atoms.
 
 **Not:** interchangeable, and not *participants* used flatly; a diagnostic should name the role.
 **In code:** `:donors`, `:acceptor`; `DativeBondAst`.
-**Settled by:** 117.
 
 ### Edit and undo
 
@@ -516,7 +478,6 @@ is why a handle is meaningless outside its batch.
 **Not:** *delta*, which is the reaction-side change encoding, nor `*Update`, which is a field-level
 change to one entity. Edits are molecule-level and transactional.
 **In code:** `Edit`, `Undo`, `UndoCompaction`, `MoleculeEditor::transact`.
-**Settled by:** 148.
 
 ### Electron counts
 
@@ -531,7 +492,6 @@ One leaf type serves both entity kinds rather than being duplicated per kind.
 vector's sum. Not the entity's charge, which is carried on the entity and is why the five carbons of
 a cyclopentadienyl ring can hold equal contributions.
 **In code:** `ElectronCountsAst`, the leading `electron-counts` of an aromatic or multicenter string.
-**Settled by:** 134.
 
 ### Embedding kind
 
@@ -551,7 +511,6 @@ admissible in the modular product.
 it.
 **In code:** `EmbeddingKind::Induced`, `EmbeddingKind::Monomorphism`; also `McisAlgorithm` and
 `McesAlgorithm`.
-**Settled by:** 162.
 
 ### Entity
 
@@ -563,7 +522,6 @@ entity name in diagnostics and action fields when it matters which kind is affec
 instance. Not *overlay* either: entity covers all eight kinds, overlay covers the six that are not
 topology.
 **In code:** `Entity`, `EntityKind`.
-**Settled by:** 117. Origin of the approach: 079.
 
 ### Entity constraint
 
@@ -572,7 +530,6 @@ includes ring constraints.
 
 **Not:** a name for the non-ring subset — use *incidence constraint* for that.
 **In code:** `EntityConstraint` must not be narrowed to the non-ring subset.
-**Settled by:** 171.
 
 ### Equality ladder
 
@@ -593,7 +550,6 @@ the choice is almost never obvious from context.
 on everything and silently answers a different question.
 **In code:** `PartialEq`, `Canonicalize::canonical_eq`, `Equiv::equiv`, `Equiv::equiv_under`,
 `BiEquiv`.
-**Settled by:** 113, 156.
 
 ### Error
 
@@ -604,7 +560,6 @@ transaction or unavailable model parameters.
 **In code:** the `Err` side of `Result<Solution<_, _>, _>`. Every module error type implements
 `umol_utils::UmolError`, which supplies `as_any` for downcasting; `Box<dyn UmolError>` is the
 cross-module boundary form and `?` promotes into it.
-**Settled by:** 171.
 
 ### Failure
 
@@ -615,7 +570,6 @@ failure means that a structurally readable entity is not realizable under them.
 **Not:** error (operational, not semantic); contradiction (a failure is not yet one — a resolver may
 be configured to retain or remove the affected input).
 **In code:** —
-**Settled by:** 171.
 
 ### Ground term
 
@@ -627,9 +581,8 @@ chemistry invariants or that its entities are mutually consistent.
 `value.is_ground() == value.as_lit().is_some()`. It does not canonicalize, apply defaults, validate,
 or merge ground states that happen to have the same downstream numerical effect.
 
-**Not:** valid, or chemically admissible. Doc 173 separates structural groundness from both.
-**In code:** `Lattice::is_ground`, `AsLit::as_lit`, `Ground<T>` (planned, doc 175).
-**Settled by:** 173. Whitepaper glossary carries the chemist-facing form.
+**Not:** valid, or chemically admissible. Structural groundness is separate from both.
+**In code:** `Lattice::is_ground`, `AsLit::as_lit`, `Ground<T>` (planned).
 
 ### Id, handle, and argument
 
@@ -644,7 +597,6 @@ Three ways to refer to an entity, at three stages.
 
 **Not:** each other. A `*Handle` outside a batch and an `*Arg` outside a builder are both meaningless.
 **In code:** `AtomId`, `AtomHandle`, `AtomArg`; likewise per entity kind.
-**Settled by:** 141 for handles. `*Arg` has no owning document.
 
 ### Incidence
 
@@ -664,7 +616,6 @@ The notion appears at three levels and they are the same idea:
 **Not:** *projection*, which is the operation that reads a value across an incidence. Incidence is
 the relationship; projection is what you do with it.
 **In code:** `incident*` methods, `ParticipantAnchor`, `IncidenceGraph`.
-**Settled by:** 171 for the constraint category; 134 for the relation-set index.
 
 ### Incidence constraint
 
@@ -685,7 +636,6 @@ Boolean, a count, or a weighted sum.
 the whole entity-constraint category.
 **In code:** `IncidenceConstraintValidator`, `IncidenceConstraintContradiction`; the established
 `incident*` methods expose the same relationship.
-**Settled by:** 171.
 
 ### Incidence graph
 
@@ -716,7 +666,6 @@ See *Overlay* for the open scope conflict in `IncidenceNodeSelection::OVERLAYS`.
 construction over a structure, not a representation of one.
 **In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceNodeSelection`,
 `SubstructureMatchAlgorithm::Incidence`.
-**Settled by:** 134.
 
 ### Inconsistency
 
@@ -728,7 +677,6 @@ select an authority or recovery action.
 where sound, replace the entity, or report a contradiction.
 **In code:** `AromaticityInconsistency`, `StereoInconsistency`, which identify the exact constraint
 site and entity involved.
-**Settled by:** 171.
 
 ### Inherent field
 
@@ -737,7 +685,6 @@ undetermined.
 
 **Not:** constraint, which is assertable without contributing to identity and may be absent.
 **In code:** the non-constraint fields of each `*Ast` entity type.
-**Settled by:** 104, 173.
 
 ### Integrity
 
@@ -746,7 +693,6 @@ constraint consistency.
 
 **Not:** invariant, conformance. All three are validation tiers and are not interchangeable.
 **In code:** `validate_integrity`, `EntityStructureValidator`, `ConstraintValidator`.
-**Settled by:** 171.
 
 ### Invariant
 
@@ -755,7 +701,6 @@ well-formed structure.
 
 **Not:** integrity, conformance. All three are validation tiers and are not interchangeable.
 **In code:** `validate_invariants`, `ValenceInvariantsValidator`, `SpinInvariantsValidator`.
-**Settled by:** 171.
 
 ### Lattice
 
@@ -765,7 +710,6 @@ clarification added for chemist readers and is not repository terminology.
 
 **Not:** *attribute lattice* in code or internal documentation.
 **In code:** `Lattice`, `meet`, `join`, `matches`, `is_compatible`.
-**Settled by:** 113.
 
 ### Leaf type
 
@@ -783,7 +727,6 @@ A new leaf type should follow the same shape, and should implement `AsLit` so th
 **Not:** an entity type, which is a record of leaves plus a constraint store.
 **In code:** `BooleanAst`, `ValueAst`, `ElectronCountsAst`, `UnpairedElectronsAst`, `ElementAst`,
 `IsotopeMassAst`.
-**Settled by:** 172, 173.
 
 ### Ligand and site
 
@@ -803,7 +746,6 @@ an atom for the lone pair.
 interchangeable, and diagnostics should say which.
 **In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair}`; `:site` and
 `:ligands` in the notation.
-**Settled by:** 104.
 
 ### Localized bond
 
@@ -816,7 +758,6 @@ their qualifier.
 **Not:** any overlay entity. The distinction is the topology/overlay split: a localized bond is an
 edge, the others are relations.
 **In code:** `BondAst`, `BondId`, `:bonds`.
-**Settled by:** 117.
 
 ### Matching
 
@@ -838,7 +779,6 @@ rather than the operation.
 **In code:** first sense — `Matching`, `BondMatching`, `PerfectMatchingAlgorithm`,
 `MatchingEnumerationAlgorithm`; second sense — `substructure_matches`, `SubstructureMatchAlgorithm`,
 `Lattice::matches`.
-**Settled by:** 162 for the graph sense; 113 for the lattice relation.
 
 ### Mismatch
 
@@ -848,7 +788,6 @@ independently meaningful but disagree.
 **Not:** failure (where one side is not realizable at all).
 **In code:** concrete names in diagnostic variants and config fields, such as
 `AromaticValenceMismatch`, `CisTransStereoMismatch`.
-**Settled by:** 171.
 
 ### Model
 
@@ -856,7 +795,6 @@ A **model** contains semantic choices defining which result is chemically accept
 
 **Not:** config, policy, algorithm.
 **In code:** `ChemistryModel`, `ValenceModel`, `AromaticityModel`, `StereoModel`, `RingModel`.
-**Settled by:** 171.
 
 ### Molecular structure
 
@@ -864,7 +802,6 @@ A **molecular structure** is a molecular topology together with its overlay enti
 
 **Not:** molecular topology, which excludes them.
 **In code:** —
-**Settled by:** whitepaper glossary; no settled repository term.
 
 ### Molecular topology
 
@@ -873,7 +810,6 @@ carrying no aromatic, stereo, or coordination information.
 
 **Not:** molecular structure, which includes the overlay entities.
 **In code:** —
-**Settled by:** whitepaper glossary; no settled repository term.
 
 ### Narrow and widen
 
@@ -895,7 +831,6 @@ termination problem — so `widen_with` really is the join and `narrow_from` rea
 **Not:** the abstract-interpretation operators of the same names. Not *refinement*, which is the order
 relation rather than an operation.
 **In code:** `Lattice::narrow_from`, `Lattice::widen_with`, `meet`, `join`.
-**Settled by:** 113.
 
 ### Noncovalent kind
 
@@ -907,7 +842,6 @@ attribute beyond charge and spin: `HydrogenBond`, `HalogenBond`, `ChalcogenBond`
 overlays despite their binary shape.
 **In code:** `NoncovalentBondKind`, `NoncovalentBondKindAst`; the notation literals `Hbd`, `Xbd`,
 `Ybd`, `Ion`, `Vdw`.
-**Settled by:** 117.
 
 ### Overlay
 
@@ -926,7 +860,6 @@ source comments descriptively; overlay is the repository term. Not *entity*, whi
 over all eight kinds.
 **In code:** `GraphAndOverlays`, `verify_overlays`, `RemovedOverlays`,
 `IncidenceNodeSelection::OVERLAYS` (narrower, see above).
-**Settled by:** 134. Whitepaper §5 carries the chemist-facing definition.
 
 ### Participant
 
@@ -939,7 +872,6 @@ or bond an overlay refers to. The lower layer is the mechanism for the upper one
 
 **Not:** member, constituent, or argument.
 **In code:** `ParticipantPosition`, `RelationParticipant`, `ParticipantAnchor`.
-**Settled by:** 134.
 
 ### Patch algebra
 
@@ -947,8 +879,8 @@ A **delta** is the morphism between two entity states, and the pair of operation
 algebra: `apply` carries a state forward by a delta, `diff` factors two states back into the deltas
 between them.
 
-The law is `apply(lhs, diff(lhs, rhs)) == rhs`. Doc 161 states the same law over the entity update
-API as `x.update(x.difference_to(y)) == y`.
+The law is `apply(lhs, diff(lhs, rhs)) == rhs`. The entity update API states the same law as
+`x.update(x.difference_to(y)) == y`.
 
 **Naming split to resolve.** One law, two spellings — `apply`/`diff` on `EntityPatch`,
 `update`/`difference_to` on the entity update surface. Pick one pair before either grows further; a
@@ -957,7 +889,6 @@ reader who learns the law under one name will not find it under the other.
 **Not:** transaction application, which executes a whole edit plan and publishes only on success. A
 patch is an entity-level morphism; a transaction is a molecule-level lifecycle.
 **In code:** `EntityPatch::apply`, `EntityPatch::diff`, `update`, `difference_to`.
-**Settled by:** 134, 161.
 
 ### Perception
 
@@ -966,7 +897,6 @@ entities. It produces a policy-free derivation.
 
 **Not:** resolution (which applies policy and edits), validation.
 **In code:** `AromaticityPerception`.
-**Settled by:** 171.
 
 ### Plan
 
@@ -974,7 +904,6 @@ A **plan** is the complete edit sequence derived without mutating the source obj
 
 **Not:** application (which executes a plan).
 **In code:** `plan`.
-**Settled by:** 166.
 
 ### Policy
 
@@ -989,7 +918,6 @@ constraint or entity context.
 **Not:** model. A model determines chemical acceptance; a policy determines what an operation does
 after acceptance or inconsistency has been established.
 **In code:** `AromaticityInconsistencyPolicy`, `StereoInconsistencyPolicy`.
-**Settled by:** 171.
 
 ### Projection
 
@@ -999,7 +927,6 @@ may be used descriptively when explaining that an entity relation induces partic
 
 **Not:** the public name of stored constraints, or of the incidence-constraint category.
 **In code:** —
-**Settled by:** 125.
 
 ### Reaction
 
@@ -1014,7 +941,6 @@ same type.
 **Not:** a derivation, which is one firing of a reaction against a concrete host. A reaction is the
 rule; a derivation is an evaluation of it.
 **In code:** `ReactionAst`, `lhs`, `Deltas`.
-**Settled by:** 131.
 
 ### Reaction span
 
@@ -1030,7 +956,6 @@ A correspondence with values and a direction added is what lifts it to a span.
 
 **Not:** a correspondence, which is valueless pairing; not a reaction, which is the rule itself.
 **In code:** `ReactionSpanAst`, `lhs()`, `rhs()`.
-**Settled by:** 131, 133.
 
 ### Recovery action
 
@@ -1048,18 +973,16 @@ inconsistency:
 spellings. Policy enums may be shared when they admit exactly the same action set; the config field
 supplies the context.
 **In code:** the variants above.
-**Settled by:** 171.
 
 ### Refinement
 
 **Refinement** names three unrelated operations. Always qualify it.
 
 - **Lattice refinement** — the order relation on attribute values; `b` refines `a` when `a ∧ b = b`.
-  Doc 113.
 - **Colour refinement** — the automorphism and canonical-labelling procedure. `RefinementAlgorithm`,
   `umol-graph-core/src/algorithms/refinement.rs`.
 - **Circular refinement** — the fingerprint iteration over atom environments.
-  `CircularRefinementAlgorithm`, `CircularRefinementHash`. Docs 126, 154.
+  `CircularRefinementAlgorithm`, `CircularRefinementHash`.
 
 Both graph refinements take **rounds**: `ToFixpoint` runs until the colouring stabilizes, `Fixed(n)`
 runs exactly `n`. A fixed count is what makes a fingerprint reproducible; a fixpoint is what makes a
@@ -1068,7 +991,6 @@ canonical form.
 **Not:** any of the three used unqualified where another could be meant.
 **In code:** `RefinementAlgorithm`, `CircularRefinementAlgorithm`, `RefinementRounds`,
 `Lattice::matches`.
-**Settled by:** 113, 126, 154.
 
 ### Relation set
 
@@ -1090,7 +1012,6 @@ participant regardless of which id-space it belongs to.
 Not the overlay itself: an overlay entity is *stored in* a relation set.
 **In code:** `FixedRelationSet`, `VarRelationSet`, `FixedFixedBirelationSet`, `ParticipantAnchor`,
 `RelationParticipant`.
-**Settled by:** 134. Whitepaper §5 carries the chemist-facing reading.
 
 ### Relational constraint
 
@@ -1100,7 +1021,6 @@ entity to atoms, bonds, roles, or predicates.
 **Not:** a synonym for *incidence constraint*, merely because the derived value depends on a
 relation.
 **In code:** `RelationalConstraint`.
-**Settled by:** 171.
 
 ### Reset
 
@@ -1108,7 +1028,6 @@ relation.
 
 **Not:** a general synonym for removing an entity or replacing determined structural information.
 **In code:** `reset_aromatic_valence`, `reset_stereo_constraints`.
-**Settled by:** 171.
 
 ### Resolution
 
@@ -1118,7 +1037,6 @@ that plan transactionally.
 **Not:** transformation (which rewrites determined representation), validation (which does not
 mutate), perception (which is policy-free).
 **In code:** `Resolver`, `resolve`, `ResolveConfig`.
-**Settled by:** 166, 171.
 
 ### Ring constraint
 
@@ -1132,7 +1050,6 @@ relevant-cycle enumeration algorithm is operational configuration.
 
 **Not:** incidence constraint.
 **In code:** `RingConstraintValidator`, `RingConstraintContradiction`.
-**Settled by:** 171.
 
 ### Solution
 
@@ -1149,7 +1066,6 @@ the two, but with 4 and 1 call sites they are conveniences rather than establish
 **Not:** `Result`. `Solution` carries the semantic verdict; `Result` carries operational success.
 Both appear in one signature and mean different things.
 **In code:** `Solution`, `umol_utils::solution`.
-**Settled by:** 083.
 
 ### Snapshot
 
@@ -1161,7 +1077,6 @@ describes the lifecycle operation rather than the copying mechanism.
 **Not:** ordinary finalization, which consumes the working object; transaction rollback, which
 replays a realized undo journal; a general synonym for `clone`.
 **In code:** planned `MoleculeEditor::snapshot`.
-**Settled by:** 179.
 
 ### Split
 
@@ -1171,7 +1086,6 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 
 **Not:** a partition by any other criterion.
 **In code:** `split`.
-**Settled by:** 086.
 
 ### Transaction
 
@@ -1186,7 +1100,6 @@ be rolled back.
 mechanism application uses. Not *patch algebra*, which is the entity-level `apply`/`diff` pair.
 **In code:** `Transaction`, `transact`, `transact_unchecked`, `rollback`, `append`,
 `TransactionError`.
-**Settled by:** 148.
 
 ### Transformation
 
@@ -1196,7 +1109,6 @@ representation rather than fill undetermined state.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.
-**Settled by:** 166.
 
 ### Underdetermined
 
@@ -1205,7 +1117,6 @@ or a contradiction.
 
 **Not:** *undetermined*, which is stored state. Do not use the two interchangeably.
 **In code:** `Solution::Underdetermined`.
-**Settled by:** 083.
 
 ### Undetermined
 
@@ -1214,7 +1125,6 @@ absent or undetermined constraint is vacuous and does not assert that an entity 
 
 **Not:** *underdetermined*, which is an operation outcome. Do not use the two interchangeably.
 **In code:** `ValueAst::Undetermined` and the per-type equivalents.
-**Settled by:** 171.
 
 ### Valence
 
@@ -1234,7 +1144,6 @@ lone pair: pyrrole-type nitrogen has aromatic valence 2 and aromatic covalence 0
 **Not:** each other. The lowercase and uppercase tags are distinct predicates, and *covalence* is
 neither. See *Covalence*.
 **In code:** `#v`, `#V`, `AtomView::valence`, `AtomView::total_valence`, `AtomView::covalence`.
-**Settled by:** —
 
 ### Validation
 
@@ -1244,19 +1153,16 @@ representation.
 **Not:** resolution (which repairs), transformation. Integrity, invariants, and conformance are its
 three tiers.
 **In code:** `Validator`, `validate`.
-**Settled by:** 166, 171.
 
 ## Maintaining this guide
 
-Add a term when a discussion assigns it a durable meaning that future code or documentation must
-preserve. Every entry carries four slots:
+Add a term when it has a durable meaning that future code or documentation must preserve. Every
+entry carries three slots:
 
 - the definition, in one sentence where possible;
 - `Not:` — the nearby terms it must not be used to mean, spelled out so a search for the wrong word
   reaches this entry;
-- `In code:` — the public type or method names implied by the decision, or `—` if none yet;
-- `Settled by:` — the document that discusses the term best, which is not always the one that used it
-  first; `—` when no document owns it, which is a legitimate outcome rather than a gap.
+- `In code:` — the public type or method names implied by the decision, or `—` if none yet.
 
 Whenever a `Not:` line forbids a specific spelling, add the corresponding row to *Retired and
 discouraged*.
