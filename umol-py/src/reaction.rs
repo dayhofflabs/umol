@@ -236,12 +236,6 @@ fn atom_correspondence(
             CorrespondenceError::DuplicateRightId { id } => {
                 format!("duplicate right atom id {}", id.index())
             }
-            CorrespondenceError::LeftCountMismatch { declared, actual } => {
-                format!("declared left atom count {declared} does not match actual count {actual}")
-            }
-            CorrespondenceError::RightCountMismatch { declared, actual } => {
-                format!("declared right atom count {declared} does not match actual count {actual}")
-            }
         })
     })
 }

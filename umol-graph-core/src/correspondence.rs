@@ -12,15 +12,14 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::graph::{EdgeId, Graph, NodeId, Remapping};
 
-/// Failure to construct or contextually apply a correspondence.
+/// Failure to construct a correspondence whose pairs form a partial bijection over its declared id
+/// spaces.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CorrespondenceError<Id> {
     LeftIdOutOfRange { id: Id, count: usize },
     RightIdOutOfRange { id: Id, count: usize },
     DuplicateLeftId { id: Id },
     DuplicateRightId { id: Id },
-    LeftCountMismatch { declared: usize, actual: usize },
-    RightCountMismatch { declared: usize, actual: usize },
 }
 
 impl<Id: Debug> Display for CorrespondenceError<Id> {
@@ -34,14 +33,6 @@ impl<Id: Debug> Display for CorrespondenceError<Id> {
             }
             Self::DuplicateLeftId { id } => write!(f, "left id {id:?} occurs more than once"),
             Self::DuplicateRightId { id } => write!(f, "right id {id:?} occurs more than once"),
-            Self::LeftCountMismatch { declared, actual } => write!(
-                f,
-                "declared left count {declared} does not match actual count {actual}"
-            ),
-            Self::RightCountMismatch { declared, actual } => write!(
-                f,
-                "declared right count {declared} does not match actual count {actual}"
-            ),
         }
     }
 }
