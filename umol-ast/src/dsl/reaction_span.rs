@@ -9,10 +9,7 @@ use std::str::FromStr;
 use umol_edn::{
     read_string, DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn,
 };
-use umol_graph_core::{
-    BiRelationData, EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
-    RelationData, RelationParticipant, VarRelationSet,
-};
+use umol_graph_core::EdgeId;
 
 use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
@@ -50,7 +47,7 @@ use crate::ast::ligand::StereoLigand;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::{
     AromaticSystemAst, Constraint, ConstraintSpan, DativeBondAst, EntitySpan, MulticenterBondAst,
-    NoncovalentBondAst, ReactionSpanAst, StereoAtomAst, StereoBondAst,
+    NoncovalentBondAst, ReactionSpanAst, ReactionSpanEntries, StereoAtomAst, StereoBondAst,
 };
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the
@@ -116,101 +113,123 @@ fn map_span<T, U>(span: &EntitySpan<T>, f: impl Fn(&T) -> U) -> EntitySpan<U> {
     }
 }
 
-/// Rebuild an overlay relation set with its per-side payload mapped through `f`; participants
-/// (the overlay topology) carry through unchanged. One per relation-set shape.
-fn map_fixed_var_span<L1, O1, const N1: usize, L2, O2, T, U>(
-    set: &FixedVarBirelationSet<L1, O1, N1, L2, O2, EntitySpan<T>>,
-    f: impl Fn(&T) -> U,
-) -> FixedVarBirelationSet<L1, O1, N1, L2, O2, EntitySpan<U>>
-where
-    L1: RelationParticipant,
-    O1: FactorOrdering,
-    L2: RelationParticipant,
-    O2: FactorOrdering,
-    T: BiRelationData + Clone,
-    U: BiRelationData + Clone,
-{
-    FixedVarBirelationSet::new(
-        set.relation_ids()
-            .map(|rid| {
-                (
-                    *set.participants_1(rid),
-                    set.participants_2(rid).to_vec(),
-                    map_span(set.data(rid), &f),
-                )
-            })
-            .collect(),
-    )
-}
-
-fn map_var_span<P, O, T, U>(
-    set: &VarRelationSet<P, O, EntitySpan<T>>,
-    f: impl Fn(&T) -> U,
-) -> VarRelationSet<P, O, EntitySpan<U>>
-where
-    P: RelationParticipant,
-    O: FactorOrdering,
-    T: RelationData + Clone,
-    U: RelationData + Clone,
-{
-    VarRelationSet::new(
-        set.relation_ids()
-            .map(|rid| (set.participants(rid).to_vec(), map_span(set.data(rid), &f)))
-            .collect(),
-    )
-}
-
-fn map_fixed_span<P, O, const N: usize, T, U>(
-    set: &FixedRelationSet<P, O, EntitySpan<T>, N>,
-    f: impl Fn(&T) -> U,
-) -> FixedRelationSet<P, O, EntitySpan<U>, N>
-where
-    P: RelationParticipant,
-    O: FactorOrdering,
-    T: RelationData + Clone,
-    U: RelationData + Clone,
-{
-    FixedRelationSet::new(
-        set.relation_ids()
-            .map(|rid| (*set.participants(rid), map_span(set.data(rid), &f)))
-            .collect(),
-    )
-}
-
 impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
     type Ctx = MoleculeDefaults;
 
     fn from_ast(ast: &ReactionSpanAst, cfg: &Self::Ctx) -> Self {
-        let lowered = ReactionSpanAst::from_parts(
-            ast.graph().clone(),
-            ast.atoms()
+        let lowered = ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: ast
+                .atoms()
                 .iter()
                 .map(|span| map_span(span, |atom| AtomDsl::from_ast(atom, &cfg.atom).0))
                 .collect(),
-            ast.bonds()
+            bonds: ast
+                .bonds()
                 .iter()
-                .map(|span| map_span(span, |bond| BondDsl::from_ast(bond, &cfg.bond).0))
+                .enumerate()
+                .map(|(index, span)| {
+                    let [first, second] = ast.graph().edge_endpoints(EdgeId(index as u32));
+                    (
+                        AtomId::from(first),
+                        AtomId::from(second),
+                        map_span(span, |bond| BondDsl::from_ast(bond, &cfg.bond).0),
+                    )
+                })
                 .collect(),
-            map_fixed_var_span(ast.dative_bonds(), |b| {
-                DativeBondDsl::from_ast(b, &cfg.dative_bond).0
-            }),
-            map_var_span(ast.aromatic_systems(), |s| {
-                AromaticSystemDsl::from_ast(s, &cfg.aromatic_system).0
-            }),
-            map_var_span(ast.multicenter_bonds(), |b| {
-                MulticenterBondDsl::from_ast(b, &cfg.multicenter_bond).0
-            }),
-            map_fixed_span(ast.noncovalent_bonds(), |b| {
-                NoncovalentBondDsl::from_ast(b, &cfg.noncovalent_bond).0
-            }),
-            map_fixed_var_span(ast.stereo_atoms(), |s| {
-                StereoAtomDsl::from_ast(s, &cfg.stereo_atom).0
-            }),
-            map_fixed_var_span(ast.stereo_bonds(), |s| {
-                StereoBondDsl::from_ast(s, &cfg.stereo_bond).0
-            }),
-            ast.constraints().to_vec(),
-        );
+            dative: ast
+                .dative_bonds()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        ast.dative_bonds()
+                            .participants_2(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        AtomId::from(ast.dative_bonds().participants_1(id)[0]),
+                        map_span(ast.dative_bonds().data(id), |bond| {
+                            DativeBondDsl::from_ast(bond, &cfg.dative_bond).0
+                        }),
+                    )
+                })
+                .collect(),
+            aromatic: ast
+                .aromatic_systems()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        ast.aromatic_systems()
+                            .participants(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        map_span(ast.aromatic_systems().data(id), |system| {
+                            AromaticSystemDsl::from_ast(system, &cfg.aromatic_system).0
+                        }),
+                    )
+                })
+                .collect(),
+            multicenter: ast
+                .multicenter_bonds()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        ast.multicenter_bonds()
+                            .participants(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        map_span(ast.multicenter_bonds().data(id), |bond| {
+                            MulticenterBondDsl::from_ast(bond, &cfg.multicenter_bond).0
+                        }),
+                    )
+                })
+                .collect(),
+            noncovalent: ast
+                .noncovalent_bonds()
+                .relation_ids()
+                .map(|id| {
+                    let [first, second] = *ast.noncovalent_bonds().participants(id);
+                    (
+                        AtomId::from(first),
+                        AtomId::from(second),
+                        map_span(ast.noncovalent_bonds().data(id), |bond| {
+                            NoncovalentBondDsl::from_ast(bond, &cfg.noncovalent_bond).0
+                        }),
+                    )
+                })
+                .collect(),
+            stereo_atoms: ast
+                .stereo_atoms()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        AtomId::from(ast.stereo_atoms().participants_1(id)[0]),
+                        ast.stereo_atoms().participants_2(id).to_vec(),
+                        map_span(ast.stereo_atoms().data(id), |stereo| {
+                            StereoAtomDsl::from_ast(stereo, &cfg.stereo_atom).0
+                        }),
+                    )
+                })
+                .collect(),
+            stereo_bonds: ast
+                .stereo_bonds()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        BondId::from(ast.stereo_bonds().participants_1(id)[0]),
+                        ast.stereo_bonds().participants_2(id).to_vec(),
+                        map_span(ast.stereo_bonds().data(id), |stereo| {
+                            StereoBondDsl::from_ast(stereo, &cfg.stereo_bond).0
+                        }),
+                    )
+                })
+                .collect(),
+            constraints: ast.constraints().to_vec(),
+        });
         ReactionSpanDsl::from_parts(lowered, MoleculeMetadata::default())
     }
 }
@@ -220,36 +239,119 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
 
     fn into_ast(self, cfg: &Self::Ctx) -> ReactionSpanAst {
         let ast = self.ast;
-        ReactionSpanAst::from_parts(
-            ast.graph().clone(),
-            ast.atoms()
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: ast
+                .atoms()
                 .iter()
                 .map(|span| map_span(span, |atom| AtomDsl(atom.clone()).into_ast(&cfg.atom)))
                 .collect(),
-            ast.bonds()
+            bonds: ast
+                .bonds()
                 .iter()
-                .map(|span| map_span(span, |bond| BondDsl(bond.clone()).into_ast(&cfg.bond)))
+                .enumerate()
+                .map(|(index, span)| {
+                    let [first, second] = ast.graph().edge_endpoints(EdgeId(index as u32));
+                    (
+                        AtomId::from(first),
+                        AtomId::from(second),
+                        map_span(span, |bond| BondDsl(bond.clone()).into_ast(&cfg.bond)),
+                    )
+                })
                 .collect(),
-            map_fixed_var_span(ast.dative_bonds(), |b| {
-                DativeBondDsl(b.clone()).into_ast(&cfg.dative_bond)
-            }),
-            map_var_span(ast.aromatic_systems(), |s| {
-                AromaticSystemDsl(s.clone()).into_ast(&cfg.aromatic_system)
-            }),
-            map_var_span(ast.multicenter_bonds(), |b| {
-                MulticenterBondDsl(b.clone()).into_ast(&cfg.multicenter_bond)
-            }),
-            map_fixed_span(ast.noncovalent_bonds(), |b| {
-                NoncovalentBondDsl(b.clone()).into_ast(&cfg.noncovalent_bond)
-            }),
-            map_fixed_var_span(ast.stereo_atoms(), |s| {
-                StereoAtomDsl(s.clone()).into_ast(&cfg.stereo_atom)
-            }),
-            map_fixed_var_span(ast.stereo_bonds(), |s| {
-                StereoBondDsl(s.clone()).into_ast(&cfg.stereo_bond)
-            }),
-            ast.constraints().to_vec(),
-        )
+            dative: ast
+                .dative_bonds()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        ast.dative_bonds()
+                            .participants_2(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        AtomId::from(ast.dative_bonds().participants_1(id)[0]),
+                        map_span(ast.dative_bonds().data(id), |bond| {
+                            DativeBondDsl(bond.clone()).into_ast(&cfg.dative_bond)
+                        }),
+                    )
+                })
+                .collect(),
+            aromatic: ast
+                .aromatic_systems()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        ast.aromatic_systems()
+                            .participants(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        map_span(ast.aromatic_systems().data(id), |system| {
+                            AromaticSystemDsl(system.clone()).into_ast(&cfg.aromatic_system)
+                        }),
+                    )
+                })
+                .collect(),
+            multicenter: ast
+                .multicenter_bonds()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        ast.multicenter_bonds()
+                            .participants(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        map_span(ast.multicenter_bonds().data(id), |bond| {
+                            MulticenterBondDsl(bond.clone()).into_ast(&cfg.multicenter_bond)
+                        }),
+                    )
+                })
+                .collect(),
+            noncovalent: ast
+                .noncovalent_bonds()
+                .relation_ids()
+                .map(|id| {
+                    let [first, second] = *ast.noncovalent_bonds().participants(id);
+                    (
+                        AtomId::from(first),
+                        AtomId::from(second),
+                        map_span(ast.noncovalent_bonds().data(id), |bond| {
+                            NoncovalentBondDsl(bond.clone()).into_ast(&cfg.noncovalent_bond)
+                        }),
+                    )
+                })
+                .collect(),
+            stereo_atoms: ast
+                .stereo_atoms()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        AtomId::from(ast.stereo_atoms().participants_1(id)[0]),
+                        ast.stereo_atoms().participants_2(id).to_vec(),
+                        map_span(ast.stereo_atoms().data(id), |stereo| {
+                            StereoAtomDsl(stereo.clone()).into_ast(&cfg.stereo_atom)
+                        }),
+                    )
+                })
+                .collect(),
+            stereo_bonds: ast
+                .stereo_bonds()
+                .relation_ids()
+                .map(|id| {
+                    (
+                        BondId::from(ast.stereo_bonds().participants_1(id)[0]),
+                        ast.stereo_bonds().participants_2(id).to_vec(),
+                        map_span(ast.stereo_bonds().data(id), |stereo| {
+                            StereoBondDsl(stereo.clone()).into_ast(&cfg.stereo_bond)
+                        }),
+                    )
+                })
+                .collect(),
+            constraints: ast.constraints().to_vec(),
+        })
     }
 }
 
@@ -931,8 +1033,8 @@ fn resolve_constraint_span(
 impl SpanInput {
     /// Resolve the union-frame span: positions are the union ids (no fresh-id allocation), inline
     /// entity keywords and `:atom-aliases` populate the context, atom `AtomSpecInput` sides resolve to
-    /// `AtomAst`, bond endpoints and constraint refs resolve against the context, and each
-    /// projected side must be internally ref-consistent.
+    /// `AtomAst`, and participant, site, ligand, and constraint refs resolve against the context.
+    /// Side-local presence and DPO validity are preserved for explicit validation or projection.
     pub(crate) fn into_ast(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
         let atom_count = self.atoms.len();
         let bond_count = self.bonds.len();
@@ -953,234 +1055,96 @@ impl SpanInput {
         for (_, span) in self.atoms {
             atoms.push(resolve_atom_span(span, &context)?);
         }
-        let mut bonds: Vec<EntitySpan<BondAst>> = Vec::with_capacity(bond_count);
-        let mut endpoints: Vec<[AtomId; 2]> = Vec::with_capacity(bond_count);
-        let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count);
+        let mut bonds: Vec<(AtomId, AtomId, EntitySpan<BondAst>)> = Vec::with_capacity(bond_count);
         for (keyword, [ref_a, ref_b], span) in self.bonds {
             let a = ref_a.resolve(&context)?;
             let b = ref_b.resolve(&context)?;
             context.register_bond(keyword, a, b)?;
-            edges.push([a.index() as u32, b.index() as u32]);
-            endpoints.push([a, b]);
-            bonds.push(span);
+            bonds.push((a, b, span));
         }
 
-        // Per-side ref consistency: a bond present on a side needs both endpoints present there.
-        for (span, [a, b]) in bonds.iter().zip(&endpoints) {
-            if span.lhs().is_some()
-                && (atoms[a.index()].lhs().is_none() || atoms[b.index()].lhs().is_none())
-            {
-                return Err(ParseError::InvalidValue(
-                    "bond present on the left references an atom absent on the left".into(),
-                ));
-            }
-            if span.rhs().is_some()
-                && (atoms[a.index()].rhs().is_none() || atoms[b.index()].rhs().is_none())
-            {
-                return Err(ParseError::InvalidValue(
-                    "bond present on the right references an atom absent on the right".into(),
-                ));
-            }
-        }
-
-        // Overlay per-side ref consistency: an overlay present on a side needs every participant
-        // atom present on that side (the bond check above, generalized to overlay participants).
-        let side_ok =
-            |lhs: bool, rhs: bool, participants: &[AtomId], kind: &str| -> Result<(), ParseError> {
-                if lhs
-                    && participants
-                        .iter()
-                        .any(|a| atoms[a.index()].lhs().is_none())
-                {
-                    return Err(ParseError::InvalidValue(format!(
-                        "{kind} present on the left references an atom absent on the left"
-                    )));
-                }
-                if rhs
-                    && participants
-                        .iter()
-                        .any(|a| atoms[a.index()].rhs().is_none())
-                {
-                    return Err(ParseError::InvalidValue(format!(
-                        "{kind} present on the right references an atom absent on the right"
-                    )));
-                }
-                Ok(())
-            };
-
-        // Dative bonds: `[acceptor]` fixed side, donors var side.
-        let mut dative_entries: Vec<([NodeId; 1], Vec<NodeId>, EntitySpan<DativeBondAst>)> =
-            Vec::with_capacity(self.dative_bonds.len());
+        let mut dative = Vec::with_capacity(self.dative_bonds.len());
         for (keyword, donors, acceptor, span) in self.dative_bonds {
             let acceptor_id = acceptor.resolve(&context)?;
             let donor_ids: Vec<AtomId> = donors
                 .into_iter()
                 .map(|d| d.resolve(&context))
                 .collect::<Result<_, _>>()?;
-            let mut participants = Vec::with_capacity(donor_ids.len() + 1);
-            participants.push(acceptor_id);
-            participants.extend(donor_ids.iter().copied());
-            side_ok(
-                span.lhs().is_some(),
-                span.rhs().is_some(),
-                &participants,
-                "dative bond",
-            )?;
             context.register_dative_bond(keyword, &donor_ids, acceptor_id)?;
-            dative_entries.push((
-                [NodeId::from(acceptor_id)],
-                donor_ids.iter().map(|&a| NodeId::from(a)).collect(),
-                span,
-            ));
+            dative.push((donor_ids, acceptor_id, span));
         }
-        let dative_bonds = FixedVarBirelationSet::new(dative_entries);
 
-        // Aromatic systems.
-        let mut aromatic_entries: Vec<(Vec<NodeId>, EntitySpan<AromaticSystemAst>)> =
-            Vec::with_capacity(self.aromatic_systems.len());
+        let mut aromatic = Vec::with_capacity(self.aromatic_systems.len());
         for (keyword, atoms_ref, span) in self.aromatic_systems {
             let atom_ids: Vec<AtomId> = atoms_ref
                 .into_iter()
                 .map(|r| r.resolve(&context))
                 .collect::<Result<_, _>>()?;
-            side_ok(
-                span.lhs().is_some(),
-                span.rhs().is_some(),
-                &atom_ids,
-                "aromatic system",
-            )?;
             context.register_aromatic_system(keyword, &atom_ids)?;
-            aromatic_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
+            aromatic.push((atom_ids, span));
         }
-        let aromatic_systems = VarRelationSet::new(aromatic_entries);
 
-        // Multicenter bonds.
-        let mut multicenter_entries: Vec<(Vec<NodeId>, EntitySpan<MulticenterBondAst>)> =
-            Vec::with_capacity(self.multicenter_bonds.len());
+        let mut multicenter = Vec::with_capacity(self.multicenter_bonds.len());
         for (keyword, atoms_ref, span) in self.multicenter_bonds {
             let atom_ids: Vec<AtomId> = atoms_ref
                 .into_iter()
                 .map(|r| r.resolve(&context))
                 .collect::<Result<_, _>>()?;
-            side_ok(
-                span.lhs().is_some(),
-                span.rhs().is_some(),
-                &atom_ids,
-                "multicenter bond",
-            )?;
             context.register_multicenter_bond(keyword, &atom_ids)?;
-            multicenter_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
+            multicenter.push((atom_ids, span));
         }
-        let multicenter_bonds = VarRelationSet::new(multicenter_entries);
 
-        // Noncovalent bonds.
-        let mut noncovalent_entries: Vec<([NodeId; 2], EntitySpan<NoncovalentBondAst>)> =
-            Vec::with_capacity(self.noncovalent_bonds.len());
+        let mut noncovalent = Vec::with_capacity(self.noncovalent_bonds.len());
         for (keyword, [first, second], span) in self.noncovalent_bonds {
             let a = first.resolve(&context)?;
             let b = second.resolve(&context)?;
-            side_ok(
-                span.lhs().is_some(),
-                span.rhs().is_some(),
-                &[a, b],
-                "noncovalent bond",
-            )?;
             context.register_noncovalent_bond(keyword, a, b)?;
-            noncovalent_entries.push(([NodeId::from(a), NodeId::from(b)], span));
+            noncovalent.push((a, b, span));
         }
-        let noncovalent_bonds = FixedRelationSet::new(noncovalent_entries);
 
-        // Stereo atoms: `[site]` fixed side, ligand frame var side.
-        let mut stereo_atom_entries: Vec<(
-            [NodeId; 1],
-            Vec<StereoLigand>,
-            EntitySpan<StereoAtomAst>,
-        )> = Vec::with_capacity(self.stereo_atoms.len());
+        let mut stereo_atoms = Vec::with_capacity(self.stereo_atoms.len());
         for (keyword, site, ligands, span) in self.stereo_atoms {
             let site_id = site.resolve(&context)?;
-            let mut participants = vec![site_id];
             let mut ligand_frame = Vec::with_capacity(ligands.len());
             for l in ligands {
                 let a = l.atom.resolve(&context)?;
-                participants.push(a);
                 ligand_frame.push(StereoLigand::new(a, l.kind));
             }
-            side_ok(
-                span.lhs().is_some(),
-                span.rhs().is_some(),
-                &participants,
-                "stereo atom",
-            )?;
             context.register_stereo_atom(keyword, site_id, &ligand_frame)?;
-            stereo_atom_entries.push(([NodeId::from(site_id)], ligand_frame, span));
+            stereo_atoms.push((site_id, ligand_frame, span));
         }
-        let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
 
-        // Stereo bonds: `[site]` fixed bond side, ligand frame var side. The site bond and every
-        // ligand atom must be present on any side the stereo bond is present.
-        let mut stereo_bond_entries: Vec<(
-            [EdgeId; 1],
-            Vec<StereoLigand>,
-            EntitySpan<StereoBondAst>,
-        )> = Vec::with_capacity(self.stereo_bonds.len());
+        let mut stereo_bonds = Vec::with_capacity(self.stereo_bonds.len());
         for (keyword, site, ligands, span) in self.stereo_bonds {
             let site_id = site.resolve(&context)?;
-            let mut ligand_atoms = Vec::with_capacity(ligands.len());
             let mut ligand_frame = Vec::with_capacity(ligands.len());
             for l in ligands {
                 let a = l.atom.resolve(&context)?;
-                ligand_atoms.push(a);
                 ligand_frame.push(StereoLigand::new(a, l.kind));
             }
-            if span.lhs().is_some()
-                && (bonds[site_id.index()].lhs().is_none()
-                    || ligand_atoms
-                        .iter()
-                        .any(|a| atoms[a.index()].lhs().is_none()))
-            {
-                return Err(ParseError::InvalidValue(
-                    "stereo bond present on the left references a bond or atom absent on the left"
-                        .into(),
-                ));
-            }
-            if span.rhs().is_some()
-                && (bonds[site_id.index()].rhs().is_none()
-                    || ligand_atoms
-                        .iter()
-                        .any(|a| atoms[a.index()].rhs().is_none()))
-            {
-                return Err(ParseError::InvalidValue(
-                    "stereo bond present on the right references a bond or atom absent on the right"
-                        .into(),
-                ));
-            }
             context.register_stereo_bond(keyword, site_id, &ligand_frame)?;
-            stereo_bond_entries.push(([EdgeId::from(site_id)], ligand_frame, span));
+            stereo_bonds.push((site_id, ligand_frame, span));
         }
-        let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
 
         let mut constraints: Vec<ConstraintSpan> = Vec::with_capacity(self.constraints.len());
         for input in self.constraints {
             constraints.push(resolve_constraint_span(input, &context)?);
         }
 
-        let graph = Graph::new(atom_count, &edges);
         let metadata = context.into_metadata();
-        Ok((
-            ReactionSpanAst::from_parts(
-                graph,
-                atoms,
-                bonds,
-                dative_bonds,
-                aromatic_systems,
-                multicenter_bonds,
-                noncovalent_bonds,
-                stereo_atoms,
-                stereo_bonds,
-                constraints,
-            ),
-            metadata,
-        ))
+        let ast = ReactionSpanAst::try_from_entries(ReactionSpanEntries {
+            atoms,
+            bonds,
+            dative,
+            aromatic,
+            multicenter,
+            noncovalent,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        })
+        .map_err(|error| ParseError::InvalidValue(error.to_string()))?;
+        Ok((ast, metadata))
     }
 }
 
@@ -1677,6 +1641,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_edn::read_string;
+    use umol_graph_core::Correspondence;
 
     use super::*;
     use crate::ast::boolean::BooleanAst;
@@ -1687,6 +1652,7 @@ mod tests {
     use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ast::reaction::ReactionAst;
     use crate::ast::value::ValueAst;
+    use crate::ast::MoleculeCorrespondence;
 
     #[fixture]
     fn populated_reaction_span_dsl() -> ReactionSpanDsl {
@@ -1809,6 +1775,35 @@ mod tests {
         let span = reaction.to_reaction_span().unwrap();
         let cfg = MoleculeDefaults::default();
         assert_eq!(ReactionSpanDsl::from_ast(&span, &cfg).into_ast(&cfg), span);
+    }
+
+    #[rstest]
+    fn test_reaction_span_dsl_from_ast_superimposed() {
+        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            ..Default::default()
+        });
+        let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0))], 2, 2).unwrap();
+        let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atoms).unwrap();
+        let expected = ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence);
+        let defaults = MoleculeDefaults::default();
+
+        assert_eq!(
+            ReactionSpanDsl::from_ast(&expected, &defaults).into_ast(&defaults),
+            expected,
+        );
     }
 
     #[rstest]
@@ -2136,21 +2131,14 @@ mod tests {
     #[rstest]
     #[case::alias_and_add(
         r#"{:atoms [:nu {:add "O"}] :bonds [{:add [0 1 :single]}] :atom-aliases [:nu "C"]}"#,
-        ReactionSpanAst::from_parts(
-            Graph::new(2, &[[0, 1]]),
-            vec![
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
                 EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
                 EntitySpan::Added(AtomAst::from_element(Element::O)),
             ],
-            vec![EntitySpan::Added(BondAst::from_order(1))],
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            vec![],
-        ),
+            bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondAst::from_order(1)))],
+            ..Default::default()
+        }),
         {
             let mut metadata = MoleculeMetadata::new();
             metadata
@@ -2161,25 +2149,18 @@ mod tests {
     )]
     #[case::dative_overlay(
         r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#,
-        ReactionSpanAst::from_parts(
-            Graph::new(2, &[]),
-            vec![
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
                 EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
                 EntitySpan::Unchanged(AtomAst::from_element(Element::N)),
             ],
-            vec![],
-            FixedVarBirelationSet::new(vec![(
-                [NodeId(1)],
-                vec![NodeId(0)],
+            dative: vec![(
+                vec![AtomId(0)],
+                AtomId(1),
                 EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
-            )]),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            vec![],
-        ),
+            )],
+            ..Default::default()
+        }),
         {
             let mut metadata = MoleculeMetadata::new();
             metadata
@@ -2187,6 +2168,64 @@ mod tests {
                 .unwrap();
             metadata
         },
+    )]
+    #[case::side_local_bond_mismatch(
+        r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Added(AtomAst::from_element(Element::O)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondAst::from_order(1)),
+            )],
+            ..Default::default()
+        }),
+        MoleculeMetadata::new(),
+    )]
+    #[case::side_local_dative_mismatch(
+        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Added(AtomAst::from_element(Element::N)),
+            ],
+            dative: vec![(
+                vec![AtomId(0)],
+                AtomId(1),
+                EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
+            )],
+            ..Default::default()
+        }),
+        MoleculeMetadata::new(),
+    )]
+    #[case::side_local_stereo_bond_mismatch(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        ReactionSpanAst::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondAst::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Added(BondAst::from_order(2))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondAst::from_order(1))),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                ],
+                EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0),
+            )],
+            ..Default::default()
+        }),
+        MoleculeMetadata::new(),
     )]
     fn test_span_input_into_ast(
         #[case] input: &str,
@@ -2200,6 +2239,23 @@ mod tests {
                 .unwrap(),
             (expected_ast, expected_metadata),
         );
+    }
+
+    #[rstest]
+    fn test_span_input_into_ast_normalizes_canonical_modified() {
+        let (ast, metadata) =
+            parse_span_input(&read_string(r#"{:atoms [{:modify ["C#c1" "C#c{1}"]}]}"#).unwrap())
+                .unwrap()
+                .into_ast()
+                .unwrap();
+
+        assert_eq!(
+            ast.atoms(),
+            &[EntitySpan::Unchanged(
+                AtomAst::from_element(Element::C).with_charge(1_i64),
+            )],
+        );
+        assert_eq!(metadata, MoleculeMetadata::new());
     }
 
     #[rstest]
@@ -2286,24 +2342,6 @@ mod tests {
         r#"{:atoms [[:a "C"] [:a "O"]]}"#,
         ParseError::DuplicateKeyword("a".to_string()),
     )]
-    #[case::left_inconsistent(
-        r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
-        ParseError::InvalidValue(
-            "bond present on the left references an atom absent on the left".to_string(),
-        ),
-    )]
-    #[case::overlay_left_inconsistent(
-        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
-        ParseError::InvalidValue(
-            "dative bond present on the left references an atom absent on the left".to_string(),
-        ),
-    )]
-    #[case::stereo_bond_left_inconsistent(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
-        ParseError::InvalidValue(
-            "stereo bond present on the left references a bond or atom absent on the left".to_string(),
-        ),
-    )]
     fn test_span_input_into_ast_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(
             parse_span_input(&read_string(input).unwrap())
@@ -2318,42 +2356,28 @@ mod tests {
     #[case::span(
         r#"{:atoms ["C" {:add "O"}] :bonds [{:add [0 1 :single]}]}"#,
         ReactionSpanDsl::new(
-            ReactionSpanAst::from_parts(
-                Graph::new(2, &[[0, 1]]),
-                vec![
+            ReactionSpanAst::from_entries(ReactionSpanEntries {
+                atoms: vec![
                     EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
                     EntitySpan::Added(AtomAst::from_element(Element::O)),
                 ],
-                vec![EntitySpan::Added(BondAst::from_order(1))],
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                vec![],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondAst::from_order(1)))],
+                ..Default::default()
+            }),
             MoleculeMetadata::new(),
         ).unwrap(),
     )]
     #[case::plain_molecule(
         r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#,
         ReactionSpanDsl::new(
-            ReactionSpanAst::from_parts(
-                Graph::new(2, &[[0, 1]]),
-                vec![
+            ReactionSpanAst::from_entries(ReactionSpanEntries {
+                atoms: vec![
                     EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomAst::from_element(Element::O)),
                 ],
-                vec![EntitySpan::Unchanged(BondAst::from_order(1))],
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                vec![],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondAst::from_order(1)))],
+                ..Default::default()
+            }),
             MoleculeMetadata::new(),
         ).unwrap(),
     )]

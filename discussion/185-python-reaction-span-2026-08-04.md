@@ -458,7 +458,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   the asserted entry path after their type-directed conversions. Preserve `MoleculeMetadata`,
   defaults, keyword, and alias behavior. Add exact parsing errors plus direct-construction/DSL and
   DSL/superimposition equivalence cases, including canonically equal input sides normalizing to
-  `Unchanged`. **Internal rewire (green).** [dep: S2a, S2b]
+  `Unchanged`. **Internal rewire (green).** [dep: S2a, S2b] **Done.**
 - **S2d — Remove the raw-storage span constructor.** Remove the crate-private
   `ReactionSpanAst::from_parts` and migrate any remaining production, fixture, property, or fuzz
   construction to `from_entries` or `try_from_entries` according to provenance. Verify by source
