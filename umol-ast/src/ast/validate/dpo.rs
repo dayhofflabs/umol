@@ -1,24 +1,22 @@
 //! Tier-2 (invariant) DPO validator: a reaction's deletions must be dangling-free, that is
 //! deleting an atom must also delete every bond and overlay incident to it.
-//! Operates on both the reaction AST and the reaction span AST.
+//! Operates on the permissive reaction AST. A reaction span establishes dangling-free projected
+//! sides as a construction invariant.
 
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::iter;
 
 use thiserror::Error;
-use umol_graph_core::{EdgeId, RelationId};
 use umol_utils::solution::Solution;
 
 use super::super::delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas, EntitySpan,
+    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta,
 };
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::molecule::MoleculeAst;
-use super::super::reaction_span::ReactionSpanAst;
 
 /// Checks the DPO dangling invariant: a deleted atom leaves no incident bond or overlay.
 #[derive(Clone, Copy, Debug, Default)]
@@ -117,93 +115,6 @@ impl DpoValidator {
                     return contradiction(DpoContradiction::DanglingNoncovalentBond {
                         atom,
                         noncovalent,
-                    });
-                }
-            }
-        }
-        Ok(Solution::Determined(()))
-    }
-
-    /// Over a `ReactionSpanAst`: a `Removed` atom must carry no surviving (non-`Removed`) incidence.
-    pub fn validate_reaction_span(
-        &self,
-        span: &ReactionSpanAst,
-    ) -> Result<Solution<(), DpoContradiction>, DpoError> {
-        let removed: HashSet<usize> = span
-            .atoms()
-            .iter()
-            .enumerate()
-            .filter(|(_, state)| matches!(state, EntitySpan::Removed(_)))
-            .map(|(index, _)| index)
-            .collect();
-
-        for (edge, state) in span.bonds().iter().enumerate() {
-            if matches!(state, EntitySpan::Removed(_)) {
-                continue;
-            }
-            for node in span.graph().edge_endpoints(EdgeId(edge as u32)) {
-                if removed.contains(&node.index()) {
-                    return contradiction(DpoContradiction::DanglingBond {
-                        atom: AtomId::from(node),
-                        bond: BondId(edge as u32),
-                    });
-                }
-            }
-        }
-        for i in 0..span.dative_bonds().count() {
-            let rid = RelationId(i as u32);
-            if matches!(span.dative_bonds().data(rid), EntitySpan::Removed(_)) {
-                continue;
-            }
-            let acceptor = span.dative_bonds().participants_1(rid)[0];
-            let donors = span.dative_bonds().participants_2(rid).iter().copied();
-            for node in iter::once(acceptor).chain(donors) {
-                if removed.contains(&node.index()) {
-                    return contradiction(DpoContradiction::DanglingDativeBond {
-                        atom: AtomId::from(node),
-                        dative: DativeBondId(i as u32),
-                    });
-                }
-            }
-        }
-        for i in 0..span.aromatic_systems().count() {
-            let rid = RelationId(i as u32);
-            if matches!(span.aromatic_systems().data(rid), EntitySpan::Removed(_)) {
-                continue;
-            }
-            for &node in span.aromatic_systems().participants(rid) {
-                if removed.contains(&node.index()) {
-                    return contradiction(DpoContradiction::DanglingAromaticSystem {
-                        atom: AtomId::from(node),
-                        system: AromaticSystemId(i as u32),
-                    });
-                }
-            }
-        }
-        for i in 0..span.multicenter_bonds().count() {
-            let rid = RelationId(i as u32);
-            if matches!(span.multicenter_bonds().data(rid), EntitySpan::Removed(_)) {
-                continue;
-            }
-            for &node in span.multicenter_bonds().participants(rid) {
-                if removed.contains(&node.index()) {
-                    return contradiction(DpoContradiction::DanglingMulticenterBond {
-                        atom: AtomId::from(node),
-                        multicenter: MulticenterBondId(i as u32),
-                    });
-                }
-            }
-        }
-        for i in 0..span.noncovalent_bonds().count() {
-            let rid = RelationId(i as u32);
-            if matches!(span.noncovalent_bonds().data(rid), EntitySpan::Removed(_)) {
-                continue;
-            }
-            for &node in span.noncovalent_bonds().participants(rid) {
-                if removed.contains(&node.index()) {
-                    return contradiction(DpoContradiction::DanglingNoncovalentBond {
-                        atom: AtomId::from(node),
-                        noncovalent: NoncovalentBondId(i as u32),
                     });
                 }
             }
@@ -369,66 +280,6 @@ mod tests {
                 .validate_reaction(&reaction.lhs, &reaction.deltas)
                 .unwrap(),
             Solution::Contradictory(expected)
-        );
-    }
-
-    #[rstest]
-    fn test_dpo_validator_validate_reaction_span() {
-        let span = ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::O),
-                ],
-                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-                ..Default::default()
-            }),
-            Deltas::from_iter([
-                Delta::Atom(AtomDelta::Remove {
-                    id: AtomId(0),
-                    ast: AtomAst::from_element(Element::C),
-                }),
-                Delta::Bond(BondDelta::Remove {
-                    id: BondId(0),
-                    atoms: [AtomId(0), AtomId(1)],
-                    ast: BondAst::from_order(1),
-                }),
-            ]),
-        )
-        .to_reaction_span()
-        .unwrap();
-        assert_eq!(
-            DpoValidator.validate_reaction_span(&span).unwrap(),
-            Solution::Determined(())
-        );
-    }
-
-    #[rstest]
-    fn test_dpo_validator_validate_reaction_span_error() {
-        // Delete the C but keep the C-O bond: the span has a `Removed` atom carrying an unchanged
-        // bond.
-        let span = ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::O),
-                ],
-                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-                ..Default::default()
-            }),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
-                id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
-            })]),
-        )
-        .to_reaction_span()
-        .unwrap();
-        assert_eq!(
-            DpoValidator.validate_reaction_span(&span).unwrap(),
-            Solution::Contradictory(DpoContradiction::DanglingBond {
-                atom: AtomId(0),
-                bond: BondId(0),
-            })
         );
     }
 }

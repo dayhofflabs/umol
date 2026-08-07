@@ -152,83 +152,53 @@ It does not make correspondence construction, composition, reversal, or unrelate
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
-## Reaction-span application
+## Reaction-span construction
 
-`ReactionSpanAst` stores a union-frame structure. Referential integrity is therefore evaluated in
-that union namespace. A bond, overlay, stereo entity, or constraint may reference a union entity
-that is absent from one side without making the span structurally malformed.
+`ReactionSpanAst` stores the union-frame encoding of an actual span of two molecules. The union
+namespace is necessary to share entity identity across the sides, but union-frame integrity alone is
+not sufficient: the entries selected on the left and right must each form a referentially intact
+`MoleculeAst`.
 
-For example, an `Unchanged` bond incident to a `Removed` atom is:
+For example, an `Unchanged` bond incident to a `Removed` atom is representable as an arbitrary
+annotated union graph, but its right projection contains an edge without both endpoints. It is
+therefore not a reaction span. Accepting it and dropping the bond during projection would impose a
+cascading or SqPO-style transformation rather than faithfully represent the supplied entries.
 
-- representable in the union-frame span;
-- DPO-invalid;
-- not projectable to a referentially intact right-hand `MoleculeAst` without changing its meaning.
+This is a representation invariant of `ReactionSpanAst`, not chemical validation. A type named as a
+span must contain both objects of the span. Consequently:
 
-For a span materialized from `ReactionAst`, the lhs is already a referentially intact
-`MoleculeAst`, while the deltas may be DPO-invalid. `ReactionAst::to_reaction_span` therefore
-succeeds: the union-frame span can represent the rule exactly. `ReactionSpanAst::rhs` is the first
-operation in this path that requires the rhs to be a referentially intact molecule, so it reports
-the unavailable reference. Calling `DpoValidator` before projection reports the same underlying
-problem earlier by explicit request.
+- `ReactionSpanAst::try_from_entries` checks the union namespace and the referential integrity of
+  each projected side;
+- `ReactionSpanAst::from_entries` asserts the same invariant for trusted producers;
+- parsing accepts only entries that construct an actual two-sided span;
+- `ReactionSpanAst::lhs`, `rhs`, `to_reaction`, and `correspondence` are infallible;
+- projection retains every entity and constraint present on the selected side and remaps its
+  references without repair or silent loss.
 
-Projection cannot return a valid molecule without changing the rule. Dropping the surviving bond,
-overlay, or constraint would impose cascading or SqPO-style closure rather than faithfully project
-the stored side.
+The two reaction representations deliberately have different construction boundaries.
+`ReactionAst` is a permissive lhs-plus-deltas carrier and may contain a DPO-invalid rule.
+`ReactionAst::to_reaction_span` is therefore fallible: it rejects deltas whose projected product
+cannot form the second molecule of an actual span. The conversion retains its existing
+`Contradiction` surface pending the repository-wide error review. Conversely, every constructed
+`ReactionSpanAst` has a valid lhs, so `ReactionSpanAst::to_reaction` is infallible.
 
-Consequently:
+### DPO validation
 
-- `ReactionSpanAst::try_from_entries` checks union-frame references, not side-level DPO semantics;
-- `DpoValidator` owns the dangling-freedom check;
-- parsing a structurally intact span does not imply DPO validation;
-- `ReactionAst::to_reaction_span` preserves a DPO-invalid but representable reaction;
-- projecting either side is fallible;
-- projection must not drop surviving incidences or constraints merely because their references are
-  absent from that side.
+The current `DpoValidator::validate_reaction_span` check becomes redundant. A removed atom with a
+surviving bond or overlay would already violate the right-side construction invariant. The
+constructor's symmetric check is stronger: it also rejects an added atom required by a surviving
+left-side entity and covers stereo and constraint references.
 
-### Projection errors
+Remove the reaction-span validator entry point rather than retaining a validator that can only
+confirm a type invariant. `DpoValidator::validate_reaction` remains useful for permissive
+`ReactionAst` values, and match-dependent dangling checks remain part of reaction application: they
+concern the supplied host and match, not the reaction span alone.
 
-`ReactionSpanAst::lhs` and `ReactionSpanAst::rhs` should return
-`Result<MoleculeAst, MoleculeEntriesError>`. A failed projection has assembled a molecule whose
-entries contain an unavailable reference; this is exactly the target constructor's error, not a DPO
-contradiction and not a new chemical error.
-
-The shared implementation should retain every entity and constraint present on the selected side,
-remap all references that survive compaction, and report `MoleculeEntriesError::InvalidReference`
-when a selected entry refers to an entity absent from that side. It must not obtain success by
-dropping the referring entry.
-
-This choice keeps the public distinction precise:
-
-- `DpoValidator` answers whether the span satisfies DPO dangling-freedom;
-- `lhs` or `rhs` answers whether that side can be represented as a `MoleculeAst` and returns it;
-- a future cascading or SqPO projection, if needed, must have an explicit transformation name.
-
-### Downstream API consequences
-
-Making side projection fallible changes the direct span conversion surface:
-
-- `ReactionSpanAst::to_reaction` becomes fallible because it needs a valid lhs molecule. A
-  DPO-invalid rhs does not by itself prevent this conversion; `ReactionAst` can represent the same
-  dangling rule.
-- `ReactionSpanAst::correspondence` remains infallible because it reads span states without
-  materializing either molecule.
-- `ReactionSpanAst::superimpose` remains an asserted producer: two referentially intact molecules and
-  a valid correspondence produce projectable sides by construction.
-- property tests over generated valid reactions unwrap the projections as established invariants;
-  tests over arbitrary structurally intact spans must admit projection failure.
-- Python `lhs`, `rhs`, and `to_reaction` raise `InvalidStructureError` when projection fails. This is
-  a failed operation precondition on an already constructed object, rather than invalid Python
-  constructor arguments.
-
-This does not by itself change the public contracts of `ReactionAst::reverse`, reaction composition,
-or reaction fingerprints. Those are operations on `ReactionAst`, and their current use of
-`to_reaction_span().rhs()` is an implementation choice rather than part of their semantics. They
-must handle the fallible internal projection within their existing operation-specific result
-surface or materialize the product without routing through a public span projection.
-
-`ReactionAst::to_reaction_span` retains its existing `Contradiction` surface in this work. A broader
-review may distinguish contradictory deltas from invalid delta references, but the span-projection
-change is not a reason to introduce a shared reaction-conversion error hierarchy.
+This keeps fallibility at the representation boundary. `ReactionAst::reverse`, reaction
+composition, and reaction fingerprints retain their operation-specific result surfaces; an
+internal route through `ReactionAst::to_reaction_span` does not require side projection itself to
+become fallible. Python checked construction reports invalid span entries as `ValueError`, while
+`lhs`, `rhs`, and `to_reaction` return their values directly.
 
 ## Review questions
 

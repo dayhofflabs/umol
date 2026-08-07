@@ -63,7 +63,8 @@ impl MoleculeCorrespondence {
     /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
     /// constituents are not all matched is unmatched.
     ///
-    /// Returns `None` when the atom correspondence does not describe the supplied molecule pair, or
+    /// Returns `None` when the atom correspondence is not compatible with the supplied molecule
+    /// pair, or
     /// when entity incidence does not induce a unique right partner.
     pub fn induce(
         lhs: &MoleculeAst,

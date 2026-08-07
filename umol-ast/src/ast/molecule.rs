@@ -92,7 +92,9 @@ pub enum MoleculeEntriesError {
     InvalidReference { entity: Entity },
 }
 
-fn validate_entry_references(entries: &MoleculeEntries) -> Result<(), MoleculeEntriesError> {
+pub(super) fn validate_entry_references(
+    entries: &MoleculeEntries,
+) -> Result<(), MoleculeEntriesError> {
     validate_entry_references_inner(entries)
         .map_err(|entity| MoleculeEntriesError::InvalidReference { entity })
 }

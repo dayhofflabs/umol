@@ -212,7 +212,7 @@ impl ReactionAst {
     /// The reaction transforming `lhs` into `rhs` under `atom_correspondence`: induce the full
     /// per-entity correspondence, diff the two sides into deltas, and pair them with `lhs`. The
     /// inverse of reading a reaction's two sides back off its span. Returns `None` when the atom
-    /// correspondence does not describe the supplied sides or their entity incidence does not
+    /// correspondence is not compatible with the supplied sides or their entity incidence does not
     /// induce unique partners.
     pub fn from_sides(
         lhs: MoleculeAst,
@@ -222,7 +222,7 @@ impl ReactionAst {
         let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom_correspondence)?;
         let deltas = lhs
             .difference_to(&rhs, &correspondence)
-            .expect("induced molecule correspondence describes its source molecules");
+            .expect("induced molecule correspondence is compatible with its source molecules");
         Some(Self::new(lhs, deltas))
     }
 

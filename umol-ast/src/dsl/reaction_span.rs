@@ -1034,7 +1034,8 @@ impl SpanInput {
     /// Resolve the union-frame span: positions are the union ids (no fresh-id allocation), inline
     /// entity keywords and `:atom-aliases` populate the context, atom `AtomSpecInput` sides resolve to
     /// `AtomAst`, and participant, site, ligand, and constraint refs resolve against the context.
-    /// Side-local presence and DPO validity are preserved for explicit validation or projection.
+    /// Checked span construction requires every selected side reference to remain available after
+    /// projection; chemistry and other semantic properties are not validated here.
     pub(crate) fn into_ast(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
         let atom_count = self.atoms.len();
         let bond_count = self.bonds.len();
@@ -2169,64 +2170,6 @@ mod tests {
             metadata
         },
     )]
-    #[case::side_local_bond_mismatch(
-        r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
-            atoms: vec![
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Added(AtomAst::from_element(Element::O)),
-            ],
-            bonds: vec![(
-                AtomId(0),
-                AtomId(1),
-                EntitySpan::Unchanged(BondAst::from_order(1)),
-            )],
-            ..Default::default()
-        }),
-        MoleculeMetadata::new(),
-    )]
-    #[case::side_local_dative_mismatch(
-        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
-            atoms: vec![
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Added(AtomAst::from_element(Element::N)),
-            ],
-            dative: vec![(
-                vec![AtomId(0)],
-                AtomId(1),
-                EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
-            )],
-            ..Default::default()
-        }),
-        MoleculeMetadata::new(),
-    )]
-    #[case::side_local_stereo_bond_mismatch(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
-            atoms: vec![
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-            ],
-            bonds: vec![
-                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondAst::from_order(1))),
-                (AtomId(1), AtomId(2), EntitySpan::Added(BondAst::from_order(2))),
-                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondAst::from_order(1))),
-            ],
-            stereo_bonds: vec![(
-                BondId(1),
-                vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                ],
-                EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0),
-            )],
-            ..Default::default()
-        }),
-        MoleculeMetadata::new(),
-    )]
     fn test_span_input_into_ast(
         #[case] input: &str,
         #[case] expected_ast: ReactionSpanAst,
@@ -2341,6 +2284,24 @@ mod tests {
     #[case::duplicate_keyword(
         r#"{:atoms [[:a "C"] [:a "O"]]}"#,
         ParseError::DuplicateKeyword("a".to_string()),
+    )]
+    #[case::side_local_bond_mismatch(
+        r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
+        ParseError::InvalidValue(
+            "reaction span entries reference unavailable atom 1".to_string()
+        ),
+    )]
+    #[case::side_local_dative_mismatch(
+        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
+        ParseError::InvalidValue(
+            "reaction span entries reference unavailable atom 1".to_string()
+        ),
+    )]
+    #[case::side_local_stereo_bond_mismatch(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        ParseError::InvalidValue(
+            "reaction span entries reference unavailable bond 2".to_string()
+        ),
     )]
     fn test_span_input_into_ast_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(

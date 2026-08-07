@@ -43,9 +43,9 @@ closed for lattice operations and editing.
   `try_from_entries` methods for checked runtime input; ordinary Rust construction remains
   infallible.
 - The conversion in both directions: `ReactionAst.to_reaction_span()` and
-  `ReactionSpanAst.to_reaction()`. The former preserves DPO-invalid rules that the union span can
-  represent; the latter is fallible when the span's lhs cannot be represented as a referentially
-  intact `MoleculeAst`.
+  `ReactionSpanAst.to_reaction()`. The former remains fallible because a permissive `ReactionAst`
+  may contain deltas whose projected side is not a structurally valid molecule; the latter is
+  infallible because a constructed span guarantees both sides.
 - A public checked `Correspondence` constructor in Rust and Python. The same type returned by
   substructure matching, molecule combination, and splitting should be accepted by subsequent
   operations; raw pair lists must not form a second construction channel.
@@ -58,9 +58,9 @@ closed for lattice operations and editing.
 - Rename the atom-level correspondence accessor on `ReactionDerivation` from `atom_map` to
   `atom_correspondence` in Rust and Python. Reserve atom mapping terminology for external-format atom
   labels.
-- Fallible `lhs()` and `rhs()`, plus infallible `correspondence()`, on the span. The side projections
-  return `MoleculeEntriesError` when a structurally intact span cannot represent that side as a
-  referentially intact `MoleculeAst`; correspondence recovery does not materialize either side.
+- Infallible `lhs()`, `rhs()`, and `correspondence()` on the span. A `ReactionSpanAst` represents an
+  actual span of two referentially intact molecules, so checked construction rejects entries that
+  cannot form either side before any projection is exposed.
 
 **Out:**
 
@@ -80,8 +80,8 @@ closed for lattice operations and editing.
   superimposition, and differencing paths identified here. Doc 168 owns that repository-wide
   review.
 - Public error-surface changes to `ReactionAst::reverse`, reaction composition, or reaction
-  fingerprints. Their current use of a materialized span is an implementation choice; direct span
-  projection does not change their operation-specific contracts.
+  fingerprints. Their current use of a materialized span is an implementation choice;
+  strengthening span construction does not change their operation-specific contracts.
 
 ## Direct span construction
 
@@ -122,13 +122,15 @@ relation containers:
 
 - the topology references existing union-frame atoms, bonds, and stereo ligands;
 - every bond, overlay, stereo, and constraint reference resolves in the union-frame namespace;
+- the entries selected on each side independently form a referentially intact `MoleculeAst`;
 - an entry cannot be absent from both sides.
 
-These are representation checks, not side-level semantic validation. In particular, an entity may
-be present on one side while one of its union-frame participants is absent from that side. Such a
-span is structurally representable but may fail DPO validation or side projection. Neither
-construction path invokes chemistry models, validators, resolvers, or implicit closure. The general
-boundary is defined in the [data type guide](../docs/development/data-types.md).
+These are representation checks, not chemical or model-level validation. `ReactionSpanAst` means a
+span of two molecules, so a bond, overlay, stereo entity, or constraint cannot be present on a side
+unless every reference it requires is present on that side. An arbitrary union graph annotated with
+left/right values but lacking either projected graph is not a reaction span. Neither construction
+path invokes chemistry models, resolvers, canonicalization, repair, or implicit closure. The
+general boundary is defined in the [data type guide](../docs/development/data-types.md).
 
 `from_entries` is the asserted path for entries whose structural integrity is established by their
 producer. It uses the same checks and panics on a violated construction contract rather than
@@ -143,9 +145,8 @@ relation storage. Python `MoleculeAst.from_entries` uses the checked Rust path a
 runtime input as `ValueError`.
 
 The current crate-private reaction-span storage constructor is removed. The DSL parser already
-resolves entries; union-reference checks move into or are shared with `try_from_entries`, while its
-side-presence checks are removed as semantic validation. Runtime-data boundaries use the checked
-path; AST/DSL conversion and
+resolves entries; union-frame and per-side reference checks move into or are shared with
+`try_from_entries`. Runtime-data boundaries use the checked path; AST/DSL conversion and
 internally generated spans use `from_entries` because their inputs establish the invariant by
 construction. There is no second crate-private constructor with weaker semantics. Private
 `from_parts` functions that genuinely assemble internal storage or pair ASTs with metadata are not
@@ -274,14 +275,16 @@ can inspect, reverse, or compose it through the existing `Correspondence` API.
 
 ## Settled semantics
 
-- `ReactionAst::to_reaction_span` accepts a DPO-invalid reaction when its union-frame span is
-  structurally representable; it retains its existing `Contradiction` result for incompatible
-  deltas;
-- `ReactionSpanAst::lhs` and `rhs` return `MoleculeEntriesError` when the selected side cannot form a
-  referentially intact `MoleculeAst`;
-- `ReactionSpanAst::to_reaction` returns the same error when its lhs cannot be materialized;
-- DPO validity remains lazy: `DpoValidator` reports it when explicitly requested, while side
-  projection reports the unavailable reference when molecule construction first requires it;
+- `ReactionAst` remains a permissive lhs-plus-deltas carrier and may contain a DPO-invalid rule;
+- `ReactionAst::to_reaction_span` retains its existing `Contradiction` result and rejects a rule
+  whose deltas cannot form two referentially intact projected molecules;
+- `ReactionSpanAst::try_from_entries` validates union-frame references and the structural integrity
+  of both projected sides;
+- `ReactionSpanAst::lhs`, `rhs`, and `to_reaction` are infallible because their required structural
+  invariants are established at span construction;
+- `DpoValidator::validate_reaction_span` is removed as redundant. Its current rule-level dangling
+  check is implied by the stronger span construction invariant; `DpoValidator::validate_reaction`
+  and match-dependent application checks remain;
 - `from_sides` accepts a partial atom correspondence; unmatched lhs and rhs atoms become removals and
   additions respectively.
 - Correspondence construction validates structural integrity only. It does not validate chemistry or
@@ -303,9 +306,11 @@ Rust verification covers:
   infallible path;
 - direct construction of every entity family and each span state;
 - exact structural failures for missing union-frame references;
-- construction of side-inconsistent but union-valid spans, followed by exact DPO-validation and
-  projection outcomes: construction succeeds, validation reports the dangling incidence, the
-  unaffected side projects, and the affected side returns the exact unavailable reference;
+- rejection of entries that are union-valid but cannot form the lhs or rhs, including exact
+  failures for bond, overlay, stereo, and constraint references absent from the selected side;
+- infallible, faithful projection of both sides for every constructed span;
+- removal of the redundant reaction-span DPO-validator entry point while retaining reaction and
+  match-dependent DPO checks;
 - normalization of canonically equal `Modified` entries to `Unchanged` through every construction
   path;
 - equivalence between direct construction, DSL parsing, and superimposition for the same span;
@@ -436,8 +441,8 @@ creates an atom, since a partial correspondence is the case where the two forms 
   overlap with molecule-entry and reaction-integrity validation and use a common internal traversal
   where that reduces duplication without expanding the public API. Also avoid retaining DSL-side
   checks that merely repeat checks owned by the checked entry constructor. **Additive (green).**
-  [dep: S1a] **Done. The initially implemented side-semantic checks are superseded by the data type
-  guide and are removed in S2b.**
+  [dep: S1a] **Done. The initially implemented side checks were removed in S2b; the revised
+  actual-span contract restores side structural checks in S3b.**
 - **S2b — Correct the construction boundary and route generated spans through entries.** Remove
   side-presence validation from `ReactionSpanAst::try_from_entries`, retaining only union-reference
   integrity, and add exact construction cases for DPO-invalid but representable spans. Preserve the
@@ -450,7 +455,8 @@ creates an atom, since a partial correspondence is the case where the two forms 
   participant remapping, and constraint ordering. Test exact
   generated spans containing created and removed atoms, bonds, every overlay family, stereo frames,
   and constraints; compare whole span values rather than family counts. **Internal rewire (green).**
-  [dep: S2a] **Done.**
+  [dep: S2a] **Done. Its union-only construction decision is superseded by S3b; the entry routing
+  and generated-span migration remain in force.**
 - **S2c — Route the reaction-span DSL through entries.** Refactor
   `dsl/reaction_span.rs` so parsed input resolves into `ReactionSpanEntries` and calls the checked
   constructor, mapping structural failures into the existing parse-error surface. Remove semantic
@@ -458,7 +464,8 @@ creates an atom, since a partial correspondence is the case where the two forms 
   the asserted entry path after their type-directed conversions. Preserve `MoleculeMetadata`,
   defaults, keyword, and alias behavior. Add exact parsing errors plus direct-construction/DSL and
   DSL/superimposition equivalence cases, including canonically equal input sides normalizing to
-  `Unchanged`. **Internal rewire (green).** [dep: S2a, S2b] **Done.**
+  `Unchanged`. **Internal rewire (green).** [dep: S2a, S2b] **Done. Its temporary removal of
+  side checks is superseded by S3b; routing through the checked constructor remains in force.**
 - **S2d — Remove the raw-storage span constructor.** Remove the crate-private
   `ReactionSpanAst::from_parts` and migrate any remaining production, fixture, property, or fuzz
   construction to `from_entries` or `try_from_entries` according to provenance. Verify by source
@@ -482,22 +489,26 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `ReactionDerivation::atom_map` to `atom_correspondence` in Rust and migrate all callers, rustdoc,
   repr expectations, and tests. Do not retain the old accessor. **Breaking (red→green).**
   [dep: S0c] **Done.**
-- **S3b — Make direct span projection faithful and fallible.** Change `ReactionSpanAst::lhs` and
-  `rhs` to return `Result<MoleculeAst, MoleculeEntriesError>`. Preserve every entity and constraint
-  present on the selected side, remap surviving references, and return the exact unavailable
-  reference instead of dropping a surviving entry whose participant is absent. Make
-  `ReactionSpanAst::to_reaction` return the same narrow error because it requires a materialized
-  lhs. Migrate Rust callers in the same subitem: operations on valid generated spans assert their
-  producer invariant, while `ReactionAst::reverse`, reaction composition, and reaction fingerprints
-  retain their current public result types and classify or avoid the internal projection failure.
-  Add exact `#[rstest]` cases showing
-  successful construction of a union-valid/DPO-invalid span, failure of only the affected side
-  projection, and successful projection of the other side. **Breaking (red→green).** [dep: S2d]
+- **S3b — Establish the actual-span invariant and keep projection infallible.** Strengthen
+  `ReactionSpanAst::try_from_entries` so that, after checking the union namespace, it verifies that
+  the entries selected on each side satisfy the same referential-integrity contract as
+  `MoleculeAst::try_from_entries`. Reuse the molecule-entry reference traversal rather than adding
+  a divergent validator. Keep `ReactionSpanAst::lhs`, `rhs`, and `to_reaction` infallible; make the
+  shared projection retain and remap every selected entity and constraint, relying on the
+  constructor invariant instead of silently dropping a selected entry with an absent participant.
+  Retain `ReactionAst::to_reaction_span`'s existing `Contradiction` surface and reject reactions
+  whose deltas cannot form an actual two-sided span. Remove
+  `DpoValidator::validate_reaction_span` and migrate its structural cases to checked span
+  construction; retain `validate_reaction` and the match-dependent application checks. Add exact
+  `#[rstest]` cases for union-valid entries rejected because the lhs or rhs lacks a required bond,
+  overlay, stereo, or constraint reference, and exact whole-value tests for both projections of
+  every accepted span. **Breaking (red→green).** [dep: S2d] **Done.**
 - **S3c — State the bridge laws as Rust properties.** Extend the reaction property suite to verify
   that `from_sides` followed by span conversion preserves both projected sides under a partial atom
-  correspondence; reaction → span → reaction is canonically equal; and direct entries, DSL parsing,
-  and superimposition agree for generated structurally valid spans. Include unmatched atoms and
-  dependent bonds or overlays rather than restricting the generator to total correspondences.
+  correspondence; every reaction that converts to a span round-trips to a canonically equal
+  reaction; and direct entries, DSL parsing, and superimposition agree for generated structurally
+  valid spans. Include unmatched atoms and dependent bonds or overlays rather than restricting the
+  generator to total correspondences.
   **Additive tests (green).** [dep: S0f, S2e, S3b]
 
 ### S4 — Expose reusable correspondence construction in Python
@@ -528,20 +539,21 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `ReactionSpanAst::try_from_entries` so all structural failures become `ValueError`. Reuse the
   existing AST, `StereoLigand`, and `Constraint` wrappers rather than exposing `EntitySpan` or
   graph-core storage. Test every entity family, all four entity states, constraint splitting,
-  canonical normalization, representative union-reference failures, and acceptance of a
-  side-inconsistent but union-valid span. **Additive
-  (green).** [dep: S2d]
+  canonical normalization, representative union-reference failures, and rejection of entries
+  whose lhs or rhs is not referentially intact. **Additive
+  (green).** [dep: S3b]
 - **S5b — Bind the textual reaction-span surface.** Add `parse`, `parse_with_metadata`, `render`,
   `render_with_metadata`, and `__str__` using `ReactionSpanDsl`, keyword-only
   `MoleculeDefaults`, and `MoleculeMetadata`. Match the established `MoleculeAst` parse/render
   behavior and error mapping. Test positional rendering, metadata-preserving rendering, defaults,
   keyword and alias retention, and parse/render round trips. **Additive (green).** [dep: S5a]
-- **S5c — Bind span projections and conversions.** Add fallible `lhs()` and `rhs()`, plus
+- **S5c — Bind span projections and conversions.** Add infallible `lhs()` and `rhs()`, plus
   `correspondence()` to `ReactionSpanAst`; add `ReactionSpanAst.to_reaction()` and
-  `ReactionAst.to_reaction_span()`. Map contradictory deltas through `ContradictionError` and a side
-  or target-entry integrity failure through `InvalidStructureError`. Test both conversion
-  directions, projected side values, exact projection failure, correspondence contents, and a
-  round trip with an unmatched rhs atom so the bridge exercises creation rather than only relabeling.
+  `ReactionAst.to_reaction_span()`. Map the latter's contradictory or structurally unrepresentable
+  deltas through `ContradictionError`; direct checked construction already reports invalid span
+  entries as `ValueError`. Test both conversion directions, projected side values, correspondence
+  contents, and a round trip with an unmatched rhs atom so the bridge exercises creation rather
+  than only relabeling.
   **Additive (green).** [dep: S3b, S3c, S4a, S5a]
 
 ### S6 — Verify and close the public bridge
