@@ -28,7 +28,7 @@ impl MoleculeEditor {
     fn snapshot(&self) -> PyResult<MoleculeAst> {
         self.inner
             .as_ref()
-            .map(|editor| MoleculeAst::from_inner(editor.snapshot()))
+            .map(|editor| MoleculeAst::from_rust(editor.snapshot()))
             .ok_or_else(consumed_editor_error)
     }
 
@@ -36,7 +36,7 @@ impl MoleculeEditor {
     fn build(&mut self) -> PyResult<MoleculeAst> {
         self.inner
             .take()
-            .map(|editor| MoleculeAst::from_inner(editor.build()))
+            .map(|editor| MoleculeAst::from_rust(editor.build()))
             .ok_or_else(consumed_editor_error)
     }
 

@@ -3172,7 +3172,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
     }
 
     fn stereo_bond_molecule(py: Python<'_>) -> Py<MoleculeAst> {
@@ -3193,7 +3193,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
     }
 
     #[rstest]

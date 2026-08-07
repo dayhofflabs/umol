@@ -47,6 +47,7 @@ use crate::lattice::impl_py_canonicalize;
 use crate::metadata::ReactionMetadata;
 use crate::model::ChemistryModel;
 use crate::molecule::MoleculeAst;
+use crate::reaction_span::ReactionSpanAst as PyReactionSpanAst;
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
 
@@ -351,7 +352,7 @@ impl ReactionAst {
     fn set_lhs(slf: Py<Self>, py: Python<'_>, value: Py<MoleculeAst>) -> PyResult<()> {
         let resolved = Py::new(
             py,
-            MoleculeAst::from_inner(value.bind(py).borrow().inner().clone()),
+            MoleculeAst::from_rust(value.bind(py).borrow().inner().clone()),
         )?;
         slf.borrow_mut(py).lhs = resolved;
         Ok(())
@@ -369,6 +370,17 @@ impl ReactionAst {
         let resolved = Py::new(py, Deltas::from_rust(value.bind(py).borrow().to_rust()))?;
         slf.borrow_mut(py).deltas = resolved;
         Ok(())
+    }
+
+    /// Materialize the superimposed reaction span.
+    ///
+    /// Raises `ContradictionError` when the deltas are internally inconsistent or cannot form a
+    /// structurally intact right-hand molecule.
+    fn to_reaction_span(&self, py: Python<'_>) -> PyResult<PyReactionSpanAst> {
+        self.to_rust(py)
+            .to_reaction_span()
+            .map(PyReactionSpanAst::from_rust)
+            .map_err(contradiction_error)
     }
 
     /// Return the reverse reaction in the product's compacted id space.
@@ -459,7 +471,7 @@ impl ReactionAst {
     /// Wrap a Rust reaction in fresh Python-owned components.
     pub(crate) fn from_rust(py: Python<'_>, reaction: AstReactionAst) -> PyResult<Self> {
         Ok(Self {
-            lhs: Py::new(py, MoleculeAst::from_inner(reaction.lhs))?,
+            lhs: Py::new(py, MoleculeAst::from_rust(reaction.lhs))?,
             deltas: Py::new(py, Deltas::from_rust(reaction.deltas))?,
         })
     }
@@ -483,13 +495,13 @@ impl ReactionDerivation {
     /// The molecule matched by the reaction, as a fresh snapshot.
     #[getter]
     fn lhs(&self) -> MoleculeAst {
-        MoleculeAst::from_inner(self.0.lhs().clone())
+        MoleculeAst::from_rust(self.0.lhs().clone())
     }
 
     /// The molecule produced by the reaction, as a fresh snapshot.
     #[getter]
     fn rhs(&self) -> MoleculeAst {
-        MoleculeAst::from_inner(self.0.rhs().clone())
+        MoleculeAst::from_rust(self.0.rhs().clone())
     }
 
     /// The correspondence between the two molecule sides, as a fresh snapshot.
@@ -606,14 +618,15 @@ mod tests {
         Canonicalize, Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
         DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
         DativeBondId as AstDativeBondId, Delta as AstDelta, Deltas as AstDeltas,
-        Entity as AstEntity, MoleculeAst as AstMoleculeAst,
+        Entity as AstEntity, EntitySpan as AstEntitySpan, MoleculeAst as AstMoleculeAst,
         MoleculeConstraint as AstMoleculeConstraint,
         MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeEntries as AstMoleculeEntries,
         MulticenterBondAst as AstMulticenterBondAst,
         MulticenterBondDelta as AstMulticenterBondDelta, MulticenterBondId as AstMulticenterBondId,
         NoncovalentBondAst as AstNoncovalentBondAst,
         NoncovalentBondDelta as AstNoncovalentBondDelta, NoncovalentBondId as AstNoncovalentBondId,
-        NoncovalentBondKind as AstNoncovalentBondKind, StereoAtomAst as AstStereoAtomAst,
+        NoncovalentBondKind as AstNoncovalentBondKind, ReactionSpanAst as AstReactionSpanAst,
+        ReactionSpanEntries as AstReactionSpanEntries, StereoAtomAst as AstStereoAtomAst,
         StereoAtomDelta as AstStereoAtomDelta, StereoAtomId as AstStereoAtomId,
         StereoBondAst as AstStereoBondAst, StereoBondDelta as AstStereoBondDelta,
         StereoBondId as AstStereoBondId, StereoCoset as AstStereoCoset,
@@ -871,7 +884,7 @@ mod tests {
         #[case] expected: AstReactionAst,
     ) {
         Python::attach(|py| {
-            let lhs = lhs.map(|value| Py::new(py, MoleculeAst::from_inner(value)).unwrap());
+            let lhs = lhs.map(|value| Py::new(py, MoleculeAst::from_rust(value)).unwrap());
             let deltas = deltas.map(|value| Py::new(py, Deltas::from_rust(value)).unwrap());
 
             let reaction = ReactionAst::new(py, lhs, deltas).unwrap();
@@ -885,7 +898,7 @@ mod tests {
         Python::attach(|py| {
             let lhs = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1291,8 +1304,8 @@ mod tests {
                 )
                 .expect("correspondence producer preserves partial-bijection invariants"),
             );
-            let lhs = Py::new(py, MoleculeAst::from_inner(lhs)).unwrap();
-            let rhs = Py::new(py, MoleculeAst::from_inner(rhs)).unwrap();
+            let lhs = Py::new(py, MoleculeAst::from_rust(lhs)).unwrap();
+            let rhs = Py::new(py, MoleculeAst::from_rust(rhs)).unwrap();
 
             let reaction = ReactionAst::from_sides(
                 py,
@@ -1411,8 +1424,8 @@ mod tests {
             );
             let reaction = ReactionAst::from_sides(
                 py,
-                Py::new(py, MoleculeAst::from_inner(lhs.clone())).unwrap(),
-                Py::new(py, MoleculeAst::from_inner(rhs)).unwrap(),
+                Py::new(py, MoleculeAst::from_rust(lhs.clone())).unwrap(),
+                Py::new(py, MoleculeAst::from_rust(rhs)).unwrap(),
                 &atom_correspondence,
             )
             .unwrap();
@@ -1441,8 +1454,8 @@ mod tests {
                 ],
                 ..Default::default()
             });
-            let lhs = Py::new(py, MoleculeAst::from_inner(lhs_before.clone())).unwrap();
-            let rhs = Py::new(py, MoleculeAst::from_inner(rhs_before.clone())).unwrap();
+            let lhs = Py::new(py, MoleculeAst::from_rust(lhs_before.clone())).unwrap();
+            let rhs = Py::new(py, MoleculeAst::from_rust(rhs_before.clone())).unwrap();
             let atom_correspondence = PyCorrespondence::from_rust(
                 &Correspondence::new(vec![(AstAtomId(0), AstAtomId(0))], 2, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -1560,7 +1573,7 @@ mod tests {
             let reaction = Py::new(py, ReactionAst::new(py, None, None).unwrap()).unwrap();
             let lhs = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1728,6 +1741,76 @@ mod tests {
                 "reached a contradiction"
             );
             assert_eq!(source.to_rust(py), before);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_to_reaction_span() {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(
+                py,
+                AstReactionAst::new(
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
+                        atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                        ..Default::default()
+                    }),
+                    vec![AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(1),
+                        ast: AstAtomAst::from_element(ChemElement::O),
+                    })]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+
+            assert_eq!(
+                reaction.to_reaction_span(py).unwrap().to_rust(),
+                AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+                    atoms: vec![
+                        AstEntitySpan::Unchanged(AstAtomAst::from_element(ChemElement::C)),
+                        AstEntitySpan::Added(AstAtomAst::from_element(ChemElement::O)),
+                    ],
+                    ..Default::default()
+                })
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_to_reaction_span_error() {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(
+                py,
+                AstReactionAst::new(
+                    AstMoleculeAst::from_entries(AstMoleculeEntries {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C),
+                            AstAtomAst::from_element(ChemElement::C),
+                        ],
+                        bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                        ..Default::default()
+                    }),
+                    vec![AstDelta::Bond(AstBondDelta::ModifyField {
+                        id: AstBondId(0),
+                        change: AstBondFieldChange::Order {
+                            old: AstValueAst::Lit(2),
+                            new: AstValueAst::Lit(3),
+                        },
+                    })]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+
+            let error = reaction.to_reaction_span(py).unwrap_err();
+
+            assert!(error.is_instance_of::<ContradictionError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "reached a contradiction"
+            );
         });
     }
 
@@ -2007,7 +2090,7 @@ mod tests {
         let (expected_reaction, expected_host, _) = reaction_application;
         Python::attach(|py| {
             let reaction = ReactionAst::from_rust(py, expected_reaction.clone()).unwrap();
-            let host = Py::new(py, MoleculeAst::from_inner(expected_host.clone())).unwrap();
+            let host = Py::new(py, MoleculeAst::from_rust(expected_host.clone())).unwrap();
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             assert_eq!(application.borrow(py).correspondences.len(), 2);
@@ -2052,7 +2135,7 @@ mod tests {
         let (expected_reaction, expected_host, _) = reaction_application;
         Python::attach(|py| {
             let mut reaction = ReactionAst::from_rust(py, expected_reaction).unwrap();
-            let host = Py::new(py, MoleculeAst::from_inner(expected_host)).unwrap();
+            let host = Py::new(py, MoleculeAst::from_rust(expected_host)).unwrap();
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
@@ -2144,7 +2227,7 @@ mod tests {
         let (reaction, host, _) = reaction_application;
         Python::attach(|py| {
             let reaction = ReactionAst::from_rust(py, reaction).unwrap();
-            let host = Py::new(py, MoleculeAst::from_inner(host)).unwrap();
+            let host = Py::new(py, MoleculeAst::from_rust(host)).unwrap();
             let application = reaction.apply(py, host, Some(config)).unwrap();
 
             let products: Vec<AstMoleculeAst> = std::iter::from_fn(|| {
@@ -2183,7 +2266,7 @@ mod tests {
             let reaction = ReactionAst::new(py, None, None).unwrap();
             let host = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![
                         AstAtomAst::from_element(ChemElement::C),
                         AstAtomAst::from_element(ChemElement::O),

@@ -617,7 +617,7 @@ impl MoleculeConstraint {
             ),
             AstMoleculeConstraint::SubPattern { anchor, pattern } => Self::SubPattern(
                 Py::new(py, SubPatternAnchor::from_rust(anchor))?,
-                Py::new(py, MoleculeAst::from_inner((**pattern).clone()))?,
+                Py::new(py, MoleculeAst::from_rust((**pattern).clone()))?,
             ),
         })
     }
@@ -1636,7 +1636,7 @@ match node:
         *molecule.constraints_mut() = expected.clone();
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = Py::new(py, ConstraintsView::new(owner)).unwrap();
             let arg = ConstraintsLike::View(view);
 
@@ -1752,7 +1752,7 @@ match node:
             molecule.constraints_mut().push(from_view.clone());
             let view = Py::new(
                 py,
-                ConstraintsView::new(Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()),
+                ConstraintsView::new(Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()),
             )
             .unwrap();
             let entry =
@@ -1898,7 +1898,7 @@ match node:
             .push(AstConstraint::Or(Vec::new()));
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner);
 
             assert_eq!(view.__repr__(py).unwrap(), "ConstraintsView(2 entries)");
@@ -1912,7 +1912,7 @@ match node:
         molecule.constraints_mut().push(constraint.clone());
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
             let value =
                 into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
@@ -1934,7 +1934,7 @@ match node:
             .push(AstConstraint::And(Vec::new()));
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
 
             view.clear(py);
@@ -1957,7 +1957,7 @@ match node:
         target_molecule.constraints_mut().push(initial.clone());
 
         Python::attach(|py| {
-            let target_owner = Py::new(py, MoleculeAst::from_inner(target_molecule)).unwrap();
+            let target_owner = Py::new(py, MoleculeAst::from_rust(target_molecule)).unwrap();
             let target = ConstraintsView::new(target_owner.clone_ref(py));
             let container = Py::new(
                 py,
@@ -1968,9 +1968,7 @@ match node:
             source_molecule.constraints_mut().push(from_view.clone());
             let source_view = Py::new(
                 py,
-                ConstraintsView::new(
-                    Py::new(py, MoleculeAst::from_inner(source_molecule)).unwrap(),
-                ),
+                ConstraintsView::new(Py::new(py, MoleculeAst::from_rust(source_molecule)).unwrap()),
             )
             .unwrap();
             let entry =
@@ -2005,7 +2003,7 @@ match node:
         molecule.constraints_mut().push(entry.clone());
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = Py::new(py, ConstraintsView::new(owner.clone_ref(py))).unwrap();
 
             view.bind(py)
@@ -2023,7 +2021,7 @@ match node:
     #[rstest]
     fn test_constraints_view_len() {
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(AstMoleculeAst::new())).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(AstMoleculeAst::new())).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
             assert_eq!(view.__len__(py).unwrap(), 0);
 
@@ -2053,7 +2051,7 @@ match node:
         ));
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner);
 
             assert_eq!(view.__getitem__(py, index).unwrap().to_rust(py), expected);
@@ -2070,7 +2068,7 @@ match node:
             .push(AstConstraint::And(Vec::new()));
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner);
 
             assert_eq!(
@@ -2089,7 +2087,7 @@ match node:
         molecule.constraints_mut().push(second.clone());
 
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
             let mut iter = view.__iter__(py).unwrap();
             owner

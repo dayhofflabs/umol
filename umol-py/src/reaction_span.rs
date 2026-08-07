@@ -15,12 +15,15 @@ use crate::aromatic::AromaticSystemAst;
 use crate::atom::AtomAst;
 use crate::bond::BondAst;
 use crate::constraint::molecule::Constraint;
+use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::DativeBondAst;
 use crate::defaults::MoleculeDefaults;
 use crate::error::{metadata_error, parse_error};
 use crate::metadata::MoleculeMetadata;
+use crate::molecule::MoleculeAst;
 use crate::multicenter::MulticenterBondAst;
 use crate::noncovalent::NoncovalentBondAst;
+use crate::reaction::ReactionAst;
 use crate::stereo::{StereoAtomAst, StereoBondAst, StereoLigand};
 
 type SpanPair<T> = (Option<Py<T>>, Option<Py<T>>);
@@ -253,6 +256,26 @@ impl ReactionSpanAst {
         .map(Self::from_rust)
         .map_err(|error| PyValueError::new_err(error.to_string()))
     }
+
+    /// Project the left-hand molecule as a detached snapshot.
+    fn lhs(&self) -> MoleculeAst {
+        MoleculeAst::from_rust(self.0.lhs())
+    }
+
+    /// Project the right-hand molecule as a detached snapshot.
+    fn rhs(&self) -> MoleculeAst {
+        MoleculeAst::from_rust(self.0.rhs())
+    }
+
+    /// Recover the correspondence between the normalized side projections.
+    fn correspondence(&self) -> MoleculeCorrespondence {
+        MoleculeCorrespondence::from_rust(self.0.correspondence())
+    }
+
+    /// Recover the reaction rule represented by this span.
+    fn to_reaction(&self, py: Python<'_>) -> PyResult<ReactionAst> {
+        ReactionAst::from_rust(py, self.0.to_reaction())
+    }
 }
 
 impl ReactionSpanAst {
@@ -273,8 +296,10 @@ mod tests {
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AtomAst as AstAtomAst, BondAst as AstBondAst,
         Constraint as AstConstraint, DativeBondAst as AstDativeBondAst, Entity as AstEntity,
-        MoleculeConstraint as AstMoleculeConstraint, MulticenterBondAst as AstMulticenterBondAst,
-        NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondKind as AstNoncovalentBondKind,
+        MoleculeAst as AstMoleculeAst, MoleculeConstraint as AstMoleculeConstraint,
+        MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeEntries as AstMoleculeEntries,
+        MulticenterBondAst as AstMulticenterBondAst, NoncovalentBondAst as AstNoncovalentBondAst,
+        NoncovalentBondKind as AstNoncovalentBondKind, ReactionAst as AstReactionAst,
         StereoAtomAst as AstStereoAtomAst, StereoBondAst as AstStereoBondAst,
         StereoCoset as AstStereoCoset, StereoKind as AstStereoKind,
         StereoLigand as AstStereoLigand, StereoLigandKind as AstStereoLigandKind,
@@ -282,6 +307,7 @@ mod tests {
     };
     use umol_ast::dsl::{AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata};
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_core::Correspondence as GraphCoreCorrespondence;
 
     use super::*;
     use crate::convert::into_py_variant;
@@ -834,6 +860,96 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "reaction span entries reference unavailable atom 1"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_lhs() {
+        let span = ReactionSpanAst::from_rust(
+            r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
+                .parse()
+                .unwrap(),
+        );
+
+        assert_eq!(
+            span.lhs().inner(),
+            &AstMoleculeAst::from_entries(AstMoleculeEntries {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::O),
+                ],
+                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                ..Default::default()
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_rhs() {
+        let span = ReactionSpanAst::from_rust(
+            r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
+                .parse()
+                .unwrap(),
+        );
+
+        assert_eq!(
+            span.rhs().inner(),
+            &AstMoleculeAst::from_entries(AstMoleculeEntries {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::N),
+                ],
+                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
+                ..Default::default()
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_correspondence() {
+        let span = ReactionSpanAst::from_rust(
+            r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
+                .parse()
+                .unwrap(),
+        );
+        let expected = AstMoleculeCorrespondence::new(
+            GraphCoreCorrespondence::new(vec![(AstAtomId(0), AstAtomId(0))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            GraphCoreCorrespondence::new(Vec::new(), 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        );
+
+        assert_eq!(span.correspondence().inner(), &expected);
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_to_reaction() {
+        Python::attach(|py| {
+            let span: AstReactionSpanAst =
+                r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
+                    .parse()
+                    .unwrap();
+            let expected: AstReactionAst = span.to_reaction();
+
+            assert_eq!(
+                ReactionSpanAst::from_rust(span)
+                    .to_reaction(py)
+                    .unwrap()
+                    .to_rust(py),
+                expected
             );
         });
     }

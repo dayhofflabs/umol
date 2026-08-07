@@ -553,7 +553,7 @@ mod tests {
             bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1444,7 +1444,7 @@ mod tests {
                 bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
                 ..Default::default()
             });
-            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
             let views = BondViews { owner };
             assert_eq!(views.of(py, 0, 1).unwrap().id(), 0);
             assert_eq!(views.of(py, 1, 0).unwrap().id(), 0);

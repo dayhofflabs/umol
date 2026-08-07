@@ -585,7 +585,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1001,7 +1001,7 @@ mod tests {
                 ..Default::default()
             });
             let views = AromaticSystemViews {
-                owner: Py::new(py, MoleculeAst::from_inner(molecule)).unwrap(),
+                owner: Py::new(py, MoleculeAst::from_rust(molecule)).unwrap(),
             };
             assert_eq!(
                 views

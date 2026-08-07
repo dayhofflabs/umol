@@ -599,7 +599,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   entries as `ValueError`. Test both conversion directions, projected side values, correspondence
   contents, and a round trip with an unmatched rhs atom so the bridge exercises creation rather
   than only relabeling.
-  **Additive (green).** [dep: S3b, S3c, S4a, S5a]
+  **Additive (green).** [dep: S3b, S3c, S4a, S5a] **Done.**
 
 ### S6 — Verify and close the public bridge
 

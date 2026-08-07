@@ -64,7 +64,7 @@ impl MoleculeAst {
         let molecule = AstMoleculeDsl::from_str(text)
             .map_err(parse_error)?
             .into_ast(&defaults);
-        Ok(Self::from_inner(molecule))
+        Ok(Self::from_rust(molecule))
     }
 
     /// Parse a molecule and return `(molecule, metadata)`, retaining entity
@@ -78,7 +78,7 @@ impl MoleculeAst {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         let dsl = AstMoleculeDsl::from_str(text).map_err(parse_error)?;
         let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
-        Ok((Self::from_inner(dsl.into_ast(&defaults)), metadata))
+        Ok((Self::from_rust(dsl.into_ast(&defaults)), metadata))
     }
 
     /// Render a canonical positional DSL representation without entity
@@ -244,7 +244,7 @@ impl MoleculeAst {
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
 
         ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
-            .map(Self::from_inner)
+            .map(Self::from_rust)
             .map_err(smiles_input_error)
     }
 
@@ -257,7 +257,7 @@ impl MoleculeAst {
     fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
         self.0
             .apply(edits.bind(py).borrow().to_rust())
-            .map(Self::from_inner)
+            .map(Self::from_rust)
             .map_err(transaction_error)
     }
 
@@ -266,7 +266,7 @@ impl MoleculeAst {
     fn combine(&self, other: &Self) -> (Self, MoleculeCorrespondence) {
         let (combined, correspondence) = self.0.combine(&other.0);
         (
-            Self::from_inner(combined),
+            Self::from_rust(combined),
             MoleculeCorrespondence::from_rust(correspondence),
         )
     }
@@ -299,7 +299,7 @@ impl MoleculeAst {
         let (combined, correspondences) =
             AstMoleculeAst::combine_all(borrowed.iter().map(|molecule| molecule.inner()));
         Ok((
-            Self::from_inner(combined),
+            Self::from_rust(combined),
             correspondences
                 .into_iter()
                 .map(MoleculeCorrespondence::from_rust)
@@ -315,7 +315,7 @@ impl MoleculeAst {
             .into_iter()
             .map(|(component, correspondence)| {
                 (
-                    Self::from_inner(component),
+                    Self::from_rust(component),
                     MoleculeCorrespondence::from_rust(correspondence),
                 )
             })
@@ -484,9 +484,8 @@ impl MoleculeAst {
         &mut self.0
     }
 
-    /// Wrap an AST molecule (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`).
-    pub(crate) fn from_inner(molecule: AstMoleculeAst) -> Self {
+    /// Wrap a Rust molecule as a Python molecule value.
+    pub(crate) fn from_rust(molecule: AstMoleculeAst) -> Self {
         MoleculeAst(molecule)
     }
 }
@@ -536,12 +535,12 @@ mod tests {
 
     #[fixture]
     fn ethanol() -> MoleculeAst {
-        MoleculeAst::from_inner(ingest_smiles("CCO").unwrap())
+        MoleculeAst::from_rust(ingest_smiles("CCO").unwrap())
     }
 
     #[fixture]
     fn ethane() -> MoleculeAst {
-        MoleculeAst::from_inner(ingest_smiles("CC").unwrap())
+        MoleculeAst::from_rust(ingest_smiles("CC").unwrap())
     }
 
     #[rstest]
@@ -638,12 +637,12 @@ mod tests {
         #[case] defaults: Option<MoleculeDefaults>,
         #[case] expected: &str,
     ) {
-        assert_eq!(MoleculeAst::from_inner(molecule).render(defaults), expected);
+        assert_eq!(MoleculeAst::from_rust(molecule).render(defaults), expected);
     }
 
     #[rstest]
     fn test_molecule_ast_render_with_metadata() {
-        let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"]}"#));
+        let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
         let mut metadata = AstMoleculeMetadata::new();
         metadata
             .set_keyword(AstEntity::Atom(AstAtomId(0)), "carbon")
@@ -663,7 +662,7 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_render_with_metadata_error() {
         Python::attach(|py| {
-            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"]}"#));
+            let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
             let mut metadata = AstMoleculeMetadata::new();
             metadata
                 .set_keyword(AstEntity::Atom(AstAtomId(1)), "outside")
@@ -683,8 +682,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_str() {
-        let molecule =
-            MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#));
+        let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#));
 
         assert_eq!(molecule.__str__(), molecule.render(None));
     }
@@ -817,7 +815,7 @@ mod tests {
     ) {
         assert_eq!(
             MoleculeAst::from_smiles("C", io_config, chemistry_model, resolve_config).unwrap(),
-            MoleculeAst::from_inner(mol_dsl!(
+            MoleculeAst::from_rust(mol_dsl!(
                 r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#
             ))
         );
@@ -850,7 +848,7 @@ mod tests {
     fn test_molecule_ast_edit() {
         Python::attach(|py| {
             let expected = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
-            let editor = Py::new(py, MoleculeAst::from_inner(expected.clone()).edit()).unwrap();
+            let editor = Py::new(py, MoleculeAst::from_rust(expected.clone()).edit()).unwrap();
             let snapshot = editor
                 .bind(py)
                 .call_method0("snapshot")
@@ -881,7 +879,7 @@ mod tests {
             methyl,
             AstBondAst::from_order(1),
         );
-        let molecule = MoleculeAst::from_inner(initial.clone());
+        let molecule = MoleculeAst::from_rust(initial.clone());
 
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
@@ -899,7 +897,7 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_apply_error() {
         let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
-        let molecule = MoleculeAst::from_inner(initial.clone());
+        let molecule = MoleculeAst::from_rust(initial.clone());
         let mut rust_edits = AstEdits::new();
         rust_edits.add_atom(AstAtomAst::from_element(ChemElement::N));
         rust_edits.push(AstEdit::ModifyAtomField {
@@ -926,8 +924,8 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_substructure_matches() {
-        let pattern = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#));
-        let host = MoleculeAst::from_inner(mol_dsl!(
+        let pattern = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#));
+        let host = MoleculeAst::from_rust(mol_dsl!(
             r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ));
         let pattern_before = pattern.inner().clone();
@@ -968,14 +966,14 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_substructure_matches_overlay() {
-        let pattern = MoleculeAst::from_inner(mol_dsl!(
+        let pattern = MoleculeAst::from_rust(mol_dsl!(
             r#"{
                 :atoms ["N" "B"]
                 :bonds []
                 :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]
             }"#
         ));
-        let host = MoleculeAst::from_inner(mol_dsl!(
+        let host = MoleculeAst::from_rust(mol_dsl!(
             r#"{
                 :atoms ["N" "B" "C"]
                 :bonds []
@@ -1006,8 +1004,8 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_substructure_matches_empty() {
-        let pattern = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["O"] :bonds []}"#));
-        let host = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+        let pattern = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["O"] :bonds []}"#));
+        let host = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
         let config = SubstructureSearchConfig::from_rust(AstSubstructureMatchConfig {
             match_algorithm: AstSubstructureMatchAlgorithm::GraphAndOverlays,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
@@ -1153,7 +1151,7 @@ mod tests {
     })]
     fn test_molecule_ast_hashed_fingerprint_error(#[case] config: HashedFingerprintConfig) {
         Python::attach(|py| {
-            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
             let error = molecule.hashed_fingerprint(config).unwrap_err();
             assert!(error.is_instance_of::<UnderdeterminedError>(py));
             assert_eq!(
@@ -1241,7 +1239,7 @@ mod tests {
     })]
     fn test_molecule_ast_counted_hashed_fingerprint_error(#[case] config: HashedFingerprintConfig) {
         Python::attach(|py| {
-            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
             let error = molecule.counted_hashed_fingerprint(config).unwrap_err();
             assert!(error.is_instance_of::<UnderdeterminedError>(py));
             assert_eq!(
@@ -1300,7 +1298,7 @@ mod tests {
         #[case] config: Option<PatternFingerprintConfig>,
     ) {
         Python::attach(|py| {
-            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
             let error = molecule.pattern_fingerprint(config).unwrap_err();
             assert!(error.is_instance_of::<UnderdeterminedError>(py));
             assert_eq!(
@@ -1376,7 +1374,7 @@ mod tests {
     #[case::bounded(StructuralFingerprintConfig::from_rust(GraphSubstructureFeaturizer::new(2)))]
     fn test_molecule_ast_structural_fingerprint_error(#[case] config: StructuralFingerprintConfig) {
         Python::attach(|py| {
-            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let molecule = MoleculeAst::from_rust(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
             let error = molecule.structural_fingerprint(config).unwrap_err();
             assert!(error.is_instance_of::<UnderdeterminedError>(py));
             assert_eq!(

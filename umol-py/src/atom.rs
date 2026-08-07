@@ -963,7 +963,7 @@ mod tests {
             ],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1508,7 +1508,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1555,7 +1555,7 @@ mod tests {
                 .with_constraint(AstAtomConstraintAst::valence(4));
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![atom],
                     ..Default::default()
                 })),
@@ -1594,7 +1594,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1803,7 +1803,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1850,7 +1850,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_entries(AstMoleculeEntries {
+                MoleculeAst::from_rust(AstMoleculeAst::from_entries(AstMoleculeEntries {
                     atoms: vec![AstAtomAst::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
