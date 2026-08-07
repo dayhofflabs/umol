@@ -552,7 +552,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   participant canonicalization and payload permutation in molecule pushout with the corrected
   relation-set operation. Preserve the existing pushout result and correspondence contracts and
   add exact position-sensitive coverage where the shared graph-core properties do not exercise the
-  molecule-level assembly. **Internal rewire (green).** [dep: S3e]
+  molecule-level assembly. **Internal rewire (green).** [dep: S3e] **Done.**
 
 ### S4 — Expose reusable correspondence construction in Python
 

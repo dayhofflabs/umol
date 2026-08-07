@@ -4,9 +4,8 @@
 //! private overlay relation-sets directly, without exposing raw accessors.
 
 use umol_graph_core::{
-    Correspondence, EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet,
-    GraphCorrespondence, NodeId, Ordered, ParticipantPosition, RelationData, RelationParticipant,
-    Unordered, VarRelationSet,
+    Correspondence, EdgeId, FixedVarBirelationSet, GraphCorrespondence, NodeId, Ordered,
+    RelationData, RelationParticipant, Remapping, Unordered, VarRelationSet,
 };
 
 use super::super::atom::AtomAst;
@@ -86,37 +85,37 @@ impl MoleculeAst {
         // Overlays glue over the same pushout: relabel `other`'s participants into the glue space
         // (`self` already keeps its ids), then merge coinciding overlays by `meet`; non-coinciding
         // ones are appended (context). `⊥` on any coincident meet makes the whole glue inadmissible.
-        let map_node = |n: NodeId| po.right.nodes().right_of(n).expect("right total on other");
+        let participant_remapping = Remapping::new(
+            (0..other.raw_graph().node_count())
+                .map(|index| {
+                    po.right
+                        .nodes()
+                        .right_of(NodeId(index as u32))
+                        .expect("right total on other nodes")
+                })
+                .collect(),
+            (0..other.raw_graph().edge_count())
+                .map(|index| {
+                    po.right
+                        .edges()
+                        .right_of(EdgeId(index as u32))
+                        .expect("right total on other edges")
+                })
+                .collect(),
+        );
 
         let aromatic = glue_var_overlays(
             &self.aromatic_systems,
             &other.aromatic_systems,
-            map_node,
-            |ast, sigma| ast.permute(sigma),
+            &participant_remapping,
         )?;
         let multicenter = glue_var_overlays(
             &self.multicenter_bonds,
             &other.multicenter_bonds,
-            map_node,
-            |ast, sigma| ast.permute(sigma),
+            &participant_remapping,
         )?;
 
-        let dative_glue = FixedVarBirelationSet::new(
-            other
-                .dative_bonds
-                .relation_ids()
-                .map(|id| {
-                    let acceptor = [map_node(other.dative_bonds.participants_1(id)[0])];
-                    let donors: Vec<NodeId> = other
-                        .dative_bonds
-                        .participants_2(id)
-                        .iter()
-                        .map(|&n| map_node(n))
-                        .collect();
-                    (acceptor, donors, other.dative_bonds.data(id).clone())
-                })
-                .collect(),
-        );
+        let dative_glue = other.dative_bonds.apply_remapping(&participant_remapping);
         let dative_merged = self.dative_bonds.pushout(&dative_glue, |a, b| a.meet(b))?;
         let dative_object = &dative_merged.object;
         let dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = dative_object
@@ -134,19 +133,9 @@ impl MoleculeAst {
             })
             .collect();
 
-        let noncovalent_glue = FixedRelationSet::new(
-            other
-                .noncovalent_bonds
-                .relation_ids()
-                .map(|id| {
-                    let &[u, v] = other.noncovalent_bonds.participants(id);
-                    (
-                        [map_node(u), map_node(v)],
-                        other.noncovalent_bonds.data(id).clone(),
-                    )
-                })
-                .collect(),
-        );
+        let noncovalent_glue = other
+            .noncovalent_bonds
+            .apply_remapping(&participant_remapping);
         let noncovalent_merged = self
             .noncovalent_bonds
             .pushout(&noncovalent_glue, |a, b| a.meet(b))?;
@@ -171,19 +160,11 @@ impl MoleculeAst {
         // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame. A same-site/different-ligand
         // collision leaves two overlays on one site — over-coordination, rejected by the `has_conflict`
         // gate below.
-        let map_edge = |e: EdgeId| {
-            po.right
-                .edges()
-                .right_of(e)
-                .expect("right total on other edges")
-        };
-        let map_ligand_atom = |a: AtomId| AtomId::from(map_node(NodeId::from(a)));
+        let remapped_stereo_atoms = other.stereo_atoms.apply_remapping(&participant_remapping);
 
         let stereo_atom_right = FixedVarBirelationSet::new(stereo_glue_entries(
             &self.stereo_atoms,
-            &other.stereo_atoms,
-            map_node,
-            map_ligand_atom,
+            &remapped_stereo_atoms,
             |d, before, after| d.transform_frame(before, after),
         )?);
         let stereo_atom_merged = self
@@ -201,11 +182,10 @@ impl MoleculeAst {
             })
             .collect();
 
+        let remapped_stereo_bonds = other.stereo_bonds.apply_remapping(&participant_remapping);
         let stereo_bond_right = FixedVarBirelationSet::new(stereo_glue_entries(
             &self.stereo_bonds,
-            &other.stereo_bonds,
-            map_edge,
-            map_ligand_atom,
+            &remapped_stereo_bonds,
             |d, before, after| d.transform_frame(before, after),
         )?);
         let stereo_bond_merged = self
@@ -327,32 +307,15 @@ impl MoleculeAst {
     }
 }
 
-/// Glue two `VarRelationSet` overlay families over the pushout node relabeling `map_node` (`right` →
-/// glue; `left` already lives in the glue id space). Each `right` datum's electron ordering is
-/// re-indexed to the canonicalized participant order, then coinciding overlays merge by `meet` and
-/// non-coinciding ones are appended (context). `None` if any coincident meet is `⊥`.
+/// Glue two `VarRelationSet` overlay families after relabeling `right` into the glue id space.
+/// Coinciding overlays merge by `meet`; non-coinciding overlays are appended as context. `None` if
+/// any coincident meet is `⊥`.
 fn glue_var_overlays<D: Lattice + RelationData>(
     left: &VarRelationSet<NodeId, Unordered, D>,
     right: &VarRelationSet<NodeId, Unordered, D>,
-    map_node: impl Fn(NodeId) -> NodeId,
-    mut permute: impl FnMut(&mut D, &[ParticipantPosition]),
+    remapping: &Remapping,
 ) -> Option<Vec<(Vec<AtomId>, D)>> {
-    let right_glue = VarRelationSet::new(
-        right
-            .relation_ids()
-            .map(|id| {
-                let mut members: Vec<NodeId> = right
-                    .participants(id)
-                    .iter()
-                    .map(|&n| map_node(n))
-                    .collect();
-                let sigma = Unordered::canonicalize_positions(&mut members);
-                let mut data = right.data(id).clone();
-                permute(&mut data, &sigma);
-                (members, data)
-            })
-            .collect(),
-    );
+    let right_glue = right.apply_remapping(remapping);
     let merged = left.pushout(&right_glue, |a, b| a.meet(b))?;
     Some(
         merged
@@ -373,20 +336,14 @@ fn glue_var_overlays<D: Lattice + RelationData>(
     )
 }
 
-/// The right-side entries for the stereo `pushout`, relabeled into the glue space (`map_site` for the
-/// site, `map_atom` for each ligand's atom) and — where a `right` spec coincides with a `left` (`self`)
-/// site (same site + ligand multiset) — aligned to `left`'s ligand frame, carrying the coset there via
-/// `transform` (`transform_frame`). `right`-only specs keep their own relabeled frame. `left` itself
-/// enters the `pushout` unchanged (a pure id-remap leaves the coset untouched), so the glue holds
-/// `self`'s frame and coincident cosets `meet` in it. A `right` spec whose site collides with a `left`
-/// site under a *different* ligand set is left as a second overlay on that site; `meet_pushout` rejects
-/// the resulting over-coordination via the `has_conflict` emit-compliance gate.
+/// Align already-remapped right-side stereo entries to coincident left-side ligand frames, carrying
+/// each coset through `transform_frame`. Right-only entries retain their remapped frame. A right
+/// entry whose site collides with a left entry under a different ligand set remains distinct;
+/// `meet_pushout` rejects the resulting over-coordination through its conflict gate.
 #[allow(clippy::type_complexity)]
 fn stereo_glue_entries<S, D>(
     left: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
     right: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
-    map_site: impl Fn(S) -> S,
-    map_atom: impl Fn(AtomId) -> AtomId,
     transform: impl Fn(&D, &[StereoLigand], &[StereoLigand]) -> Option<D>,
 ) -> Option<Vec<([S; 1], Vec<StereoLigand>, D)>>
 where
@@ -396,19 +353,15 @@ where
     right
         .relation_ids()
         .map(|id| {
-            let site = map_site(right.participants_1(id)[0]);
-            let relabeled: Vec<StereoLigand> = right
-                .participants_2(id)
-                .iter()
-                .map(|&l| StereoLigand::new(map_atom(l.atom_id), l.kind))
-                .collect();
-            match left.find_by_participants(&[site], &relabeled) {
+            let site = right.participants_1(id)[0];
+            let remapped_frame = right.participants_2(id).to_vec();
+            match left.find_by_participants(&[site], &remapped_frame) {
                 Some(hit) => {
                     let target = left.participants_2(hit).to_vec();
-                    let data = transform(right.data(id), &relabeled, &target)?;
+                    let data = transform(right.data(id), &remapped_frame, &target)?;
                     Some(([site], target, data))
                 }
-                None => Some(([site], relabeled, right.data(id).clone())),
+                None => Some(([site], remapped_frame, right.data(id).clone())),
             }
         })
         .collect()
@@ -423,6 +376,7 @@ mod tests {
     use super::super::super::aromatic::AromaticSystemAst;
     use super::super::super::constraint::{AtomConstraintAst, Constraint};
     use super::super::super::ligand::StereoLigandKind;
+    use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::stereo::StereoKind;
     use super::*;
 
@@ -532,71 +486,85 @@ mod tests {
         assert!(left.meet_pushout(&right, &overlap).is_none());
     }
 
-    // Overlays glue over the same pushout: `right`'s system on the shared atoms {0,1} coincides (met to
-    // one), its system on the disjoint `context` atoms {2,3} is kept (context) — both sides' overlays
-    // survive. The context is vertex-disjoint from {0,1}: two aromatic systems must not share an atom,
-    // so an overlapping context would make the glue inadmissible (see the `inadmissible` error table).
+    // The crossing node correspondence reverses each right-side participant pair. Electron counts
+    // follow their atoms into the canonical glue order; coincident overlays meet and disjoint
+    // overlays remain as context.
     #[rstest]
-    #[case::aromatic_context_disjoint(vec![AtomId(2), AtomId(3)])]
-    fn test_molecule_ast_meet_pushout_overlays(#[case] context: Vec<AtomId>) {
+    fn test_molecule_ast_meet_pushout_overlays() {
         let full_overlap = GraphCorrespondence::new(
             Correspondence::new(
                 vec![
-                    (NodeId(0), NodeId(0)),
-                    (NodeId(1), NodeId(1)),
-                    (NodeId(2), NodeId(2)),
-                    (NodeId(3), NodeId(3)),
+                    (NodeId(0), NodeId(1)),
+                    (NodeId(1), NodeId(0)),
+                    (NodeId(2), NodeId(3)),
+                    (NodeId(3), NodeId(2)),
                 ],
                 4,
                 4,
             )
             .expect("correspondence producer preserves partial-bijection invariants"),
-            Correspondence::new(
-                vec![
-                    (EdgeId(0), EdgeId(0)),
-                    (EdgeId(1), EdgeId(1)),
-                    (EdgeId(2), EdgeId(2)),
-                ],
-                3,
-                3,
-            )
-            .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 0, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let left = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-            ],
-            aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemAst::from_electrons(vec![1, 2]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1)],
+                MulticenterBondAst::from_electrons(vec![7, 11]),
+            )],
             constraints: Constraints::new(),
             ..Default::default()
         });
         let right = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-            ],
             aromatic: vec![
-                (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
-                (context.clone(), AromaticSystemAst::default()),
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    AromaticSystemAst::from_electrons(vec![2, 1]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    AromaticSystemAst::from_electrons(vec![5, 3]),
+                ),
+            ],
+            multicenter: vec![
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    MulticenterBondAst::from_electrons(vec![11, 7]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    MulticenterBondAst::from_electrons(vec![17, 13]),
+                ),
             ],
             constraints: Constraints::new(),
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-            ],
             aromatic: vec![
-                (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
-                (context, AromaticSystemAst::default()),
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    AromaticSystemAst::from_electrons(vec![1, 2]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    AromaticSystemAst::from_electrons(vec![3, 5]),
+                ),
+            ],
+            multicenter: vec![
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    MulticenterBondAst::from_electrons(vec![7, 11]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    MulticenterBondAst::from_electrons(vec![13, 17]),
+                ),
             ],
             constraints: Constraints::new(),
             ..Default::default()
