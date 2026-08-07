@@ -1,5 +1,8 @@
 //! Read-only Python values for reaction correspondences.
 
+use std::fmt::Debug;
+
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemId, AtomId, BondId, DativeBondId,
@@ -9,7 +12,7 @@ use umol_ast::ast::{
 use umol_graph_core::{Correspondence as GraphCoreCorrespondence, NodeId};
 
 /// An id that can cross the Python boundary as an integer index.
-pub(crate) trait CorrespondenceId: Copy + Ord + From<usize> {
+pub(crate) trait CorrespondenceId: Copy + Debug + Ord + From<usize> {
     fn index(self) -> usize;
 }
 
@@ -44,6 +47,21 @@ pub struct Correspondence(GraphCoreCorrespondence<usize>);
 
 #[pymethods]
 impl Correspondence {
+    /// Construct an in-range partial bijection between two integer id spaces.
+    ///
+    /// Raises `ValueError` when either id is outside its declared space or an id occurs in more than
+    /// one pair on the same side. The indices are not bound to any particular molecule.
+    #[new]
+    fn new(
+        matched_pairs: Vec<(usize, usize)>,
+        left_count: usize,
+        right_count: usize,
+    ) -> PyResult<Self> {
+        GraphCoreCorrespondence::new(matched_pairs, left_count, right_count)
+            .map(Self)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
     /// Matched `(left, right)` id pairs, ordered by left id.
     #[getter]
     fn matched_pairs(&self) -> Vec<(usize, usize)> {
@@ -138,6 +156,23 @@ impl Correspondence {
             )
             .expect("correspondence producer preserves partial-bijection invariants"),
         )
+    }
+
+    #[allow(
+        dead_code,
+        reason = "typed Python-to-Rust conversion for correspondence consumers"
+    )]
+    pub(crate) fn to_rust<Id: CorrespondenceId>(&self) -> GraphCoreCorrespondence<Id> {
+        GraphCoreCorrespondence::new(
+            self.0
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (Id::from(left), Id::from(right)))
+                .collect(),
+            self.0.left_count(),
+            self.0.right_count(),
+        )
+        .expect("Python correspondence preserves partial-bijection invariants")
     }
 
     fn repr(&self) -> String {
@@ -301,6 +336,95 @@ mod tests {
             GraphCoreCorrespondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         )
+    }
+
+    #[rstest]
+    #[case::empty(
+        vec![],
+        2,
+        3,
+        Correspondence(GraphCoreCorrespondence::new(vec![], 2, 3).expect("correspondence producer preserves partial-bijection invariants")),
+    )]
+    #[case::partial(
+        vec![(0, 2)],
+        2,
+        3,
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 2)], 2, 3).expect("correspondence producer preserves partial-bijection invariants")),
+    )]
+    #[case::unsorted(
+        vec![(2, 0), (0, 2)],
+        3,
+        3,
+        Correspondence(GraphCoreCorrespondence::new(vec![(0, 2), (2, 0)], 3, 3).expect("correspondence producer preserves partial-bijection invariants")),
+    )]
+    fn test_correspondence_new(
+        #[case] matched_pairs: Vec<(usize, usize)>,
+        #[case] left_count: usize,
+        #[case] right_count: usize,
+        #[case] expected: Correspondence,
+    ) {
+        assert_eq!(
+            Correspondence::new(matched_pairs, left_count, right_count).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::left_out_of_range(
+        vec![(2, 0)],
+        2,
+        1,
+        "left id 2 is out of range for 2 entries",
+    )]
+    #[case::right_out_of_range(
+        vec![(0, 1)],
+        1,
+        1,
+        "right id 1 is out of range for 1 entries",
+    )]
+    #[case::duplicate_left(
+        vec![(0, 0), (0, 1)],
+        1,
+        2,
+        "left id 0 occurs more than once",
+    )]
+    #[case::duplicate_right(
+        vec![(0, 0), (1, 0)],
+        2,
+        1,
+        "right id 0 occurs more than once",
+    )]
+    fn test_correspondence_new_error(
+        #[case] matched_pairs: Vec<(usize, usize)>,
+        #[case] left_count: usize,
+        #[case] right_count: usize,
+        #[case] message: &str,
+    ) {
+        Python::attach(|py| {
+            let error = Correspondence::new(matched_pairs, left_count, right_count).unwrap_err();
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(error.value(py).to_string(), message);
+        });
+    }
+
+    #[rstest]
+    #[case::empty(Correspondence(GraphCoreCorrespondence::new(vec![], 2, 3).expect("correspondence producer preserves partial-bijection invariants")))]
+    #[case::partial(Correspondence(GraphCoreCorrespondence::new(vec![(0, 2)], 2, 3).expect("correspondence producer preserves partial-bijection invariants")))]
+    fn test_correspondence_to_rust(#[case] correspondence: Correspondence) {
+        assert_eq!(
+            correspondence.to_rust::<AtomId>(),
+            GraphCoreCorrespondence::new(
+                correspondence
+                    .matched_pairs()
+                    .into_iter()
+                    .map(|(left, right)| (AtomId::from(left), AtomId::from(right)))
+                    .collect(),
+                correspondence.left_count(),
+                correspondence.right_count(),
+            )
+            .expect("correspondence producer preserves partial-bijection invariants")
+        );
     }
 
     #[rstest]

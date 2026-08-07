@@ -12,7 +12,6 @@ from umol import (
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     ContradictionError,
-    Correspondence,
     Delta,
     Deltas,
     Element,
@@ -203,11 +202,6 @@ def test_reaction_application_config_value(
 @pytest.mark.parametrize(
     "value_type,message",
     [
-        pytest.param(
-            Correspondence,
-            "cannot create 'builtins.Correspondence' instances",
-            id="correspondence",
-        ),
         pytest.param(
             MoleculeCorrespondence,
             "cannot create 'builtins.MoleculeCorrespondence' instances",

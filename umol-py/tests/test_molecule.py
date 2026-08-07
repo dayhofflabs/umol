@@ -905,6 +905,60 @@ def test_molecule_ast_combine_all_empty():
     assert MoleculeAst.combine_all([]) == (MoleculeAst(), [])
 
 
+def test_correspondence_constructor():
+    correspondence = Correspondence([(2, 0), (0, 2)], 3, 3)
+
+    assert correspondence.matched_pairs == [(0, 2), (2, 0)]
+    assert correspondence.left_count == 3
+    assert correspondence.right_count == 3
+    assert correspondence.left_unmatched == [1]
+    assert correspondence.right_unmatched == [1]
+    assert repr(correspondence) == (
+        "Correspondence(matched_pairs=[(0, 2), (2, 0)], "
+        "left_count=3, right_count=3)"
+    )
+
+
+@pytest.mark.parametrize(
+    "matched_pairs,left_count,right_count,message",
+    [
+        pytest.param(
+            [(2, 0)],
+            2,
+            1,
+            "left id 2 is out of range for 2 entries",
+            id="left-out-of-range",
+        ),
+        pytest.param(
+            [(0, 1)],
+            1,
+            1,
+            "right id 1 is out of range for 1 entries",
+            id="right-out-of-range",
+        ),
+        pytest.param(
+            [(0, 0), (0, 1)],
+            1,
+            2,
+            "left id 0 occurs more than once",
+            id="duplicate-left",
+        ),
+        pytest.param(
+            [(0, 0), (1, 0)],
+            2,
+            1,
+            "right id 0 occurs more than once",
+            id="duplicate-right",
+        ),
+    ],
+)
+def test_correspondence_constructor_error(
+    matched_pairs, left_count, right_count, message
+):
+    with pytest.raises(ValueError, match=rf"^{re.escape(message)}$"):
+        Correspondence(matched_pairs, left_count, right_count)
+
+
 def test_correspondence_value():
     _, molecule_correspondence = MoleculeAst.from_entries(
         [AtomAst(Element("C"))]

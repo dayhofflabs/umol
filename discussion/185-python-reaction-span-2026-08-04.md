@@ -562,6 +562,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `CorrespondenceError` variant to `ValueError`. Retain the existing immutable accessors,
   composition, reversal, equality, and repr. Test empty, unsorted, partial, duplicate, and
   out-of-range construction with exact values and exceptions. **Additive (green).** [dep: S0a]
+  **Done.**
 - **S4b — Require the correspondence value in Python `from_sides`.** Change
   `ReactionAst.from_sides(lhs, rhs, atom_correspondence)` to accept `Correspondence` directly,
   remove the raw-pair parser and its duplicate `HashSet` validation, and map the Rust method's
