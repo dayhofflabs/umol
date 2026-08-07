@@ -541,7 +541,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   factors and both factors of birelation data. Add exact checked-application cases for uncovered
   node and edge participants. No production caller currently uses these methods, so migrate their
   graph-core tests with the signature change and keep the workspace green.
-  **Breaking API correction with additive checked path (red→green).** [dep: S3d]
+  **Breaking API correction with additive checked path (red→green).** [dep: S3d] **Done.**
 - **S3f — Route reaction-span superimposition through relation remapping.** Derive the graph-core
   participant remapping and the typed `IdRemapping` from the same lhs-anchored correspondence in
   `ReactionSpanAst::superimpose`. Use the corrected relation-set operation for every overlay and

@@ -196,7 +196,14 @@ pub enum ParticipantAnchor {
 pub trait RelationParticipant: Copy + Ord + Hash {
     fn compact(self, compaction: &Compaction) -> Option<Self>;
     fn uncompact(self, compaction: &Compaction) -> Self;
+
+    /// Relabel this participant through `remapping`.
+    ///
+    /// Every node or edge id read from `remapping` must be reported by [`refs`](Self::refs), so
+    /// checked relation-set remapping can establish coverage before calling this method.
     fn remap(self, remapping: &Remapping) -> Self;
+
+    /// Return every graph id used to represent this participant.
     fn refs(self) -> ParticipantRefs;
 
     /// The node or edge to route this participant through the incidence index, if any — narrows
@@ -349,20 +356,27 @@ impl<P: PartialEq, O, D: PartialEq, const N: usize> PartialEq for FixedRelationS
 
 impl<P: Eq, O, D: Eq, const N: usize> Eq for FixedRelationSet<P, O, D, N> {}
 
-/// Relabel a factor's participants through a general `Remapping` and re-canonicalize,
-/// returning the new participants and the position permutation `σ` (`σ[new] = old`).
-/// Total — no participant is dropped.
-fn remap_factor<P, O>(
-    participants: &[P],
-    remapping: &Remapping,
-) -> (Vec<P>, Vec<ParticipantPosition>)
+/// Relabel a factor's participants through a general `Remapping`, preserving their stored order.
+/// The owning relation-set constructor canonicalizes the result and transports positional data.
+fn remap_factor<P>(participants: &[P], remapping: &Remapping) -> Vec<P>
 where
     P: RelationParticipant,
-    O: FactorOrdering,
 {
-    let mut relabeled: Vec<P> = participants.iter().map(|&p| p.remap(remapping)).collect();
-    let positions = O::canonicalize_positions(&mut relabeled);
-    (relabeled, positions)
+    participants.iter().map(|&p| p.remap(remapping)).collect()
+}
+
+fn participants_are_covered_by<P>(participants: &[P], remapping: &Remapping) -> bool
+where
+    P: RelationParticipant,
+{
+    participants.iter().all(|participant| {
+        let refs = participant.refs();
+        refs.node
+            .is_none_or(|node| remapping.try_map_node(node).is_some())
+            && refs
+                .edge
+                .is_none_or(|edge| remapping.try_map_edge(edge).is_some())
+    })
 }
 
 /// Multiset equality of a stored factor slice against a pre-sorted query — sort a copy of
@@ -504,31 +518,47 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         Self::new(entries)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> (Self, Vec<ParticipantPosition>)
+    /// Relabel every participant and transport positional data into the canonicalized result.
+    ///
+    /// # Semantic properties
+    ///
+    /// Each positional payload item remains attached to the participant whose id is relabeled.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a participant lies outside the remapping's corresponding source range.
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
     where
         D: RelationData + Clone,
     {
-        let mut positions = Vec::new();
         let entries: Vec<([P; N], D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
-                let (sorted, sigma) = remap_factor::<P, O>(self.participants(rid), remapping);
-                positions.extend(sigma);
-                let parts: [P; N] = sorted
+                let parts: [P; N] = remap_factor(self.participants(rid), remapping)
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
                 (parts, self.data(rid).clone())
             })
             .collect();
-        (Self::new(entries), positions)
+        Self::new(entries)
+    }
+
+    /// Relabel every participant, returning `None` when the remapping does not cover the set.
+    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    where
+        D: RelationData + Clone,
+    {
+        self.relation_ids()
+            .all(|id| participants_are_covered_by(self.participants(id), remapping))
+            .then(|| self.apply_remapping(remapping))
     }
 
     /// Glue `self` and `right`, both **already in the same participant id-space**, identifying
     /// coinciding relations (equal participants) — the same-space relation pushout. `combine` merges
     /// the data of a coincidence (`None` = ⊥ ⇒ the whole glue is inadmissible ⇒ `None`); every other
     /// relation is carried. `self`'s ids are the identity prefix of the object, `right`'s
-    /// non-coinciding relations are appended. The caller brings both sides into the common space with
-    /// [`apply_remapping`](Self::apply_remapping) and re-indexes its `D` first.
+    /// non-coinciding relations are appended. The caller brings both sides, including positional
+    /// data, into the common space with [`apply_remapping`](Self::apply_remapping) first.
     pub fn pushout(
         &self,
         right: &Self,
@@ -784,20 +814,39 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         Self::new(entries)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> (Self, Vec<ParticipantPosition>)
+    /// Relabel every participant and transport positional data into the canonicalized result.
+    ///
+    /// # Semantic properties
+    ///
+    /// Each positional payload item remains attached to the participant whose id is relabeled.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a participant lies outside the remapping's corresponding source range.
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
     where
         D: RelationData + Clone,
     {
-        let mut positions = Vec::new();
         let entries: Vec<(Vec<P>, D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
-                let (sorted, sigma) = remap_factor::<P, O>(self.participants(rid), remapping);
-                positions.extend(sigma);
-                (sorted, self.data(rid).clone())
+                (
+                    remap_factor(self.participants(rid), remapping),
+                    self.data(rid).clone(),
+                )
             })
             .collect();
-        (Self::new(entries), positions)
+        Self::new(entries)
+    }
+
+    /// Relabel every participant, returning `None` when the remapping does not cover the set.
+    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    where
+        D: RelationData + Clone,
+    {
+        self.relation_ids()
+            .all(|id| participants_are_covered_by(self.participants(id), remapping))
+            .then(|| self.apply_remapping(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`].
@@ -1085,32 +1134,46 @@ where
         Self::new(entries)
     }
 
-    pub fn apply_remapping(
-        &self,
-        remapping: &Remapping,
-    ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
+    /// Relabel every participant and transport positional data into the canonicalized result.
+    ///
+    /// # Semantic properties
+    ///
+    /// In both factors, each positional payload item remains attached to the participant whose id
+    /// is relabeled.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a participant lies outside the remapping's corresponding source range.
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
     where
         D: BiRelationData + Clone,
     {
-        let mut positions_1 = Vec::new();
-        let mut positions_2 = Vec::new();
         let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
-                let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
-                let (s2, sigma2) = remap_factor::<L2, O2>(self.participants_2(rid), remapping);
-                positions_1.extend(sigma1);
-                positions_2.extend(sigma2);
-                let f1: [L1; N1] = s1
+                let f1: [L1; N1] = remap_factor(self.participants_1(rid), remapping)
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                let f2: [L2; N2] = s2
+                let f2: [L2; N2] = remap_factor(self.participants_2(rid), remapping)
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
                 (f1, f2, self.data(rid).clone())
             })
             .collect();
-        (Self::new(entries), positions_1, positions_2)
+        Self::new(entries)
+    }
+
+    /// Relabel every participant, returning `None` when the remapping does not cover either factor.
+    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    where
+        D: BiRelationData + Clone,
+    {
+        self.relation_ids()
+            .all(|id| {
+                participants_are_covered_by(self.participants_1(id), remapping)
+                    && participants_are_covered_by(self.participants_2(id), remapping)
+            })
+            .then(|| self.apply_remapping(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
@@ -1431,29 +1494,47 @@ where
         Self::new(entries)
     }
 
-    pub fn apply_remapping(
-        &self,
-        remapping: &Remapping,
-    ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
+    /// Relabel every participant and transport positional data into the canonicalized result.
+    ///
+    /// # Semantic properties
+    ///
+    /// In both factors, each positional payload item remains attached to the participant whose id
+    /// is relabeled.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a participant lies outside the remapping's corresponding source range.
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
     where
         D: BiRelationData + Clone,
     {
-        let mut positions_1 = Vec::new();
-        let mut positions_2 = Vec::new();
         let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
-                let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
-                let (s2, sigma2) = remap_factor::<L2, O2>(self.participants_2(rid), remapping);
-                positions_1.extend(sigma1);
-                positions_2.extend(sigma2);
-                let f1: [L1; N1] = s1
+                let f1: [L1; N1] = remap_factor(self.participants_1(rid), remapping)
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (f1, s2, self.data(rid).clone())
+                (
+                    f1,
+                    remap_factor(self.participants_2(rid), remapping),
+                    self.data(rid).clone(),
+                )
             })
             .collect();
-        (Self::new(entries), positions_1, positions_2)
+        Self::new(entries)
+    }
+
+    /// Relabel every participant, returning `None` when the remapping does not cover either factor.
+    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    where
+        D: BiRelationData + Clone,
+    {
+        self.relation_ids()
+            .all(|id| {
+                participants_are_covered_by(self.participants_1(id), remapping)
+                    && participants_are_covered_by(self.participants_2(id), remapping)
+            })
+            .then(|| self.apply_remapping(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
@@ -1789,26 +1870,44 @@ where
         Self::new(entries)
     }
 
-    pub fn apply_remapping(
-        &self,
-        remapping: &Remapping,
-    ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
+    /// Relabel every participant and transport positional data into the canonicalized result.
+    ///
+    /// # Semantic properties
+    ///
+    /// In both factors, each positional payload item remains attached to the participant whose id
+    /// is relabeled.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a participant lies outside the remapping's corresponding source range.
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
     where
         D: BiRelationData + Clone,
     {
-        let mut positions_1 = Vec::new();
-        let mut positions_2 = Vec::new();
         let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.count())
             .map(|i| {
                 let rid = RelationId(i as u32);
-                let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
-                let (s2, sigma2) = remap_factor::<L2, O2>(self.participants_2(rid), remapping);
-                positions_1.extend(sigma1);
-                positions_2.extend(sigma2);
-                (s1, s2, self.data(rid).clone())
+                (
+                    remap_factor(self.participants_1(rid), remapping),
+                    remap_factor(self.participants_2(rid), remapping),
+                    self.data(rid).clone(),
+                )
             })
             .collect();
-        (Self::new(entries), positions_1, positions_2)
+        Self::new(entries)
+    }
+
+    /// Relabel every participant, returning `None` when the remapping does not cover either factor.
+    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    where
+        D: BiRelationData + Clone,
+    {
+        self.relation_ids()
+            .all(|id| {
+                participants_are_covered_by(self.participants_1(id), remapping)
+                    && participants_are_covered_by(self.participants_2(id), remapping)
+            })
+            .then(|| self.apply_remapping(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
@@ -1917,6 +2016,44 @@ mod tests {
     use rstest::*;
 
     use super::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct PositionLabels(Vec<u32>);
+
+    impl RelationData for PositionLabels {
+        fn on_permutation(&mut self, order: &[ParticipantPosition]) {
+            let previous = self.0.clone();
+            self.0 = order
+                .iter()
+                .map(|position| previous[position.index()])
+                .collect();
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct BiPositionLabels {
+        factor_1: Vec<u32>,
+        factor_2: Vec<u32>,
+    }
+
+    impl BiRelationData for BiPositionLabels {
+        fn on_permutation(
+            &mut self,
+            order_1: &[ParticipantPosition],
+            order_2: &[ParticipantPosition],
+        ) {
+            let previous_1 = self.factor_1.clone();
+            self.factor_1 = order_1
+                .iter()
+                .map(|position| previous_1[position.index()])
+                .collect();
+            let previous_2 = self.factor_2.clone();
+            self.factor_2 = order_2
+                .iter()
+                .map(|position| previous_2[position.index()])
+                .collect();
+        }
+    }
 
     impl RelationData for &str {
         fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
@@ -2165,17 +2302,26 @@ mod tests {
 
     #[rstest]
     fn test_fixed_relation_set_apply_remapping() {
-        // swap the pair: [0,1] relabeled to [1,0], re-sorted to [0,1]; σ = [1,0]
-        let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
-            FixedRelationSet::new(vec![([n(0), n(1)], "x")]);
+        let rs: FixedRelationSet<NodeId, Unordered, PositionLabels, 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
         let remapping = Remapping::new(vec![n(1), n(0)], vec![]);
-        let (out, positions) = rs.apply_remapping(&remapping);
+        let out = rs.apply_remapping(&remapping);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.data(RelationId(0)), &"x");
-        assert_eq!(
-            positions,
-            vec![ParticipantPosition(1), ParticipantPosition(0)]
-        );
+        assert_eq!(out.data(RelationId(0)), &PositionLabels(vec![11, 10]));
+    }
+
+    #[rstest]
+    #[case::covered(vec![n(1), n(0)], true)]
+    #[case::uncovered_node(vec![n(0)], false)]
+    fn test_fixed_relation_set_try_apply_remapping(
+        #[case] nodes: Vec<NodeId>,
+        #[case] covered: bool,
+    ) {
+        let rs: FixedRelationSet<NodeId, Unordered, PositionLabels, 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
+        let remapping = Remapping::new(nodes, vec![]);
+        let expected = covered.then(|| rs.apply_remapping(&remapping));
+        assert_eq!(rs.try_apply_remapping(&remapping), expected);
     }
 
     #[rstest]
@@ -2334,21 +2480,33 @@ mod tests {
 
     #[rstest]
     fn test_var_relation_set_apply_remapping() {
-        // relabel 0→2, 1→0, 2→1: [0,1,2] relabeled to [2,0,1], re-sorted to [0,1,2]; σ = [1,2,0]
-        let rs: VarRelationSet<NodeId, Unordered, &str> =
-            VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], "x")]);
-        let remapping = Remapping::new(vec![n(2), n(0), n(1)], vec![]);
-        let (out, positions) = rs.apply_remapping(&remapping);
-        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(2)]);
-        assert_eq!(out.data(RelationId(0)), &"x");
+        let rs: VarRelationSet<EdgeId, Ordered, PositionLabels> = VarRelationSet::new(vec![(
+            vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            PositionLabels(vec![20, 21, 22]),
+        )]);
+        let remapping = Remapping::new(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let out = rs.apply_remapping(&remapping);
         assert_eq!(
-            positions,
-            vec![
-                ParticipantPosition(1),
-                ParticipantPosition(2),
-                ParticipantPosition(0)
-            ]
+            out.participants(RelationId(0)),
+            &[EdgeId(2), EdgeId(0), EdgeId(1)]
         );
+        assert_eq!(out.data(RelationId(0)), &PositionLabels(vec![20, 21, 22]));
+    }
+
+    #[rstest]
+    #[case::covered(vec![EdgeId(2), EdgeId(0), EdgeId(1)], true)]
+    #[case::uncovered_edge(vec![EdgeId(2), EdgeId(0)], false)]
+    fn test_var_relation_set_try_apply_remapping(
+        #[case] edges: Vec<EdgeId>,
+        #[case] covered: bool,
+    ) {
+        let rs: VarRelationSet<EdgeId, Ordered, PositionLabels> = VarRelationSet::new(vec![(
+            vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            PositionLabels(vec![20, 21, 22]),
+        )]);
+        let remapping = Remapping::new(vec![], edges);
+        let expected = covered.then(|| rs.apply_remapping(&remapping));
+        assert_eq!(rs.try_apply_remapping(&remapping), expected);
     }
 
     #[rstest]
@@ -2459,15 +2617,63 @@ mod tests {
 
     #[rstest]
     fn test_fixed_fixed_birelation_set_apply_remapping() {
-        // factor-1 [0,1] swaps (σ₁ = [1,0]); factor-2 [2] is fixed (σ₂ = [0])
-        let rs: FixedFixedBirelationSet<NodeId, Unordered, 2, NodeId, Unordered, 1, &str> =
-            FixedFixedBirelationSet::new(vec![([n(0), n(1)], [n(2)], "x")]);
-        let remapping = Remapping::new(vec![n(1), n(0), n(2)], vec![]);
-        let (out, p1, p2) = rs.apply_remapping(&remapping);
+        let rs: FixedFixedBirelationSet<
+            NodeId,
+            Unordered,
+            2,
+            EdgeId,
+            Unordered,
+            2,
+            BiPositionLabels,
+        > = FixedFixedBirelationSet::new(vec![(
+            [n(0), n(1)],
+            [EdgeId(0), EdgeId(1)],
+            BiPositionLabels {
+                factor_1: vec![10, 11],
+                factor_2: vec![20, 21],
+            },
+        )]);
+        let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)]);
+        let out = rs.apply_remapping(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(2)]);
-        assert_eq!(p1, vec![ParticipantPosition(1), ParticipantPosition(0)]);
-        assert_eq!(p2, vec![ParticipantPosition(0)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(0), EdgeId(1)]);
+        assert_eq!(
+            out.data(RelationId(0)),
+            &BiPositionLabels {
+                factor_1: vec![11, 10],
+                factor_2: vec![21, 20],
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::covered(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], true)]
+    #[case::uncovered_node(vec![n(0)], vec![EdgeId(1), EdgeId(0)], false)]
+    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(1)], false)]
+    fn test_fixed_fixed_birelation_set_try_apply_remapping(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] covered: bool,
+    ) {
+        let rs: FixedFixedBirelationSet<
+            NodeId,
+            Unordered,
+            2,
+            EdgeId,
+            Unordered,
+            2,
+            BiPositionLabels,
+        > = FixedFixedBirelationSet::new(vec![(
+            [n(0), n(1)],
+            [EdgeId(0), EdgeId(1)],
+            BiPositionLabels {
+                factor_1: vec![10, 11],
+                factor_2: vec![20, 21],
+            },
+        )]);
+        let remapping = Remapping::new(nodes, edges);
+        let expected = covered.then(|| rs.apply_remapping(&remapping));
+        assert_eq!(rs.try_apply_remapping(&remapping), expected);
     }
 
     #[rstest]
@@ -2585,15 +2791,53 @@ mod tests {
 
     #[rstest]
     fn test_fixed_var_birelation_set_apply_remapping() {
-        // factor-1 [0] fixed (σ₁ = [0]); factor-2 [1,2] relabeled to [3,1], re-sorted to [1,3] (σ₂ = [1,0])
-        let rs: FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, &str> =
-            FixedVarBirelationSet::new(vec![([n(0)], vec![n(1), n(2)], "x")]);
-        let remapping = Remapping::new(vec![n(0), n(3), n(1)], vec![]);
-        let (out, p1, p2) = rs.apply_remapping(&remapping);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
-        assert_eq!(p1, vec![ParticipantPosition(0)]);
-        assert_eq!(p2, vec![ParticipantPosition(1), ParticipantPosition(0)]);
+        let rs: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Unordered, BiPositionLabels> =
+            FixedVarBirelationSet::new(vec![(
+                [EdgeId(0), EdgeId(1)],
+                vec![n(0), n(1), n(2)],
+                BiPositionLabels {
+                    factor_1: vec![30, 31],
+                    factor_2: vec![40, 41, 42],
+                },
+            )]);
+        let remapping = Remapping::new(vec![n(2), n(0), n(1)], vec![EdgeId(2), EdgeId(0)]);
+        let out = rs.apply_remapping(&remapping);
+        assert_eq!(out.participants_1(RelationId(0)), &[EdgeId(2), EdgeId(0)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(0), n(1), n(2)]);
+        assert_eq!(
+            out.data(RelationId(0)),
+            &BiPositionLabels {
+                factor_1: vec![30, 31],
+                factor_2: vec![41, 42, 40],
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::covered(
+        vec![n(2), n(0), n(1)],
+        vec![EdgeId(2), EdgeId(0)],
+        true,
+    )]
+    #[case::uncovered_node(vec![n(2), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
+    #[case::uncovered_edge(vec![n(2), n(0), n(1)], vec![EdgeId(2)], false)]
+    fn test_fixed_var_birelation_set_try_apply_remapping(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] covered: bool,
+    ) {
+        let rs: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Unordered, BiPositionLabels> =
+            FixedVarBirelationSet::new(vec![(
+                [EdgeId(0), EdgeId(1)],
+                vec![n(0), n(1), n(2)],
+                BiPositionLabels {
+                    factor_1: vec![30, 31],
+                    factor_2: vec![40, 41, 42],
+                },
+            )]);
+        let remapping = Remapping::new(nodes, edges);
+        let expected = covered.then(|| rs.apply_remapping(&remapping));
+        assert_eq!(rs.try_apply_remapping(&remapping), expected);
     }
 
     #[rstest]
@@ -2709,15 +2953,56 @@ mod tests {
 
     #[rstest]
     fn test_var_var_birelation_set_apply_remapping() {
-        // both factors swap: factor-1 [0,1]→[1,0]→[0,1] (σ₁ = [1,0]); factor-2 [2,3]→[3,2]→[2,3] (σ₂ = [1,0])
-        let rs: VarVarBirelationSet<NodeId, Unordered, NodeId, Unordered, &str> =
-            VarVarBirelationSet::new(vec![(vec![n(0), n(1)], vec![n(2), n(3)], "x")]);
-        let remapping = Remapping::new(vec![n(1), n(0), n(3), n(2)], vec![]);
-        let (out, p1, p2) = rs.apply_remapping(&remapping);
+        let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Ordered, BiPositionLabels> =
+            VarVarBirelationSet::new(vec![(
+                vec![n(0), n(1)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                BiPositionLabels {
+                    factor_1: vec![50, 51],
+                    factor_2: vec![60, 61, 62],
+                },
+            )]);
+        let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let out = rs.apply_remapping(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(2), n(3)]);
-        assert_eq!(p1, vec![ParticipantPosition(1), ParticipantPosition(0)]);
-        assert_eq!(p2, vec![ParticipantPosition(1), ParticipantPosition(0)]);
+        assert_eq!(
+            out.participants_2(RelationId(0)),
+            &[EdgeId(2), EdgeId(0), EdgeId(1)]
+        );
+        assert_eq!(
+            out.data(RelationId(0)),
+            &BiPositionLabels {
+                factor_1: vec![51, 50],
+                factor_2: vec![60, 61, 62],
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::covered(
+        vec![n(1), n(0)],
+        vec![EdgeId(2), EdgeId(0), EdgeId(1)],
+        true,
+    )]
+    #[case::uncovered_node(vec![n(1)], vec![EdgeId(2), EdgeId(0), EdgeId(1)], false)]
+    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
+    fn test_var_var_birelation_set_try_apply_remapping(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] covered: bool,
+    ) {
+        let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Ordered, BiPositionLabels> =
+            VarVarBirelationSet::new(vec![(
+                vec![n(0), n(1)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                BiPositionLabels {
+                    factor_1: vec![50, 51],
+                    factor_2: vec![60, 61, 62],
+                },
+            )]);
+        let remapping = Remapping::new(nodes, edges);
+        let expected = covered.then(|| rs.apply_remapping(&remapping));
+        assert_eq!(rs.try_apply_remapping(&remapping), expected);
     }
 
     #[rstest]
