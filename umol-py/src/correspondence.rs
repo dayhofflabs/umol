@@ -158,10 +158,6 @@ impl Correspondence {
         )
     }
 
-    #[allow(
-        dead_code,
-        reason = "typed Python-to-Rust conversion for correspondence consumers"
-    )]
     pub(crate) fn to_rust<Id: CorrespondenceId>(&self) -> GraphCoreCorrespondence<Id> {
         GraphCoreCorrespondence::new(
             self.0

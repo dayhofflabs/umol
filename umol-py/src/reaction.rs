@@ -19,12 +19,10 @@ use umol_graph::fingerprint::featurize_reaction;
 use umol_graph::ingest::ingest_reaction_smiles_with;
 use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
-use umol_graph_core::{
-    CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
-    Correspondence, CorrespondenceError,
-};
+use umol_graph_core::CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm;
 #[cfg(test)]
 use umol_graph_core::{
+    Correspondence,
     RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
@@ -209,37 +207,6 @@ impl ReactionApplicationConfig {
     }
 }
 
-/// Validate atom pairs and construct their partial bijection over the two side sizes.
-fn atom_correspondence(
-    pairs: Vec<(usize, usize)>,
-    lhs_count: usize,
-    rhs_count: usize,
-) -> PyResult<Correspondence<AtomId>> {
-    let matched_pairs = pairs
-        .into_iter()
-        .map(|(left, right)| (AtomId::from(left), AtomId::from(right)))
-        .collect();
-    Correspondence::new(matched_pairs, lhs_count, rhs_count).map_err(|error| {
-        PyValueError::new_err(match error {
-            CorrespondenceError::LeftIdOutOfRange { id, count } => {
-                format!("left atom id {} out of range for {count} atoms", id.index())
-            }
-            CorrespondenceError::RightIdOutOfRange { id, count } => {
-                format!(
-                    "right atom id {} out of range for {count} atoms",
-                    id.index()
-                )
-            }
-            CorrespondenceError::DuplicateLeftId { id } => {
-                format!("duplicate left atom id {}", id.index())
-            }
-            CorrespondenceError::DuplicateRightId { id } => {
-                format!("duplicate right atom id {}", id.index())
-            }
-        })
-    })
-}
-
 /// A reaction whose molecule and delta components remain live Python values.
 #[pyclass]
 pub struct ReactionAst {
@@ -330,19 +297,16 @@ impl ReactionAst {
         py: Python<'_>,
         lhs: Py<MoleculeAst>,
         rhs: Py<MoleculeAst>,
-        atom_pairs: &Bound<'_, PyAny>,
+        atom_correspondence: &PyCorrespondence,
     ) -> PyResult<Self> {
         let lhs = lhs.bind(py).borrow().inner().clone();
         let rhs = rhs.bind(py).borrow().inner().clone();
-        let atom_pairs = atom_pairs
-            .try_iter()?
-            .map(|item| item?.extract::<(usize, usize)>())
-            .collect::<PyResult<Vec<_>>>()?;
-        let atom = atom_correspondence(atom_pairs, lhs.atoms().count(), rhs.atoms().count())?;
+        let atom_correspondence = atom_correspondence.to_rust::<AtomId>();
 
-        let reaction = AstReactionAst::from_sides(lhs, rhs, atom).ok_or_else(|| {
-            PyValueError::new_err("atom correspondence is incompatible with the reaction sides")
-        })?;
+        let reaction =
+            AstReactionAst::from_sides(lhs, rhs, atom_correspondence).ok_or_else(|| {
+                PyValueError::new_err("atom correspondence is incompatible with the reaction sides")
+            })?;
         Self::from_rust(py, reaction)
     }
 
@@ -631,7 +595,7 @@ impl ReactionApplicationIter {
 
 #[cfg(test)]
 mod tests {
-    use pyo3::exceptions::{PyTypeError, PyValueError};
+    use pyo3::exceptions::PyTypeError;
     use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
@@ -877,81 +841,6 @@ mod tests {
                 relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
             }
         );
-    }
-
-    #[rstest]
-    #[case::empty(Vec::new(), 0, 0, Vec::new())]
-    #[case::partial(vec![(1, 2)], 3, 4, vec![(AstAtomId(1), AstAtomId(2))])]
-    #[case::total(
-        vec![(0, 1), (1, 0)],
-        2,
-        2,
-        vec![(AstAtomId(0), AstAtomId(1)), (AstAtomId(1), AstAtomId(0))],
-    )]
-    #[case::unsorted(
-        vec![(2, 0), (0, 2)],
-        3,
-        3,
-        vec![(AstAtomId(0), AstAtomId(2)), (AstAtomId(2), AstAtomId(0))],
-    )]
-    fn test_atom_correspondence(
-        #[case] pairs: Vec<(usize, usize)>,
-        #[case] lhs_count: usize,
-        #[case] rhs_count: usize,
-        #[case] expected_matched_pairs: Vec<(AstAtomId, AstAtomId)>,
-    ) {
-        let correspondence = atom_correspondence(pairs, lhs_count, rhs_count).unwrap();
-
-        assert_eq!(
-            correspondence.matched_pairs(),
-            expected_matched_pairs.as_slice()
-        );
-        assert_eq!(correspondence.left_count(), lhs_count);
-        assert_eq!(correspondence.right_count(), rhs_count);
-    }
-
-    #[rstest]
-    #[case::duplicate_left(
-        vec![(0, 0), (0, 1)],
-        2,
-        2,
-        "duplicate left atom id 0",
-    )]
-    #[case::duplicate_right(
-        vec![(0, 1), (1, 1)],
-        2,
-        2,
-        "duplicate right atom id 1",
-    )]
-    #[case::left_out_of_range(
-        vec![(2, 0)],
-        2,
-        1,
-        "left atom id 2 out of range for 2 atoms",
-    )]
-    #[case::right_out_of_range(
-        vec![(0, 1)],
-        1,
-        1,
-        "right atom id 1 out of range for 1 atoms",
-    )]
-    fn test_atom_correspondence_error(
-        #[case] pairs: Vec<(usize, usize)>,
-        #[case] lhs_count: usize,
-        #[case] rhs_count: usize,
-        #[case] expected: &str,
-    ) {
-        Python::attach(|py| {
-            let error = atom_correspondence(pairs, lhs_count, rhs_count)
-                .err()
-                .unwrap();
-
-            assert!(error.is_instance_of::<PyValueError>(py));
-            assert_eq!(
-                error.value(py).str().unwrap().extract::<String>().unwrap(),
-                expected
-            );
-        });
     }
 
     #[rstest]
@@ -1391,15 +1280,25 @@ mod tests {
         Python::attach(|py| {
             let lhs_before = lhs.clone();
             let rhs_before = rhs.clone();
+            let atom_correspondence = PyCorrespondence::from_rust(
+                &Correspondence::new(
+                    atom_pairs
+                        .into_iter()
+                        .map(|(left, right)| (AstAtomId::from(left), AstAtomId::from(right)))
+                        .collect(),
+                    lhs.atoms().count(),
+                    rhs.atoms().count(),
+                )
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            );
             let lhs = Py::new(py, MoleculeAst::from_inner(lhs)).unwrap();
             let rhs = Py::new(py, MoleculeAst::from_inner(rhs)).unwrap();
 
-            let atom_pairs = PyList::new(py, atom_pairs).unwrap();
             let reaction = ReactionAst::from_sides(
                 py,
                 lhs.clone_ref(py),
                 rhs.clone_ref(py),
-                atom_pairs.as_any(),
+                &atom_correspondence,
             )
             .unwrap();
 
@@ -1499,12 +1398,22 @@ mod tests {
         Python::attach(|py| {
             let lhs = lhs.parse::<AstMoleculeAst>().unwrap();
             let rhs = rhs.parse::<AstMoleculeAst>().unwrap();
-            let atom_pairs = PyList::new(py, atom_pairs).unwrap();
+            let atom_correspondence = PyCorrespondence::from_rust(
+                &Correspondence::new(
+                    atom_pairs
+                        .into_iter()
+                        .map(|(left, right)| (AstAtomId::from(left), AstAtomId::from(right)))
+                        .collect(),
+                    lhs.atoms().count(),
+                    rhs.atoms().count(),
+                )
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            );
             let reaction = ReactionAst::from_sides(
                 py,
                 Py::new(py, MoleculeAst::from_inner(lhs.clone())).unwrap(),
                 Py::new(py, MoleculeAst::from_inner(rhs)).unwrap(),
-                atom_pairs.as_any(),
+                &atom_correspondence,
             )
             .unwrap();
 
@@ -1534,12 +1443,15 @@ mod tests {
             });
             let lhs = Py::new(py, MoleculeAst::from_inner(lhs_before.clone())).unwrap();
             let rhs = Py::new(py, MoleculeAst::from_inner(rhs_before.clone())).unwrap();
-            let atom_pairs = PyList::new(py, [(0, 0)]).unwrap();
+            let atom_correspondence = PyCorrespondence::from_rust(
+                &Correspondence::new(vec![(AstAtomId(0), AstAtomId(0))], 2, 2)
+                    .expect("correspondence producer preserves partial-bijection invariants"),
+            );
             let reaction = ReactionAst::from_sides(
                 py,
                 lhs.clone_ref(py),
                 rhs.clone_ref(py),
-                atom_pairs.as_any(),
+                &atom_correspondence,
             )
             .unwrap();
             let expected = reaction.to_rust(py);

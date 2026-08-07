@@ -11,6 +11,7 @@ from umol import (
     AtomFieldChange,
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
+    Correspondence,
     ContradictionError,
     Delta,
     Deltas,
@@ -689,11 +690,8 @@ def test_reactionast_from_sides():
         [AtomAst(Element("C")), AtomAst(Element("N"))]
     )
 
-    reaction = ReactionAst.from_sides(
-        lhs,
-        rhs,
-        ((left, right) for left, right in [(0, 0)]),
-    )
+    atom_correspondence = Correspondence([(0, 0)], 2, 2)
+    reaction = ReactionAst.from_sides(lhs, rhs, atom_correspondence)
 
     assert reaction == ReactionAst(
         lhs_snapshot,
@@ -707,12 +705,13 @@ def test_reactionast_from_sides():
     assert lhs == lhs_snapshot
     assert rhs == rhs_snapshot
     assert reaction.lhs is not lhs
+    assert ReactionAst.from_sides(lhs, rhs, atom_correspondence) == reaction
 
 
 def test_reactionast_from_sides_snapshot():
     lhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))])
     rhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("N"))])
-    reaction = ReactionAst.from_sides(lhs, rhs, [(0, 0)])
+    reaction = ReactionAst.from_sides(lhs, rhs, Correspondence([(0, 0)], 2, 2))
     expected = ReactionAst(reaction.lhs, reaction.deltas)
 
     lhs.atoms[0].charge = 1
@@ -732,49 +731,16 @@ def test_reactionast_from_sides_snapshot():
     assert rhs.atoms[0].charge == ValueAst.Lit(-1)
 
 
-@pytest.mark.parametrize(
-    "lhs_count,rhs_count,atom_pairs,message",
-    [
-        pytest.param(
-            2,
-            2,
-            [(0, 0), (0, 1)],
-            "duplicate left atom id 0",
-            id="duplicate-left",
-        ),
-        pytest.param(
-            2,
-            2,
-            [(0, 1), (1, 1)],
-            "duplicate right atom id 1",
-            id="duplicate-right",
-        ),
-        pytest.param(
-            2,
-            1,
-            [(2, 0)],
-            "left atom id 2 out of range for 2 atoms",
-            id="left-out-of-range",
-        ),
-        pytest.param(
-            1,
-            1,
-            [(0, 1)],
-            "right atom id 1 out of range for 1 atoms",
-            id="right-out-of-range",
-        ),
-    ],
-)
-def test_reactionast_from_sides_error(lhs_count, rhs_count, atom_pairs, message):
-    lhs = MoleculeAst.from_entries([AtomAst(Element("C")) for _ in range(lhs_count)])
-    rhs = MoleculeAst.from_entries([AtomAst(Element("C")) for _ in range(rhs_count)])
+def test_reactionast_from_sides_error():
+    lhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    rhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    atom_correspondence = Correspondence([(0, 0)], 2, 1)
 
-    with pytest.raises(ValueError, match=f"^{message}$"):
-        ReactionAst.from_sides(
-            lhs,
-            rhs,
-            (pair for pair in atom_pairs),
-        )
+    with pytest.raises(
+        ValueError,
+        match="^atom correspondence is incompatible with the reaction sides$",
+    ):
+        ReactionAst.from_sides(lhs, rhs, atom_correspondence)
 
 
 @pytest.mark.parametrize(
@@ -1678,7 +1644,7 @@ def test_reactionast_workflow():
     reaction = ReactionAst.from_sides(
         lhs,
         rhs,
-        ((atom_id, atom_id) for atom_id in range(5)),
+        Correspondence([(atom_id, atom_id) for atom_id in range(5)], 5, 5),
     )
 
     assert reaction == expected_forward

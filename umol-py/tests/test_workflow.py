@@ -14,6 +14,7 @@ from umol import (
     BondAst,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
+    Correspondence,
     Edit,
     Edits,
     HashedFingerprintConfig,
@@ -209,7 +210,11 @@ def test_fingerprint_workflow():
     counted = molecule.counted_hashed_fingerprint(config=hashed_config)
     pattern = molecule.pattern_fingerprint(config=pattern_config)
     structural = molecule.structural_fingerprint(config=structural_config)
-    reaction = ReactionAst.from_sides(molecule, product, [(0, 0)])
+    reaction = ReactionAst.from_sides(
+        molecule,
+        product,
+        Correspondence([(0, 0)], 2, 1),
+    )
     reaction_snapshot = ReactionAst(reaction.lhs, reaction.deltas)
     combined = reaction.combined_fingerprint(
         config=ReactionCombinedFingerprintConfig.Difference(molecule=hashed_config)

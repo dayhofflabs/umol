@@ -567,8 +567,8 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `ReactionAst.from_sides(lhs, rhs, atom_correspondence)` to accept `Correspondence` directly,
   remove the raw-pair parser and its duplicate `HashSet` validation, and map the Rust method's
   provisional `None` result to `ValueError`. Test reuse of a constructed correspondence, unmatched
-  ids, contextual incompatibility, and rejection of raw pair lists by the typed signature.
-  **Breaking (red→green).** [dep: S0f, S4a]
+  ids, and contextual incompatibility.
+  **Breaking (red→green).** [dep: S0f, S4a] **Done.**
 - **S4c — Align the Python derivation accessor.** Rename
   `ReactionDerivation.atom_map` to `atom_correspondence`, migrate Python tests and repr expectations,
   and verify that it returns the same constructible `Correspondence` value used by `from_sides`.
