@@ -481,7 +481,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
 - **S3a — Align reaction-derivation terminology.** Rename
   `ReactionDerivation::atom_map` to `atom_correspondence` in Rust and migrate all callers, rustdoc,
   repr expectations, and tests. Do not retain the old accessor. **Breaking (red→green).**
-  [dep: S0c]
+  [dep: S0c] **Done.**
 - **S3b — Make direct span projection faithful and fallible.** Change `ReactionSpanAst::lhs` and
   `rhs` to return `Result<MoleculeAst, MoleculeEntriesError>`. Preserve every entity and constraint
   present on the selected side, remap surviving references, and return the exact unavailable

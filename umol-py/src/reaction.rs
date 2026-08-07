@@ -537,7 +537,7 @@ impl ReactionDerivation {
     /// The atom-level correspondence, as a fresh snapshot.
     #[getter]
     fn atom_map(&self) -> PyCorrespondence {
-        PyCorrespondence::from_rust(self.0.atom_map())
+        PyCorrespondence::from_rust(self.0.atom_correspondence())
     }
 
     /// Return the reverse derivation with swapped sides and inverted correspondence.
@@ -2988,7 +2988,7 @@ mod tests {
         );
         assert_eq!(
             derivation.atom_map(),
-            PyCorrespondence::from_rust(expected.atom_map())
+            PyCorrespondence::from_rust(expected.atom_correspondence())
         );
 
         *host.atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::F);

@@ -2894,9 +2894,12 @@ mod tests {
             })
         );
         assert_eq!(
-            derivation.atom_map().matched_pairs(),
+            derivation.atom_correspondence().matched_pairs(),
             &[(AtomId(0), AtomId(0))]
         );
-        assert_eq!(derivation.atom_map().left_unmatched(), vec![AtomId(1)]);
+        assert_eq!(
+            derivation.atom_correspondence().left_unmatched(),
+            vec![AtomId(1)]
+        );
     }
 }

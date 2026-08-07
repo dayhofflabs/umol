@@ -4,8 +4,9 @@
 //! `lhs` is an owned snapshot of the molecule the rule matched, `rhs` is the molecule produced, and
 //! `comap` maps `lhs` → `rhs` (preserved entities matched, deleted `lhs` entities left-unmatched,
 //! created entities right-unmatched). It is the *instance* of a `ReactionAst` (rule : derivation ∷
-//! function : one evaluation) and carries the ground-truth atom map — `apply` created the atoms, so
-//! no post-hoc diff is needed to recover it; `to_reaction` abstracts back to the rule layer.
+//! function : one evaluation) and carries the ground-truth atom correspondence — `apply` created
+//! the atoms, so no post-hoc diff is needed to recover it; `to_reaction` abstracts back to the rule
+//! layer.
 
 use umol_graph_core::Correspondence;
 
@@ -46,8 +47,8 @@ impl ReactionDerivation {
         &self.comap
     }
 
-    /// The atom-level slice of the comap — the per-step atom map.
-    pub fn atom_map(&self) -> &Correspondence<AtomId> {
+    /// The atom-level slice of the comap.
+    pub fn atom_correspondence(&self) -> &Correspondence<AtomId> {
         self.comap.atoms()
     }
 
@@ -72,7 +73,7 @@ impl ReactionDerivation {
     }
 
     /// Chain onto a following derivation `next` (which fires on this one's `rhs`): the composite
-    /// `lhs ⇒ next.rhs`, with the comaps composed (pathway atom-map propagation).
+    /// `lhs ⇒ next.rhs`, with the comaps composed (pathway atom-correspondence propagation).
     pub fn chain(&self, next: &ReactionDerivation) -> ReactionDerivation {
         ReactionDerivation {
             lhs: self.lhs.clone(),
@@ -95,7 +96,7 @@ mod tests {
     use super::super::value::ValueAst;
     use super::*;
 
-    /// A `lhs ⇒ rhs` derivation over C-C, bond order 1 → 2, total atom map.
+    /// A `lhs ⇒ rhs` derivation over C-C, bond order 1 → 2, with total atom correspondence.
     #[fixture]
     fn derivation_parts() -> (MoleculeAst, MoleculeAst, MoleculeCorrespondence) {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
@@ -179,13 +180,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_derivation_atom_map(
+    fn test_reaction_derivation_atom_correspondence(
         derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let derivation = ReactionDerivation::new(lhs, rhs, comap);
         assert_eq!(
-            derivation.atom_map().matched_pairs(),
+            derivation.atom_correspondence().matched_pairs(),
             &[(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))]
         );
     }
