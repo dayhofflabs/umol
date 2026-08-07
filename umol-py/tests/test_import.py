@@ -144,6 +144,7 @@ PUBLIC_EXPORTS = frozenset(
     ReactionDerivation
     ReactionMetadata
     ReactionSide
+    ReactionSpanAst
     RefinementRounds
     RelOp
     RelationalConstraint

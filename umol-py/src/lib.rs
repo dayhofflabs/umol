@@ -98,6 +98,7 @@ use crate::{
     reaction::{
         ReactionApplicationConfig, ReactionAst, ReactionCompositionConfig, ReactionDerivation,
     },
+    reaction_span::ReactionSpanAst,
     resolve::{
         AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
         AromaticityResolveConfig, ResolveConfig, StereoFailurePolicy, StereoMismatchPolicy,
@@ -165,6 +166,8 @@ mod multicenter;
 mod noncovalent;
 #[cfg(feature = "graph")]
 mod reaction;
+#[cfg(feature = "graph")]
+mod reaction_span;
 #[cfg(feature = "graph")]
 mod resolve;
 #[cfg(feature = "graph")]
@@ -272,6 +275,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionApplicationConfig>()?;
         module.add_class::<ReactionAst>()?;
         module.add_class::<ReactionDerivation>()?;
+        module.add_class::<ReactionSpanAst>()?;
         module.add_class::<RingConfig>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;

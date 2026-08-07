@@ -585,7 +585,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   graph-core storage. Test every entity family, all four entity states, constraint splitting,
   canonical normalization, representative union-reference failures, and rejection of entries
   whose lhs or rhs is not referentially intact. **Additive
-  (green).** [dep: S3b]
+  (green).** [dep: S3b] **Done.**
 - **S5b — Bind the textual reaction-span surface.** Add `parse`, `parse_with_metadata`, `render`,
   `render_with_metadata`, and `__str__` using `ReactionSpanDsl`, keyword-only
   `MoleculeDefaults`, and `MoleculeMetadata`. Match the established `MoleculeAst` parse/render
