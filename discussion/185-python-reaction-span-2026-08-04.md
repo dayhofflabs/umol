@@ -591,6 +591,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `MoleculeDefaults`, and `MoleculeMetadata`. Match the established `MoleculeAst` parse/render
   behavior and error mapping. Test positional rendering, metadata-preserving rendering, defaults,
   keyword and alias retention, and parse/render round trips. **Additive (green).** [dep: S5a]
+  **Done.**
 - **S5c — Bind span projections and conversions.** Add infallible `lhs()` and `rhs()`, plus
   `correspondence()` to `ReactionSpanAst`; add `ReactionSpanAst.to_reaction()` and
   `ReactionAst.to_reaction_span()`. Map the latter's contradictory or structurally unrepresentable

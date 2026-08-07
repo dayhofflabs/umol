@@ -1,18 +1,24 @@
 //! `ReactionSpanAst` — a Python facade over the superimposed reaction span AST.
 
+use std::str::FromStr;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AtomId as AstAtomId, BondId as AstBondId, Canonicalize, Constraint as AstConstraint,
-    ConstraintSpan as AstConstraintSpan, EntitySpan as AstEntitySpan,
+    ConstraintSpan as AstConstraintSpan, EntitySpan as AstEntitySpan, FromAst, IntoAst,
     ReactionSpanAst as AstReactionSpanAst, ReactionSpanEntries as AstReactionSpanEntries,
 };
+use umol_ast::dsl::ReactionSpanDsl as AstReactionSpanDsl;
 
 use crate::aromatic::AromaticSystemAst;
 use crate::atom::AtomAst;
 use crate::bond::BondAst;
 use crate::constraint::molecule::Constraint;
 use crate::dative::DativeBondAst;
+use crate::defaults::MoleculeDefaults;
+use crate::error::{metadata_error, parse_error};
+use crate::metadata::MoleculeMetadata;
 use crate::multicenter::MulticenterBondAst;
 use crate::noncovalent::NoncovalentBondAst;
 use crate::stereo::{StereoAtomAst, StereoBondAst, StereoLigand};
@@ -51,6 +57,62 @@ pub struct ReactionSpanAst(AstReactionSpanAst);
 
 #[pymethods]
 impl ReactionSpanAst {
+    /// Parse a reaction span from its EDN representation under explicit construction defaults.
+    #[staticmethod]
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let span = AstReactionSpanDsl::from_str(text)
+            .map_err(parse_error)?
+            .into_ast(&defaults);
+        Ok(Self::from_rust(span))
+    }
+
+    /// Parse a reaction span and return `(span, metadata)`, retaining entity
+    /// keywords and atom aliases for metadata-preserving rendering.
+    #[staticmethod]
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse_with_metadata(
+        text: &str,
+        defaults: Option<MoleculeDefaults>,
+    ) -> PyResult<(Self, MoleculeMetadata)> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let dsl = AstReactionSpanDsl::from_str(text).map_err(parse_error)?;
+        let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
+        Ok((Self::from_rust(dsl.into_ast(&defaults)), metadata))
+    }
+
+    /// Render a canonical positional DSL representation without entity
+    /// keywords or atom aliases.
+    #[pyo3(signature = (*, defaults=None))]
+    fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        AstReactionSpanDsl::from_ast(&self.0, &defaults).to_string()
+    }
+
+    /// Render a canonical DSL representation with persistent metadata.
+    ///
+    /// Raises `MetadataError` if the detached metadata is not coherent with
+    /// this reaction span.
+    #[pyo3(signature = (metadata, *, defaults=None))]
+    fn render_with_metadata(
+        &self,
+        metadata: &MoleculeMetadata,
+        defaults: Option<MoleculeDefaults>,
+    ) -> PyResult<String> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let lowered = AstReactionSpanDsl::from_ast(&self.0, &defaults)
+            .into_parts()
+            .0;
+        AstReactionSpanDsl::new(lowered, metadata.to_rust())
+            .map(|dsl| dsl.to_string())
+            .map_err(metadata_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.render(None)
+    }
+
     /// Construct a reaction span from union-frame entries.
     ///
     /// Every entity value is a `(lhs, rhs)` pair. Either member may be `None`, but not both.
@@ -188,12 +250,16 @@ impl ReactionSpanAst {
             stereo_bonds,
             constraints: constraint_entries,
         })
-        .map(Self)
+        .map(Self::from_rust)
         .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 }
 
 impl ReactionSpanAst {
+    pub(crate) fn from_rust(span: AstReactionSpanAst) -> Self {
+        Self(span)
+    }
+
     #[cfg(test)]
     pub(crate) fn to_rust(&self) -> AstReactionSpanAst {
         self.0.clone()
@@ -206,7 +272,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AtomAst as AstAtomAst, BondAst as AstBondAst,
-        Constraint as AstConstraint, DativeBondAst as AstDativeBondAst,
+        Constraint as AstConstraint, DativeBondAst as AstDativeBondAst, Entity as AstEntity,
         MoleculeConstraint as AstMoleculeConstraint, MulticenterBondAst as AstMulticenterBondAst,
         NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondKind as AstNoncovalentBondKind,
         StereoAtomAst as AstStereoAtomAst, StereoBondAst as AstStereoBondAst,
@@ -214,10 +280,200 @@ mod tests {
         StereoLigand as AstStereoLigand, StereoLigandKind as AstStereoLigandKind,
         ValueAst as AstValueAst,
     };
+    use umol_ast::dsl::{AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata};
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
     use crate::convert::into_py_variant;
+    use crate::error::{MetadataError, ParseError};
+
+    #[rstest]
+    #[case::required(
+        r#"{:atoms ["C" {:add "O"}]}"#,
+        None,
+        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+            atoms: vec![
+                AstEntitySpan::Unchanged(AstAtomAst::from_element(ChemElement::C)),
+                AstEntitySpan::Added(AstAtomAst::from_element(ChemElement::O)),
+            ],
+            ..Default::default()
+        })
+    )]
+    #[case::ground(
+        r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
+        Some(MoleculeDefaults::ground()),
+        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+            atoms: vec![AstEntitySpan::Unchanged(
+                "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
+            )],
+            ..Default::default()
+        })
+    )]
+    fn test_reaction_span_ast_parse(
+        #[case] text: &str,
+        #[case] defaults: Option<MoleculeDefaults>,
+        #[case] expected: AstReactionSpanAst,
+    ) {
+        assert_eq!(
+            ReactionSpanAst::parse(text, defaults).unwrap().to_rust(),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_parse_error() {
+        Python::attach(|py| {
+            let error = ReactionSpanAst::parse("not edn", None).unwrap_err();
+
+            assert!(error.is_instance_of::<ParseError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "EDN parse: unexpected token 'n' at byte 0"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_parse_with_metadata() {
+        let (span, metadata) = ReactionSpanAst::parse_with_metadata(
+            r#"{:atoms [[:carbon :x]] :atom-aliases [:x "C"]}"#,
+            None,
+        )
+        .unwrap();
+        let metadata = metadata.to_rust();
+
+        assert_eq!(
+            span.to_rust(),
+            AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+                atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+                    ChemElement::C,
+                ))],
+                ..Default::default()
+            })
+        );
+        assert_eq!(
+            metadata.keyword(AstEntity::Atom(AstAtomId(0))),
+            Some("carbon")
+        );
+        assert_eq!(
+            metadata.atom_alias("x"),
+            Some(&AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+        );
+    }
+
+    #[rstest]
+    #[case::required(
+        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+            atoms: vec![
+                AstEntitySpan::Unchanged(AstAtomAst::from_element(ChemElement::C)),
+                AstEntitySpan::Added(AstAtomAst::from_element(ChemElement::O)),
+            ],
+            ..Default::default()
+        }),
+        None,
+        r#"{:atoms ["C" {:add "O"}]}"#
+    )]
+    #[case::ground(
+        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+            atoms: vec![AstEntitySpan::Unchanged(
+                "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
+            )],
+            ..Default::default()
+        }),
+        Some(MoleculeDefaults::ground()),
+        r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#
+    )]
+    fn test_reaction_span_ast_render(
+        #[case] span: AstReactionSpanAst,
+        #[case] defaults: Option<MoleculeDefaults>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(ReactionSpanAst::from_rust(span).render(defaults), expected);
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_render_with_metadata() {
+        let span =
+            ReactionSpanAst::from_rust(AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+                atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+                    ChemElement::C,
+                ))],
+                ..Default::default()
+            }));
+        let mut metadata = AstMoleculeMetadata::new();
+        metadata
+            .set_keyword(AstEntity::Atom(AstAtomId(0)), "carbon")
+            .unwrap();
+        metadata
+            .add_atom_alias("x", AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+            .unwrap();
+
+        assert_eq!(
+            span.render_with_metadata(&MoleculeMetadata::from_rust(metadata), None)
+                .unwrap(),
+            r#"{:atom-aliases [:x "C"] :atoms [[:carbon :x]]}"#
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_render_with_metadata_error() {
+        Python::attach(|py| {
+            let span = ReactionSpanAst::from_rust(AstReactionSpanAst::from_entries(
+                AstReactionSpanEntries {
+                    atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+                        ChemElement::C,
+                    ))],
+                    ..Default::default()
+                },
+            ));
+            let mut metadata = AstMoleculeMetadata::new();
+            metadata
+                .set_keyword(AstEntity::Atom(AstAtomId(1)), "outside")
+                .unwrap();
+
+            let error = span
+                .render_with_metadata(&MoleculeMetadata::from_rust(metadata), None)
+                .unwrap_err();
+
+            assert!(error.is_instance_of::<MetadataError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "metadata entity is out of range: atom 1"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_render_with_metadata_roundtrip() {
+        let (span, metadata) = ReactionSpanAst::parse_with_metadata(
+            concat!(
+                r#"{:atoms [[:carbon "C"] {:add "O"}] "#,
+                r#":bonds [{:add [0 1 :single]}]}"#,
+            ),
+            None,
+        )
+        .unwrap();
+
+        let rendered = span.render_with_metadata(&metadata, None).unwrap();
+
+        assert_eq!(
+            ReactionSpanAst::parse_with_metadata(&rendered, None).unwrap(),
+            (span, metadata)
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_str() {
+        let span =
+            ReactionSpanAst::from_rust(AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+                atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+                    ChemElement::C,
+                ))],
+                ..Default::default()
+            }));
+
+        assert_eq!(span.__str__(), span.render(None));
+    }
 
     #[rstest]
     fn test_reaction_span_ast_from_entries() {
