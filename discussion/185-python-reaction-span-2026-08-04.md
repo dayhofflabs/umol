@@ -547,7 +547,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `ReactionSpanAst::superimpose`. Use the corrected relation-set operation for every overlay and
   remove local participant sorting and payload permutation. Retain the exact lhs law and the rhs
   `MoleculeAst::equiv_under` property, including crossing correspondences and position-sensitive
-  payloads. **Internal rewire (green).** [dep: S3e]
+  payloads. **Internal rewire (green).** [dep: S3e] **Done.**
 - **S3g — Route molecule pushout through relation remapping.** Replace the corresponding manual
   participant canonicalization and payload permutation in molecule pushout with the corrected
   relation-set operation. Preserve the existing pushout result and correspondence contracts and

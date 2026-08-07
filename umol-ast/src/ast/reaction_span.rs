@@ -11,8 +11,8 @@ use std::hash::Hash;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
-    Ordered, RelationData, RelationId, Unordered, VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
+    RelationId, Remapping, Unordered, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -616,6 +616,115 @@ impl ReactionSpanAst {
         // R id → union id per family.
         let atom_union: HashMap<AtomId, AtomId> = union_map(atoms_corr, lhs_atom_count);
         let bond_union: HashMap<BondId, BondId> = union_map(bonds_corr, lhs_bond_count);
+        let participant_remapping = Remapping::new(
+            (0..rhs.atoms().count())
+                .map(|index| NodeId::from(atom_union[&AtomId::from(index)]))
+                .collect(),
+            (0..rhs.bonds().count())
+                .map(|index| EdgeId::from(bond_union[&BondId::from(index)]))
+                .collect(),
+        );
+
+        let remapped_rhs_dative: FixedVarBirelationSet<
+            NodeId,
+            Ordered,
+            1,
+            NodeId,
+            Unordered,
+            DativeBondAst,
+        > = FixedVarBirelationSet::new(
+            rhs.dative_bonds()
+                .iter()
+                .map(|view| {
+                    (
+                        [NodeId::from(view.acceptor_id())],
+                        view.donor_ids().map(NodeId::from).collect(),
+                        view.ast.clone(),
+                    )
+                })
+                .collect(),
+        )
+        .apply_remapping(&participant_remapping);
+        let remapped_rhs_aromatic: VarRelationSet<NodeId, Unordered, AromaticSystemAst> =
+            VarRelationSet::new(
+                rhs.aromatic_systems()
+                    .iter()
+                    .map(|view| {
+                        (
+                            view.atom_ids().map(NodeId::from).collect(),
+                            view.ast.clone(),
+                        )
+                    })
+                    .collect(),
+            )
+            .apply_remapping(&participant_remapping);
+        let remapped_rhs_multicenter: VarRelationSet<NodeId, Unordered, MulticenterBondAst> =
+            VarRelationSet::new(
+                rhs.multicenter_bonds()
+                    .iter()
+                    .map(|view| {
+                        (
+                            view.atom_ids().map(NodeId::from).collect(),
+                            view.ast.clone(),
+                        )
+                    })
+                    .collect(),
+            )
+            .apply_remapping(&participant_remapping);
+        let remapped_rhs_noncovalent: FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2> =
+            FixedRelationSet::new(
+                rhs.noncovalent_bonds()
+                    .iter()
+                    .map(|view| {
+                        let [first, second] = view.atom_ids();
+                        (
+                            [NodeId::from(first), NodeId::from(second)],
+                            view.ast.clone(),
+                        )
+                    })
+                    .collect(),
+            )
+            .apply_remapping(&participant_remapping);
+        let remapped_rhs_stereo_atoms: FixedVarBirelationSet<
+            NodeId,
+            Ordered,
+            1,
+            StereoLigand,
+            Ordered,
+            StereoAtomAst,
+        > = FixedVarBirelationSet::new(
+            rhs.stereo_atoms()
+                .iter()
+                .map(|view| {
+                    (
+                        [NodeId::from(view.site_id())],
+                        view.ligand_frame(),
+                        view.ast.clone(),
+                    )
+                })
+                .collect(),
+        )
+        .apply_remapping(&participant_remapping);
+        let remapped_rhs_stereo_bonds: FixedVarBirelationSet<
+            EdgeId,
+            Ordered,
+            1,
+            StereoLigand,
+            Ordered,
+            StereoBondAst,
+        > = FixedVarBirelationSet::new(
+            rhs.stereo_bonds()
+                .iter()
+                .map(|view| {
+                    (
+                        [EdgeId::from(view.site_id())],
+                        view.ligand_frame(),
+                        view.ast.clone(),
+                    )
+                })
+                .collect(),
+        )
+        .apply_remapping(&participant_remapping);
 
         // Atoms
         let mut atoms: Vec<EntitySpan<AtomAst>> = Vec::new();
@@ -658,25 +767,26 @@ impl ReactionSpanAst {
         let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemAst>)> = Vec::new();
         for view in lhs.aromatic_systems().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
-            let rhs_ast = aromatic_corr.right_of(view.id).map(|r| {
-                let rhs_view = rhs.aromatic_system(r);
-                let mut remapped_participants: Vec<AtomId> =
-                    rhs_view.atom_ids().map(|atom| atom_union[&atom]).collect();
-                let order = Unordered::canonicalize_positions(&mut remapped_participants);
-                debug_assert_eq!(remapped_participants, participants);
-                let mut ast = rhs_view.ast.clone();
-                ast.on_permutation(&order);
-                ast
-            });
+            let rhs_ast = aromatic_corr
+                .right_of(view.id)
+                .map(|id| remapped_rhs_aromatic.data(id.into()).clone());
             aromatic.push((
                 participants,
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
         for &r in &aromatic_corr.right_unmatched() {
-            let view = rhs.aromatic_system(r);
-            let participants = view.atom_ids().map(|a| atom_union[&a]).collect();
-            aromatic.push((participants, EntitySpan::Added(view.ast.clone())));
+            let relation_id = RelationId::from(r);
+            let participants = remapped_rhs_aromatic
+                .participants(relation_id)
+                .iter()
+                .copied()
+                .map(AtomId::from)
+                .collect();
+            aromatic.push((
+                participants,
+                EntitySpan::Added(remapped_rhs_aromatic.data(relation_id).clone()),
+            ));
         }
 
         // Multicenter bonds
@@ -684,25 +794,26 @@ impl ReactionSpanAst {
         let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondAst>)> = Vec::new();
         for view in lhs.multicenter_bonds().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
-            let rhs_ast = multicenter_corr.right_of(view.id).map(|r| {
-                let rhs_view = rhs.multicenter_bond(r);
-                let mut remapped_participants: Vec<AtomId> =
-                    rhs_view.atom_ids().map(|atom| atom_union[&atom]).collect();
-                let order = Unordered::canonicalize_positions(&mut remapped_participants);
-                debug_assert_eq!(remapped_participants, participants);
-                let mut ast = rhs_view.ast.clone();
-                ast.on_permutation(&order);
-                ast
-            });
+            let rhs_ast = multicenter_corr
+                .right_of(view.id)
+                .map(|id| remapped_rhs_multicenter.data(id.into()).clone());
             multicenter.push((
                 participants,
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
             ));
         }
         for &r in &multicenter_corr.right_unmatched() {
-            let view = rhs.multicenter_bond(r);
-            let participants = view.atom_ids().map(|a| atom_union[&a]).collect();
-            multicenter.push((participants, EntitySpan::Added(view.ast.clone())));
+            let relation_id = RelationId::from(r);
+            let participants = remapped_rhs_multicenter
+                .participants(relation_id)
+                .iter()
+                .copied()
+                .map(AtomId::from)
+                .collect();
+            multicenter.push((
+                participants,
+                EntitySpan::Added(remapped_rhs_multicenter.data(relation_id).clone()),
+            ));
         }
 
         // Noncovalent bonds
@@ -712,7 +823,7 @@ impl ReactionSpanAst {
             let [a, b] = view.atom_ids();
             let rhs_ast = noncovalent_corr
                 .right_of(view.id)
-                .map(|r| rhs.noncovalent_bond(r).ast.clone());
+                .map(|id| remapped_rhs_noncovalent.data(id.into()).clone());
             noncovalent.push((
                 a,
                 b,
@@ -720,12 +831,12 @@ impl ReactionSpanAst {
             ));
         }
         for &r in &noncovalent_corr.right_unmatched() {
-            let view = rhs.noncovalent_bond(r);
-            let [a, b] = view.atom_ids();
+            let relation_id = RelationId::from(r);
+            let &[first, second] = remapped_rhs_noncovalent.participants(relation_id);
             noncovalent.push((
-                atom_union[&a],
-                atom_union[&b],
-                EntitySpan::Added(view.ast.clone()),
+                AtomId::from(first),
+                AtomId::from(second),
+                EntitySpan::Added(remapped_rhs_noncovalent.data(relation_id).clone()),
             ));
         }
 
@@ -737,7 +848,7 @@ impl ReactionSpanAst {
             let donors = view.donor_ids().collect();
             let rhs_ast = dative_corr
                 .right_of(view.id)
-                .map(|r| rhs.dative_bond(r).ast.clone());
+                .map(|id| remapped_rhs_dative.data(id.into()).clone());
             dative.push((
                 donors,
                 acceptor,
@@ -745,10 +856,19 @@ impl ReactionSpanAst {
             ));
         }
         for &r in &dative_corr.right_unmatched() {
-            let view = rhs.dative_bond(r);
-            let acceptor = atom_union[&view.acceptor_id()];
-            let donors = view.donor_ids().map(|a| atom_union[&a]).collect();
-            dative.push((donors, acceptor, EntitySpan::Added(view.ast.clone())));
+            let relation_id = RelationId::from(r);
+            let acceptor = AtomId::from(remapped_rhs_dative.participants_1(relation_id)[0]);
+            let donors = remapped_rhs_dative
+                .participants_2(relation_id)
+                .iter()
+                .copied()
+                .map(AtomId::from)
+                .collect();
+            dative.push((
+                donors,
+                acceptor,
+                EntitySpan::Added(remapped_rhs_dative.data(relation_id).clone()),
+            ));
         }
 
         // Stereo atoms
@@ -758,7 +878,7 @@ impl ReactionSpanAst {
         for view in lhs.stereo_atoms().iter() {
             let rhs_ast = stereo_atom_corr
                 .right_of(view.id)
-                .map(|r| rhs.stereo_atom(r).ast.clone());
+                .map(|id| remapped_rhs_stereo_atoms.data(id.into()).clone());
             stereo_atoms.push((
                 view.site_id(),
                 view.ligand_frame(),
@@ -766,14 +886,16 @@ impl ReactionSpanAst {
             ));
         }
         for &r in &stereo_atom_corr.right_unmatched() {
-            let view = rhs.stereo_atom(r);
-            let site = atom_union[&view.site_id()];
-            let ligands = view
-                .ligand_frame()
-                .iter()
-                .map(|l| StereoLigand::new(atom_union[&l.atom_id], l.kind))
-                .collect();
-            stereo_atoms.push((site, ligands, EntitySpan::Added(view.ast.clone())));
+            let relation_id = RelationId::from(r);
+            let site = AtomId::from(remapped_rhs_stereo_atoms.participants_1(relation_id)[0]);
+            let ligands = remapped_rhs_stereo_atoms
+                .participants_2(relation_id)
+                .to_vec();
+            stereo_atoms.push((
+                site,
+                ligands,
+                EntitySpan::Added(remapped_rhs_stereo_atoms.data(relation_id).clone()),
+            ));
         }
 
         // Stereo bonds
@@ -783,7 +905,7 @@ impl ReactionSpanAst {
         for view in lhs.stereo_bonds().iter() {
             let rhs_ast = stereo_bond_corr
                 .right_of(view.id)
-                .map(|r| rhs.stereo_bond(r).ast.clone());
+                .map(|id| remapped_rhs_stereo_bonds.data(id.into()).clone());
             stereo_bonds.push((
                 view.site_id(),
                 view.ligand_frame(),
@@ -791,14 +913,16 @@ impl ReactionSpanAst {
             ));
         }
         for &r in &stereo_bond_corr.right_unmatched() {
-            let view = rhs.stereo_bond(r);
-            let site = bond_union[&view.site_id()];
-            let ligands = view
-                .ligand_frame()
-                .iter()
-                .map(|l| StereoLigand::new(atom_union[&l.atom_id], l.kind))
-                .collect();
-            stereo_bonds.push((site, ligands, EntitySpan::Added(view.ast.clone())));
+            let relation_id = RelationId::from(r);
+            let site = BondId::from(remapped_rhs_stereo_bonds.participants_1(relation_id)[0]);
+            let ligands = remapped_rhs_stereo_bonds
+                .participants_2(relation_id)
+                .to_vec();
+            stereo_bonds.push((
+                site,
+                ligands,
+                EntitySpan::Added(remapped_rhs_stereo_bonds.data(relation_id).clone()),
+            ));
         }
 
         // Constraints: R's remapped into the union frame, then set-diffed against L's.
