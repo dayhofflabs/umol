@@ -1,6 +1,6 @@
 # 185 — Expose the reaction span form on the Python surface
 
-Status: **In Progress**
+Status: **Completed**
 Date: 2026-08-04
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [182](182-python-resolution-2026-08-03.md),
@@ -610,7 +610,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
   `from_sides`, `atom_map`, and the raw-storage reaction-span constructor are absent, while every
   declared Python method is registered and importable. Update this document and `000-status.md`
   only after all checks pass. **Verification and documentation (green).**
-  [dep: S0f, S1c, S2e, S3b, S4c, S5b, S5c]
+  [dep: S0f, S1c, S2e, S3b, S4c, S5b, S5c] **Done.**
 
 ## Plan properties
 
