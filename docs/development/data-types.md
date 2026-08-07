@@ -145,19 +145,23 @@ property:
   changes;
 - assert only on internal paths whose producer establishes the required property.
 
-For example, converting a partial correspondence to a dense remapping may return `None` because no
-total-left mapping exists. This can occur for a correspondence correctly produced for its molecule
-pair: partiality is part of the correspondence model, whereas a remapping is total on its source.
+For example, converting a partial correspondence to a total-on-source remapping may return `None`
+because no total-left mapping exists. This can occur for a correspondence correctly produced for
+its molecule pair: partiality is part of the correspondence model, whereas a remapping is total on
+its source.
 It does not make correspondence construction, composition, reversal, or unrelated consumers
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
 ## Remapping
 
-Remapping is an explicit transformation between id spaces. It preserves represented values and
-incidence; it does not validate chemistry, canonicalize attributes, repair references, or remove
-entities. A remapping is total on its source: every referenced source id has an image. Removal uses
-compaction instead because a removed id has no image.
+Remapping is an explicit transformation between id spaces. It transports represented values and
+incidence along a total function; it does not validate chemistry, canonicalize attributes, repair
+references, or remove entities. The image vectors passed to a remapping constructor define its
+source domains, and every id in those domains has an image. Construction is therefore infallible.
+A general remapping need not be injective or surjective; injection or bijection is a contextual
+precondition of operations that require distinct or dense target entities. Removal uses compaction
+instead because a removed id has no image.
 
 The facility has two coordinated levels:
 
@@ -176,6 +180,46 @@ from the same correspondence or construction result: the graph-core mapping tran
 and relation participants, while the AST mapping transports references to owned entity rows. Do not
 manually sort remapped relation participants or permute their payloads at individual call sites;
 that behavior belongs to relation-set remapping through `RelationData`.
+
+### Participant frames and payload equivalence
+
+`RelationData::on_permutation` and `BiRelationData::on_permutation` are the sole primitive actions
+of participant-position permutations on relation payloads. `Equiv` and `BiEquiv` derive comparison
+from that action rather than defining a second remapping protocol:
+
+- `equiv` compares two payloads expressed in the same participant frame;
+- `equiv_under` first expresses `self` in the other payload's frame and then performs the same
+  comparison;
+- when `is_permutation_invariant` is true, the frame change is observationally irrelevant and
+  `equiv_under` reduces to `equiv`.
+
+This is not merely an alias for canonical equality. It records the dominant semantic case: most
+molecular relation payloads do not assign values to participant positions. Dative-bond order,
+noncovalent-bond kind, stereo configuration carried by an ordered ligand factor, and their
+constraints are position-independent. In the current model, the only position-sensitive payload
+fields are the per-participant electron counts of aromatic systems and multicenter bonds. Those two
+implementations permute their electron-count vectors; an undetermined electron-count value is
+itself permutation-invariant.
+
+The graph-core traits nevertheless use a conservative default of `false` for
+`is_permutation_invariant`, and every payload implementation must supply its position action. This
+keeps a newly introduced position-sensitive payload from silently inheriting a no-op action. A
+separate marker-trait hierarchy or a default no-op action would encode the common case with less
+boilerplate but weaker review pressure and more public machinery.
+
+`Equiv` and `BiEquiv` therefore remain derived, blanket-implemented operations. Payload types do not
+override their comparison independently of `on_permutation` and canonical equality. Relation-set
+remapping applies the position action to stored data, while read-only comparisons and matching may
+apply it to a temporary value before using their own comparison relation. Graph core does not need
+a second payload-equivalence API.
+
+Applying a remapping to an independently supplied graph or relation set introduces a contextual
+coverage condition: every participant must lie in the remapping's declared source domain. Public
+relation-set APIs provide paired routes. `apply_remapping` asserts coverage for producer paths that
+establish it and documents that a mismatch panics; `try_apply_remapping` checks coverage and returns
+`None` for an independently supplied mismatch. Both use the same transport implementation. The
+checked route belongs at application because construction cannot know which carrier will later be
+supplied; `map_node`, `map_edge`, and participant-level remapping remain direct indexing operations.
 
 A total mapping may target a sparse or larger ambient namespace, as when the rhs of a reaction is
 embedded into an lhs-anchored union. Such a mapping can transport relation entries and referenced
@@ -197,7 +241,7 @@ chemistry, resolve values, canonicalize attributes, repair references, compact t
 entities. Identity remapping is exact; applying a remapping and its inverse recovers the original;
 and sequential remapping agrees with correspondence composition.
 
-Remapping is semantics-preserving alpha-renaming. Its primary semantic law is
+Dense molecule remapping is semantics-preserving alpha-renaming. Its primary semantic law is
 `source.equiv_under(&remapped, &correspondence)`. Property tests must state this law directly in
 addition to testing identity, inverse, composition, and referential integrity. Generated cases must
 include crossing permutations, all entity families, position-sensitive relation data and stereo

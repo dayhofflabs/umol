@@ -515,25 +515,44 @@ creates an atom, since a partial correspondence is the case where the two forms 
   Include unmatched atoms and dependent bonds or overlays rather than restricting the generator to
   total correspondences.
   **Additive properties (green).** [dep: S0f, S2e, S3b] **Done.**
-- **S3d — Make relation-set remapping own positional data transport.** In `umol-graph-core`, change
-  all five relation-set and birelation-set `apply_remapping` operations to canonicalize each
-  remapped factor and apply the induced position permutations to its `RelationData` or
-  `BiRelationData` internally. Return the remapped set without exposing those permutations. Cover
-  ordered and unordered factors with position-sensitive data, asserting both exact
-  participant/data alignment and semantic equivalence under the induced permutation. No production
-  caller currently uses these methods, so migrate their graph-core tests with the signature change
-  and keep the workspace green. **Breaking API correction (red→green).** [dep: S3c]
-- **S3e — Route reaction-span superimposition through relation remapping.** Derive the graph-core
+- **S3d — Add checked point lookup to `Remapping`.** In `umol-graph-core`, keep
+  `Remapping::new` infallible: its image vectors define a total function over their own source
+  ranges, and injectivity or bijectivity is a precondition only for operations that require it. Add
+  `try_map_node` and `try_map_edge`, returning `None` for an id outside the corresponding source
+  range. Keep `map_node` and `map_edge` as the asserted point-lookup routes and implement them over
+  the same stored images. Document their panic condition and test exact covered and uncovered node
+  and edge lookups. **Additive checked surface (green).** [dep: S3c] **Done.**
+- **S3e — Make relation-set remapping own positional data transport.** In `umol-graph-core`, change
+  all five relation-set and birelation-set `apply_remapping` operations to return the remapped set
+  without exposing participant permutations. Map each factor's participants and route the entries
+  through the set's existing constructor, so factor canonicalization and `RelationData` or
+  `BiRelationData::on_permutation` happen exactly once at the abstraction that owns them; do not
+  pre-permute payloads or change `RelationParticipant::remap`.
+
+  Add `try_apply_remapping` to all five set types. Determine coverage from each participant's
+  `ParticipantRefs` using `try_map_node` and `try_map_edge`; return `None` if either referenced id is
+  outside the remapping's source ranges, otherwise delegate to the same transport implementation as
+  `apply_remapping`. The asserted route is for a remapping known to cover every participant and
+  documents that a mismatch panics; the checked route handles independently supplied values.
+
+  State and test the concrete positional-data law: after relabeling and factor canonicalization,
+  each payload position remains attached to the same logical participant. Use tagged
+  position-sensitive payloads across all five storage shapes, covering ordered and unordered
+  factors and both factors of birelation data. Add exact checked-application cases for uncovered
+  node and edge participants. No production caller currently uses these methods, so migrate their
+  graph-core tests with the signature change and keep the workspace green.
+  **Breaking API correction with additive checked path (red→green).** [dep: S3d]
+- **S3f — Route reaction-span superimposition through relation remapping.** Derive the graph-core
   participant remapping and the typed `IdRemapping` from the same lhs-anchored correspondence in
   `ReactionSpanAst::superimpose`. Use the corrected relation-set operation for every overlay and
   remove local participant sorting and payload permutation. Retain the exact lhs law and the rhs
   `MoleculeAst::equiv_under` property, including crossing correspondences and position-sensitive
-  payloads. **Internal rewire (green).** [dep: S3d]
-- **S3f — Route molecule pushout through relation remapping.** Replace the corresponding manual
+  payloads. **Internal rewire (green).** [dep: S3e]
+- **S3g — Route molecule pushout through relation remapping.** Replace the corresponding manual
   participant canonicalization and payload permutation in molecule pushout with the corrected
   relation-set operation. Preserve the existing pushout result and correspondence contracts and
   add exact position-sensitive coverage where the shared graph-core properties do not exercise the
-  molecule-level assembly. **Internal rewire (green).** [dep: S3d]
+  molecule-level assembly. **Internal rewire (green).** [dep: S3e]
 
 ### S4 — Expose reusable correspondence construction in Python
 
