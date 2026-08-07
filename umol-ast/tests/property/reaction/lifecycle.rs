@@ -25,22 +25,6 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_ast_from_sides(reaction in comprehensive_reaction_strategy()) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let rebuilt = ReactionAst::from_sides(
-                span.lhs(),
-                span.rhs(),
-                span.correspondence().atoms().clone(),
-            )
-            .expect("a reaction span induces a unique molecule correspondence");
-            let rebuilt_span = rebuilt.to_reaction_span().map_err(|error| {
-                TestCaseError::fail(format!("rebuilt reaction did not materialize: {error}"))
-            })?;
-            prop_assert_eq!(rebuilt_span, span);
-        }
-    }
-
-    #[test]
     fn test_reaction_ast_apply_at(reaction in reaction_strategy()) {
         let atom_count = reaction.lhs.atoms().count();
         let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();

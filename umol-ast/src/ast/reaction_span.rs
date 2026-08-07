@@ -11,8 +11,8 @@ use std::hash::Hash;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, Unordered, VarRelationSet,
+    Correspondence, EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
+    Ordered, RelationData, RelationId, Unordered, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -248,8 +248,10 @@ impl MoleculeAst {
     ///
     /// # Semantic properties
     ///
-    /// Applying a returned delta collection to `self` reconstructs `rhs`, up to appended-atom
-    /// renumbering.
+    /// Applying a returned delta collection to `self` reconstructs `rhs` in the lhs-anchored
+    /// reaction frame: preserved entities retain their lhs ids and rhs-only entities are appended.
+    /// The result is equivalent to `rhs` under the induced total correspondence, but need not be
+    /// structurally equal when the supplied correspondence changes entity order.
     pub fn difference_to(
         &self,
         rhs: &MoleculeAst,
@@ -591,8 +593,12 @@ impl ReactionSpanAst {
     ///
     /// # Semantic properties
     ///
-    /// For a compatible correspondence, projecting the returned span recovers the supplied lhs and
-    /// rhs, and recovering its correspondence reproduces the supplied correspondence.
+    /// For a compatible correspondence, the lhs projection is structurally equal to `lhs`. The rhs
+    /// projection is `rhs` reindexed into the lhs-anchored reaction frame: preserved entities retain
+    /// lhs ids and rhs-only entities are appended. It is equivalent to `rhs` under the induced total
+    /// correspondence, but need not be structurally equal when matched pairs cross entity order.
+    /// The correspondence recovered from the span relates these normalized projections and
+    /// therefore need not equal the source correspondence.
     pub fn superimpose(
         lhs: &MoleculeAst,
         rhs: &MoleculeAst,
@@ -651,10 +657,17 @@ impl ReactionSpanAst {
         let aromatic_corr = correspondence.aromatic_systems();
         let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemAst>)> = Vec::new();
         for view in lhs.aromatic_systems().iter() {
-            let participants = view.atom_ids().collect();
-            let rhs_ast = aromatic_corr
-                .right_of(view.id)
-                .map(|r| rhs.aromatic_system(r).ast.clone());
+            let participants: Vec<AtomId> = view.atom_ids().collect();
+            let rhs_ast = aromatic_corr.right_of(view.id).map(|r| {
+                let rhs_view = rhs.aromatic_system(r);
+                let mut remapped_participants: Vec<AtomId> =
+                    rhs_view.atom_ids().map(|atom| atom_union[&atom]).collect();
+                let order = Unordered::canonicalize_positions(&mut remapped_participants);
+                debug_assert_eq!(remapped_participants, participants);
+                let mut ast = rhs_view.ast.clone();
+                ast.on_permutation(&order);
+                ast
+            });
             aromatic.push((
                 participants,
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
@@ -670,10 +683,17 @@ impl ReactionSpanAst {
         let multicenter_corr = correspondence.multicenter_bonds();
         let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondAst>)> = Vec::new();
         for view in lhs.multicenter_bonds().iter() {
-            let participants = view.atom_ids().collect();
-            let rhs_ast = multicenter_corr
-                .right_of(view.id)
-                .map(|r| rhs.multicenter_bond(r).ast.clone());
+            let participants: Vec<AtomId> = view.atom_ids().collect();
+            let rhs_ast = multicenter_corr.right_of(view.id).map(|r| {
+                let rhs_view = rhs.multicenter_bond(r);
+                let mut remapped_participants: Vec<AtomId> =
+                    rhs_view.atom_ids().map(|atom| atom_union[&atom]).collect();
+                let order = Unordered::canonicalize_positions(&mut remapped_participants);
+                debug_assert_eq!(remapped_participants, participants);
+                let mut ast = rhs_view.ast.clone();
+                ast.on_permutation(&order);
+                ast
+            });
             multicenter.push((
                 participants,
                 EntitySpan::superimpose(Some(view.ast.clone()), rhs_ast).unwrap(),
@@ -825,9 +845,11 @@ impl ReactionSpanAst {
         }))
     }
 
-    /// Recover the per-family correspondence between the two sides, forgetting the values — the
-    /// inverse of `superimpose`: for a span with projectable sides,
+    /// Recover the per-family correspondence between the two normalized side projections,
+    /// forgetting the values. For every span,
     /// `superimpose(self.lhs(), self.rhs(), &self.correspondence())` reproduces `Some(self)`.
+    /// A source correspondence used to construct the span is not retained when it assigns a
+    /// different rhs entity order.
     pub fn correspondence(&self) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
             recover_correspondence(self.atoms.iter()),

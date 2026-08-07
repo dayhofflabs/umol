@@ -152,6 +152,63 @@ It does not make correspondence construction, composition, reversal, or unrelate
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
+## Remapping
+
+Remapping is an explicit transformation between id spaces. It preserves represented values and
+incidence; it does not validate chemistry, canonicalize attributes, repair references, or remove
+entities. A remapping is total on its source: every referenced source id has an image. Removal uses
+compaction instead because a removed id has no image.
+
+The facility has two coordinated levels:
+
+- `umol_graph_core::Remapping` maps node and edge ids used by graphs and relation participants. A
+  relation-set remapping must relabel each factor, canonicalize that factor according to its
+  `Ordered` or `Unordered` marker, and apply the induced position permutation to its `RelationData`.
+  Positional payloads therefore remain aligned with their participants. An ordered stereo ligand
+  frame retains its positions under a pure id remapping, so its induced position permutation is the
+  identity and its coset is unchanged.
+- `IdRemapping` maps all eight molecule entity-id families. It is used for AST values that contain
+  entity references, including constraints and deltas; it does not duplicate graph-core participant
+  canonicalization.
+
+A higher-level operation that moves molecular data into another namespace derives both mappings
+from the same correspondence or construction result: the graph-core mapping transports topology
+and relation participants, while the AST mapping transports references to owned entity rows. Do not
+manually sort remapped relation participants or permute their payloads at individual call sites;
+that behavior belongs to relation-set remapping through `RelationData`.
+
+A total mapping may target a sparse or larger ambient namespace, as when the rhs of a reaction is
+embedded into an lhs-anchored union. Such a mapping can transport relation entries and referenced
+values but cannot by itself produce a standalone `MoleculeAst`, whose eight entity tables use dense
+ids. End-to-end molecule remapping is defined only when every entity-family mapping is a bijection
+onto a dense target id space. An embedding into a union and a remapping of a standalone molecule are
+therefore related operations with different codomains.
+
+### Dense molecule remapping
+
+A public end-to-end remapping operation on `MoleculeAst` accepts a `MoleculeCorrespondence` that
+describes the complete old and new id spaces. The correspondence source counts must equal the
+molecule counts, and every component correspondence must be total on both sides. The operation
+returns `None` when these structural conditions do not hold.
+
+On success, it transports topology, every relation participant, position-sensitive relation data,
+stereo frames, entity ASTs, and every typed reference in constraints. It does not validate
+chemistry, resolve values, canonicalize attributes, repair references, compact tables, or remove
+entities. Identity remapping is exact; applying a remapping and its inverse recovers the original;
+and sequential remapping agrees with correspondence composition.
+
+Remapping is semantics-preserving alpha-renaming. Its primary semantic law is
+`source.equiv_under(&remapped, &correspondence)`. Property tests must state this law directly in
+addition to testing identity, inverse, composition, and referential integrity. Generated cases must
+include crossing permutations, all entity families, position-sensitive relation data and stereo
+frames, and constraints containing typed entity references; testing only reordered atom and bond
+tables is insufficient.
+
+Canonicalization is a consumer of this operation, not an alternative implementation of it. It
+derives a complete correspondence from a canonical labeling and applies the ordinary molecule
+remapping operation. Canonicalization code must not introduce a second path for transporting entity
+tables or referenced values.
+
 ## Reaction-span construction
 
 `ReactionSpanAst` stores the union-frame encoding of an actual span of two molecules. The union
@@ -174,6 +231,14 @@ span must contain both objects of the span. Consequently:
 - `ReactionSpanAst::lhs`, `rhs`, `to_reaction`, and `correspondence` are infallible;
 - projection retains every entity and constraint present on the selected side and remaps its
   references without repair or silent loss.
+
+The union frame is lhs-anchored. Preserved entities retain their lhs ids and rhs-only entities are
+appended. Consequently, `superimpose(lhs, rhs, correspondence).lhs() == lhs`, while the rhs
+projection is equivalent to the supplied `rhs` under the induced total correspondence rather than
+necessarily structurally equal to it. A crossing source correspondence changes rhs entity order;
+neither a reaction's deltas nor the span membership columns encode that otherwise semantically
+irrelevant permutation. `ReactionSpanAst::correspondence` relates the normalized projections and
+does not retain a source correspondence whose rhs frame differs.
 
 The two reaction representations deliberately have different construction boundaries.
 `ReactionAst` is a permissive lhs-plus-deltas carrier and may contain a DPO-invalid rule.

@@ -2273,9 +2273,14 @@ pub(crate) fn molecule_ast_with_removals_strategy(
 
 pub(crate) fn molecule_ast_structurally_unambiguous_strategy() -> impl Strategy<Value = MoleculeAst>
 {
-    molecule_ast_strategy().prop_filter(
+    molecule_entries_structurally_unambiguous_strategy().prop_map(MoleculeAst::from_entries)
+}
+
+pub(crate) fn molecule_entries_structurally_unambiguous_strategy(
+) -> impl Strategy<Value = MoleculeEntries> {
+    molecule_entries_strategy().prop_filter(
         "entity incidence identifies at most one entity of each family",
-        molecule_entity_incidence_is_unique,
+        |entries| molecule_entity_incidence_is_unique(&MoleculeAst::from_entries(entries.clone())),
     )
 }
 

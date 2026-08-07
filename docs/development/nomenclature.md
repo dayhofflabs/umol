@@ -51,6 +51,12 @@ and none is a synonym for another.
 **Determinacy.** *Undetermined* is stored lattice state on a value. *Underdetermined* is an operation
 outcome. The words differ by two letters and by kind; the glossary keeps them apart deliberately.
 
+**Id-space relations.** A *correspondence* pairs some entities in two declared carriers and is a
+partial bijection. A *remapping* transports every source id into another id space and is therefore
+total on its source, although its image may occupy only part of a larger target. A *compaction* is
+the partial old-to-new mapping produced by removal: surviving ids have dense images and removed ids
+have none. Partiality from pairing and partiality from removal are different semantics.
+
 ## Suffixes
 
 The generative core of this guide. Each family gains members as work lands, so a new type's suffix
@@ -272,32 +278,22 @@ to gain analogues, so it is recorded rather than generative.
 **Not:** *join*, which is the lattice least upper bound.
 **In code:** `combine`, `combine_all`, `combine_from`.
 
-### Compaction and remapping
+### Compaction
 
-Two id mappings that look alike in a signature and are not interchangeable. The entry exists to
-explain why both sets of operations exist, not to license new ones.
-
-- **Compaction** — the *partial* mapping produced by removal. `MoleculeEditor::remove` closes up the
-  id space, so `IdCompaction` translates a pre-removal id to its post-removal id **or signals that
-  the entity is gone**. It wraps `umol_graph_core::Compaction` for atoms and bonds and carries sorted
-  removed-id lists for the six relation kinds. Its purpose is rewriting stale references against the
-  new layout.
-- **Remapping** — the *total* relabeling. `IdRemapping` moves values between id spaces with no
-  removals involved, so every id has an image. It composes and reverses, which is what lets a `Delta`
-  written in one id space be applied in another.
-
-The tell is removal: a compaction can say "gone", a remapping cannot. That is why compaction has
-`compact_*` and `uncompact_*` per entity kind while remapping has `forward`, `reverse` and `compose`.
+A **compaction** is the partial old-to-new id mapping produced by removal. A surviving id maps to
+its position in the closed-up post-removal table; a removed id has no image. `IdCompaction` wraps
+`umol_graph_core::Compaction` for atoms and bonds and carries the removed ids for the six relation
+kinds so every stale reference can be updated or discarded consistently.
 
 **`UndoCompaction`** is the inverse view of an `IdCompaction` for rollback: it carries surviving
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
 them.
 
-**Not:** each other, and neither is a `Correspondence`, which relates entities of two *different*
-structures rather than two id spaces of one.
-**In code:** `IdCompaction`, `IdRemapping`, `UndoCompaction`, `umol_graph_core::Compaction`;
-`compact_*`, `uncompact_*`, `forward`, `reverse`, `compose`.
+**Not:** a correspondence, whose unmatched ids remain members of their respective carriers; not a
+remapping, which gives every source id an image and never expresses removal.
+**In code:** `IdCompaction`, `UndoCompaction`, `umol_graph_core::Compaction`; `compact_*`,
+`uncompact_*`.
 
 ### Config
 
@@ -349,19 +345,28 @@ classifications that a resolver may still act on).
 
 ### Correspondence
 
-A **correspondence** is a partial bijection between two structures' id spaces, held per entity
-family. The atom part is a `Correspondence<AtomId>` aligned with the molecular graph, so the bond
-correspondence is its *induced* edge correspondence; the seven other families each carry their own
-over their entity id.
+A **correspondence** is a partial bijection between two declared carriers' id spaces. It records
+which entities are paired and the full size of each carrier; unmatched ids remain entities of their
+own carrier rather than being interpreted as removed. A correspondence may relate a pattern and a
+host, two reaction sides, or two id frames of the same semantic structure.
+
+`MoleculeCorrespondence` holds one correspondence for each of the eight entity families. Its atom
+component is a `Correspondence<AtomId>` aligned with the molecular graph, so the bond component can
+be induced from the atom pairing and the two topologies. The remaining entity families carry their
+own pairings.
 
 A correspondence is **valueless** — it records pairing and nothing else. Adding values and a
 direction is what lifts it to a reaction span.
 
 Correspondences compose and reverse, which is what lets a chain of operations be followed end to end,
-and `to_remapping` converts one into the total relabeling when no removals are involved.
+and `to_remapping` converts one into a total-on-source remapping when it is total on the left. The
+result may map into a larger target id space. End-to-end remapping of a standalone `MoleculeAst`
+requires the stronger condition that every entity-family correspondence is total on both sides, so
+the target tables are dense and contain exactly the mapped entities.
 
-**Not:** a compaction or a remapping, which relate two id spaces of *one* structure across an edit.
-A correspondence relates two different structures.
+**Not:** a compaction, because being unmatched does not mean that an entity was removed; not a
+remapping, because a correspondence may be partial and records a relation rather than performing
+transport.
 **In code:** `MoleculeCorrespondence`, `Correspondence<T>`, `GraphCorrespondence`, `induce`,
 `compose`, `reverse`, `left_of`, `right_of`, `is_total`, `to_remapping`.
 
@@ -954,6 +959,11 @@ entity persists in `K` and its label is resolved per side.
 
 A correspondence with values and a direction added is what lifts it to a span.
 
+The materialized union is lhs-anchored: preserved entities retain lhs ids and rhs-only entities are
+appended. Its lhs projection is structurally identical to the source lhs. Its rhs projection is the
+source rhs reindexed into that reaction frame and is compared under the induced total
+correspondence, not by structural equality when the source correspondence crosses entity order.
+
 **Not:** a correspondence, which is valueless pairing; not a reaction, which is the rule itself.
 **In code:** `ReactionSpanAst`, `lhs()`, `rhs()`.
 
@@ -1021,6 +1031,27 @@ entity to atoms, bonds, roles, or predicates.
 **Not:** a synonym for *incidence constraint*, merely because the derived value depends on a
 relation.
 **In code:** `RelationalConstraint`.
+
+### Remapping
+
+A **remapping** is a total old-to-new relabeling: every source id has an image and no entity is
+dropped. Totality is directional. A remapping may inject a source into a larger ambient id space,
+such as an lhs-anchored reaction union, so it is not necessarily surjective, bijective, or
+reversible.
+
+`umol_graph_core::Remapping` transports graph nodes, edges, and relation participants.
+`IdRemapping` transports typed references across all eight molecule entity families. When relation
+participant order changes during transport, the relation-set operation also permutes positional
+relation data so that values remain aligned with their participants.
+
+A correspondence that is total on the left can produce a remapping. Applying a remapping to a
+complete standalone molecule requires a bijection onto dense target tables, which corresponds to
+totality on both sides. In that case remapping is semantics-preserving alpha-renaming rather than a
+structural edit.
+
+**Not:** a correspondence, which may be partial and only records pairing; not a compaction, which
+expresses removal by leaving removed source ids without images.
+**In code:** `umol_graph_core::Remapping`, `IdRemapping`, `apply_remapping`, `to_remapping`.
 
 ### Reset
 

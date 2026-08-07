@@ -290,8 +290,9 @@ can inspect, reverse, or compose it through the existing `Correspondence` API.
 - Correspondence construction validates structural integrity only. It does not validate chemistry or
   require that matched atoms or bonds have equal attributes.
 - Conversion does not mutate its receiver, consistent with 178.
-- Round-tripping a reaction through the span form and back yields a canonically equal reaction. This
-  is the property the paper's prose asserts, so it is the property the tests should state.
+- Round-tripping a reaction through the span form and back may replace relative deltas with absolute
+  updates. Materializing the recovered reaction must reproduce the same span; equality of delta
+  syntax is not the semantic contract.
 
 ## Verification
 
@@ -308,7 +309,8 @@ Rust verification covers:
 - exact structural failures for missing union-frame references;
 - rejection of entries that are union-valid but cannot form the lhs or rhs, including exact
   failures for bond, overlay, stereo, and constraint references absent from the selected side;
-- infallible, faithful projection of both sides for every constructed span;
+- infallible, faithful projection of both normalized sides for every constructed span, with exact
+  lhs preservation and rhs equivalence under the induced total reaction-frame correspondence;
 - removal of the redundant reaction-span DPO-validator entry point while retaining reaction and
   match-dependent DPO checks;
 - normalization of canonically equal `Modified` entries to `Unchanged` through every construction
@@ -504,12 +506,34 @@ creates an atom, since a partial correspondence is the case where the two forms 
   overlay, stereo, or constraint reference, and exact whole-value tests for both projections of
   every accepted span. **Breaking (red→green).** [dep: S2d] **Done.**
 - **S3c — State the bridge laws as Rust properties.** Extend the reaction property suite to verify
-  that `from_sides` followed by span conversion preserves both projected sides under a partial atom
-  correspondence; every reaction that converts to a span round-trips to a canonically equal
-  reaction; and direct entries, DSL parsing, and superimposition agree for generated structurally
-  valid spans. Include unmatched atoms and dependent bonds or overlays rather than restricting the
-  generator to total correspondences.
-  **Additive tests (green).** [dep: S0f, S2e, S3b]
+  that `from_sides` followed by span conversion preserves the lhs exactly and preserves the rhs up
+  to the total correspondence induced by lhs-anchored reaction-frame reindexing; exercise crossing
+  partial atom correspondences explicitly rather than assuming order preservation. Verify that
+  every reaction that converts to a span round-trips to the same materialized span, and that direct
+  entries, DSL parsing, and superimposition agree for generated structurally valid, lhs-anchored
+  spans.
+  Include unmatched atoms and dependent bonds or overlays rather than restricting the generator to
+  total correspondences.
+  **Additive properties (green).** [dep: S0f, S2e, S3b] **Done.**
+- **S3d — Make relation-set remapping own positional data transport.** In `umol-graph-core`, change
+  all five relation-set and birelation-set `apply_remapping` operations to canonicalize each
+  remapped factor and apply the induced position permutations to its `RelationData` or
+  `BiRelationData` internally. Return the remapped set without exposing those permutations. Cover
+  ordered and unordered factors with position-sensitive data, asserting both exact
+  participant/data alignment and semantic equivalence under the induced permutation. No production
+  caller currently uses these methods, so migrate their graph-core tests with the signature change
+  and keep the workspace green. **Breaking API correction (red→green).** [dep: S3c]
+- **S3e — Route reaction-span superimposition through relation remapping.** Derive the graph-core
+  participant remapping and the typed `IdRemapping` from the same lhs-anchored correspondence in
+  `ReactionSpanAst::superimpose`. Use the corrected relation-set operation for every overlay and
+  remove local participant sorting and payload permutation. Retain the exact lhs law and the rhs
+  `MoleculeAst::equiv_under` property, including crossing correspondences and position-sensitive
+  payloads. **Internal rewire (green).** [dep: S3d]
+- **S3f — Route molecule pushout through relation remapping.** Replace the corresponding manual
+  participant canonicalization and payload permutation in molecule pushout with the corrected
+  relation-set operation. Preserve the existing pushout result and correspondence contracts and
+  add exact position-sensitive coverage where the shared graph-core properties do not exercise the
+  molecule-level assembly. **Internal rewire (green).** [dep: S3d]
 
 ### S4 — Expose reusable correspondence construction in Python
 

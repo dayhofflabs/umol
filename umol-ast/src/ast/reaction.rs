@@ -214,6 +214,14 @@ impl ReactionAst {
     /// inverse of reading a reaction's two sides back off its span. Returns `None` when the atom
     /// correspondence is not compatible with the supplied sides or their entity incidence does not
     /// induce unique partners.
+    ///
+    /// # Semantic properties
+    ///
+    /// The returned reaction retains `lhs` exactly. Its materialized rhs is the supplied `rhs`
+    /// reindexed into the lhs-anchored reaction frame: preserved entities retain lhs ids and
+    /// rhs-only entities are appended. The two right-hand molecules are equivalent under the
+    /// induced total correspondence, but need not be structurally equal when matched pairs cross
+    /// entity order.
     pub fn from_sides(
         lhs: MoleculeAst,
         rhs: MoleculeAst,
