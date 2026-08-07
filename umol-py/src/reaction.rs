@@ -500,7 +500,7 @@ impl ReactionDerivation {
 
     /// The atom-level correspondence, as a fresh snapshot.
     #[getter]
-    fn atom_map(&self) -> PyCorrespondence {
+    fn atom_correspondence(&self) -> PyCorrespondence {
         PyCorrespondence::from_rust(self.0.atom_correspondence())
     }
 
@@ -2899,7 +2899,7 @@ mod tests {
             PyMoleculeCorrespondence::from_rust(expected.comap().clone())
         );
         assert_eq!(
-            derivation.atom_map(),
+            derivation.atom_correspondence(),
             PyCorrespondence::from_rust(expected.atom_correspondence())
         );
 

@@ -1433,13 +1433,17 @@ def test_reactionast_apply():
         next(application)
 
     comap = first.comap
-    atom_map = first.atom_map
+    atom_correspondence = first.atom_correspondence
 
     assert first.comap == comap
     assert first.comap is not comap
-    assert first.atom_map == atom_map
-    assert first.atom_map is not atom_map
-    assert atom_map == comap.atoms
+    assert first.atom_correspondence == atom_correspondence
+    assert first.atom_correspondence is not atom_correspondence
+    assert atom_correspondence == comap.atoms
+    assert (
+        ReactionAst.from_sides(first.lhs, first.rhs, atom_correspondence)
+        == first.to_reaction()
+    )
     assert comap.atoms.matched_pairs == [(0, 0), (1, 1)]
     assert comap.atoms.left_count == 2
     assert comap.atoms.right_count == 2

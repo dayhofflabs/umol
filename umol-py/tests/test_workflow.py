@@ -333,9 +333,9 @@ def test_reaction_application_workflow():
     assert len(derivations) == 1
     assert derivations[0].lhs == host_snapshot
     assert derivations[0].rhs == MoleculeAst.from_smiles("CC")
-    assert derivations[0].atom_map.matched_pairs == [(0, 0), (1, 1)]
-    assert derivations[0].atom_map.left_count == 3
-    assert derivations[0].atom_map.right_count == 2
+    assert derivations[0].atom_correspondence.matched_pairs == [(0, 0), (1, 1)]
+    assert derivations[0].atom_correspondence.left_count == 3
+    assert derivations[0].atom_correspondence.right_count == 2
     assert derivations[0].comap.bonds.matched_pairs == [(0, 0)]
     assert reaction == reaction_snapshot
     assert host == host_snapshot

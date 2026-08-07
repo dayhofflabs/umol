@@ -572,7 +572,7 @@ creates an atom, since a partial correspondence is the case where the two forms 
 - **S4c — Align the Python derivation accessor.** Rename
   `ReactionDerivation.atom_map` to `atom_correspondence`, migrate Python tests and repr expectations,
   and verify that it returns the same constructible `Correspondence` value used by `from_sides`.
-  **Breaking (red→green).** [dep: S3a, S4a]
+  **Breaking (red→green).** [dep: S3a, S4a] **Done.**
 
 ### S5 — Expose `ReactionSpanAst` in Python
 
