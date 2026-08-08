@@ -98,7 +98,7 @@ fn matches(
         |qe: EdgeId, te: EdgeId| query.edge_labels[qe.index()] == target.edge_labels[te.index()];
     let mut found: Vec<Vec<usize>> = target
         .graph
-        .subgraph_isomorphisms(&query.graph, &mut node_match, &mut edge_match, alg)
+        .enumerate_subgraph_isomorphisms(&query.graph, &mut node_match, &mut edge_match, alg)
         .iter()
         .map(|c| c.matched_pairs().iter().map(|&(_, t)| t.index()).collect())
         .collect();
@@ -108,7 +108,7 @@ fn matches(
 
 proptest! {
     #[test]
-    fn test_subgraph_isomorphisms_cross_validation(
+    fn test_enumerate_subgraph_isomorphisms_cross_validation(
         query in labeled_graph(4, 2, 2),
         target in labeled_graph(6, 2, 2),
     ) {
@@ -124,7 +124,7 @@ proptest! {
     }
 
     #[test]
-    fn test_subgraph_isomorphisms_cross_validation_planted(
+    fn test_enumerate_subgraph_isomorphisms_cross_validation_planted(
         (target, nodes) in labeled_graph(6, 2, 2).prop_flat_map(|t| {
             let cap = t.graph.node_count().min(4);
             let n = t.graph.node_count();

@@ -3,8 +3,12 @@
 These are living, normative guides for repository development. They are updated in place when a
 rule changes and carry neither dates nor implementation status.
 
-- [Data type contracts](data-types.md) defines construction, conversion, validation,
-  transformation, provenance, fallibility, and public contract review.
+- [Algorithm execution contracts](algorithms.md) defines result-delivery forms, the
+  visitor/collector layering, uniform delivery across selector variants, the streamability
+  requirement, and the payload and emission-order contracts.
+- [Data type contracts](data-types.md) defines construction, conversion, validation tiers,
+  transformation, representation ownership and crate layering, provenance, fallibility, and public
+  contract review.
 - [Nomenclature](nomenclature.md) defines repository-specific terms and public naming conventions.
 - [Property tests](property-tests.md) defines executable-specification, evidence, documentation,
   and property-suite organization policy.

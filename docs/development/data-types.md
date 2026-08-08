@@ -3,9 +3,9 @@
 ## Purpose
 
 This is a normative developer guide for deciding which properties belong in constructors,
-converters, validators, and transformations. It applies primarily to aggregate model types such as
-`MoleculeAst`, `ReactionAst`, and `ReactionSpanAst`. Small value types may enforce stronger
-invariants when those invariants define the value represented by the type.
+converters, integrity checks, validators, and transformations. It applies primarily to aggregate
+model types such as `MoleculeAst`, `ReactionAst`, and `ReactionSpanAst`. Small value types may
+enforce stronger invariants when those invariants define the value represented by the type.
 
 The central rule is that an aggregate constructor establishes that its input can be represented; it
 does not establish every useful property of the resulting value. Semantic properties are lazy and
@@ -16,9 +16,11 @@ operation capable of checking it. A caller may request an explicit validator ear
 not, a later conversion or operation reports the failure when that invariant becomes a precondition
 of producing its result.
 
-This distinction is already applied to DPO validation: a dangling reaction is constructible but
-DPO-invalid until checked. This guide generalizes that decision and makes it available independently
-of the reaction implementation history.
+This distinction is already visible in the reaction representations: `ReactionAst` construction
+does not require its deltas to materialize an actual two-sided reaction span. An operation that
+requires such a span reports the failure at that boundary. Host-dependent DPO application
+conditions are a separate contextual concern. This guide generalizes that decision and makes it
+available independently of the reaction implementation history.
 
 ## Operation taxonomy
 
@@ -26,8 +28,128 @@ of the reaction implementation history.
 | --- | --- | --- |
 | Construction | Representation and referential integrity | Semantic validation, canonicalization, resolution, repair |
 | Conversion | Faithful representation in the target type | Semantic validation, normalization, silent loss or repair |
-| Validation | A named semantic property | Mutation or repair |
+| Integrity check | A tier-1 representation contract | Semantic validation, mutation, or repair |
+| Validation | A tier-2 invariant or tier-3 conformance property | Mutation or repair |
 | Transformation | An explicitly named change of representation or state | Pretend that the input was already valid or canonical |
+
+## Integrity checks and validation tiers
+
+The three tiers are ordered by the information needed to state the failed property. The numbering
+does not imply one API family: tier 1 is enforced by AST-owned integrity checks, while tiers 2 and 3
+are semantic validation in the chemistry layer.
+
+| tier | category | required context | consequence of failure |
+| --- | --- | --- | --- |
+| 1 | integrity | the stored representation alone | the representation is malformed and cannot satisfy the type's construction contract |
+| 2 | invariants | the representation and model-independent physical or mathematical rules | the representation is coherent but violates a universal invariant |
+| 3 | conformance | the representation and a selected chemistry model | the representation is coherent but is not accepted by that model |
+
+Boundary reference resolution is not a validation tier. Names, aliases, and other boundary-only
+references that are erased during conversion must resolve before the target AST can be assembled;
+failure belongs to that conversion.
+
+Tier 1 is representation integrity. It is an invariant of the data type and is established by every
+public constructor, conversion, and mutation that produces the type. It includes resolvable stored
+references, required collection shapes, participant-frame arity, and values lying in the
+kind-dependent domain needed to interpret their representation. A checked constructor returns an
+error for a violation; an asserted constructor may panic when its documented producer contract is
+broken.
+
+For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
+outside that kind's coset space are representation-integrity failures. The same applies to an
+explicit coset set or variable domain containing an out-of-range member and to an explicit frame
+permutation of the wrong degree. These values do not denote malformed-but-chemically-questionable
+stereo configurations; they fail to denote configurations at all. Whether a structurally valid
+configuration is stereogenic, physically realizable, or admitted by a selected stereo model belongs
+to the later tiers.
+
+Tier 2 contains universal conditions over an otherwise coherent representation, such as electron
+and angular-momentum consistency and agreement between independently meaningful stored constraints
+and their model-independent derived values. These states remain representable so that patterns,
+rules, diagnostics, and explicit validation can operate on them.
+Tier 3 contains choices such as valence, aromaticity, stereo, and connectivity models. A different
+model may legitimately produce a different conformance result for the same structurally valid AST.
+
+The composite order is integrity check, invariants validation, then conformance validation. A later
+tier may assume the earlier tiers only when its public contract says so or its producer establishes
+them. It must not turn an earlier-tier failure into a chemistry contradiction.
+
+### Invoking an integrity check
+
+Representation integrity has one authoritative implementation in the crate that owns the AST. It
+is exposed as `check_integrity` with a corresponding `*IntegrityError`; there is no `*Checker`
+object. An integrity check returns `Result<(), *IntegrityError>`, never `Solution`,
+`Underdetermined`, or `Contradictory`. It includes stored entity and constraint references, parallel
+collection shapes such as participant and electron-count lengths, and kind-dependent data needed to
+interpret a value such as stereo frame arity, coset domains, and permutation degree.
+
+Every path that publishes an aggregate AST uses that same implementation:
+
+1. A boundary parser or format converter first resolves names, aliases, and other boundary-only
+   references, assembles entries, then invokes the checked AST constructor. It translates the AST
+   construction error into its boundary-specific parse or conversion error without reproducing the
+   checks.
+2. A public constructor from independently supplied entries invokes the checked implementation and
+   returns its error. An asserted constructor invokes the same implementation and may panic only
+   when its documented producer contract is broken.
+3. A builder, editor, transaction, or multi-step transformation may hold incomplete intermediate
+   state. The integrity gate is at the operation that publishes a `MoleculeAst`, not at every
+   primitive mutation. A trusted internal producer may take the asserted route only when its
+   construction establishes the complete invariant.
+4. A public operation that requires interpretable representation, including aggregate
+   canonicalization, invokes the same check defensively if unchecked or compromised values can
+   reach it. It returns a typed integrity error and never turns the failure into a chemistry
+   contradiction or indexing panic.
+
+For `MoleculeAst`, this places the same gate behind direct checked entry construction, molecule-DSL
+raise, TableIR raise, Python construction from entries, and finalization of builders and editors.
+Reaction code uses it whenever it materializes a molecule side or projection; it does not grow a
+reaction-specific copy of molecule integrity. A route that already establishes the contract may use
+the asserted constructor, but the asserted and checked routes must share the implementation and the
+set of accepted values.
+
+Do not run a semantic validator at these boundaries. DSL and external-format raise may preserve an
+atom `#T` or bond `#C` assertion before a stereo entity has been perceived or resolved. Validating
+constraint satisfaction during construction would reject a representable input and silently impose
+an operation order. Source-format checks such as wedge, directional-bond, or chirality-frame
+interpretation likewise stay in the source-format layer; only the resulting AST's representation is
+checked by the shared AST gate.
+
+Canonicalization is a transformation of a representation-integrity-valid value. It does not repair,
+preserve as opaque data, or select a canonical form for malformed representation state. If an
+unchecked or compromised value reaches a public canonicalization operation, the operation reports a
+typed integrity error and does not panic. Canonicalization otherwise preserves tier-2 and tier-3
+invalid states; an intrinsic lattice `Contradiction` remains distinct from malformed storage.
+
+## Representation ownership and crate layering
+
+An operation belongs with the crate that owns the representation when its correctness requires
+coordinated access to that representation's complete internal shape. For `MoleculeAst` and the
+reaction ASTs, this includes operations that must keep all entity families, participant frames,
+typed ids, and references inside constraints synchronized while rebuilding or remapping the value.
+Such operations belong in `umol-ast`; moving them to `umol-graph` because a higher-level model
+currently contains one of their inputs would invite the higher layer to reconstruct AST internals.
+
+The layers divide responsibility as follows:
+
+- `umol-graph-core` supplies chemistry-independent graph and relation primitives and takes explicit
+  algorithm selectors;
+- `umol-ast` owns AST construction, complete incidence encoding, frame and id remapping, and
+  transformations that must preserve the whole representation; and
+- `umol-graph` supplies chemistry models and model-aware operations over the public AST API. It may
+  construct a public AST operation context from a model and config, but it must not reach into AST
+  storage or maintain a parallel representation of the same operation.
+
+When an AST-owned operation needs only one semantic consequence of a higher-level model, expose that
+requirement directly in the AST operation context. Do not move the operation upward or pass the
+entire higher-level model merely because that model is the current source of the value. Conversely,
+do not duplicate a reduced model type when the operation needs only a primitive parameter.
+
+Aggregate canonicalization is the reference case. `umol-graph-core` supplies canonical labels and
+the automorphism algorithm selector. `umol-ast` owns typed incidence, stereo-frame actions,
+complete remapping, constraint transport, and canonical representative construction.
+`umol-graph` may project `StereoModel::para_stereo` and its operation config into the public AST
+context, but canonicalization itself remains in `umol-ast`.
 
 ### Construction
 
@@ -43,7 +165,8 @@ type. For aggregate ASTs, these are representation invariants:
 Construction does not establish model-independent semantics merely because they can be checked
 without a chemistry model. In particular, construction does not imply:
 
-- DPO dangling-freedom;
+- that a reaction's deltas can materialize an actual two-sided span;
+- host-dependent application conditions such as the DPO gluing conditions;
 - chemical validity or conformance to a model;
 - agreement between independently meaningful entities and constraints;
 - groundness;
@@ -75,21 +198,168 @@ The error belongs to the failed boundary:
 - failure of an optional semantic precondition belongs to the operation requesting that property,
   not to the target constructor.
 
+### Raw representation and semantic normal form
+
+Derived structural equality may observe storage details that are deliberately absent from the
+semantic model. Their presence in a raw AST does not require every operation or intermediate
+representation to preserve them. In particular, do not introduce ordering or multiset semantics
+solely to make an exact structural roundtrip retain redundant input.
+
+Molecule-level `Constraints` is the reference case. Its raw `Vec` representation permits ordering
+and duplicate entries, and `==` observes both. Its semantic value is an implicit conjunction:
+conjunct order is irrelevant and repeated equal constraints are idempotent. Normalization
+therefore normalizes the individual constraints, flattens conjunctions, sorts them, and removes
+duplicates. Reaction deltas, reaction spans, matching, and aggregate canonicalization must use this
+set-like semantic value; they must not treat duplicate occurrences as distinct chemical assertions.
+Context-free constraint-delta normalization deduplicates repeated additions or removals and cancels
+an equal addition/removal pair. Materializing the normalized delta against an LHS then enforces
+continuity: adding an already-present canonical constraint or removing an absent one is a
+`Contradiction`, not an idempotent no-op. This matches old/new continuity for entity changes and
+keeps addition and removal as meaningful inverses.
+
+This does not license silent normalization in an operation that promises faithful representation
+conversion. Instead, classify the operation accurately:
+
+- a boundary parse/render roundtrip or a conversion documented as representation-preserving retains
+  every representable raw distinction;
+- an operation that derives a semantic representation or delta normal form may discard redundant
+  ordering and multiplicity, but must document the normal form and state its roundtrip under the
+  relevant semantic equality rather than raw `==`; and
+- a transaction whose contract is exact rollback may retain positions and occurrences in its undo
+  data without making those details part of the semantic constraint model.
+
+When exact raw preservation conflicts with a smaller, closed, or algebraically coherent semantic
+API, preserve the semantic API and weaken the raw roundtrip to the documented canonical relation.
+Do not add variants, counters, or special cases merely to preserve redundant syntax or collection
+layout.
+
 ### Validation
 
-Validation checks one named property without mutation. It may traverse the entire value and may be
-more expensive than construction. That cost is appropriate because the caller explicitly requested
-the property.
+Validation checks one named tier-2 invariant or tier-3 conformance property without mutation. The
+validator concept belongs in `umol-graph`, where `*InvariantsValidator` names model-independent
+validation and `*ConformanceValidator` names validation under a selected chemistry model. Both
+return `Result<Solution<_, _>, _>` because a coherent non-ground representation may leave a semantic
+question underdetermined.
 
-Validation remains separate even when a property is model-independent. DPO dangling-freedom is a
-semantic invariant of a rule rather than an invariant required to store the rule. Canonicality is
-similarly useful but not required for representation.
+Validation remains separate even when a property is model-independent. Whether reaction deltas can
+materialize a two-sided span is a precondition of operations that require that representation, not
+a DPO condition. DPO dangling and identification conditions depend on a host and match and belong
+to reaction application. Canonicality is similarly useful but not required for representation.
+
+Do not define `*Validator` types in `umol-ast`. A former AST validator is either a tier-1 integrity
+check that stays with its owning AST type and returns `Result`, or a tier-2/tier-3 validator that
+belongs in `umol-graph`. The composite graph `Validator` may group invariants and conformance passes,
+but it does not expose `validate_integrity`: successfully constructed AST inputs already satisfy
+their integrity contract.
 
 ### Transformation
 
 Canonicalization, resolution, repair, stripping, cascading removal, and closure under a rewriting
 semantics are transformations. Their names and return types must expose the change. A constructor or
 ordinary conversion must not perform one as an incidental implementation step.
+
+## Identity and constraints
+
+Derived `==` compares the stored AST structure exactly, including constraints, ids, ordering, and
+non-normal value encodings. `equiv` compares normalized AST values in the current frame;
+`equiv_under` performs the same comparison after an explicit entity or participant-frame mapping.
+Aggregate `canonical_eq` compares complete canonical AST forms after selecting the canonical frame.
+All three semantic comparisons include constraints. This distinction matters for patterns, where
+constraints are not redundant with the structural description.
+
+Entity and molecular structural identity is established from inherent fields and structural
+incidence. Constraints restrict the states admitted by an entity or molecule but do not establish
+that structural identity. They therefore do not distinguish the initial structural automorphism
+orbits. Aggregate canonicalization may use normalized constraints after structural labeling to
+select among the remaining structurally equivalent frames. Remapping transports every reference
+they contain. This post-hoc participation gives the complete AST assertion a unique canonical form
+without turning constraints into structural identity features.
+
+## Aggregate canonicalization
+
+> **TODO (2026-08-07):** This section records the approved target contract from discussion doc 186.
+> The current code still names fixed-frame normalization `Canonicalize` and does not yet provide the
+> context-bearing aggregate trait. Remove this marker when doc 186 is implemented.
+
+Aggregate canonicalization selects an entity-id and participant frame for a complete indexed AST.
+It is distinct from `Normalize`, which puts values into normal form without changing their id or
+participant frame. `Normalize` is context-free and remains the supertrait of `Lattice`;
+`Canonicalize` takes an explicit canonicalization context and is implemented by complete indexed
+aggregates rather than their leaf values. Do not add a context parameter to `Normalize` merely to
+share a trait between the two operations.
+
+The aggregate operation preserves the represented molecule: it remaps every entity and reference,
+transports position-sensitive relation data, carries stereo cosets through stereo-frame
+permutations, and normalizes every carried value in the selected frame. It does not perceive,
+resolve, strip, repair, or validate chemistry.
+
+The equality operations form three levels:
+
+- `==` compares the exact stored representation;
+- `equiv` compares normalized values in the current frame, while `equiv_under` applies an explicitly
+  supplied correspondence or participant order before that comparison; and
+- `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
+  frame rather than receiving it from the caller.
+
+For inputs in the aggregate operation domain, `canonical_eq` holds exactly when canonicalization
+produces the same complete AST form. Equivalently, an admissible remapping exists under which
+`equiv_under` holds. `equiv_under` is therefore the explicit-map member of the `equiv` family, not a
+fourth equality relation.
+
+The context-bearing trait has the semantic shape
+
+```rust
+pub trait Canonicalize: Sized {
+    type Error;
+
+    fn canonicalize(
+        self,
+        context: &CanonicalizationContext,
+    ) -> Result<Self, Self::Error>;
+
+    fn canonical_eq(
+        &self,
+        other: &Self,
+        context: &CanonicalizationContext,
+    ) -> Result<bool, Self::Error>;
+}
+```
+
+Use one concrete context for `MoleculeAst`, `ReactionSpanAst`, and `ReactionAst` unless an
+implementation establishes a real need for distinct context types. The comparison is fallible for
+the same domain reasons as construction of either canonical form.
+
+Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
+para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
+partition. With it enabled, feed each stereo-sensitive partition back into refinement until the
+partition stabilizes. Do not expose an iteration cutoff that can change the canonical form.
+
+A parameterized operation may select a frame using only a coarser structural layer while returning
+the complete original molecule in that frame. Its guarantee is deliberately limited:
+
+- the selected structural layer is in canonical form;
+- the complete result is a remapping of the input and retains excluded features unchanged; and
+- the ordering of excluded features within an automorphism class of the selected layer is not
+  determined.
+
+An excluded feature must not break such a tie. Complete outputs from differently numbered inputs
+may therefore differ by an automorphism of the selected layer. Complete `canonical_eq` does not use
+this coarser operation; it compares canonical representatives formed from every available entity
+kind and constraint.
+
+The typed comparison schema is a compatibility contract, but that contract must admit additive
+entity-model extensions. Existing entity-kind blocks, field components, constraint variants, and
+their order have explicit stable schema positions. New entity kinds and constraint variants occupy
+append-only extension positions and do not renumber or reinterpret existing positions. Schema
+positions must not be inferred from Rust enum declaration order.
+
+Adding an extension must leave the canonical numbering and canonical form of every molecule that
+contains none of the new entity kinds or constraint variants unchanged. Molecules that use the new
+extension acquire a coherent order that is frozen from the version introducing the extension
+onward. No comparison exists with versions that could not represent that extension. More generally,
+if one schema is an append-only extension of another, every molecule expressible in the earlier
+schema has the same canonical representative under both. This cumulative promise concerns the
+canonical AST, not an internal comparison-key encoding.
 
 ## Provenance and contextual validity
 
@@ -193,7 +463,8 @@ from that action rather than defining a second remapping protocol:
 - when `is_permutation_invariant` is true, the frame change is observationally irrelevant and
   `equiv_under` reduces to `equiv`.
 
-This is not merely an alias for canonical equality. It records the dominant semantic case: most
+This frame action is part of normalized equivalence rather than a separate comparison relation. It
+records the dominant semantic case: most
 molecular relation payloads do not assign values to participant positions. Dative-bond order,
 noncovalent-bond kind, stereo configuration carried by an ordered ligand factor, and their
 constraints are position-independent. In the current model, the only position-sensitive payload
@@ -208,7 +479,7 @@ separate marker-trait hierarchy or a default no-op action would encode the commo
 boilerplate but weaker review pressure and more public machinery.
 
 `Equiv` and `BiEquiv` therefore remain derived, blanket-implemented operations. Payload types do not
-override their comparison independently of `on_permutation` and canonical equality. Relation-set
+override their comparison independently of `on_permutation` and normalized equality. Relation-set
 remapping applies the position action to stored data, while read-only comparisons and matching may
 apply it to a temporary value before using their own comparison relation. Graph core does not need
 a second payload-equivalence API.
@@ -237,7 +508,7 @@ returns `None` when these structural conditions do not hold.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
 stereo frames, entity ASTs, and every typed reference in constraints. It does not validate
-chemistry, resolve values, canonicalize attributes, repair references, compact tables, or remove
+chemistry, resolve values, normalize attributes, repair references, compact tables, or remove
 entities. Identity remapping is exact; applying a remapping and its inverse recovers the original;
 and sequential remapping agrees with correspondence composition.
 
@@ -285,23 +556,26 @@ irrelevant permutation. `ReactionSpanAst::correspondence` relates the normalized
 does not retain a source correspondence whose rhs frame differs.
 
 The two reaction representations deliberately have different construction boundaries.
-`ReactionAst` is a permissive lhs-plus-deltas carrier and may contain a DPO-invalid rule.
-`ReactionAst::to_reaction_span` is therefore fallible: it rejects deltas whose projected product
-cannot form the second molecule of an actual span. The conversion retains its existing
-`Contradiction` surface pending the repository-wide error review. Conversely, every constructed
-`ReactionSpanAst` has a valid lhs, so `ReactionSpanAst::to_reaction` is infallible.
+`ReactionAst` is a permissive lhs-plus-deltas carrier and may contain deltas that cannot materialize
+an actual two-sided span. `ReactionAst::to_reaction_span` is therefore fallible: it rejects deltas
+whose projected product cannot form the second molecule of a span. The conversion retains its
+existing `Contradiction` surface pending the repository-wide error review. Conversely, every
+constructed `ReactionSpanAst` has a valid lhs and rhs, so `ReactionSpanAst::to_reaction` is
+infallible.
 
-### DPO validation
+### Span integrity and DPO application
 
-The current `DpoValidator::validate_reaction_span` check becomes redundant. A removed atom with a
-surviving bond or overlay would already violate the right-side construction invariant. The
-constructor's symmetric check is stronger: it also rejects an added atom required by a surviving
-left-side entity and covers stereo and constraint references.
+There is no separate DPO-validity predicate on a reaction span. A removed atom with a surviving bond
+or overlay would violate the right-side construction invariant: the purported `R` is not a molecule
+and the value is not a span. The constructor's symmetric check also rejects an added atom required
+by a surviving left-side entity and covers stereo and constraint references.
 
 Remove the reaction-span validator entry point rather than retaining a validator that can only
-confirm a type invariant. `DpoValidator::validate_reaction` remains useful for permissive
-`ReactionAst` values, and match-dependent dangling checks remain part of reaction application: they
-concern the supplied host and match, not the reaction span alone.
+confirm a type invariant. A check over permissive `ReactionAst` values that predicts whether their
+deltas can materialize a span must be named and documented as reaction consistency or
+materializability rather than DPO validation. The public name remains to be settled. DPO dangling
+and identification conditions remain part of reaction application because they concern the
+supplied host and match, not the reaction or reaction span alone.
 
 This keeps fallibility at the representation boundary. `ReactionAst::reverse`, reaction
 composition, and reaction fingerprints retain their operation-specific result surfaces; an

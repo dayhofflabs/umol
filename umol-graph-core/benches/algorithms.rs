@@ -749,7 +749,7 @@ fn subgraph_isomorphism(c: &mut Criterion) {
             for algorithm in SUBISO {
                 group.bench_function(format!("{tname}/{qname}/{}", subiso_name(algorithm)), |b| {
                     b.iter(|| {
-                        target.subgraph_isomorphisms(
+                        target.enumerate_subgraph_isomorphisms(
                             query,
                             &mut |_: NodeId, _: NodeId| true,
                             &mut |qe: EdgeId, he: EdgeId| {

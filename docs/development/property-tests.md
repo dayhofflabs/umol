@@ -367,7 +367,7 @@ The delta properties are related but distinct:
 - deriving field and constraint deltas and applying them reaches the target;
 - diffing an entity with itself emits no deltas;
 - delta inversion is an involution;
-- canonicalizing a consistent `Deltas` value is idempotent;
+- normalizing a consistent `Deltas` value is idempotent;
 - edit application followed by rollback restores the original molecule;
 - appending transaction batches preserves the sequential application and
   rollback semantics.
@@ -379,17 +379,22 @@ operational domains interchangeable.
 
 ### Molecule comparison
 
+> **TODO (2026-08-07):** These are the approved target relations from discussion doc 186. The
+> current code still calls fixed-frame normalization `Canonicalize` and its equality
+> `canonical_eq`. Remove this marker and update the cited property modules when doc 186 is
+> implemented.
+
 The comparison suite already records distinct relations:
 
 - `==` compares stored representation;
-- `equiv` compares molecule semantics in the current ID and participant frame;
+- `equiv` compares normalized semantics in the current ID and participant frame;
 - `equiv_under` compares after an explicit correspondence;
-- entity `canonical_eq` compares canonical entity semantics.
+- aggregate `canonical_eq` compares complete canonical forms after selecting the frame.
 
 The properties exercise:
 
 - reflexivity and symmetry of `equiv`;
-- agreement of `equiv` with `==` on canonical ASTs;
+- agreement of `equiv` with `==` on normalized ASTs;
 - reduction of `equiv_under` to `equiv` under the identity correspondence;
 - symmetry under reversing a correspondence;
 - composition of correspondence-aware equivalence on generated atom
@@ -397,8 +402,8 @@ The properties exercise:
 
 This example shows why the comparison relation must appear in every public
 property. Writing only “the result equals the input” is ambiguous for an AST
-with representation equality, canonical equality, same-frame equivalence, and
-correspondence-aware equivalence.
+with representation equality, normalized equivalence in a fixed or explicitly
+mapped frame, and aggregate canonical equality.
 
 It also exposes a useful documentation question: if `equiv` is publicly
 presented as an equivalence relation, transitivity is part of that claim. The

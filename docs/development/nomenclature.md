@@ -11,6 +11,11 @@ Prefer the established domain noun over a newly generalized synonym. Public name
 artificially parallel when the underlying constraints, entities, or operations have different names.
 A shared name is useful only when the semantics and available operations are genuinely shared.
 
+Use complete words in public identifiers and associated-type names; do not introduce clipped
+abbreviations. In particular, a conversion trait's associated type is `Context`, not `Ctx`.
+Established repository terms recorded by this guide, including `Ast`, `Dsl`, `Id`, and `Config`, do
+not license new abbreviations by analogy.
+
 ## How to use this guide
 
 - **Before naming something new**, check *Retired and discouraged* first. It is indexed by the wrong
@@ -35,9 +40,11 @@ model-independent invariants, and model-dependent conformance without mutation. 
 aromatization, and charge delocalization are transformations, not resolver behaviour, because they
 alter determined representation.
 
-**Validation tiers.** *Integrity* (well-formed storage and shape, no model), *invariants*
-(model-independent physics), *conformance* (accepted by a selected chemistry model). Distinct tiers,
-run in that order.
+**Integrity and validation tiers.** *Integrity* is the AST-owned construction contract and is
+enforced by an integrity check. *Invariants* are model-independent semantic properties and
+*conformance* is acceptance by a selected chemistry model; both are checked by validators in
+`umol-graph`. Run integrity, invariants, and conformance in that order, but do not give them one API
+family merely because the tiers are ordered.
 
 **Derivation and policy.** *Perception* produces a policy-free *derivation*, which may carry
 *inconsistencies*. A *policy* maps a classified inconsistency to a *recovery action*. Policies belong
@@ -70,6 +77,8 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 | `*Model` | semantic choices deciding chemical acceptance | 13 | graph |
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
 | `*Kind` | unit-variant enum discriminating a family | 11 | ast, geometric, graph-core, msym, py |
+| `*Features` | bitflag set of independently combinable switches | 1 | ast |
+| `*Level` | closed enum selecting one of several nested named layers | 0 (planned) | ast |
 | `*Constraint` | one assertable predicate over an entity | 6 | ast, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | ast, py — as `*ConstraintsAst`, which is correct: the container is itself lattice-shaped |
 | `*Key` | identifies a constraint slot within a container | 13 | ast, perm, py |
@@ -82,7 +91,7 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 | `*Contradiction` | a semantic rejection, the `Solution::Contradictory` payload | 18 | ast, graph |
 | `*Mismatch` | two independently meaningful things that disagree | 3 | graph |
 | `*Error` | operational or setup failure, the `Err` side | 58 | all |
-| `*Validator` | performs one validation tier or one check within it | 12 | ast, graph |
+| `*Validator` | validates a tier-2 invariant or tier-3 conformance property | 12 | graph after the integrity-check migration |
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
 | `*Ast` / `*Dsl` | internal representation / boundary surface | 77 / 38 | ast — **under review** |
 
@@ -200,6 +209,12 @@ spelling.
 | `reset` for removing or replacing an entity | `remove`, `replace` | reset clears a constraint to its undetermined form |
 | `config` for semantic acceptance choices | `model` | config is operational |
 | `policy` for chemical acceptance | `model` | policy acts after acceptance is established |
+| `validate_integrity` | `check_integrity` | tier-1 integrity is an AST construction check, not semantic validation |
+| `*Validator` in `umol-ast` | `check_integrity` for tier 1, or move the validator to `umol-graph` for tiers 2 and 3 | validators are chemistry-layer semantic operations |
+| `*Selection` for nested structural layers | `*Level` | selection does not state that the alternatives form an ordered, nested hierarchy |
+| `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
+| `iterative` for visitor delivery | visitor delivery, `visit_*` | the implementation may remain recursive while visiting results |
+| a bare plural method name for an eager collection-returning operation | `enumerate_*` | delivery must be legible at the call site; the bare plural is reserved for single-value operations |
 
 ## Open issues
 
@@ -210,7 +225,6 @@ text changes at the same time.
 | # | Issue | Where | Kind |
 | --- | --- | --- | --- |
 | 1 | Transformer naming has three patterns in use — agent noun (`Kekulizer`, `Aromatizer`), verb phrase (`DelocalizeCharge`), target phrase (`ToExplicitHydrogens`). Needs deciding before the planned members land. | *Transformer naming* | decision |
-| 2 | `IncidenceNodeSelection::OVERLAYS` covers four of the six overlay kinds, with `STEREO` separate. The same word means four kinds there and six everywhere else. Either the flag or the term should change. | *Overlay* | scope conflict |
 | 3 | One patch law, two spellings: `apply`/`diff` on `EntityPatch`, `update`/`difference_to` on the entity update surface. | *Patch algebra* | naming split |
 | 4 | `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`; the `CosetSpace` doc on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so line 25 is wrong. | *Coset* | doc error |
 | 5 | `*Ast` and `*Dsl` are under review; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on naming decision |
@@ -242,18 +256,24 @@ every edit succeeds.
 
 ### Canonical and canonicalize
 
-**Canonicalize** folds an AST value into its canonical form; the operation is idempotent and returns
-`Err(Contradiction)` when the value is unsatisfiable. **`Canonical<T>`** is the wrapper carrying the
-guarantee that the fold has already run.
+> **TODO (2026-08-07):** The definitions below are the approved target semantics from discussion
+> doc 186. The current code still uses `Canonicalize` and `canonical_eq` for fixed-frame AST
+> normalization. Remove this marker when the trait rename and aggregate canonicalization API are
+> implemented.
 
-Equality is **lazy** by design: `==`, `Hash` and `Ord` on an AST value stay derived-structural — same
-tree — while semantic equality is `canonical_eq`, which compares canonical forms. `Canonical<T>`
-inverts this: because it canonicalizes once on construction, its derived structural equality *is*
-semantic, so it can key a map for semantic deduplication.
+**Canonicalize** selects a canonical entity-id and participant frame for a complete indexed AST
+modulo the admissible remappings. It uses canonical labeling, transports every entity and reference
+through the selected frame, applies the corresponding participant actions, and normalizes the
+carried AST values. The operation takes an explicit canonicalization context.
 
-**Not:** *canonical labeling*, which is the graph relabeling that makes isomorphic structures
-comparable. Two unrelated canonical forms, one over attribute values and one over graphs.
-**In code:** `Canonicalize`, `canonicalize`, `canonical`, `canonical_eq`, `Canonical<T>`.
+**Canonical equality** compares the complete canonical forms produced under the same context. It is
+the search-based counterpart of `equiv_under`: the caller does not supply a correspondence because
+canonicalization selects the frame.
+
+**Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
+labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
+whereas aggregate canonicalization constructs the complete remapped AST.
+**In code:** `Canonicalize`, `canonicalize`, `canonical_eq`.
 
 ### Class
 
@@ -322,16 +342,29 @@ which umol does not represent.
 validators may reuse policy-free derivations, but they convert every determined inconsistency into a
 contradiction.
 
-**Not:** integrity, invariant. All three are validation tiers and are not interchangeable.
+**Not:** integrity or an invariant. Conformance is tier-3 semantic validation in `umol-graph`.
 **In code:** `validate_conformance`, `*ConformanceValidator`.
+
+### Constitution
+
+**Constitution** is the structural level containing topology plus every non-stereo overlay: dative
+bonds, aromatic systems, multicenter bonds, and noncovalent bonds. It distinguishes structural
+composition and connectivity without adding stereo configuration.
+
+**Not:** all overlays, because stereo atoms and stereo bonds belong only to the full level. Not
+constraints, which do not contribute to structural identity.
+**In code:** the `Constitution` variant of `IncidenceLevel` and `CanonicalizationLevel` (planned).
 
 ### Constraint
 
 A **constraint** is a possibly non-ground assertion represented by the constraint AST types. This is
-the public repository term.
+the public repository term. A constraint restricts the states admitted by an entity or molecule but
+does not contribute to its identity. It therefore does not distinguish structural automorphism
+orbits or select a canonical entity frame. It remains part of the complete AST assertion and is
+transported and, where required, compared after a structural correspondence has been established.
 
 **Not:** `projection`, `predicate`, or `representation`, when naming the stored object or an
-operation over it.
+operation over it. Not an inherent field, which does contribute to identity.
 **In code:** `AtomConstraintAst`, `AtomConstraintsAst`, and the per-entity equivalents.
 
 ### Contradiction
@@ -538,23 +571,32 @@ includes ring constraints.
 
 ### Equality ladder
 
-Four distinct equality relations exist on AST values and molecules. They are not interchangeable and
-the choice is almost never obvious from context.
+Three levels of equality exist on AST values and molecules. `equiv_under` is the mapped form of
+`equiv`, not a fourth relation.
 
-- **`==`** — derived structural equality. Same tree, same ids, same order. Deliberately *not*
-  semantic, so it stays cheap on the hot path.
-- **`canonical_eq`** — equality of canonical forms. Semantic on the value axis, blind to framing.
-- **`equiv`** — framed equivalence: the value axis composed with the position axis, in the receiver's
-  current id and participant frame.
-- **`equiv_under`** — the same, after reindexing the receiver into the other's frame via an explicit
-  correspondence or participant order. The work is skipped when the payload is permutation-invariant.
+- **`==`** — derived structural equality of the stored AST. Same tree, constraints, ids, and order.
+  Deliberately *not* chemical identity, so it stays cheap on the hot path.
+- **`equiv`** — equality of normalized AST values in the current id and participant frame.
+  **`equiv_under`** is the same after reindexing the receiver into the other's frame via an explicit
+  correspondence or participant order. The work is skipped when the payload is
+  permutation-invariant.
+- **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
+  implementation selects the canonical frame rather than receiving one from the caller.
 
-`BiEquiv` is the two-factor analogue for birelation payloads, reindexing per factor before comparing.
+For inputs in the canonicalization domain, `canonical_eq` holds exactly when an admissible remapping
+exists under which `equiv_under` holds. The two-factor frame-aware operation for birelation payloads
+reindexes each factor before comparing.
+
+Structural canonical labeling initially establishes automorphism orbits from inherent fields and
+incidence without constraints. Complete aggregate canonicalization then uses normalized
+constraints to select among structurally equivalent frames. This distinction is especially
+important for patterns: constraints do not define the underlying structural orbits, but they remain
+meaningful parts of the canonical AST assertion.
 
 **Not:** each other. Reaching for `==` when `equiv` is meant is the common error, because `==` exists
 on everything and silently answers a different question.
-**In code:** `PartialEq`, `Canonicalize::canonical_eq`, `Equiv::equiv`, `Equiv::equiv_under`,
-`BiEquiv`.
+**In code:** `PartialEq`, `Equiv::equiv`, the frame-aware `equiv_under` traits, and
+`Canonicalize::canonical_eq`.
 
 ### Error
 
@@ -575,6 +617,28 @@ failure means that a structurally readable entity is not realizable under them.
 **Not:** error (operational, not semantic); contradiction (a failure is not yet one — a resolver may
 be configured to retain or remove the affected input).
 **In code:** —
+
+### Features
+
+A **features** type is a bitflag set of independently combinable switches. Callers may select any
+meaningful subset; the values do not represent steps in a single hierarchy.
+
+Use a domain-qualified name when the switches describe one operation's inputs. The molecule-coloring
+flags are therefore `MoleculeColoringFeatures`, not `ConstitutionFeatures`: the set also contains a
+stereo-kind switch and is not limited to constitution.
+
+**Not:** *level*, whose alternatives are mutually exclusive nested layers.
+**In code:** `MoleculeColoringFeatures` (planned rename of `ConstitutionFeatures`).
+
+### Full
+
+**Full** is the structural level containing constitution plus stereo atoms and stereo bonds. It is
+the complete structural entity model, but it still excludes constraints because constraints do not
+contribute to structural identity. Para-stereo changes refinement behavior within this level rather
+than defining another level.
+
+**Not:** a claim that every constraint, model choice, or future operation participates.
+**In code:** the `Full` variant of `IncidenceLevel` and `CanonicalizationLevel` (planned).
 
 ### Ground term
 
@@ -639,7 +703,7 @@ Boolean, a count, or a weighted sum.
 
 **Not:** *relational constraint* (which has a narrower existing meaning); *projection*; a synonym for
 the whole entity-constraint category.
-**In code:** `IncidenceConstraintValidator`, `IncidenceConstraintContradiction`; the established
+**In code:** the incidence-constraint component of tier-2 invariants validation; the established
 `incident*` methods expose the same relationship.
 
 ### Incidence graph
@@ -654,9 +718,10 @@ bonds; the only new information a stereo node carries is its site and, at colour
 Bond direction is not encoded structurally either: the colouring separates the endpoints of a
 directed bond, so a dative donor and acceptor are never automorphism-equivalent.
 
-`IncidenceNodeSelection` names three levels, which land on the chemist's own hierarchy:
-`topological()` is atoms and localized bonds, `constitution()` adds the overlays, `full()` adds the
-stereo elements. That makes "the same molecule" a parameter rather than three code paths.
+`IncidenceLevel` names three levels, which land on the chemist's own hierarchy: `Topology` is atoms
+and localized bonds, `Constitution` adds dative bonds, aromatic systems, multicenter bonds, and
+noncovalent bonds, and `Full` adds stereo atoms and stereo bonds. That makes "the same molecule" a
+parameter rather than three code paths.
 
 **Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
 bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
@@ -665,11 +730,10 @@ correspondence — is the default, and `Incidence` is chosen when the connectivi
 carried by an overlay rather than by bonds. Both return the same matches; the difference is pruning,
 not semantics.
 
-See *Overlay* for the open scope conflict in `IncidenceNodeSelection::OVERLAYS`.
-
 **Not:** the molecular topology, which is the atom-and-bond graph itself. The incidence graph is a
 construction over a structure, not a representation of one.
-**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceNodeSelection`,
+**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceLevel` (planned replacement for
+`IncidenceNodeSelection`),
 `SubstructureMatchAlgorithm::Incidence`.
 
 ### Inconsistency
@@ -688,24 +752,41 @@ site and entity involved.
 An **inherent field** identifies an entity and is always present on it, though its value may be
 undetermined.
 
-**Not:** constraint, which is assertable without contributing to identity and may be absent.
+**Not:** constraint, which restricts admitted states without contributing to identity and may be
+absent.
 **In code:** the non-constraint fields of each `*Ast` entity type.
 
 ### Integrity
 
-**Integrity** concerns well-formed storage, entity shape, references, and model-independent
-constraint consistency.
+**Integrity** is the tier-1 construction contract of an AST representation: well-formed storage,
+resolvable stored references, required parallel-collection shapes, and kind-dependent values needed
+to interpret the representation. Constraint satisfaction and other model-independent semantic
+conditions are invariants rather than integrity.
 
-**Not:** invariant, conformance. All three are validation tiers and are not interchangeable.
-**In code:** `validate_integrity`, `EntityStructureValidator`, `ConstraintValidator`.
+**Not:** an invariant or conformance. Integrity is established by construction and checked in
+`umol-ast`; it is not a `Solution` verdict.
+**In code:** `check_integrity`, `*IntegrityError`.
+
+### Integrity check
+
+An **integrity check** is the AST-owned, error-valued operation that enforces tier 1. It returns
+`Result<(), *IntegrityError>` and is shared by checked constructors, boundary conversions, and every
+path that publishes the AST type. Trusted asserted constructors use the same implementation and
+change only the failure reporting. There is no `*Checker` object.
+
+**Not:** a validator. Validators return semantic `Solution` values and belong in `umol-graph`.
+**In code:** `MoleculeAst::check_integrity`, `ReactionAst::check_integrity`,
+`ReactionSpanAst::check_integrity`; the corresponding `*IntegrityError` types.
 
 ### Invariant
 
 An **invariant** is a model-independent physical or mathematical condition over an otherwise
-well-formed structure.
+well-formed structure. Agreement between an independently meaningful stored constraint and its
+model-independent derived value is also an invariant.
 
-**Not:** integrity, conformance. All three are validation tiers and are not interchangeable.
-**In code:** `validate_invariants`, `ValenceInvariantsValidator`, `SpinInvariantsValidator`.
+**Not:** integrity or conformance. Invariants are tier-2 semantic validation in `umol-graph`.
+**In code:** `validate_invariants`, `*InvariantsValidator`, including
+`ValenceInvariantsValidator` and `SpinInvariantsValidator`.
 
 ### Lattice
 
@@ -732,6 +813,21 @@ A new leaf type should follow the same shape, and should implement `AsLit` so th
 **Not:** an entity type, which is a record of leaves plus a constraint store.
 **In code:** `BooleanAst`, `ValueAst`, `ElectronCountsAst`, `UnpairedElectronsAst`, `ElementAst`,
 `IsotopeMassAst`.
+
+### Level
+
+A **level** is one member of a closed enum of nested named layers. Selecting a level includes every
+lower layer; the alternatives cannot be combined independently.
+
+The structural levels are `Topology`, `Constitution`, and `Full`. `Topology` contains atoms and
+localized bonds. `Constitution` adds dative bonds, aromatic systems, multicenter bonds, and
+noncovalent bonds. `Full` adds stereo atoms and stereo bonds. Constraints are not structural levels,
+and para-stereo is context-dependent behavior within `Full`, not a fourth level. Future structural
+entity kinds extend the first applicable level without changing the meanings of the earlier ones.
+
+**Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
+the nested relation.
+**In code:** `IncidenceLevel` and `CanonicalizationLevel` (planned).
 
 ### Ligand and site
 
@@ -848,23 +944,33 @@ overlays despite their binary shape.
 **In code:** `NoncovalentBondKind`, `NoncovalentBondKindAst`; the notation literals `Hbd`, `Xbd`,
 `Ybd`, `Ion`, `Vdw`.
 
+### Normalize
+
+**Normalize** puts an AST value into a deterministic normal form without changing entity ids or
+participant frames. It folds value expressions, canonicalizes set representations, flattens and
+deduplicates logical constraints, normalizes entity fields and constraints, and normalizes
+fixed-frame transformation values such as `Deltas`. It is context-free, idempotent on satisfiable
+values, and returns `Err(Contradiction)` for an unsatisfiable represented value.
+
+**Normalized equivalence** is `equiv`: two values are equivalent in the current frame when their
+normal forms are structurally equal. `Normalized<T>` carries the guarantee that normalization has
+already run, so its derived `Eq`, `Hash`, and `Ord` operate on normal forms and can be used for
+semantic deduplication.
+
+**Not:** aggregate canonicalization, which selects an entity and participant frame and requires an
+explicit context. Not chemical standardization, resolution, validation, or repair.
+**In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`, `Equiv::equiv`.
+
 ### Overlay
 
 An **overlay** is one of the six entity kinds that are not molecular topology: dative bond, aromatic
 system, multicenter bond, noncovalent bond, stereo atom, stereo bond. Atoms and localized bonds are
 the topology and are not overlays.
 
-**Scope conflict, unresolved.** `IncidenceNodeSelection::OVERLAYS` covers only four of the six —
-dative, aromatic, multicenter, noncovalent — with `STEREO` as a separate flag, so that
-`constitution()` is atoms, bonds and those four while `full()` adds stereo. The narrower sense is
-chemically motivated (constitution against configuration) but it makes the same word mean four kinds
-in one place and six everywhere else. Either the flag or the term should change.
-
 **Not:** *relation* or *hyperedge*, which are whitepaper framings for the same thing and appear in
 source comments descriptively; overlay is the repository term. Not *entity*, which is the umbrella
 over all eight kinds.
-**In code:** `GraphAndOverlays`, `verify_overlays`, `RemovedOverlays`,
-`IncidenceNodeSelection::OVERLAYS` (narrower, see above).
+**In code:** `GraphAndOverlays`, `verify_overlays`, `RemovedOverlays`.
 
 ### Participant
 
@@ -1069,6 +1175,32 @@ that plan transactionally.
 mutate), perception (which is policy-free).
 **In code:** `Resolver`, `resolve`, `ResolveConfig`.
 
+### Result delivery
+
+**Result delivery** is how a multi-result operation hands results to the caller, and it is
+independent of algorithm selection — the `*Algorithm` enum says how to search, the delivery prefix
+says how results arrive.
+
+- **`visit_*`** — callback delivery; the visitor returns `ControlFlow`, and `Break` terminates the
+  search.
+- **`enumerate_*`** — eager collection of every result. Every eager operation returning a
+  collection of results carries this prefix, whether or not a visitor form exists.
+- **`iter_*`** — a resumable iterator with an explicit search cursor, added only when suspension
+  across calls has a consumer.
+
+An operation returning a single value — one output struct, one set, one coloring, a count, an
+`Option` — takes none of these prefixes and has no visitor form; plural-sounding names for
+single-value operations, such as `automorphisms`, are not delivery prefixes. `try_*` and
+`*_fallback` mark input-domain dispatch (simple graph against subdivision fallback) and compose
+with the delivery prefix. The execution contract behind the prefixes — streamability, visitor
+payload, and emission order — is defined in the algorithm execution guide.
+
+**Not:** *iterative* for visitor delivery — an implementation may remain recursive while visiting
+results. Not a bare plural name for an eager collection-returning operation.
+**In code:** `visit_simple_cycles`, `try_visit_relevant_cycles`, `visit_perfect_matchings`,
+`enumerate_relevant_cycles`; per the settled migration, `enumerate_subgraph_isomorphisms` and
+`visit_subgraph_isomorphisms`.
+
 ### Ring constraint
 
 A **ring constraint** is a constraint whose value requires ring enumeration. Ring membership, ring
@@ -1080,7 +1212,7 @@ dependency. Their fixed molecular semantics are the Relevant ring set through si
 relevant-cycle enumeration algorithm is operational configuration.
 
 **Not:** incidence constraint.
-**In code:** `RingConstraintValidator`, `RingConstraintContradiction`.
+**In code:** the ring-constraint component of tier-2 invariants validation in `umol-graph`.
 
 ### Solution
 
@@ -1117,6 +1249,15 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 
 **Not:** a partition by any other criterion.
 **In code:** `split`.
+
+### Topology
+
+**Topology** is the lowest structural level: atoms and localized bonds, including the inherent
+values carried by those entities. It does not include overlay entities.
+
+**Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
+algorithmic representation constructed from selected structure; constraints.
+**In code:** the `Topology` variant of `IncidenceLevel` and `CanonicalizationLevel` (planned).
 
 ### Transaction
 
@@ -1178,11 +1319,13 @@ neither. See *Covalence*.
 
 ### Validation
 
-**Validation** reports semantic contradictions without repairing or selecting an authoritative
-representation.
+**Validation** reports tier-2 invariant or tier-3 conformance outcomes without repairing or
+selecting an authoritative representation. Validators live in `umol-graph`, use the
+`*InvariantsValidator` or `*ConformanceValidator` suffix, and return
+`Result<Solution<_, _>, _>` so non-ground semantic questions may be underdetermined.
 
-**Not:** resolution (which repairs), transformation. Integrity, invariants, and conformance are its
-three tiers.
+**Not:** an integrity check, resolution, or transformation. Integrity is ordered before validation
+but is enforced by AST construction rather than by a validator.
 **In code:** `Validator`, `validate`.
 
 ## Maintaining this guide

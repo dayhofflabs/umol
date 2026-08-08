@@ -50,7 +50,7 @@ impl Graph {
     // TODO: add singular `subgraph_isomorphism(...) -> Option<Vec<usize>>` that stops at
     // the first match (existence via `.is_some()`). Saves the embedding-multiplicity
     // factor on positive matches; same Vf2, `search` gains an early-exit cap.
-    pub fn subgraph_isomorphisms(
+    pub fn enumerate_subgraph_isomorphisms(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
@@ -95,7 +95,7 @@ impl Graph {
             .collect()
     }
 
-    pub fn subgraph_isomorphisms_at(
+    pub fn enumerate_subgraph_isomorphisms_at(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
@@ -1953,7 +1953,7 @@ mod tests {
         vec![8, 9, 4, 3, 6, 7], vec![9, 4, 3, 6, 7, 8], vec![9, 8, 7, 6, 3, 4]])]
     #[case::node_filter(Graph::new(3, &[]), Graph::new(1, &[]), only_q0_t1, any_edge, vec![vec![1]])]
     #[case::edge_filter(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(2, &[[0, 1]]), any_node, only_tedge1, vec![vec![1, 2], vec![2, 1]])]
-    fn test_subgraph_isomorphisms(
+    fn test_enumerate_subgraph_isomorphisms(
         #[case] target: Graph,
         #[case] query: Graph,
         #[case] mut node_match: fn(NodeId, NodeId) -> bool,
@@ -1971,7 +1971,7 @@ mod tests {
             RayKirsch,
         ] {
             let mut r: Vec<Vec<usize>> = target
-                .subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg)
+                .enumerate_subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg)
                 .iter()
                 .map(|c| {
                     c.matched_pairs()
@@ -1996,7 +1996,7 @@ mod tests {
     #[case::node_filter(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), exclude_t0, any_edge, vec![vec![1, 2]])]
     #[case::node_filter_rejects_anchor(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), reject_q0_t1, any_edge, vec![])]
     #[case::edge_filter(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), any_node, only_tedge1, vec![vec![1, 2]])]
-    fn test_subgraph_isomorphisms_at(
+    fn test_enumerate_subgraph_isomorphisms_at(
         #[case] target: Graph,
         #[case] query: Graph,
         #[case] anchor: (NodeId, NodeId),
@@ -2015,7 +2015,7 @@ mod tests {
             RayKirsch,
         ] {
             let mut r: Vec<Vec<usize>> = target
-                .subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg)
+                .enumerate_subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg)
                 .iter()
                 .map(|c| {
                     c.matched_pairs()
@@ -2041,7 +2041,7 @@ mod tests {
         let mut node_match = any_node;
         let mut edge_match = any_edge;
         let mut r: Vec<Vec<usize>> = graph
-            .subgraph_isomorphisms(
+            .enumerate_subgraph_isomorphisms(
                 &graph,
                 &mut node_match,
                 &mut edge_match,
@@ -2125,7 +2125,7 @@ mod tests {
         let mut nm: fn(NodeId, NodeId) -> bool = any_node;
         let mut em: fn(EdgeId, EdgeId) -> bool = any_edge;
         let matches: Vec<Vec<usize>> = target
-            .subgraph_isomorphisms(&query, &mut nm, &mut em, Vf2)
+            .enumerate_subgraph_isomorphisms(&query, &mut nm, &mut em, Vf2)
             .iter()
             .map(|c| {
                 c.matched_pairs()
