@@ -13,8 +13,8 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::operators::{mem_op, mem_op_str, rel_op, rel_op_str};
-use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::{ValueAst, ValuePredicate, ValueTerm};
+use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::value::{ValueAst, ValuePredicate, ValueTerm};
 
 /// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
 /// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `Term`/
@@ -519,7 +519,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::operators::{MemOp, RelOp};
+    use crate::ir::operators::{MemOp, RelOp};
 
     #[rustfmt::skip]
     #[rstest]

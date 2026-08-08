@@ -52,26 +52,26 @@ use super::stereo::{
     parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, StereoAtomDsl,
     StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl,
 };
-use crate::ast::atom::{AtomAst, AtomUpdate};
-use crate::ast::bond::{BondAst, BondUpdate};
-use crate::ast::delta::{
+use crate::ir::atom::{AtomAst, AtomUpdate};
+use crate::ir::bond::{BondAst, BondUpdate};
+use crate::ir::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
-use crate::ast::edit::{
+use crate::ir::edit::{
     AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
-use crate::ast::entity::Entity;
-use crate::ast::id::{
+use crate::ir::entity::Entity;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::reaction::ReactionAst;
-use crate::ast::stereo::{StereoConfigurationAst, StereoConfigurationUpdate};
-use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::{
+use crate::ir::reaction::ReactionAst;
+use crate::ir::stereo::{StereoConfigurationAst, StereoConfigurationUpdate};
+use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::{
     AromaticSystemUpdate, DativeBondUpdate, MulticenterBondUpdate, NoncovalentBondUpdate,
     StereoAtomUpdate, StereoBondUpdate, StereoKind, StereoLigand,
 };
@@ -2815,10 +2815,16 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::aromatic::AromaticSystemAst;
-    use crate::ast::atom::ElementAst;
-    use crate::ast::boolean::BooleanAst;
-    use crate::ast::constraint::{
+    use crate::dsl::bond::BondDsl;
+    use crate::dsl::constraint::MoleculeConstraintDsl;
+    use crate::dsl::molecule::AtomSpecInput;
+    use crate::dsl::refs::{
+        AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
+    };
+    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::atom::ElementAst;
+    use crate::ir::boolean::BooleanAst;
+    use crate::ir::constraint::{
         AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintAst,
         BondConstraintAst, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
         MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst,
@@ -2826,28 +2832,20 @@ mod tests {
         StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
         StereoBondConstraintsAst, StereogenicityAst,
     };
-    use crate::ast::dative::DativeBondAst;
-    use crate::ast::delta::{ConstraintDelta, Deltas};
-    use crate::ast::edit::{
+    use crate::ir::dative::DativeBondAst;
+    use crate::ir::delta::{ConstraintDelta, Deltas};
+    use crate::ir::edit::{
         AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, MulticenterBondFieldChange,
         NoncovalentBondFieldChange,
     };
-    use crate::ast::electrons::ElectronCountsAst;
-    use crate::ast::ligand::StereoLigandKind;
-    use crate::ast::molecule::MoleculeAst;
-    use crate::ast::multicenter::MulticenterBondAst;
-    use crate::ast::noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
-    };
-    use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, Stereogenicity};
-    use crate::ast::value::ValueAst;
-    use crate::dsl::bond::BondDsl;
-    use crate::dsl::constraint::MoleculeConstraintDsl;
-    use crate::dsl::molecule::AtomSpecInput;
-    use crate::dsl::refs::{
-        AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
-    };
+    use crate::ir::electrons::ElectronCountsAst;
+    use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::molecule::MoleculeAst;
+    use crate::ir::multicenter::MulticenterBondAst;
+    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
+    use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+    use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, Stereogenicity};
+    use crate::ir::value::ValueAst;
     use crate::mol_dsl;
 
     #[fixture]

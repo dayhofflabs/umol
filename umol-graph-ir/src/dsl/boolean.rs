@@ -9,8 +9,8 @@ use winnow::Parser;
 
 use super::edn_utils::eof_err;
 use super::error::{PResult, ParseError};
-use crate::ast::boolean::BooleanAst;
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ir::boolean::BooleanAst;
+use crate::ir::traits::{FromAst, IntoAst};
 
 /// Boundary type for [`BooleanAst`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

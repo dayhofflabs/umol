@@ -1,6 +1,6 @@
 //! Surface DSL for cross-entity relational constraints.
 //!
-//! Mirrors [`crate::ast::constraint::RelationalConstraint`] with
+//! Mirrors [`crate::ir::constraint::RelationalConstraint`] with
 //! `AtomRef`/`BondRef`/`DativeBondRef`/etc. in place of raw `AtomId` etc.
 //! EDN form is a flat single-key map keyed by the variant — e.g.
 //! `{:dative-bond-donor [<bond_ref> <atom_ref>]}`,
@@ -22,8 +22,8 @@ use super::refs::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     StereoAtomRef, StereoBondRef,
 };
-use crate::ast::constraint::RelationalConstraint;
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ir::constraint::RelationalConstraint;
+use crate::ir::traits::{FromAst, IntoAst};
 
 /// Surface DSL wrapper around [`RelationalConstraint`]. Structural parallel
 /// to the AST enum — same 18 variants, with surface refs ([`AtomRef`],
@@ -1048,12 +1048,12 @@ mod tests {
     use super::super::metadata::MoleculeMetadata;
     use super::super::namespace::MoleculeContext;
     use super::*;
-    use crate::ast::constraint::AtomConstraintAst;
-    use crate::ast::id::{
+    use crate::ir::constraint::AtomConstraintAst;
+    use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
     };
-    use crate::ast::value::ValueAst;
+    use crate::ir::value::ValueAst;
 
     #[fixture]
     fn meta() -> MoleculeMetadata {

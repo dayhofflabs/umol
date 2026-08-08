@@ -9,7 +9,7 @@
 #[macro_export]
 macro_rules! mol_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::MoleculeAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::MoleculeAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -21,7 +21,7 @@ macro_rules! mol_dsl_ground {
         let dsl: $crate::dsl::MoleculeDsl =
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
         let (ast, _meta) = dsl.into_parts();
-        <$crate::dsl::MoleculeDsl as $crate::ast::IntoAst<$crate::ast::MoleculeAst>>::into_ast(
+        <$crate::dsl::MoleculeDsl as $crate::ir::IntoAst<$crate::ir::MoleculeAst>>::into_ast(
             $crate::dsl::MoleculeDsl::new(ast, $crate::dsl::MoleculeMetadata::default())
                 .expect("empty metadata is coherent"),
             &$crate::dsl::MoleculeDefaults::ground(),
@@ -37,7 +37,7 @@ macro_rules! mol_dsl_ground {
 #[macro_export]
 macro_rules! atom_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::AtomAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::AtomAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -47,7 +47,7 @@ macro_rules! atom_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AtomDsl =
             <$crate::dsl::AtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::AtomDsl as $crate::ast::IntoAst<$crate::ast::AtomAst>>::into_ast(
+        <$crate::dsl::AtomDsl as $crate::ir::IntoAst<$crate::ir::AtomAst>>::into_ast(
             dsl,
             &$crate::dsl::AtomDefaults::ground(),
         )
@@ -58,7 +58,7 @@ macro_rules! atom_dsl_ground {
 #[macro_export]
 macro_rules! atom_update_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::AtomUpdate as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::AtomUpdate as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -70,7 +70,7 @@ macro_rules! atom_update_dsl {
 #[macro_export]
 macro_rules! bond_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::BondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::BondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -80,7 +80,7 @@ macro_rules! bond_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::BondDsl =
             <$crate::dsl::BondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::BondDsl as $crate::ast::IntoAst<$crate::ast::BondAst>>::into_ast(
+        <$crate::dsl::BondDsl as $crate::ir::IntoAst<$crate::ir::BondAst>>::into_ast(
             dsl,
             &$crate::dsl::BondDefaults::ground(),
         )
@@ -91,7 +91,7 @@ macro_rules! bond_dsl_ground {
 #[macro_export]
 macro_rules! bond_update_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::BondUpdate as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::BondUpdate as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -99,7 +99,7 @@ macro_rules! bond_update_dsl {
 #[macro_export]
 macro_rules! dative_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::DativeBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::DativeBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -109,7 +109,7 @@ macro_rules! dative_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::DativeBondDsl =
             <$crate::dsl::DativeBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::DativeBondDsl as $crate::ast::IntoAst<$crate::ast::DativeBondAst>>::into_ast(
+        <$crate::dsl::DativeBondDsl as $crate::ir::IntoAst<$crate::ir::DativeBondAst>>::into_ast(
             dsl,
             &$crate::dsl::DativeBondDefaults::ground(),
         )
@@ -120,7 +120,7 @@ macro_rules! dative_dsl_ground {
 #[macro_export]
 macro_rules! aromatic_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::AromaticSystemAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::AromaticSystemAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -131,7 +131,7 @@ macro_rules! aromatic_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AromaticSystemDsl =
             <$crate::dsl::AromaticSystemDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::AromaticSystemDsl as $crate::ast::IntoAst<$crate::ast::AromaticSystemAst>>::into_ast(
+        <$crate::dsl::AromaticSystemDsl as $crate::ir::IntoAst<$crate::ir::AromaticSystemAst>>::into_ast(
             dsl,
             &$crate::dsl::AromaticSystemDefaults::ground(),
         )
@@ -142,7 +142,7 @@ macro_rules! aromatic_dsl_ground {
 #[macro_export]
 macro_rules! multicenter_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::MulticenterBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::MulticenterBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -153,7 +153,7 @@ macro_rules! multicenter_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MulticenterBondDsl =
             <$crate::dsl::MulticenterBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::MulticenterBondDsl as $crate::ast::IntoAst<$crate::ast::MulticenterBondAst>>::into_ast(
+        <$crate::dsl::MulticenterBondDsl as $crate::ir::IntoAst<$crate::ir::MulticenterBondAst>>::into_ast(
             dsl,
             &$crate::dsl::MulticenterBondDefaults::ground(),
         )
@@ -164,7 +164,7 @@ macro_rules! multicenter_dsl_ground {
 #[macro_export]
 macro_rules! noncovalent_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::NoncovalentBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::NoncovalentBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -175,7 +175,7 @@ macro_rules! noncovalent_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::NoncovalentBondDsl =
             <$crate::dsl::NoncovalentBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::NoncovalentBondDsl as $crate::ast::IntoAst<$crate::ast::NoncovalentBondAst>>::into_ast(
+        <$crate::dsl::NoncovalentBondDsl as $crate::ir::IntoAst<$crate::ir::NoncovalentBondAst>>::into_ast(
             dsl,
             &$crate::dsl::NoncovalentBondDefaults::ground(),
         )
@@ -186,7 +186,7 @@ macro_rules! noncovalent_dsl_ground {
 #[macro_export]
 macro_rules! stereo_atom_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::StereoAtomAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::StereoAtomAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -196,7 +196,7 @@ macro_rules! stereo_atom_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoAtomDsl =
             <$crate::dsl::StereoAtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::StereoAtomDsl as $crate::ast::IntoAst<$crate::ast::StereoAtomAst>>::into_ast(
+        <$crate::dsl::StereoAtomDsl as $crate::ir::IntoAst<$crate::ir::StereoAtomAst>>::into_ast(
             dsl,
             &$crate::dsl::StereoAtomDefaults::ground(),
         )
@@ -207,7 +207,7 @@ macro_rules! stereo_atom_dsl_ground {
 #[macro_export]
 macro_rules! stereo_bond_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ast::StereoBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::StereoBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -217,7 +217,7 @@ macro_rules! stereo_bond_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoBondDsl =
             <$crate::dsl::StereoBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::StereoBondDsl as $crate::ast::IntoAst<$crate::ast::StereoBondAst>>::into_ast(
+        <$crate::dsl::StereoBondDsl as $crate::ir::IntoAst<$crate::ir::StereoBondAst>>::into_ast(
             dsl,
             &$crate::dsl::StereoBondDefaults::ground(),
         )
@@ -230,15 +230,15 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
-    use crate::ast::constraint::RingScope;
-    use crate::ast::{
+    use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
+    use crate::ir::constraint::RingScope;
+    use crate::ir::{
         AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst,
         AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
         BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, Entity,
         MoleculeAst, MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
         StereoAtomAst, StereoBondAst, StereoCoset, StereoKind, ValueAst,
     };
-    use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
 
     #[rustfmt::skip]
     #[rstest]

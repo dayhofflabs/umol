@@ -55,7 +55,7 @@ fn codegen(input: MolInput) -> Result<TokenStream> {
     Ok(quote! {
         {
             #[allow(unused_imports)]
-            use ::umol_ast::ast::spec::*;
+            use ::umol_graph_ir::ir::spec::*;
             (MoleculeSpec::new() #atoms #(+ #bonds)* #(+ #overlays)*).build()
         }
     })

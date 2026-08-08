@@ -14,12 +14,12 @@ use super::edn_utils::{
 use super::error::ParseError;
 use super::metadata::Metadata;
 use super::namespace::Namespace;
-use crate::ast::entity::Entity;
-use crate::ast::id::{
+use crate::ir::entity::Entity;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::{StereoLigand, StereoLigandKind};
+use crate::ir::ligand::{StereoLigand, StereoLigandKind};
 
 macro_rules! define_ref {
     ($name:ident, $id:ident, $variant:ident, $kind:literal, $reader:ident,

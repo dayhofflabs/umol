@@ -538,7 +538,7 @@ pub(crate) fn overlay_term(
     match overlay {
         Overlay::Aromatic { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::AromaticSystemAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::AromaticSystemAst });
             Ok(quote! { aromatic_system([ #(#atoms),* ], #ast) })
         }
         Overlay::Dative {
@@ -548,12 +548,12 @@ pub(crate) fn overlay_term(
         } => {
             let donors = overlay_atoms(donors, labels)?;
             let acceptor = overlay_atom(acceptor, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::DativeBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::DativeBondAst });
             Ok(quote! { dative_bond([ #(#donors),* ], #acceptor, #ast) })
         }
         Overlay::Multicenter { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::MulticenterBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::MulticenterBondAst });
             Ok(quote! { multicenter_bond([ #(#atoms),* ], #ast) })
         }
         Overlay::Noncovalent { atoms, payload } => {
@@ -565,7 +565,7 @@ pub(crate) fn overlay_term(
             }
             let first = overlay_atom(&atoms[0], labels)?;
             let second = overlay_atom(&atoms[1], labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::NoncovalentBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::NoncovalentBondAst });
             Ok(quote! { noncovalent_bond(#first, #second, #ast) })
         }
         Overlay::StereoAtom {
@@ -575,7 +575,7 @@ pub(crate) fn overlay_term(
         } => {
             let site = overlay_atom(site, labels)?;
             let ligands = overlay_ligands(ligands, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::StereoAtomAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoAtomAst });
             Ok(quote! { stereo_atom(#site, [ #(#ligands),* ], #ast) })
         }
         Overlay::StereoBond {
@@ -592,7 +592,7 @@ pub(crate) fn overlay_term(
             resolve_bond_ref(labels, name)?;
             let site = name.to_string();
             let ligands = overlay_ligands(ligands, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::StereoBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoBondAst });
             Ok(quote! { stereo_bond(#site, [ #(#ligands),* ], #ast) })
         }
     }

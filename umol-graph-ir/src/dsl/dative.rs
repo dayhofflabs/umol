@@ -18,11 +18,11 @@ use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::predicate::{fmt_ring_membership, ring_membership};
 use super::value::{fmt_value, value};
-use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{DativeBondConstraintAst, RingMembershipAst, RingScope};
-use crate::ast::dative::{DativeBondAst, DativeBondUpdate};
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
-use crate::ast::value::ValueAst;
+use crate::ir::boolean::BooleanAst;
+use crate::ir::constraint::{DativeBondConstraintAst, RingMembershipAst, RingScope};
+use crate::ir::dative::{DativeBondAst, DativeBondUpdate};
+use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `DativeBondAst`. The string form is the order
 /// (number of donated electron pairs) followed by `#…` predicates,
@@ -476,7 +476,7 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::{DativeBondConstraintsAst, RingScope};
+    use crate::ir::constraint::{DativeBondConstraintsAst, RingScope};
 
     #[rustfmt::skip]
     #[rstest]

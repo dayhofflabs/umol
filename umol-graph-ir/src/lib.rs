@@ -1,8 +1,8 @@
-//! umol DSL (surface) and AST (semantic) representations.
+//! umol DSL (surface) and graph IR representations.
 
-pub mod ast;
 pub mod dsl;
+pub mod ir;
 pub mod macros;
 
 /// The `mol!` visual-literal macro (desugars to an L2 `MoleculeSpec` build).
-pub use umol_ast_macros::{frag, mol};
+pub use umol_graph_ir_macros::{frag, mol};

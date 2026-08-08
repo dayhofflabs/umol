@@ -15,12 +15,12 @@ use super::boolean::{boolean, BooleanDsl};
 use super::config::NoncovalentBondDefaults;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
-use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::NoncovalentBondConstraintAst;
-use crate::ast::noncovalent::{
+use crate::ir::boolean::BooleanAst;
+use crate::ir::constraint::NoncovalentBondConstraintAst;
+use crate::ir::noncovalent::{
     NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate,
 };
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromAst, IntoAst, Lattice};
 
 /// Surface DSL wrapper around `NoncovalentBondAst`.
 #[repr(transparent)]
@@ -456,7 +456,7 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::NoncovalentBondConstraintsAst;
+    use crate::ir::constraint::NoncovalentBondConstraintsAst;
 
     #[rustfmt::skip]
     #[rstest]

@@ -85,7 +85,7 @@ When the expected for a complex constructor is too verbose, prefer struct litera
 - Each fallible macro gets a separate `test_<macro>_macro_error` with `#[should_panic]`.
 - For macros that wrap `FromStr` plus a config (e.g., `mol_ground!`), test against an explicitly-constructed expected via `from_atoms_and_bonds` + `with_*` chains + `into_ground()`. This verifies the macro applies the correct config.
 
-### AST entity tests (`umol-graph-ir::ast::*`)
+### AST entity tests (`umol-graph-ir::ir::*`)
 
 - Method order: `new`/`from_*` → `with_*` → `into_*` → `is_ground` → `matches` → `simplify_*`.
 - `with_*` methods consolidate into one `test_<entity>_with_methods` table.

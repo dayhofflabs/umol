@@ -15,13 +15,13 @@ use std::marker::PhantomData;
 use super::atom::AtomDsl;
 use super::error::ParseError;
 use super::metadata::{MetadataError, MoleculeMetadata};
-use crate::ast::entity::Entity;
-use crate::ast::id::{
+use crate::ir::entity::Entity;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::StereoLigand;
-use crate::ast::molecule::MoleculeAst;
+use crate::ir::ligand::StereoLigand;
+use crate::ir::molecule::MoleculeAst;
 
 /// The metadata, counters, and participant indexes built while parsing a molecule or applying
 /// reaction deltas. Atoms need only a counter; the seven non-atom kinds add participant lookup.
@@ -671,7 +671,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::ast::ligand::StereoLigandKind;
+    use crate::ir::ligand::StereoLigandKind;
 
     #[rstest]
     fn test_molecule_context_continuation() {

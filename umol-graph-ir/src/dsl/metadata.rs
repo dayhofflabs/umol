@@ -4,10 +4,10 @@ use bimap::BiBTreeMap;
 use thiserror::Error;
 
 use super::atom::AtomDsl;
-use crate::ast::correspondence::MoleculeCorrespondence;
-use crate::ast::entity::Entity;
+use crate::ir::correspondence::MoleculeCorrespondence;
+use crate::ir::entity::Entity;
 #[cfg(test)]
-use crate::ast::id::{
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
@@ -362,7 +362,7 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::*;
-    use crate::ast::atom::AtomAst;
+    use crate::ir::atom::AtomAst;
 
     #[rstest]
     fn test_molecule_metadata_new() {

@@ -10,9 +10,9 @@ use winnow::Parser;
 use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
-use crate::ast::constraint::{RingMembershipAst, RingScope};
-use crate::ast::spin::UnpairedElectronsAst;
-use crate::ast::value::ValueAst;
+use crate::ir::constraint::{RingMembershipAst, RingScope};
+use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::value::ValueAst;
 
 pub(crate) fn charge(i: &mut &str) -> PResult<ValueAst> {
     preceded(

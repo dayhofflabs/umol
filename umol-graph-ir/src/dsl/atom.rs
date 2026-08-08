@@ -29,15 +29,15 @@ use super::stereo::{
     fmt_tetrahedral_stereo_config, tetrahedral_stereo_config, TetrahedralStereoDsl,
 };
 use super::value::{fmt_set, fmt_value, terminator, value, variable_name, ValueDsl};
-use crate::ast::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
-use crate::ast::constraint::{
+use crate::ir::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
+use crate::ir::constraint::{
     AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
     MulticenterValenceAst, RingScope,
 };
-use crate::ast::operators::MemOp;
-use crate::ast::stereo::TetrahedralStereoAst;
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
-use crate::ast::value::ValueAst;
+use crate::ir::operators::MemOp;
+use crate::ir::stereo::TetrahedralStereoAst;
+use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
@@ -1306,11 +1306,11 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::RingScope;
-    use crate::ast::operators::{MemOp, RelOp};
-    use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-    use crate::ast::stereo::{StereoCoset, StereoTerm};
-    use crate::ast::value::{ValuePredicate, ValueTerm};
+    use crate::ir::constraint::RingScope;
+    use crate::ir::operators::{MemOp, RelOp};
+    use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+    use crate::ir::stereo::{StereoCoset, StereoTerm};
+    use crate::ir::value::{ValuePredicate, ValueTerm};
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]

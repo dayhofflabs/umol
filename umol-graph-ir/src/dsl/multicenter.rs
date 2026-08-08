@@ -19,10 +19,10 @@ use super::predicate::{
     lower_unpaired_electrons, optional_value, raise_unpaired_electrons, UnpairedElectronsPredicate,
 };
 use super::value::{fmt_value, ValueDsl};
-use crate::ast::constraint::MulticenterBondConstraintAst;
-use crate::ast::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::ValueAst;
+use crate::ir::constraint::MulticenterBondConstraintAst;
+use crate::ir::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
+use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `MulticenterBondAst`. The `electrons` field
 /// (per-atom contributions) is serialized at the molecule level. The
@@ -554,9 +554,9 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::MulticenterBondConstraintsAst;
-    use crate::ast::electrons::ElectronCountsAst;
-    use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+    use crate::ir::constraint::MulticenterBondConstraintsAst;
+    use crate::ir::electrons::ElectronCountsAst;
+    use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
 
     #[rustfmt::skip]
     #[rstest]

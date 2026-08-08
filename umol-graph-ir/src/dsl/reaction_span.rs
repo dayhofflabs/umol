@@ -36,16 +36,16 @@ use super::namespace::MoleculeContext;
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{parse_stereo_ligand, AtomRef, BondRef, StereoLigandRef};
 use super::stereo::{StereoAtomDsl, StereoBondDsl};
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::entity::Entity;
-use crate::ast::id::{
+use crate::ir::atom::AtomAst;
+use crate::ir::bond::BondAst;
+use crate::ir::entity::Entity;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::StereoLigand;
-use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::{
+use crate::ir::ligand::StereoLigand;
+use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::{
     AromaticSystemAst, Constraint, ConstraintSpan, DativeBondAst, EntitySpan, MulticenterBondAst,
     NoncovalentBondAst, ReactionSpanAst, ReactionSpanEntries, StereoAtomAst, StereoBondAst,
 };
@@ -1645,15 +1645,15 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::*;
-    use crate::ast::boolean::BooleanAst;
-    use crate::ast::constraint::{BondConstraintAst, Constraint, Constraints, MoleculeConstraint};
-    use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
-    use crate::ast::edit::BondFieldChange;
-    use crate::ast::ligand::StereoLigandKind;
-    use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ast::reaction::ReactionAst;
-    use crate::ast::value::ValueAst;
-    use crate::ast::MoleculeCorrespondence;
+    use crate::ir::boolean::BooleanAst;
+    use crate::ir::constraint::{BondConstraintAst, Constraint, Constraints, MoleculeConstraint};
+    use crate::ir::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
+    use crate::ir::edit::BondFieldChange;
+    use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::reaction::ReactionAst;
+    use crate::ir::value::ValueAst;
+    use crate::ir::MoleculeCorrespondence;
 
     #[fixture]
     fn populated_reaction_span_dsl() -> ReactionSpanDsl {

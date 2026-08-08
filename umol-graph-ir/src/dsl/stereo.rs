@@ -20,20 +20,20 @@ use super::config::{StereoAtomDefaults, StereoBondDefaults};
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::value::variable_name;
-use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{
+use crate::ir::boolean::BooleanAst;
+use crate::ir::constraint::{
     FluxionalityAst, LigandPermutation, LigandSymmetryAst, OrientedLigandPermutation,
     StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
     StereoBondConstraintsAst, StereoLigandPair, StereogenicityAst, TopicityAst,
     TopicityRelationAst,
 };
-use crate::ast::id::StereoLigandPosition;
-use crate::ast::stereo::{
+use crate::ir::id::StereoLigandPosition;
+use crate::ir::stereo::{
     CisTransStereoAst, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
     StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
     Stereogenicity, TetrahedralStereoAst, Topicity,
 };
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromAst, IntoAst, Lattice};
 
 /// Surface DSL wrapper for `StereoAtomAst`
 #[repr(transparent)]

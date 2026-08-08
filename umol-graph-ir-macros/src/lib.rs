@@ -78,7 +78,7 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
         Err(e) => return e,
     };
     let name = &input.ident;
-    let lattice = quote!(crate::ast::Lattice);
+    let lattice = quote!(crate::ir::Lattice);
     quote! {
         impl #lattice for #name {
             fn is_undetermined(&self) -> bool {
@@ -92,7 +92,7 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
                     #( #fields: #lattice::meet(&self.#fields, &other.#fields)?, )*
                 })
             }
-            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ast::NoJoin> {
+            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ir::NoJoin> {
                 ::core::result::Result::Ok(Self {
                     #( #fields: #lattice::join(&self.#fields, &other.#fields)?, )*
                 })
@@ -119,8 +119,8 @@ pub fn derive_canonicalize(input: TokenStream) -> TokenStream {
         Err(e) => return e,
     };
     let name = &input.ident;
-    let canon = quote!(crate::ast::Canonicalize);
-    let contradiction = quote!(crate::ast::Contradiction);
+    let canon = quote!(crate::ir::Canonicalize);
+    let contradiction = quote!(crate::ir::Contradiction);
     quote! {
         impl #canon for #name {
             fn canonicalize(self) -> ::core::result::Result<Self, #contradiction> {

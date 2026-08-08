@@ -32,38 +32,38 @@ use super::stereo::{
     StereoBondDsl, StereoBondUpdateDsl,
 };
 use super::value::ValueDsl;
-use crate::ast::aromatic::AromaticSystemUpdate;
-use crate::ast::atom::AtomUpdate;
-use crate::ast::bond::BondUpdate;
-use crate::ast::constraint::{
+use crate::ir::aromatic::AromaticSystemUpdate;
+use crate::ir::atom::AtomUpdate;
+use crate::ir::bond::BondUpdate;
+use crate::ir::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
     DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
     NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
     StereoBondConstraintAst, SubPatternAnchor,
 };
-use crate::ast::dative::DativeBondUpdate;
-use crate::ast::edit::{
+use crate::ir::dative::DativeBondUpdate;
+use crate::ir::edit::{
     AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange,
     BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits, EntityHandle,
     MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
     NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange,
     StereoBondHandle,
 };
-use crate::ast::entity::Entity;
-use crate::ast::id::{
+use crate::ir::entity::Entity;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::StereoLigandKind;
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::multicenter::MulticenterBondUpdate;
-use crate::ast::noncovalent::NoncovalentBondUpdate;
-use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::ast::stereo::{
+use crate::ir::ligand::StereoLigandKind;
+use crate::ir::molecule::MoleculeAst;
+use crate::ir::multicenter::MulticenterBondUpdate;
+use crate::ir::noncovalent::NoncovalentBondUpdate;
+use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+use crate::ir::stereo::{
     StereoAtomUpdate, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate,
     StereoKind,
 };
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromAst, IntoAst, Lattice};
 
 /// Surface form shared by every typed handle in a standalone edit document.
 ///
@@ -4375,28 +4375,26 @@ mod tests {
     use umol_edn::{read_string, EdnError};
 
     use super::*;
-    use crate::ast::aromatic::AromaticSystemAst;
-    use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
-    use crate::ast::bond::BondAst;
-    use crate::ast::boolean::BooleanAst;
-    use crate::ast::constraint::{
+    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::atom::{AtomAst, ElementAst, IsotopeMassAst};
+    use crate::ir::bond::BondAst;
+    use crate::ir::boolean::BooleanAst;
+    use crate::ir::constraint::{
         AromaticSystemConstraintAst, AtomConstraintsAst, BondConstraintsAst, Constraint,
         DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
         NoncovalentBondConstraintAst, RingMembershipAst, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
     };
-    use crate::ast::dative::DativeBondAst;
-    use crate::ast::edit::AddBond;
-    use crate::ast::electrons::ElectronCountsAst;
-    use crate::ast::molecule::MoleculeAst;
-    use crate::ast::multicenter::MulticenterBondAst;
-    use crate::ast::noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
-    };
-    use crate::ast::stereo::{
+    use crate::ir::dative::DativeBondAst;
+    use crate::ir::edit::AddBond;
+    use crate::ir::electrons::ElectronCountsAst;
+    use crate::ir::molecule::MoleculeAst;
+    use crate::ir::multicenter::MulticenterBondAst;
+    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
+    use crate::ir::stereo::{
         StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind, Stereogenicity,
     };
-    use crate::ast::value::ValueAst;
+    use crate::ir::value::ValueAst;
     use crate::mol_dsl;
 
     #[rstest]

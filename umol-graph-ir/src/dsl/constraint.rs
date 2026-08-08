@@ -36,20 +36,20 @@ use super::stereo::{
     StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
-use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{
+use crate::ir::boolean::BooleanAst;
+use crate::ir::constraint::{
     AromaticValenceAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
     FluxionalityAst, LigandPermutation, LigandSymmetryAst, MoleculeConstraint,
     MulticenterValenceAst, OrientedLigandPermutation, RingMembershipAst, RingScope,
     StereoAtomConstraintAst, StereoBondConstraintAst, StereoLigandPair, StereogenicityAst,
     SubPatternAnchor, TopicityAst,
 };
-use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::spin::UnpairedElectronsAst;
-use crate::ast::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
-use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::ValueAst;
+use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
+use crate::ir::molecule::MoleculeAst;
+use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
+use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::value::ValueAst;
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
@@ -2196,22 +2196,22 @@ mod tests {
 
     use super::super::namespace::MoleculeContext;
     use super::*;
-    use crate::ast::constraint::{
+    use crate::ir::constraint::{
         AromaticValenceAst, AtomConstraintAst, BondConstraintAst, DativeBondConstraintAst,
         FluxionalityAst, LigandPermutation, LigandSymmetryAst, MulticenterValenceAst,
         OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintAst, StereoLigandPair,
         StereogenicityAst, TopicityAst, TopicityRelationAst,
     };
-    use crate::ast::id::{
+    use crate::ir::id::{
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
         StereoBondId,
     };
-    use crate::ast::molecule::MoleculeAst;
-    use crate::ast::stereo::{
+    use crate::ir::molecule::MoleculeAst;
+    use crate::ir::stereo::{
         CisTransStereoAst, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity,
     };
-    use crate::ast::value::ValueAst;
-    use crate::ast::BooleanAst;
+    use crate::ir::value::ValueAst;
+    use crate::ir::BooleanAst;
 
     /// Every `fuzz_constraints` seed must parse as a `ConstraintDsl` or a `ConstraintsDsl` (tree) —
     /// guards the seed corpus against rot as the constraint DSL evolves.

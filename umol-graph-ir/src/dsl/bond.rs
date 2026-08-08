@@ -23,13 +23,13 @@ use super::predicate::{
 };
 use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTransStereoDsl};
 use super::value::{fmt_value, value};
-use crate::ast::bond::{BondAst, BondUpdate};
-use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst, RingScope};
-use crate::ast::spin::UnpairedElectronsAst;
-use crate::ast::stereo::CisTransStereoAst;
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
-use crate::ast::value::ValueAst;
+use crate::ir::bond::{BondAst, BondUpdate};
+use crate::ir::boolean::BooleanAst;
+use crate::ir::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst, RingScope};
+use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::stereo::CisTransStereoAst;
+use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `BondAst`.
 #[repr(transparent)]
@@ -643,10 +643,10 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::{BondConstraintsAst, RingScope};
-    use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-    use crate::ast::stereo::StereoCoset;
     use crate::bond_dsl;
+    use crate::ir::constraint::{BondConstraintsAst, RingScope};
+    use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+    use crate::ir::stereo::StereoCoset;
 
     #[rustfmt::skip]
     #[rstest]

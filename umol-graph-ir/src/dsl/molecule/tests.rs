@@ -6,12 +6,12 @@ use umol_chem::element::Element;
 use umol_edn::read_string;
 
 use super::*;
-use crate::ast::atom::AtomAst;
-use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
-use crate::ast::electrons::ElectronCountsAst;
-use crate::ast::spin::UnpairedElectronsAst;
-use crate::ast::value::ValueAst;
+use crate::ir::atom::AtomAst;
+use crate::ir::boolean::BooleanAst;
+use crate::ir::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
+use crate::ir::electrons::ElectronCountsAst;
+use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::value::ValueAst;
 use crate::mol_dsl;
 
 #[fixture]

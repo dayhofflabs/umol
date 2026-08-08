@@ -19,10 +19,10 @@ use super::predicate::{
     lower_unpaired_electrons, optional_value, raise_unpaired_electrons, UnpairedElectronsPredicate,
 };
 use super::value::{fmt_value, ValueDsl};
-use crate::ast::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
-use crate::ast::constraint::AromaticSystemConstraintAst;
-use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::ValueAst;
+use crate::ir::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
+use crate::ir::constraint::AromaticSystemConstraintAst;
+use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `AromaticSystemAst`.
 #[repr(transparent)]
@@ -552,9 +552,9 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::AromaticSystemConstraintsAst;
-    use crate::ast::electrons::ElectronCountsAst;
-    use crate::ast::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+    use crate::ir::constraint::AromaticSystemConstraintsAst;
+    use crate::ir::electrons::ElectronCountsAst;
+    use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
 
     #[rustfmt::skip]
     #[rstest]

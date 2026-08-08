@@ -40,21 +40,21 @@ use super::refs::{
 use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::dative::DativeBondAst;
-use crate::ast::entity::Entity;
-use crate::ast::id::{
+use crate::ir::aromatic::AromaticSystemAst;
+use crate::ir::atom::AtomAst;
+use crate::ir::bond::BondAst;
+use crate::ir::dative::DativeBondAst;
+use crate::ir::entity::Entity;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-use crate::ast::molecule::{MoleculeAst, MoleculeEntries};
-use crate::ast::multicenter::MulticenterBondAst;
-use crate::ast::noncovalent::NoncovalentBondAst;
-use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ir::ligand::{StereoLigand, StereoLigandKind};
+use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+use crate::ir::multicenter::MulticenterBondAst;
+use crate::ir::noncovalent::NoncovalentBondAst;
+use crate::ir::stereo::{StereoAtomAst, StereoBondAst};
+use crate::ir::traits::{FromAst, IntoAst};
 
 /// Surface DSL for a whole molecule. Pairs `MoleculeAst` with `MoleculeMetadata`;
 /// fields are private so metadata cannot drift onto a different AST.

@@ -1,12 +1,12 @@
 //! DSL parse / render for the membership and relational operators — the string-DSL
-//! surface of `ast::operators` (`MemOp` / `RelOp`), shared by the value predicates and
+//! surface of `ir::operators` (`MemOp` / `RelOp`), shared by the value predicates and
 //! the element bind.
 
 use winnow::combinator::alt;
 use winnow::Parser;
 
 use super::error::PResult;
-use crate::ast::operators::{MemOp, RelOp};
+use crate::ir::operators::{MemOp, RelOp};
 
 pub(crate) fn rel_op(i: &mut &str) -> PResult<RelOp> {
     alt((

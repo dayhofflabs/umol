@@ -9,7 +9,7 @@ use winnow::error::ErrMode;
 use winnow::Parser;
 
 use super::error::{PResult, ParseError};
-use crate::ast::electrons::ElectronCountsAst;
+use crate::ir::electrons::ElectronCountsAst;
 
 /// The mandatory per-atom electron counts at the head of an aromatic-system /
 /// multicenter-bond string: `*` (undetermined) or a non-empty `[n,n,…]` vector
