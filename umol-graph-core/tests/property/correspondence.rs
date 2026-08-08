@@ -267,7 +267,7 @@ proptest! {
             )
         });
         prop_assert_eq!(
-            GraphCorrespondence::induced(&left, &right, correspondence),
+            GraphCorrespondence::induce(&left, &right, correspondence),
             expected,
         );
     }

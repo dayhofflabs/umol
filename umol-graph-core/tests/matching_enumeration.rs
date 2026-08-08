@@ -29,7 +29,7 @@ fn test_matching_enumeration_relabeling(#[case] source: &str, #[case] permutatio
         })
         .collect();
     let relabeled = Graph::new(original.node_count(), &relabeled_edges);
-    let correspondence = GraphCorrespondence::induced(
+    let correspondence = GraphCorrespondence::induce(
         &original,
         &relabeled,
         Correspondence::from_images(
@@ -101,7 +101,7 @@ fn test_matching_enumeration_relabeling_property() {
                 })
                 .collect();
             let relabeled = Graph::new(original.node_count(), &relabeled_edges);
-            let correspondence = GraphCorrespondence::induced(
+            let correspondence = GraphCorrespondence::induce(
                 &original,
                 &relabeled,
                 Correspondence::from_images(

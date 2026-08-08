@@ -296,11 +296,12 @@ impl GraphCorrespondence {
 
     /// The graph correspondence a node correspondence induces over `left` / `right`: its edge family
     /// is the induced edge correspondence (an edge matched when both endpoints are matched). Exact
-    /// for a subiso match or a common *induced* subgraph — the two cases where every structurally
-    /// matched edge is admissible; not for an edge-subgraph result under a nontrivial edge predicate
-    /// (there the producer supplies the edge family directly). Returns `None` when the node
-    /// correspondence does not describe the supplied graphs or does not induce unique edge pairs.
-    pub fn induced(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Option<Self> {
+    /// whenever every structurally matched edge is admissible — a subiso match, a common *induced*
+    /// subgraph, or a common-subgraph walk whose adjacency enforces the edge predicate; not for an
+    /// edge-subgraph result whose producer selects the edge family directly. Returns `None` when the
+    /// node correspondence does not describe the supplied graphs or does not induce unique edge
+    /// pairs.
+    pub fn induce(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Option<Self> {
         let edges = Correspondence::new(
             nodes.edge_matched_pairs(left, right)?,
             left.edge_count(),
@@ -561,15 +562,50 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_correspondence_induced(paths: (Graph, Graph, Correspondence<NodeId>)) {
-        let (left, right, nodes) = paths;
+    #[case::paths(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
+        Correspondence::new(vec![(n(0), n(1)), (n(1), n(2)), (n(2), n(3))], 3, 4)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+        GraphCorrespondence::new(
+            Correspondence::new(vec![(n(0), n(1)), (n(1), n(2)), (n(2), n(3))], 3, 4)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![(e(0), e(1)), (e(1), e(2))], 2, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        ),
+    )]
+    #[case::empty(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        Correspondence::new(vec![], 2, 2)
+            .expect("correspondence producer preserves partial-bijection invariants"),
+        GraphCorrespondence::new(
+            Correspondence::new(vec![], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 1, 1)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        ),
+    )]
+    #[case::one_sided_edge(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[]),
+        Correspondence::from_images(&[n(0), n(1)], 2),
+        GraphCorrespondence::new(
+            Correspondence::new(vec![(n(0), n(0)), (n(1), n(1))], 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new(vec![], 1, 0)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        ),
+    )]
+    fn test_graph_correspondence_induce(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] nodes: Correspondence<NodeId>,
+        #[case] expected: GraphCorrespondence,
+    ) {
         assert_eq!(
-            GraphCorrespondence::induced(&left, &right, nodes.clone()),
-            Some(GraphCorrespondence::new(
-                nodes,
-                Correspondence::new(vec![(e(0), e(1)), (e(1), e(2))], 2, 3)
-                    .expect("correspondence producer preserves partial-bijection invariants"),
-            )),
+            GraphCorrespondence::induce(&left, &right, nodes),
+            Some(expected)
         );
     }
 
@@ -596,12 +632,12 @@ mod tests {
         Graph::new(2, &[[0, 1], [0, 1]]),
         Correspondence::from_images(&[n(0), n(1)], 2),
     )]
-    fn test_graph_correspondence_induced_error(
+    fn test_graph_correspondence_induce_error(
         #[case] left: Graph,
         #[case] right: Graph,
         #[case] nodes: Correspondence<NodeId>,
     ) {
-        assert_eq!(GraphCorrespondence::induced(&left, &right, nodes), None);
+        assert_eq!(GraphCorrespondence::induce(&left, &right, nodes), None);
     }
 
     #[rstest]

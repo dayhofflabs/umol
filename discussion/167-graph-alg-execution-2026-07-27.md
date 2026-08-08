@@ -1,6 +1,7 @@
 # Graph algorithm execution APIs
 
-Status: **Active**
+Status: **Completed** (2026-08-08) — S0–S4 implemented and verified; S5 (resumable
+cursors, Python laziness) deferred pending a committed Python consumer
 Date: 2026-07-27
 Relates: [105](105-dsl-fixes-2026-06-06.md),
 [158](158-ring-model-and-enumeration-2026-07-22.md),
@@ -252,7 +253,12 @@ template in the pattern fingerprint.
   from a per-search scratch buffer; the batch clique conversion is removed.
 - S3b: public `visit_common_subgraphs` and `visit_maximal_common_subgraphs`
   emitting the borrowed pair slice; eager forms collect and lift each result
-  to `GraphCorrespondence`; tests and benches as in S1. [dep: S3a]
+  to `GraphCorrespondence`; tests and benches as in S1. [dep: S3a] As
+  implemented, the lift is `GraphCorrespondence::induce` — the DPO path's
+  existing induction, renamed from `induced` (2026-08-08); a transient
+  raw-pair duplicate added during implementation was removed. The walks'
+  adjacency enforces the edge predicate on every both-side edge pair, so the
+  induced edge family is exact for these producers.
 - S3c: `ReactionAst::compose` composes per overlap inside the visitor; public
   signature unchanged. [dep: S3b]
 
@@ -262,7 +268,8 @@ template in the pattern fingerprint.
   working buffer `&[EdgeId]`; the eager form collects by copying.
 - S4b: the structural fingerprint computes canonical keys per emitted
   subgraph without materializing the family. [dep: S4a]
-- S4c (deferrable): paths visitor; no consumer exists.
+- S4c: paths visitor; no consumer exists. Marked deferrable, implemented with
+  the stage (2026-08-08).
 
 ### S5 — deferred: cursors and Python laziness
 
@@ -294,4 +301,4 @@ can pause at any stage boundary.
 - Eager APIs collect the visitor where a visitor exists.
 - No operation named `iter_*` materializes its complete result set.
 - Python laziness is backed by resumable state rather than an eagerly filled
-  Rust vector.
+  Rust vector. (Deferred with S5.)

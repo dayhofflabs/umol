@@ -5,6 +5,8 @@
 //! enumeration uses Bron--Kerbosch with pivoting. See
 //! [Bron and Kerbosch (1973)](https://doi.org/10.1145/362342.362367).
 
+use std::ops::ControlFlow;
+
 use bitvec::prelude::*;
 
 use crate::correspondence::{Correspondence, GraphCorrespondence};
@@ -30,6 +32,47 @@ pub enum EmbeddingKind {
 }
 
 impl Graph {
+    /// Visits every common subgraph of `self` and `other` — the empty one
+    /// included — as a left↔right node-pair slice until traversal completes or
+    /// the visitor returns [`ControlFlow::Break`]. The slice borrows search
+    /// state, so it is only valid for the duration of the call. Traversal is
+    /// deterministic for a fixed graph representation, but its order is not a
+    /// canonical ordering contract.
+    pub fn visit_common_subgraphs<B, N, E, F>(
+        &self,
+        other: &Graph,
+        node_match: &mut N,
+        edge_match: &mut E,
+        embedding: EmbeddingKind,
+        alg: CommonSubgraphEnumerationAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        N: FnMut(NodeId, NodeId) -> bool,
+        E: FnMut(EdgeId, EdgeId) -> bool,
+        F: FnMut(&[(NodeId, NodeId)]) -> ControlFlow<B>,
+    {
+        match alg {
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking => {
+                let (pairs, neighbors) =
+                    self.modular_product(other, node_match, edge_match, embedding);
+                all_cliques(
+                    &neighbors,
+                    &pairs,
+                    &mut Vec::new(),
+                    bitvec![1; pairs.len()],
+                    &mut Vec::new(),
+                    &mut visitor,
+                )
+            }
+            CommonSubgraphEnumerationAlgorithm::DirectBacktracking => {
+                direct_backtracking(self, other, node_match, edge_match, embedding, &mut visitor)
+            }
+        }
+    }
+
+    /// Collects every common subgraph as a [`GraphCorrespondence`] by
+    /// collecting [`Graph::visit_common_subgraphs`], sorted by node pairs.
     pub fn enumerate_common_subgraphs<N, E>(
         &self,
         other: &Graph,
@@ -42,25 +85,61 @@ impl Graph {
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        match alg {
-            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking => {
-                let (pairs, neighbors) =
-                    self.modular_product(other, node_match, edge_match, embedding);
-                let mut cliques = Vec::new();
-                all_cliques(
-                    &neighbors,
-                    &mut Vec::new(),
-                    bitvec![1; pairs.len()],
-                    &mut cliques,
+        let mut subgraphs = Vec::new();
+        let _: ControlFlow<()> =
+            self.visit_common_subgraphs(other, node_match, edge_match, embedding, alg, |pairs| {
+                let nodes =
+                    Correspondence::new(pairs.to_vec(), self.node_count(), other.node_count())
+                        .expect("common-subgraph node pairs form a valid correspondence");
+                subgraphs.push(
+                    GraphCorrespondence::induce(self, other, nodes)
+                        .expect("a common-subgraph pairing induces a unique graph correspondence"),
                 );
-                subgraphs_from_cliques(cliques, &pairs, self, other)
-            }
-            CommonSubgraphEnumerationAlgorithm::DirectBacktracking => {
-                direct_backtracking(self, other, node_match, edge_match, embedding)
-            }
+                ControlFlow::Continue(())
+            });
+        subgraphs.sort_by(|x, y| x.nodes().matched_pairs().cmp(y.nodes().matched_pairs()));
+        subgraphs.dedup();
+        subgraphs
+    }
+
+    /// Visits every maximal common subgraph of `self` and `other` as a
+    /// left↔right node-pair slice until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`]. The slice borrows search state, so it
+    /// is only valid for the duration of the call. Traversal is deterministic
+    /// for a fixed graph representation, but its order is not a canonical
+    /// ordering contract.
+    pub fn visit_maximal_common_subgraphs<B, N, E, F>(
+        &self,
+        other: &Graph,
+        node_match: &mut N,
+        edge_match: &mut E,
+        embedding: EmbeddingKind,
+        alg: MaximalCommonSubgraphAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        N: FnMut(NodeId, NodeId) -> bool,
+        E: FnMut(EdgeId, EdgeId) -> bool,
+        F: FnMut(&[(NodeId, NodeId)]) -> ControlFlow<B>,
+    {
+        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match, embedding);
+        let count = pairs.len();
+        match alg {
+            MaximalCommonSubgraphAlgorithm::BronKerbosch => bron_kerbosch(
+                &neighbors,
+                &pairs,
+                &mut Vec::new(),
+                bitvec![1; count],
+                bitvec![0; count],
+                &mut Vec::new(),
+                &mut visitor,
+            ),
         }
     }
 
+    /// Collects every maximal common subgraph as a [`GraphCorrespondence`] by
+    /// collecting [`Graph::visit_maximal_common_subgraphs`], sorted by node
+    /// pairs.
     pub fn enumerate_maximal_common_subgraphs<N, E>(
         &self,
         other: &Graph,
@@ -73,19 +152,27 @@ impl Graph {
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match, embedding);
-        let count = pairs.len();
-        let mut cliques = Vec::new();
-        match alg {
-            MaximalCommonSubgraphAlgorithm::BronKerbosch => bron_kerbosch(
-                &neighbors,
-                &mut Vec::new(),
-                bitvec![1; count],
-                bitvec![0; count],
-                &mut cliques,
-            ),
-        }
-        subgraphs_from_cliques(cliques, &pairs, self, other)
+        let mut subgraphs = Vec::new();
+        let _: ControlFlow<()> = self.visit_maximal_common_subgraphs(
+            other,
+            node_match,
+            edge_match,
+            embedding,
+            alg,
+            |pairs| {
+                let nodes =
+                    Correspondence::new(pairs.to_vec(), self.node_count(), other.node_count())
+                        .expect("common-subgraph node pairs form a valid correspondence");
+                subgraphs.push(
+                    GraphCorrespondence::induce(self, other, nodes)
+                        .expect("a common-subgraph pairing induces a unique graph correspondence"),
+                );
+                ControlFlow::Continue(())
+            },
+        );
+        subgraphs.sort_by(|x, y| x.nodes().matched_pairs().cmp(y.nodes().matched_pairs()));
+        subgraphs.dedup();
+        subgraphs
     }
 
     pub(super) fn modular_product<N, E>(
@@ -132,57 +219,14 @@ impl Graph {
     }
 }
 
-fn subgraphs_from_cliques(
-    cliques: Vec<Vec<usize>>,
-    pairs: &[(NodeId, NodeId)],
-    a: &Graph,
-    b: &Graph,
-) -> Vec<GraphCorrespondence> {
-    let mut subgraphs: Vec<GraphCorrespondence> = cliques
-        .into_iter()
-        .map(|clique| {
-            let mapping: Vec<(NodeId, NodeId)> = clique.iter().map(|&i| pairs[i]).collect();
-            subgraph_from_mapping(mapping, a, b)
-        })
-        .collect();
-    subgraphs.sort_by(|x, y| x.nodes().matched_pairs().cmp(y.nodes().matched_pairs()));
-    subgraphs.dedup();
-    subgraphs
-}
-
-fn subgraph_from_mapping(
-    mapping: Vec<(NodeId, NodeId)>,
-    left: &Graph,
-    right: &Graph,
-) -> GraphCorrespondence {
-    let mut edges = Vec::new();
-    for x in 0..mapping.len() {
-        for y in (x + 1)..mapping.len() {
-            let (left_a, right_a) = mapping[x];
-            let (left_b, right_b) = mapping[y];
-            if let (Some(left_edge), Some(right_edge)) = (
-                left.find_edge(left_a, left_b),
-                right.find_edge(right_a, right_b),
-            ) {
-                edges.push((left_edge, right_edge));
-            }
-        }
-    }
-    GraphCorrespondence::new(
-        Correspondence::new(mapping, left.node_count(), right.node_count())
-            .expect("common-subgraph node pairs form a valid correspondence"),
-        Correspondence::new(edges, left.edge_count(), right.edge_count())
-            .expect("common-subgraph edge pairs form a valid correspondence"),
-    )
-}
-
-fn direct_backtracking<N, E>(
+fn direct_backtracking<B, N, E>(
     left: &Graph,
     right: &Graph,
     node_match: &mut N,
     edge_match: &mut E,
     embedding: EmbeddingKind,
-) -> Vec<GraphCorrespondence>
+    emit: &mut impl FnMut(&[(NodeId, NodeId)]) -> ControlFlow<B>,
+) -> ControlFlow<B>
 where
     N: FnMut(NodeId, NodeId) -> bool,
     E: FnMut(EdgeId, EdgeId) -> bool,
@@ -204,13 +248,8 @@ where
         candidates,
         used_right: bitvec![0; right.node_count()],
         matched_pairs: Vec::new(),
-        subgraphs: Vec::new(),
     };
-    state.search(0);
-    state
-        .subgraphs
-        .sort_by(|a, b| a.nodes().matched_pairs().cmp(b.nodes().matched_pairs()));
-    state.subgraphs
+    state.search(0, emit)
 }
 
 struct DirectEnumerationState<'g, 'm, E> {
@@ -220,22 +259,21 @@ struct DirectEnumerationState<'g, 'm, E> {
     embedding: EmbeddingKind,
     candidates: Vec<Vec<NodeId>>,
     used_right: BitVec,
+    // Doubles as the emitted pair slice at each leaf.
     matched_pairs: Vec<(NodeId, NodeId)>,
-    subgraphs: Vec<GraphCorrespondence>,
 }
 
 impl<E> DirectEnumerationState<'_, '_, E>
 where
     E: FnMut(EdgeId, EdgeId) -> bool,
 {
-    fn search(&mut self, left_index: usize) {
+    fn search<B>(
+        &mut self,
+        left_index: usize,
+        emit: &mut impl FnMut(&[(NodeId, NodeId)]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if left_index == self.left.node_count() {
-            self.subgraphs.push(subgraph_from_mapping(
-                self.matched_pairs.clone(),
-                self.left,
-                self.right,
-            ));
-            return;
+            return emit(&self.matched_pairs);
         }
 
         let left_node = NodeId::from(left_index);
@@ -246,11 +284,14 @@ where
             }
             self.used_right.set(right_node.index(), true);
             self.matched_pairs.push((left_node, right_node));
-            self.search(left_index + 1);
+            let result = self.search(left_index + 1, emit);
             self.matched_pairs.pop();
             self.used_right.set(right_node.index(), false);
+            if let ControlFlow::Break(value) = result {
+                return ControlFlow::Break(value);
+            }
         }
-        self.search(left_index + 1);
+        self.search(left_index + 1, emit)
     }
 
     fn compatible(&mut self, left_node: NodeId, right_node: NodeId) -> bool {
@@ -273,33 +314,46 @@ where
     }
 }
 
-fn all_cliques(
+fn all_cliques<B>(
     neighbors: &[BitVec],
+    pairs: &[(NodeId, NodeId)],
     clique: &mut Vec<usize>,
     candidates: BitVec,
-    out: &mut Vec<Vec<usize>>,
-) {
-    out.push(clique.clone());
+    scratch: &mut Vec<(NodeId, NodeId)>,
+    emit: &mut impl FnMut(&[(NodeId, NodeId)]) -> ControlFlow<B>,
+) -> ControlFlow<B> {
+    scratch.clear();
+    scratch.extend(clique.iter().map(|&index| pairs[index]));
+    if let ControlFlow::Break(value) = emit(scratch) {
+        return ControlFlow::Break(value);
+    }
     let start = clique.last().map_or(0, |&v| v + 1);
     let extend: Vec<usize> = candidates.iter_ones().filter(|&v| v >= start).collect();
     for v in extend {
         let next = candidates.clone() & neighbors[v].clone();
         clique.push(v);
-        all_cliques(neighbors, clique, next, out);
+        let result = all_cliques(neighbors, pairs, clique, next, scratch, emit);
         clique.pop();
+        if let ControlFlow::Break(value) = result {
+            return ControlFlow::Break(value);
+        }
     }
+    ControlFlow::Continue(())
 }
 
-fn bron_kerbosch(
+fn bron_kerbosch<B>(
     neighbors: &[BitVec],
+    pairs: &[(NodeId, NodeId)],
     clique: &mut Vec<usize>,
     mut candidates: BitVec,
     mut excluded: BitVec,
-    out: &mut Vec<Vec<usize>>,
-) {
+    scratch: &mut Vec<(NodeId, NodeId)>,
+    emit: &mut impl FnMut(&[(NodeId, NodeId)]) -> ControlFlow<B>,
+) -> ControlFlow<B> {
     if candidates.not_any() && excluded.not_any() {
-        out.push(clique.clone());
-        return;
+        scratch.clear();
+        scratch.extend(clique.iter().map(|&index| pairs[index]));
+        return emit(scratch);
     }
     let pivot = candidates
         .iter_ones()
@@ -312,17 +366,23 @@ fn bron_kerbosch(
     for v in expand {
         let nv = neighbors[v].clone();
         clique.push(v);
-        bron_kerbosch(
+        let result = bron_kerbosch(
             neighbors,
+            pairs,
             clique,
             candidates.clone() & nv.clone(),
             excluded.clone() & nv,
-            out,
+            scratch,
+            emit,
         );
         clique.pop();
+        if let ControlFlow::Break(value) = result {
+            return ControlFlow::Break(value);
+        }
         candidates.set(v, false);
         excluded.set(v, true);
     }
+    ControlFlow::Continue(())
 }
 
 #[cfg(test)]
@@ -330,6 +390,80 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::correspondence::Correspondence;
+
+    #[rstest]
+    #[case::modular_product(CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking)]
+    #[case::direct(CommonSubgraphEnumerationAlgorithm::DirectBacktracking)]
+    fn test_graph_visit_common_subgraphs(#[case] alg: CommonSubgraphEnumerationAlgorithm) {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[[0, 1]]);
+        let node_labels = [0u8, 1];
+
+        let mut emissions: Vec<Vec<(NodeId, NodeId)>> = Vec::new();
+        let flow: ControlFlow<()> = left.visit_common_subgraphs(
+            &right,
+            &mut |left_node, right_node| {
+                node_labels[left_node.index()] == node_labels[right_node.index()]
+            },
+            &mut |_, _| true,
+            EmbeddingKind::Induced,
+            alg,
+            |pairs| {
+                let mut pairs = pairs.to_vec();
+                pairs.sort_unstable();
+                emissions.push(pairs);
+                ControlFlow::Continue(())
+            },
+        );
+        assert_eq!(flow, ControlFlow::Continue(()));
+        emissions.sort();
+        assert_eq!(
+            emissions,
+            vec![
+                vec![],
+                vec![(NodeId(0), NodeId(0))],
+                vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+                vec![(NodeId(1), NodeId(1))],
+            ],
+        );
+    }
+
+    #[rstest]
+    #[case::modular_product(CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking)]
+    #[case::direct(CommonSubgraphEnumerationAlgorithm::DirectBacktracking)]
+    fn test_graph_visit_common_subgraphs_termination(
+        #[case] alg: CommonSubgraphEnumerationAlgorithm,
+    ) {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[[0, 1]]);
+
+        let result = left.visit_common_subgraphs(
+            &right,
+            &mut |_, _| true,
+            &mut |_, _| true,
+            EmbeddingKind::Induced,
+            alg,
+            |pairs| {
+                let mut pairs = pairs.to_vec();
+                pairs.sort_unstable();
+                ControlFlow::Break(pairs)
+            },
+        );
+        let ControlFlow::Break(first) = result else {
+            panic!("expected Break on first emission");
+        };
+        let expected = [
+            vec![],
+            vec![(NodeId(0), NodeId(0))],
+            vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+            vec![(NodeId(0), NodeId(1))],
+            vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+            vec![(NodeId(1), NodeId(0))],
+            vec![(NodeId(1), NodeId(1))],
+        ];
+        assert!(expected.contains(&first), "invalid emission {first:?}");
+    }
 
     #[rstest]
     #[case::empty(
@@ -374,7 +508,7 @@ mod tests {
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         )],
     )]
-    fn test_direct_backtracking(
+    fn test_graph_enumerate_common_subgraphs(
         #[case] left: Graph,
         #[case] right: Graph,
         #[case] left_node_labels: Vec<u8>,
@@ -384,8 +518,7 @@ mod tests {
         #[case] expected: Vec<GraphCorrespondence>,
     ) {
         assert_eq!(
-            direct_backtracking(
-                &left,
+            left.enumerate_common_subgraphs(
                 &right,
                 &mut |left_node, right_node| {
                     left_node_labels[left_node.index()] == right_node_labels[right_node.index()]
@@ -394,6 +527,7 @@ mod tests {
                     left_edge_labels[left_edge.index()] == right_edge_labels[right_edge.index()]
                 },
                 EmbeddingKind::Induced,
+                CommonSubgraphEnumerationAlgorithm::DirectBacktracking,
             ),
             expected,
         );
@@ -478,5 +612,81 @@ mod tests {
         );
 
         assert_eq!(direct, modular_product);
+    }
+
+    #[rstest]
+    #[case::single_edge(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        vec![0, 0],
+        vec![0, 0],
+        vec![
+            vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+            vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+        ],
+    )]
+    #[case::labeled_path(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![0, 1, 2],
+        vec![0, 1, 2],
+        vec![vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1)), (NodeId(2), NodeId(2))]],
+    )]
+    fn test_graph_visit_maximal_common_subgraphs(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] left_node_labels: Vec<u8>,
+        #[case] right_node_labels: Vec<u8>,
+        #[case] expected: Vec<Vec<(NodeId, NodeId)>>,
+    ) {
+        let mut emissions: Vec<Vec<(NodeId, NodeId)>> = Vec::new();
+        let flow: ControlFlow<()> = left.visit_maximal_common_subgraphs(
+            &right,
+            &mut |left_node, right_node| {
+                left_node_labels[left_node.index()] == right_node_labels[right_node.index()]
+            },
+            &mut |_, _| true,
+            EmbeddingKind::Induced,
+            MaximalCommonSubgraphAlgorithm::BronKerbosch,
+            |pairs| {
+                let mut pairs = pairs.to_vec();
+                pairs.sort_unstable();
+                emissions.push(pairs);
+                ControlFlow::Continue(())
+            },
+        );
+        assert_eq!(flow, ControlFlow::Continue(()));
+        emissions.sort();
+        assert_eq!(emissions, expected);
+    }
+
+    #[rstest]
+    #[case::bron_kerbosch(MaximalCommonSubgraphAlgorithm::BronKerbosch)]
+    fn test_graph_visit_maximal_common_subgraphs_termination(
+        #[case] alg: MaximalCommonSubgraphAlgorithm,
+    ) {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[[0, 1]]);
+
+        let result = left.visit_maximal_common_subgraphs(
+            &right,
+            &mut |_, _| true,
+            &mut |_, _| true,
+            EmbeddingKind::Induced,
+            alg,
+            |pairs| {
+                let mut pairs = pairs.to_vec();
+                pairs.sort_unstable();
+                ControlFlow::Break(pairs)
+            },
+        );
+        let ControlFlow::Break(first) = result else {
+            panic!("expected Break on first emission");
+        };
+        let expected = [
+            vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+            vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+        ];
+        assert!(expected.contains(&first), "invalid emission {first:?}");
     }
 }

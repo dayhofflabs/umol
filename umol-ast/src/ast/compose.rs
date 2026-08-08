@@ -3,8 +3,11 @@
 //! id space and `canonicalize`d; overlaps with no `B.apply(A.apply(H))` witness (the DPO gluing
 //! conditions) are rejected.
 
+use std::ops::ControlFlow;
+
 use umol_graph_core::{
-    CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, GraphCorrespondence, NodeId,
+    CommonSubgraphEnumerationAlgorithm, Correspondence, EdgeId, EmbeddingKind, GraphCorrespondence,
+    NodeId,
 };
 
 use super::id::{AtomId, BondId};
@@ -72,27 +75,36 @@ fn compose_all(
             .meet(l_b.bond(BondId::from(le)).ast)
             .is_some()
     };
-    // Every overlap of R_A with L_B — the *complete* common-subgraph enumeration, not just the
+    let a_inverse = a.reverse().ok()?;
+
+    // Every overlap of R_A with L_B — the *complete* common-subgraph visitation, not just the
     // maximal ones: each distinct (incl. partial and empty) overlap is a distinct sequential
     // composite, so completeness (`seq ⊆ composed`) requires all of them. Monomorphism (not induced):
     // an R_A bond absent in the matched L_B region stays as R_A context (the R1 case), rather than
     // forcing the overlap edge-for-edge. `compose_overlap` builds the composite by gluing over the
     // overlap.
-    let overlaps = r_a.raw_graph().enumerate_common_subgraphs(
+    let mut results = Vec::new();
+    let _: ControlFlow<()> = r_a.raw_graph().visit_common_subgraphs(
         l_b.raw_graph(),
         &mut node_match,
         &mut edge_match,
         EmbeddingKind::Monomorphism,
         algorithm,
+        |pairs| {
+            let nodes = Correspondence::new(
+                pairs.to_vec(),
+                r_a.raw_graph().node_count(),
+                l_b.raw_graph().node_count(),
+            )
+            .expect("common-subgraph node pairs form a valid correspondence");
+            let overlap = GraphCorrespondence::induce(r_a.raw_graph(), l_b.raw_graph(), nodes)
+                .expect("a common-subgraph pairing induces a unique graph correspondence");
+            if let Some(composite) = compose_overlap(&a_inverse, b, &overlap) {
+                results.push(composite);
+            }
+            ControlFlow::Continue(())
+        },
     );
-    let a_inverse = a.reverse().ok()?;
-
-    let mut results = Vec::new();
-    for overlap in overlaps {
-        if let Some(composite) = compose_overlap(&a_inverse, b, &overlap) {
-            results.push(composite);
-        }
-    }
     Some(results)
 }
 

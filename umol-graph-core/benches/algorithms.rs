@@ -945,6 +945,62 @@ fn common_subgraph_enumeration(c: &mut Criterion) {
                     });
                 },
             );
+            // Time to first result: break on the first emission.
+            group.bench_with_input(
+                BenchmarkId::new(case.name, format!("{algorithm_name}/first")),
+                &algorithm,
+                |b, &algorithm| {
+                    b.iter(|| {
+                        let mut node_match = |left: NodeId, right: NodeId| {
+                            case.left_node_labels[left.index()]
+                                == case.right_node_labels[right.index()]
+                        };
+                        let mut edge_match = |left: EdgeId, right: EdgeId| {
+                            case.left_edge_labels[left.index()]
+                                == case.right_edge_labels[right.index()]
+                        };
+                        case.left.visit_common_subgraphs(
+                            &case.right,
+                            &mut node_match,
+                            &mut edge_match,
+                            case.embedding,
+                            algorithm,
+                            |_| ControlFlow::Break(()),
+                        )
+                    });
+                },
+            );
+            // Complete visitation without result storage: total enumeration
+            // time minus the collection cost.
+            group.bench_with_input(
+                BenchmarkId::new(case.name, format!("{algorithm_name}/count")),
+                &algorithm,
+                |b, &algorithm| {
+                    b.iter(|| {
+                        let mut node_match = |left: NodeId, right: NodeId| {
+                            case.left_node_labels[left.index()]
+                                == case.right_node_labels[right.index()]
+                        };
+                        let mut edge_match = |left: EdgeId, right: EdgeId| {
+                            case.left_edge_labels[left.index()]
+                                == case.right_edge_labels[right.index()]
+                        };
+                        let mut count = 0usize;
+                        let _: ControlFlow<()> = case.left.visit_common_subgraphs(
+                            &case.right,
+                            &mut node_match,
+                            &mut edge_match,
+                            case.embedding,
+                            algorithm,
+                            |_| {
+                                count += 1;
+                                ControlFlow::Continue(())
+                            },
+                        );
+                        count
+                    });
+                },
+            );
         }
     }
     group.finish();

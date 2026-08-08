@@ -299,7 +299,7 @@ mod tests {
             right.node_count(),
         )
         .expect("correspondence producer preserves partial-bijection invariants");
-        GraphCorrespondence::induced(left, right, nodes)
+        GraphCorrespondence::induce(left, right, nodes)
             .expect("simple graph overlap induces a unique graph correspondence")
     }
 
@@ -337,7 +337,7 @@ mod tests {
         // host path 0-1-2-3; delete node 1 with its two incident edges, keep endpoints 0 and 2.
         let host = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
         // L = path 0-1-2 matched onto host 0-1-2.
-        let matched = GraphCorrespondence::induced(
+        let matched = GraphCorrespondence::induce(
             &Graph::new(3, &[[0, 1], [1, 2]]),
             &host,
             Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2)], 4),
@@ -364,7 +364,7 @@ mod tests {
     fn test_pushout_complement_dangling() {
         // Same match, but K keeps the edges — deleting node 1 would strand them → None.
         let host = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
-        let matched = GraphCorrespondence::induced(
+        let matched = GraphCorrespondence::induce(
             &Graph::new(3, &[[0, 1], [1, 2]]),
             &host,
             Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2)], 4),

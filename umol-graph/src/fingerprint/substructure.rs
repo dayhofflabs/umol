@@ -9,6 +9,8 @@
 //! negatives). Degree, ring membership, and aromaticity are excluded: they change
 //! with context and would break the subset test.
 
+use std::ops::ControlFlow;
+
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{AutomorphismAlgorithm, GraphCorrespondence, SubgraphEnumerationAlgorithm};
 
@@ -49,15 +51,18 @@ impl SubstructureFeaturizer {
                 self.automorphism_algorithm,
             ));
         }
-        for edges in
-            graph.enumerate_connected_subgraphs(self.max_bonds, self.subgraph_enumeration_algorithm)
-        {
-            keys.push(canonical_key(
-                mol,
-                &graph.edge_induced_subgraph(&edges),
-                self.automorphism_algorithm,
-            ));
-        }
+        let _: ControlFlow<()> = graph.visit_connected_subgraphs(
+            self.max_bonds,
+            self.subgraph_enumeration_algorithm,
+            |edges| {
+                keys.push(canonical_key(
+                    mol,
+                    &graph.edge_induced_subgraph(edges),
+                    self.automorphism_algorithm,
+                ));
+                ControlFlow::Continue(())
+            },
+        );
         Ok(FeatureSet::from_features(keys))
     }
 }
