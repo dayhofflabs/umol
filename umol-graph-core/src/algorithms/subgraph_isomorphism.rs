@@ -48,9 +48,58 @@ pub enum SubgraphIsomorphismAlgorithm {
 pub const ARCMATCH_DEFAULT_PATH_LENGTH: usize = 6;
 
 impl Graph {
-    // TODO: add singular `subgraph_isomorphism(...) -> Option<Vec<usize>>` that stops at
-    // the first match (existence via `.is_some()`). Saves the embedding-multiplicity
-    // factor on positive matches; same Vf2, `search` gains an early-exit cap.
+    /// Visits every subgraph isomorphism of `query` in `self` until traversal
+    /// completes or the visitor returns [`ControlFlow::Break`]. The embedding
+    /// slice maps each query node index to its host node and borrows search
+    /// state, so it is only valid for the duration of the call. Traversal is
+    /// deterministic for a fixed graph representation, but its order is not a
+    /// canonical ordering contract.
+    pub fn visit_subgraph_isomorphisms<B, F>(
+        &self,
+        query: &Graph,
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        F: FnMut(&[NodeId]) -> ControlFlow<B>,
+    {
+        let mut scratch: Vec<NodeId> = Vec::with_capacity(query.node_count());
+        let mut emit = |embedding: &[usize]| {
+            scratch.clear();
+            scratch.extend(embedding.iter().copied().map(NodeId::from));
+            visitor(&scratch)
+        };
+        match alg {
+            SubgraphIsomorphismAlgorithm::Vf2 => {
+                self.visit_subgraph_isomorphisms_vf2(query, node_match, edge_match, &mut emit)
+            }
+            SubgraphIsomorphismAlgorithm::Ullmann => {
+                self.visit_subgraph_isomorphisms_ullmann(query, node_match, edge_match, &mut emit)
+            }
+            SubgraphIsomorphismAlgorithm::Ri => {
+                self.visit_subgraph_isomorphisms_ri(query, node_match, edge_match, &mut emit)
+            }
+            SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => self
+                .visit_subgraph_isomorphisms_arcmatch(
+                    query,
+                    node_match,
+                    edge_match,
+                    path_length,
+                    &mut emit,
+                ),
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
+                self.visit_subgraph_isomorphisms_vf2rdkit(query, node_match, edge_match, &mut emit)
+            }
+            SubgraphIsomorphismAlgorithm::RayKirsch => {
+                self.visit_subgraph_isomorphisms_rk(query, node_match, edge_match, &mut emit)
+            }
+        }
+    }
+
+    /// Collects every subgraph isomorphism as a [`Correspondence`] over the
+    /// host's node id space by collecting [`Graph::visit_subgraph_isomorphisms`].
     pub fn enumerate_subgraph_isomorphisms(
         &self,
         query: &Graph,
@@ -58,44 +107,65 @@ impl Graph {
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         alg: SubgraphIsomorphismAlgorithm,
     ) -> Vec<Correspondence<NodeId>> {
-        let embeddings = match alg {
-            SubgraphIsomorphismAlgorithm::Vf2 => {
-                self.subgraph_isomorphisms_vf2(query, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::Ullmann => {
-                self.subgraph_isomorphisms_ullmann(query, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::Ri => {
-                self.subgraph_isomorphisms_ri(query, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => {
-                self.subgraph_isomorphisms_arcmatch(query, node_match, edge_match, path_length)
-            }
-            SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
-                self.subgraph_isomorphisms_vf2rdkit(query, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::RayKirsch => {
-                self.subgraph_isomorphisms_rk(query, node_match, edge_match)
-            }
-        };
-        self.embeddings_to_correspondences(embeddings)
+        let mut result = Vec::new();
+        let _: ControlFlow<()> =
+            self.visit_subgraph_isomorphisms(query, node_match, edge_match, alg, |embedding| {
+                result.push(Correspondence::from_images(embedding, self.node_count()));
+                ControlFlow::Continue(())
+            });
+        result
     }
 
-    /// Lift each `query→host` embedding (dense left space `0..query.node_count()`) to a
-    /// [`Correspondence`] over the host's node id space.
-    fn embeddings_to_correspondences(
+    /// Visits every subgraph isomorphism mapping query node `anchor.0` to host
+    /// node `anchor.1`; otherwise like [`Graph::visit_subgraph_isomorphisms`].
+    pub fn visit_subgraph_isomorphisms_at<B, F>(
         &self,
-        embeddings: Vec<Vec<usize>>,
-    ) -> Vec<Correspondence<NodeId>> {
-        embeddings
-            .into_iter()
-            .map(|embedding| {
-                let images: Vec<NodeId> = embedding.into_iter().map(NodeId::from).collect();
-                Correspondence::from_images(&images, self.node_count())
-            })
-            .collect()
+        query: &Graph,
+        anchor: (NodeId, NodeId),
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        F: FnMut(&[NodeId]) -> ControlFlow<B>,
+    {
+        let mut scratch: Vec<NodeId> = Vec::with_capacity(query.node_count());
+        let mut emit = |embedding: &[usize]| {
+            scratch.clear();
+            scratch.extend(embedding.iter().copied().map(NodeId::from));
+            visitor(&scratch)
+        };
+        match alg {
+            SubgraphIsomorphismAlgorithm::Vf2 => self.visit_subgraph_isomorphisms_at_vf2(
+                query, anchor, node_match, edge_match, &mut emit,
+            ),
+            SubgraphIsomorphismAlgorithm::Ullmann => self.visit_subgraph_isomorphisms_at_ullmann(
+                query, anchor, node_match, edge_match, &mut emit,
+            ),
+            SubgraphIsomorphismAlgorithm::Ri => self.visit_subgraph_isomorphisms_at_ri(
+                query, anchor, node_match, edge_match, &mut emit,
+            ),
+            SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => self
+                .visit_subgraph_isomorphisms_at_arcmatch(
+                    query,
+                    anchor,
+                    node_match,
+                    edge_match,
+                    path_length,
+                    &mut emit,
+                ),
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit => self.visit_subgraph_isomorphisms_at_vf2rdkit(
+                query, anchor, node_match, edge_match, &mut emit,
+            ),
+            SubgraphIsomorphismAlgorithm::RayKirsch => self.visit_subgraph_isomorphisms_at_rk(
+                query, anchor, node_match, edge_match, &mut emit,
+            ),
+        }
     }
 
+    /// Collects every anchored subgraph isomorphism as a [`Correspondence`] by
+    /// collecting [`Graph::visit_subgraph_isomorphisms_at`].
     pub fn enumerate_subgraph_isomorphisms_at(
         &self,
         query: &Graph,
@@ -104,109 +174,88 @@ impl Graph {
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         alg: SubgraphIsomorphismAlgorithm,
     ) -> Vec<Correspondence<NodeId>> {
-        let embeddings = match alg {
-            SubgraphIsomorphismAlgorithm::Vf2 => {
-                self.subgraph_isomorphisms_at_vf2(query, anchor, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::Ullmann => {
-                self.subgraph_isomorphisms_at_ullmann(query, anchor, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::Ri => {
-                self.subgraph_isomorphisms_at_ri(query, anchor, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => self
-                .subgraph_isomorphisms_at_arcmatch(
-                    query,
-                    anchor,
-                    node_match,
-                    edge_match,
-                    path_length,
-                ),
-            SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
-                self.subgraph_isomorphisms_at_vf2rdkit(query, anchor, node_match, edge_match)
-            }
-            SubgraphIsomorphismAlgorithm::RayKirsch => {
-                self.subgraph_isomorphisms_at_rk(query, anchor, node_match, edge_match)
-            }
-        };
-        self.embeddings_to_correspondences(embeddings)
+        let mut result = Vec::new();
+        let _: ControlFlow<()> = self.visit_subgraph_isomorphisms_at(
+            query,
+            anchor,
+            node_match,
+            edge_match,
+            alg,
+            |embedding| {
+                result.push(Correspondence::from_images(embedding, self.node_count()));
+                ControlFlow::Continue(())
+            },
+        );
+        result
     }
 
     // Cordella et al. 2004 "A (sub)graph isomorphism algorithm for matching large graphs".
-    fn subgraph_isomorphisms_vf2(
+    fn visit_subgraph_isomorphisms_vf2<B>(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return vec![vec![]];
+            return emit(&[]);
         }
 
         let mut state = Vf2State::new(query, self);
-        let mut results = Vec::new();
-        let _: ControlFlow<()> = state.search(node_match, edge_match, &mut |embedding| {
-            results.push(embedding.to_vec());
-            ControlFlow::Continue(())
-        });
-        results
+        state.search(node_match, edge_match, emit)
     }
 
     // Cordella et al. 2004 "A (sub)graph isomorphism algorithm for matching large graphs".
-    fn subgraph_isomorphisms_at_vf2(
+    fn visit_subgraph_isomorphisms_at_vf2<B>(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if !node_match(anchor.0, anchor.1) {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
 
         let mut state = Vf2State::new(query, self);
         state.seed_anchor(anchor);
-        let mut results = Vec::new();
-        let _: ControlFlow<()> = state.search(node_match, edge_match, &mut |embedding| {
-            results.push(embedding.to_vec());
-            ControlFlow::Continue(())
-        });
-        results
+        state.search(node_match, edge_match, emit)
     }
 
     // Ullmann 1976 "An algorithm for subgraph isomorphism": candidate matrix
     // (label- and degree-compatible) refined to a fixpoint, then row-by-row
     // backtracking with re-refinement. Monomorphism (substructure) semantics.
-    fn subgraph_isomorphisms_ullmann(
+    fn visit_subgraph_isomorphisms_ullmann<B>(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return vec![vec![]];
+            return emit(&[]);
         }
         let mut m = ullmann_matrix(query, self, node_match);
         ullmann_refine(query, self, &mut m, edge_match);
-        let mut results = Vec::new();
         let mut mapping = vec![usize::MAX; query.node_count()];
         let mut used = vec![false; self.node_count()];
-        let _: ControlFlow<()> = ullmann_search(
+        ullmann_search(
             query,
             self,
             0,
@@ -214,29 +263,26 @@ impl Graph {
             &mut mapping,
             &mut used,
             edge_match,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
-    fn subgraph_isomorphisms_at_ullmann(
+    fn visit_subgraph_isomorphisms_at_ullmann<B>(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() || query.node_count() == 0 {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if !node_match(anchor.0, anchor.1) {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let n2 = self.node_count();
         let (qa, ta) = (anchor.0.index(), anchor.1.index());
@@ -254,10 +300,9 @@ impl Graph {
             }
         }
         ullmann_refine(query, self, &mut m, edge_match);
-        let mut results = Vec::new();
         let mut mapping = vec![usize::MAX; query.node_count()];
         let mut used = vec![false; n2];
-        let _: ControlFlow<()> = ullmann_search(
+        ullmann_search(
             query,
             self,
             0,
@@ -265,36 +310,32 @@ impl Graph {
             &mut mapping,
             &mut used,
             edge_match,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
     // Bonnici et al. 2013 "A subgraph isomorphism algorithm and its application to
     // biochemical data": a static most-constrained-first pattern ordering with light
     // edge-consistency matching and no domain reduction. Monomorphism semantics.
-    fn subgraph_isomorphisms_ri(
+    fn visit_subgraph_isomorphisms_ri<B>(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return vec![vec![]];
+            return emit(&[]);
         }
         let order = ri_order(query, None);
         let parents = ri_parents(query, &order);
-        let mut results = Vec::new();
         let mut mapping = vec![0usize; order.len()];
         let mut used = vec![false; self.node_count()];
         let mut by_query = vec![0usize; order.len()];
-        let _: ControlFlow<()> = ri_search(
+        ri_search(
             self,
             &order,
             &parents,
@@ -305,37 +346,33 @@ impl Graph {
             node_match,
             edge_match,
             &mut by_query,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
-    fn subgraph_isomorphisms_at_ri(
+    fn visit_subgraph_isomorphisms_at_ri<B>(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() || query.node_count() == 0 {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if !node_match(anchor.0, anchor.1) {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let order = ri_order(query, Some(anchor.0.index()));
         let parents = ri_parents(query, &order);
-        let mut results = Vec::new();
         let mut mapping = vec![0usize; order.len()];
         let mut used = vec![false; self.node_count()];
         let mut by_query = vec![0usize; order.len()];
-        let _: ControlFlow<()> = ri_search(
+        ri_search(
             self,
             &order,
             &parents,
@@ -346,29 +383,26 @@ impl Graph {
             node_match,
             edge_match,
             &mut by_query,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
     // Bonnici et al. 2024 "ArcMatch: high-performance subgraph matching for labeled
     // graphs": vertex domains → arc consistency → edge domains → path-based reduction
     // → 5-measure ordering → dynamic-parent backtracking. Monomorphism semantics.
-    fn subgraph_isomorphisms_arcmatch(
+    fn visit_subgraph_isomorphisms_arcmatch<B>(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         path_length: usize,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return vec![vec![]];
+            return emit(&[]);
         }
         let mut vertex = arcmatch_vertex_domains(query, self, node_match);
         arcmatch_arc_consistency(query, self, &mut vertex, edge_match);
@@ -377,11 +411,10 @@ impl Graph {
             arcmatch_path_reduction(query, &mut domains, path_length);
         }
         let order = arcmatch_variable_ordering(query, &domains);
-        let mut results = Vec::new();
         let mut assigned = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
         let mut scratch = vec![0usize; query.node_count()];
-        let _: ControlFlow<()> = arcmatch_search(
+        arcmatch_search(
             query,
             &order,
             &domains,
@@ -389,30 +422,27 @@ impl Graph {
             &mut assigned,
             &mut used,
             &mut scratch,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
-    fn subgraph_isomorphisms_at_arcmatch(
+    fn visit_subgraph_isomorphisms_at_arcmatch<B>(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         path_length: usize,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() || query.node_count() == 0 {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if !node_match(anchor.0, anchor.1) {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let n2 = self.node_count();
         let (qa, ta) = (anchor.0.index(), anchor.1.index());
@@ -435,11 +465,10 @@ impl Graph {
             arcmatch_path_reduction(query, &mut domains, path_length);
         }
         let order = arcmatch_variable_ordering(query, &domains);
-        let mut results = Vec::new();
         let mut assigned = vec![None; query.node_count()];
         let mut used = vec![false; n2];
         let mut scratch = vec![0usize; query.node_count()];
-        let _: ControlFlow<()> = arcmatch_search(
+        arcmatch_search(
             query,
             &order,
             &domains,
@@ -447,34 +476,30 @@ impl Graph {
             &mut assigned,
             &mut used,
             &mut scratch,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
     // RDKit's `vf2.hpp` (vflib-derived VF2 + Mayfield PR #2500): monomorphism with
     // candidates drawn from a mapped neighbor's image adjacency, an explicit degree
     // bound, and no terminal-set look-ahead. Benchmark reference for RDKit.
-    fn subgraph_isomorphisms_vf2rdkit(
+    fn visit_subgraph_isomorphisms_vf2rdkit<B>(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return vec![vec![]];
+            return emit(&[]);
         }
         let mut mapping = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
-        let mut results = Vec::new();
         let mut scratch = vec![0usize; query.node_count()];
-        let _: ControlFlow<()> = vf2rdkit_search(
+        vf2rdkit_search(
             query,
             self,
             &mut mapping,
@@ -482,37 +507,33 @@ impl Graph {
             node_match,
             edge_match,
             &mut scratch,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
-    fn subgraph_isomorphisms_at_vf2rdkit(
+    fn visit_subgraph_isomorphisms_at_vf2rdkit<B>(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() || query.node_count() == 0 {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if !node_match(anchor.0, anchor.1) {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let mut mapping = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
         mapping[anchor.0.index()] = Some(anchor.1.index());
         used[anchor.1.index()] = true;
-        let mut results = Vec::new();
         let mut scratch = vec![0usize; query.node_count()];
-        let _: ControlFlow<()> = vf2rdkit_search(
+        vf2rdkit_search(
             query,
             self,
             &mut mapping,
@@ -520,28 +541,25 @@ impl Graph {
             node_match,
             edge_match,
             &mut scratch,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
     // Ray-Kirsch bond-based search (Sayle `parsmart.cpp`): backtrack over query
     // bonds; degree-0 query atoms are mapped as a product afterwards. Benchmark
     // reference.
-    fn subgraph_isomorphisms_rk(
+    fn visit_subgraph_isomorphisms_rk<B>(
         &self,
         query: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if query.node_count() == 0 {
-            return vec![vec![]];
+            return emit(&[]);
         }
         let bond_order = rk_bond_order(query);
         let isolated: Vec<usize> = (0..query.node_count())
@@ -549,9 +567,8 @@ impl Graph {
             .collect();
         let mut mapping = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
-        let mut results = Vec::new();
         let mut scratch = vec![0usize; query.node_count()];
-        let _: ControlFlow<()> = rk_search(
+        rk_search(
             self,
             &bond_order,
             &isolated,
@@ -561,29 +578,26 @@ impl Graph {
             node_match,
             edge_match,
             &mut scratch,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 
-    fn subgraph_isomorphisms_at_rk(
+    fn visit_subgraph_isomorphisms_at_rk<B>(
         &self,
         query: &Graph,
         anchor: (NodeId, NodeId),
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-    ) -> Vec<Vec<usize>> {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if query.node_count() > self.node_count() || query.node_count() == 0 {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         if !node_match(anchor.0, anchor.1) {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let bond_order = rk_bond_order(query);
         let isolated: Vec<usize> = (0..query.node_count())
@@ -593,9 +607,8 @@ impl Graph {
         let mut used = vec![false; self.node_count()];
         mapping[anchor.0.index()] = Some(anchor.1.index());
         used[anchor.1.index()] = true;
-        let mut results = Vec::new();
         let mut scratch = vec![0usize; query.node_count()];
-        let _: ControlFlow<()> = rk_search(
+        rk_search(
             self,
             &bond_order,
             &isolated,
@@ -605,12 +618,8 @@ impl Graph {
             node_match,
             edge_match,
             &mut scratch,
-            &mut |embedding| {
-                results.push(embedding.to_vec());
-                ControlFlow::Continue(())
-            },
-        );
-        results
+            emit,
+        )
     }
 }
 
@@ -2006,6 +2015,7 @@ use ray_kirsch::{rk_bond_order, rk_search};
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::collections::HashMap;
 
     use pretty_assertions::assert_eq;
@@ -2043,6 +2053,117 @@ mod tests {
         const QE: [u8; 1] = [1];
         const TE: [u8; 2] = [0, 1];
         QE[q.index()] == TE[t.index()]
+    }
+
+    #[rstest]
+    #[case::triangle_self(Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), any_node, any_edge,
+        vec![vec![0, 1, 2], vec![0, 2, 1], vec![1, 0, 2], vec![1, 2, 0], vec![2, 0, 1], vec![2, 1, 0]])]
+    #[case::empty_query(Graph::new(3, &[[0, 1], [1, 2]]), Graph::default(), any_node, any_edge, vec![vec![]])]
+    #[case::node_filter(Graph::new(3, &[]), Graph::new(1, &[]), only_q0_t1, any_edge, vec![vec![1]])]
+    fn test_graph_visit_subgraph_isomorphisms(
+        #[case] target: Graph,
+        #[case] query: Graph,
+        #[case] mut node_match: fn(NodeId, NodeId) -> bool,
+        #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
+        #[case] expected: Vec<Vec<usize>>,
+    ) {
+        for alg in [
+            Vf2,
+            Ullmann,
+            Ri,
+            ArcMatch {
+                path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+            },
+            Vf2Rdkit,
+            RayKirsch,
+        ] {
+            let mut r: Vec<Vec<usize>> = Vec::new();
+            let flow: ControlFlow<()> = target.visit_subgraph_isomorphisms(
+                &query,
+                &mut node_match,
+                &mut edge_match,
+                alg,
+                |embedding| {
+                    r.push(embedding.iter().map(|n| n.index()).collect());
+                    ControlFlow::Continue(())
+                },
+            );
+            assert_eq!(flow, ControlFlow::Continue(()), "algorithm {alg:?}");
+            r.sort();
+            assert_eq!(r, expected, "algorithm {alg:?}");
+        }
+    }
+
+    // ArcMatch consults only precomputed domains during search, so predicate-call
+    // counts cannot witness its early stop; the Break return still does.
+    #[rstest]
+    #[case::vf2(Vf2, true)]
+    #[case::ullmann(Ullmann, true)]
+    #[case::ri(Ri, true)]
+    #[case::arcmatch(ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, false)]
+    #[case::vf2rdkit(Vf2Rdkit, true)]
+    #[case::raykirsch(RayKirsch, true)]
+    fn test_graph_visit_subgraph_isomorphisms_termination(
+        #[case] alg: SubgraphIsomorphismAlgorithm,
+        #[case] search_consults_predicates: bool,
+    ) {
+        let graph = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let expected = [
+            vec![0, 1, 2],
+            vec![0, 2, 1],
+            vec![1, 0, 2],
+            vec![1, 2, 0],
+            vec![2, 0, 1],
+            vec![2, 1, 0],
+        ];
+
+        let full_calls = Cell::new(0usize);
+        let mut full_emissions = 0usize;
+        let full: ControlFlow<Vec<usize>> = graph.visit_subgraph_isomorphisms(
+            &graph,
+            &mut |_, _| {
+                full_calls.set(full_calls.get() + 1);
+                true
+            },
+            &mut |_, _| {
+                full_calls.set(full_calls.get() + 1);
+                true
+            },
+            alg,
+            |_| {
+                full_emissions += 1;
+                ControlFlow::Continue(())
+            },
+        );
+        assert_eq!(full, ControlFlow::Continue(()));
+        assert_eq!(full_emissions, 6);
+
+        let early_calls = Cell::new(0usize);
+        let early = graph.visit_subgraph_isomorphisms(
+            &graph,
+            &mut |_, _| {
+                early_calls.set(early_calls.get() + 1);
+                true
+            },
+            &mut |_, _| {
+                early_calls.set(early_calls.get() + 1);
+                true
+            },
+            alg,
+            |embedding| ControlFlow::Break(embedding.iter().map(|n| n.index()).collect()),
+        );
+        let ControlFlow::Break(first) = early else {
+            panic!("expected Break on first emission");
+        };
+        assert!(expected.contains(&first), "invalid embedding {first:?}");
+        if search_consults_predicates {
+            assert!(
+                early_calls.get() < full_calls.get(),
+                "early {} vs full {}",
+                early_calls.get(),
+                full_calls.get()
+            );
+        }
     }
 
     #[rstest]
@@ -2119,6 +2240,47 @@ mod tests {
                         .collect()
                 })
                 .collect();
+            r.sort();
+            assert_eq!(r, expected, "algorithm {alg:?}");
+        }
+    }
+
+    #[rstest]
+    #[case::fixes_anchor(Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), any_node, any_edge,
+        vec![vec![1, 0], vec![1, 2]])]
+    #[case::empty_query(Graph::new(3, &[[0, 1], [1, 2]]), Graph::default(), (NodeId(0), NodeId(0)), any_node, any_edge, vec![])]
+    #[case::out_of_bounds(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(2, &[[0, 1]]), (NodeId(5), NodeId(0)), any_node, any_edge, vec![])]
+    fn test_graph_visit_subgraph_isomorphisms_at(
+        #[case] target: Graph,
+        #[case] query: Graph,
+        #[case] anchor: (NodeId, NodeId),
+        #[case] mut node_match: fn(NodeId, NodeId) -> bool,
+        #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
+        #[case] expected: Vec<Vec<usize>>,
+    ) {
+        for alg in [
+            Vf2,
+            Ullmann,
+            Ri,
+            ArcMatch {
+                path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+            },
+            Vf2Rdkit,
+            RayKirsch,
+        ] {
+            let mut r: Vec<Vec<usize>> = Vec::new();
+            let flow: ControlFlow<()> = target.visit_subgraph_isomorphisms_at(
+                &query,
+                anchor,
+                &mut node_match,
+                &mut edge_match,
+                alg,
+                |embedding| {
+                    r.push(embedding.iter().map(|n| n.index()).collect());
+                    ControlFlow::Continue(())
+                },
+            );
+            assert_eq!(flow, ControlFlow::Continue(()), "algorithm {alg:?}");
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
         }
