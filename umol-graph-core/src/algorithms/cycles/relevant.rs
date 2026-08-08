@@ -473,7 +473,7 @@ impl RelevantCycleAnalysis {
         // Vismara analyzes relevant cycles independently within biconnected
         // components. Tarjan supplies that decomposition as fixed preprocessing,
         // not as an independent relevant-cycle choice.
-        let mut components = graph.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
+        let mut components = graph.enumerate_biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
         components.sort();
 
         for component in components {

@@ -36,7 +36,7 @@ enum McsAlgorithmKind {
 
 impl Graph {
     /// Every maximum common induced subgraph (all of the largest size).
-    pub fn maximum_common_induced_subgraphs(
+    pub fn enumerate_maximum_common_induced_subgraphs(
         &self,
         other: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
@@ -58,7 +58,7 @@ impl Graph {
     }
 
     /// Every maximum common edge subgraph (all of the largest size).
-    pub fn maximum_common_edge_subgraphs(
+    pub fn enumerate_maximum_common_edge_subgraphs(
         &self,
         other: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
@@ -83,7 +83,7 @@ impl Graph {
     /// never skipped; `hint` pairs warm-start the incumbent bound (may be discarded). Either may be
     /// empty.
     #[allow(clippy::too_many_arguments)]
-    pub fn maximum_common_edge_subgraphs_seeded(
+    pub fn enumerate_maximum_common_edge_subgraphs_seeded(
         &self,
         other: &Graph,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
@@ -536,7 +536,7 @@ mod tests {
         #[case] edges: usize,
     ) {
         let r = a
-            .maximum_common_induced_subgraphs(
+            .enumerate_maximum_common_induced_subgraphs(
                 &b,
                 &mut any_node,
                 &mut any_edge,
@@ -563,7 +563,7 @@ mod tests {
         #[case] edges: usize,
     ) {
         let r = a
-            .maximum_common_edge_subgraphs(
+            .enumerate_maximum_common_edge_subgraphs(
                 &b,
                 &mut any_node,
                 &mut any_edge,
@@ -578,9 +578,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_maximum_common_edge_subgraphs() {
+    fn test_graph_enumerate_maximum_common_edge_subgraphs() {
         let p3 = Graph::new(3, &[[0, 1], [1, 2]]);
-        let all = p3.maximum_common_edge_subgraphs(
+        let all = p3.enumerate_maximum_common_edge_subgraphs(
             &p3,
             &mut any_node,
             &mut any_edge,
@@ -614,7 +614,7 @@ mod tests {
     fn test_graph_maximum_common_induced_subgraph_node_filter() {
         let e = Graph::new(2, &[[0, 1]]);
         let r = e
-            .maximum_common_induced_subgraphs(
+            .enumerate_maximum_common_induced_subgraphs(
                 &e,
                 &mut cross,
                 &mut any_edge,
@@ -634,7 +634,7 @@ mod tests {
     fn test_graph_maximum_common_induced_subgraph_edge_filter() {
         let tri = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let r = tri
-            .maximum_common_induced_subgraphs(
+            .enumerate_maximum_common_induced_subgraphs(
                 &tri,
                 &mut any_node,
                 &mut reject_edge,
@@ -649,10 +649,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_maximum_common_edge_subgraphs_seeded() {
+    fn test_graph_enumerate_maximum_common_edge_subgraphs_seeded() {
         let tri = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let anchor = [(NodeId(0), NodeId(1))];
-        let r = tri.maximum_common_edge_subgraphs_seeded(
+        let r = tri.enumerate_maximum_common_edge_subgraphs_seeded(
             &tri,
             &mut any_node,
             &mut any_edge,
@@ -670,9 +670,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_maximum_common_edge_subgraphs_seeded_hint() {
+    fn test_graph_enumerate_maximum_common_edge_subgraphs_seeded_hint() {
         let p4 = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
-        let unseeded = p4.maximum_common_edge_subgraphs(
+        let unseeded = p4.enumerate_maximum_common_edge_subgraphs(
             &p4,
             &mut any_node,
             &mut any_edge,
@@ -680,7 +680,7 @@ mod tests {
             McesAlgorithm::McGregor,
         );
         let hint = [(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))];
-        let seeded = p4.maximum_common_edge_subgraphs_seeded(
+        let seeded = p4.enumerate_maximum_common_edge_subgraphs_seeded(
             &p4,
             &mut any_node,
             &mut any_edge,
@@ -700,17 +700,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_maximum_common_edge_subgraphs_seeded_empty() {
+    fn test_graph_enumerate_maximum_common_edge_subgraphs_seeded_empty() {
         // empty anchor + empty hint is exactly the unseeded edge MCS.
         let p4 = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
-        let plain = p4.maximum_common_edge_subgraphs(
+        let plain = p4.enumerate_maximum_common_edge_subgraphs(
             &p4,
             &mut any_node,
             &mut any_edge,
             McsConnectivity::Connected,
             McesAlgorithm::McGregor,
         );
-        let seeded = p4.maximum_common_edge_subgraphs_seeded(
+        let seeded = p4.enumerate_maximum_common_edge_subgraphs_seeded(
             &p4,
             &mut any_node,
             &mut any_edge,
@@ -727,7 +727,7 @@ mod tests {
         let tri = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let empty = Graph::default();
         let r = tri
-            .maximum_common_induced_subgraphs(
+            .enumerate_maximum_common_induced_subgraphs(
                 &empty,
                 &mut any_node,
                 &mut any_edge,
@@ -755,13 +755,13 @@ mod tests {
         Graph::new(1, &[]),
         vec![(vec![(NodeId(0), NodeId(0))], 0)]
     )]
-    fn test_graph_maximal_common_subgraphs(
+    fn test_graph_enumerate_maximal_common_subgraphs(
         #[case] a: Graph,
         #[case] b: Graph,
         #[case] expected: Vec<(Vec<(NodeId, NodeId)>, usize)>,
     ) {
         assert_eq!(
-            a.maximal_common_subgraphs(
+            a.enumerate_maximal_common_subgraphs(
                 &b,
                 &mut any_node,
                 &mut any_edge,
@@ -805,7 +805,7 @@ mod tests {
             2
         )]
     )]
-    fn test_graph_maximal_common_subgraphs_labeled(
+    fn test_graph_enumerate_maximal_common_subgraphs_labeled(
         #[case] a: Graph,
         #[case] labels_a: Vec<u8>,
         #[case] b: Graph,
@@ -814,7 +814,7 @@ mod tests {
     ) {
         let mut node_match = |x: NodeId, y: NodeId| labels_a[x.index()] == labels_b[y.index()];
         assert_eq!(
-            a.maximal_common_subgraphs(
+            a.enumerate_maximal_common_subgraphs(
                 &b,
                 &mut node_match,
                 &mut any_edge,
@@ -829,10 +829,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_maximal_common_subgraphs_edge_filter() {
+    fn test_graph_enumerate_maximal_common_subgraphs_edge_filter() {
         let edge = Graph::new(2, &[[0, 1]]);
         assert_eq!(
-            edge.maximal_common_subgraphs(
+            edge.enumerate_maximal_common_subgraphs(
                 &edge,
                 &mut any_node,
                 &mut reject_edge,
@@ -852,11 +852,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_maximal_common_subgraphs_empty() {
+    fn test_graph_enumerate_maximal_common_subgraphs_empty() {
         let a = Graph::new(1, &[]);
         let b = Graph::new(1, &[]);
         assert_eq!(
-            a.maximal_common_subgraphs(
+            a.enumerate_maximal_common_subgraphs(
                 &b,
                 &mut cross,
                 &mut any_edge,
@@ -963,7 +963,7 @@ mod tests {
             EmbeddingKind::Induced,
             CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         );
-        let maximal = a.maximal_common_subgraphs(
+        let maximal = a.enumerate_maximal_common_subgraphs(
             &b,
             &mut any_node,
             &mut any_edge,

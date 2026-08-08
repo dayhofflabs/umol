@@ -1502,20 +1502,20 @@ fn test_molecule_ast_degree(
 #[case::single(chain(3), 1)]
 #[case::two(two_components(), 2)]
 #[case::empty(MoleculeAst::default(), 0)]
-fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
+fn test_molecule_ast_enumerate_connected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
     let cc = ast
         .graph()
-        .connected_components(ConnectedComponentsAlgorithm::Bfs);
+        .enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs);
     assert_eq!(cc.len(), expected);
 }
 
 #[rstest]
 #[case::ring_6(ring(6), 1)]
 #[case::chain(chain(5), 0)]
-fn test_molecule_ast_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
+fn test_molecule_ast_enumerate_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
     let bcc = ast
         .graph()
-        .biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
+        .enumerate_biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
     assert_eq!(bcc.len(), expected);
 }
 
@@ -1740,10 +1740,10 @@ fn test_atom_automorphism_same_orbit() {
 }
 
 #[rstest]
-fn test_molecule_ast_subgraph_isomorphisms() {
+fn test_molecule_ast_enumerate_subgraph_isomorphisms() {
     let target = ring(6);
     let query = chain(2);
-    let mut matches = target.graph().subgraph_isomorphisms(
+    let mut matches = target.graph().enumerate_subgraph_isomorphisms(
         &query.graph(),
         &mut |_, _| true,
         &mut |_, _| true,
@@ -1770,10 +1770,10 @@ fn test_molecule_ast_subgraph_isomorphisms() {
 }
 
 #[rstest]
-fn test_molecule_ast_subgraph_isomorphisms_at() {
+fn test_molecule_ast_enumerate_subgraph_isomorphisms_at() {
     let target = ring(6);
     let query = chain(2);
-    let mut matches = target.graph().subgraph_isomorphisms_at(
+    let mut matches = target.graph().enumerate_subgraph_isomorphisms_at(
         &query.graph(),
         (AtomId(0), AtomId(0)),
         &mut |_, _| true,

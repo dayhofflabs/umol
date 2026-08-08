@@ -457,7 +457,7 @@ fn connected_components(c: &mut Criterion) {
     let mut group = c.benchmark_group("connected_components");
     for (name, g) in &graphs {
         group.bench_function(*name, |b| {
-            b.iter(|| g.connected_components(ConnectedComponentsAlgorithm::Bfs));
+            b.iter(|| g.enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs));
         });
     }
     group.finish();
@@ -475,7 +475,7 @@ fn biconnected_components(c: &mut Criterion) {
     let mut group = c.benchmark_group("biconnected_components");
     for (name, g) in &graphs {
         group.bench_function(*name, |b| {
-            b.iter(|| g.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan));
+            b.iter(|| g.enumerate_biconnected_components(BiconnectedComponentsAlgorithm::Tarjan));
         });
     }
     group.finish();

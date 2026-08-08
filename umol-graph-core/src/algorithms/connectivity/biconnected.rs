@@ -1,6 +1,6 @@
 //! Biconnected components.
 //!
-//! [`Graph::biconnected_components`] currently uses Tarjan's depth-first
+//! [`Graph::enumerate_biconnected_components`] currently uses Tarjan's depth-first
 //! algorithm. It returns vertex sets for blocks with at least three vertices,
 //! omits two-vertex bridge blocks, and does not separately return articulation
 //! points. See [Tarjan (1972)](https://doi.org/10.1137/0201010).
@@ -15,7 +15,7 @@ pub enum BiconnectedComponentsAlgorithm {
 }
 
 impl Graph {
-    pub fn biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
+    pub fn enumerate_biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
         match alg {
             BiconnectedComponentsAlgorithm::Tarjan => self.biconnected_components_tarjan(),
         }
@@ -142,13 +142,13 @@ mod tests {
         vec![vec![n(0), n(1), n(2)], vec![n(2), n(3), n(4)]])]
     #[case::disconnected(5, vec![[0, 1], [1, 2], [0, 2], [3, 4]],
         vec![vec![n(0), n(1), n(2)]])]
-    fn test_graph_biconnected_components(
+    fn test_graph_enumerate_biconnected_components(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
         #[case] expected: Vec<Vec<NodeId>>,
     ) {
         let g = Graph::new(node_count, &edges);
-        let mut bcc = g.biconnected_components(Tarjan);
+        let mut bcc = g.enumerate_biconnected_components(Tarjan);
         bcc.sort();
         assert_eq!(bcc, expected);
     }

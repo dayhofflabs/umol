@@ -109,7 +109,7 @@ impl CycleVectorBasis {
 pub(super) fn cycle_space_rank(graph: &Graph) -> usize {
     graph.edge_count()
         + graph
-            .connected_components(ConnectedComponentsAlgorithm::Bfs)
+            .enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs)
             .len()
         - graph.node_count()
 }
@@ -389,7 +389,7 @@ mod tests {
             }
             let expected = graph.edge_count()
                 + graph
-                    .connected_components(ConnectedComponentsAlgorithm::Bfs)
+                    .enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs)
                     .len()
                 - graph.node_count();
 

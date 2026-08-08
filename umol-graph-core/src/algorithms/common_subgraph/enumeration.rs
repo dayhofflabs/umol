@@ -61,7 +61,7 @@ impl Graph {
         }
     }
 
-    pub fn maximal_common_subgraphs<N, E>(
+    pub fn enumerate_maximal_common_subgraphs<N, E>(
         &self,
         other: &Graph,
         node_match: &mut N,

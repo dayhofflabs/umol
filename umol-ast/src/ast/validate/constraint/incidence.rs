@@ -625,7 +625,7 @@ pub fn bond_components_by_atom(
     let mut component_by_atom = vec![0; atom_count];
     for (component, atoms) in ast
         .graph()
-        .connected_components(algorithm)
+        .enumerate_connected_components(algorithm)
         .into_iter()
         .enumerate()
     {

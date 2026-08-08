@@ -94,7 +94,7 @@ impl HmoAromaticity {
         sorted_host.sort_unstable();
         let components: Vec<Vec<AtomId>> = extracted
             .graph()
-            .connected_components(connected_components_algorithm)
+            .enumerate_connected_components(connected_components_algorithm)
             .into_iter()
             .map(|c| c.into_iter().map(|sub| sorted_host[sub.index()]).collect())
             .collect();

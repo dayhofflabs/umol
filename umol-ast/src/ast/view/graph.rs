@@ -30,17 +30,17 @@ impl<'a> GraphView<'a> {
         self.graph.degree(NodeId::from(atom))
     }
 
-    pub fn connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
+    pub fn enumerate_connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
         self.graph
-            .connected_components(alg)
+            .enumerate_connected_components(alg)
             .into_iter()
             .map(|c| c.into_iter().map(AtomId::from).collect())
             .collect()
     }
 
-    pub fn biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
+    pub fn enumerate_biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
         self.graph
-            .biconnected_components(alg)
+            .enumerate_biconnected_components(alg)
             .into_iter()
             .map(|c| c.into_iter().map(AtomId::from).collect())
             .collect()
@@ -175,7 +175,7 @@ impl<'a> GraphView<'a> {
     /// Occurrences of `query` within `self` (the host), one query→host `AtomId`
     /// vector per occurrence. `atom_match`/`bond_match` receive `(query, host)` —
     /// i.e. `(pattern, target)`, matching the `pattern.matches(target)` convention.
-    pub fn subgraph_isomorphisms(
+    pub fn enumerate_subgraph_isomorphisms(
         &self,
         query: &GraphView<'_>,
         atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
@@ -183,7 +183,7 @@ impl<'a> GraphView<'a> {
         alg: SubgraphIsomorphismAlgorithm,
     ) -> Vec<Vec<AtomId>> {
         self.graph
-            .subgraph_isomorphisms(
+            .enumerate_subgraph_isomorphisms(
                 query.graph,
                 &mut |query_node, host_node| {
                     atom_match(AtomId::from(query_node), AtomId::from(host_node))
@@ -203,9 +203,9 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
-    /// Like [`subgraph_isomorphisms`](Self::subgraph_isomorphisms) with query atom
+    /// Like [`enumerate_subgraph_isomorphisms`](Self::enumerate_subgraph_isomorphisms) with query atom
     /// `anchor.0` pinned to host atom `anchor.1`. Closures receive `(query, host)`.
-    pub fn subgraph_isomorphisms_at(
+    pub fn enumerate_subgraph_isomorphisms_at(
         &self,
         query: &GraphView<'_>,
         anchor: (AtomId, AtomId),
@@ -214,7 +214,7 @@ impl<'a> GraphView<'a> {
         alg: SubgraphIsomorphismAlgorithm,
     ) -> Vec<Vec<AtomId>> {
         self.graph
-            .subgraph_isomorphisms_at(
+            .enumerate_subgraph_isomorphisms_at(
                 query.graph,
                 (NodeId::from(anchor.0), NodeId::from(anchor.1)),
                 &mut |query_node, host_node| {

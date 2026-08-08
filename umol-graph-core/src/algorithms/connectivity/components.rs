@@ -1,6 +1,6 @@
 //! Connected components.
 //!
-//! [`Graph::connected_components`] currently uses breadth-first flood fill and
+//! [`Graph::enumerate_connected_components`] currently uses breadth-first flood fill and
 //! returns one sorted node set per component.
 
 use crate::graph::{Graph, NodeId};
@@ -11,7 +11,7 @@ pub enum ConnectedComponentsAlgorithm {
 }
 
 impl Graph {
-    pub fn connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
+    pub fn enumerate_connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
         match alg {
             ConnectedComponentsAlgorithm::Bfs => self.connected_components_bfs(),
         }
@@ -66,12 +66,12 @@ mod tests {
     #[case::single_edge(2, vec![[0, 1]], vec![vec![n(0), n(1)]])]
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], vec![vec![n(0), n(1), n(2)]])]
     #[case::two_components(4, vec![[0, 1], [2, 3]], vec![vec![n(0), n(1)], vec![n(2), n(3)]])]
-    fn test_graph_connected_components(
+    fn test_graph_enumerate_connected_components(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
         #[case] expected: Vec<Vec<NodeId>>,
     ) {
         let g = Graph::new(node_count, &edges);
-        assert_eq!(g.connected_components(Bfs), expected);
+        assert_eq!(g.enumerate_connected_components(Bfs), expected);
     }
 }

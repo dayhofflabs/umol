@@ -284,7 +284,7 @@ fn connected(ast: &MoleculeAst, atoms: &[AtomId], algorithm: ConnectedComponents
     }
     let selected: BTreeSet<_> = atoms.iter().copied().collect();
     ast.graph()
-        .connected_components(algorithm)
+        .enumerate_connected_components(algorithm)
         .into_iter()
         .any(|component| {
             component

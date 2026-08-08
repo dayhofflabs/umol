@@ -204,7 +204,7 @@ impl MoleculeAst {
         let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
 
         host.raw_graph()
-            .subgraph_isomorphisms(
+            .enumerate_subgraph_isomorphisms(
                 pattern.raw_graph(),
                 &mut |query_node, host_node| {
                     pattern
@@ -261,7 +261,7 @@ impl MoleculeAst {
 
         host_levi
             .graph()
-            .subgraph_isomorphisms(
+            .enumerate_subgraph_isomorphisms(
                 pattern_levi.graph(),
                 // Atoms/bonds carry their predicates; overlay pseudonodes match by
                 // kind only (the exact AST/participation check is `verify_overlays`).

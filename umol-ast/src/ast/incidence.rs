@@ -6,8 +6,6 @@ use umol_graph_core::{Graph, NodeId};
 
 use super::entity::{Entity, EntityKind};
 use super::molecule::MoleculeAst;
-#[cfg(test)]
-use super::molecule::MoleculeEntries;
 
 bitflags! {
     /// Which relation kinds become pseudonodes in [`MoleculeAst::incidence_graph`].
@@ -210,6 +208,7 @@ mod tests {
         StereoAtomId, StereoBondId,
     };
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
+    use crate::ast::molecule::MoleculeEntries;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
