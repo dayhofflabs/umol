@@ -759,6 +759,46 @@ fn subgraph_isomorphism(c: &mut Criterion) {
                         )
                     });
                 });
+                // Time to first result: break on the first emission.
+                group.bench_function(
+                    format!("{tname}/{qname}/{}/first", subiso_name(algorithm)),
+                    |b| {
+                        b.iter(|| {
+                            target.visit_subgraph_isomorphisms(
+                                query,
+                                &mut |_: NodeId, _: NodeId| true,
+                                &mut |qe: EdgeId, he: EdgeId| {
+                                    q_labels[qe.index()] == t_labels[he.index()]
+                                },
+                                algorithm,
+                                |_| ControlFlow::Break(()),
+                            )
+                        });
+                    },
+                );
+                // Complete visitation without result storage: total enumeration
+                // time minus the collection cost.
+                group.bench_function(
+                    format!("{tname}/{qname}/{}/count", subiso_name(algorithm)),
+                    |b| {
+                        b.iter(|| {
+                            let mut count = 0usize;
+                            let _: ControlFlow<()> = target.visit_subgraph_isomorphisms(
+                                query,
+                                &mut |_: NodeId, _: NodeId| true,
+                                &mut |qe: EdgeId, he: EdgeId| {
+                                    q_labels[qe.index()] == t_labels[he.index()]
+                                },
+                                algorithm,
+                                |_| {
+                                    count += 1;
+                                    ControlFlow::Continue(())
+                                },
+                            );
+                            count
+                        });
+                    },
+                );
             }
         }
     }

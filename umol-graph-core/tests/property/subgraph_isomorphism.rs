@@ -1,10 +1,14 @@
-//! Cross-validation properties for the subgraph-isomorphism algorithms: on
-//! random labeled graphs, every named algorithm must return the same match set as
-//! VF2 (the reference). For ArcMatch this is a complete correctness check — its
-//! reduction is provably safe (Bonnici 2024 Thm 2-3), so the only possible defect
-//! is returning *fewer* matches, which a set mismatch against VF2 catches.
+//! Cross-validation and delivery-agreement properties for the
+//! subgraph-isomorphism algorithms: on random labeled graphs, every named
+//! algorithm must return the same match set as VF2 (the reference), and for
+//! every algorithm the visitor emissions must equal the eager enumeration,
+//! ordinary and anchored. For ArcMatch the cross-validation is a complete
+//! correctness check — its reduction is provably safe (Bonnici 2024 Thm 2-3),
+//! so the only possible defect is returning *fewer* matches, which a set
+//! mismatch against VF2 catches.
 
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 
 use proptest::prelude::*;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
@@ -106,6 +110,32 @@ fn matches(
     found
 }
 
+/// Sorted match set under `alg` collected through the visitor, with
+/// label-equality node and edge matching.
+fn visited(
+    query: &LabeledGraph,
+    target: &LabeledGraph,
+    alg: SubgraphIsomorphismAlgorithm,
+) -> Vec<Vec<usize>> {
+    let mut node_match =
+        |q: NodeId, t: NodeId| query.node_labels[q.index()] == target.node_labels[t.index()];
+    let mut edge_match =
+        |qe: EdgeId, te: EdgeId| query.edge_labels[qe.index()] == target.edge_labels[te.index()];
+    let mut found: Vec<Vec<usize>> = Vec::new();
+    let _: ControlFlow<()> = target.graph.visit_subgraph_isomorphisms(
+        &query.graph,
+        &mut node_match,
+        &mut edge_match,
+        alg,
+        |embedding| {
+            found.push(embedding.iter().map(|n| n.index()).collect());
+            ControlFlow::Continue(())
+        },
+    );
+    found.sort();
+    found
+}
+
 proptest! {
     #[test]
     fn test_enumerate_subgraph_isomorphisms_cross_validation(
@@ -141,6 +171,72 @@ proptest! {
                 "{:?} disagrees with Vf2",
                 alg
             );
+        }
+    }
+
+    #[test]
+    fn test_visit_subgraph_isomorphisms_agreement(
+        query in labeled_graph(4, 2, 2),
+        target in labeled_graph(6, 2, 2),
+    ) {
+        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
+            prop_assert_eq!(
+                visited(&query, &target, alg),
+                matches(&query, &target, alg),
+                "{:?} visitor disagrees with enumeration",
+                alg
+            );
+        }
+    }
+
+    #[test]
+    fn test_visit_subgraph_isomorphisms_at_agreement(
+        query in labeled_graph(3, 2, 2),
+        target in labeled_graph(5, 2, 2),
+    ) {
+        let mut node_match =
+            |q: NodeId, t: NodeId| query.node_labels[q.index()] == target.node_labels[t.index()];
+        let mut edge_match =
+            |qe: EdgeId, te: EdgeId| query.edge_labels[qe.index()] == target.edge_labels[te.index()];
+        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
+            for qa in 0..query.graph.node_count() {
+                for ta in 0..target.graph.node_count() {
+                    let anchor = (NodeId(qa as u32), NodeId(ta as u32));
+                    let mut via_visit: Vec<Vec<usize>> = Vec::new();
+                    let _: ControlFlow<()> = target.graph.visit_subgraph_isomorphisms_at(
+                        &query.graph,
+                        anchor,
+                        &mut node_match,
+                        &mut edge_match,
+                        alg,
+                        |embedding| {
+                            via_visit.push(embedding.iter().map(|n| n.index()).collect());
+                            ControlFlow::Continue(())
+                        },
+                    );
+                    via_visit.sort();
+                    let mut via_enumerate: Vec<Vec<usize>> = target
+                        .graph
+                        .enumerate_subgraph_isomorphisms_at(
+                            &query.graph,
+                            anchor,
+                            &mut node_match,
+                            &mut edge_match,
+                            alg,
+                        )
+                        .iter()
+                        .map(|c| c.matched_pairs().iter().map(|&(_, t)| t.index()).collect())
+                        .collect();
+                    via_enumerate.sort();
+                    prop_assert_eq!(
+                        via_visit,
+                        via_enumerate,
+                        "{:?} anchored at {:?}: visitor disagrees with enumeration",
+                        alg,
+                        anchor
+                    );
+                }
+            }
         }
     }
 }
