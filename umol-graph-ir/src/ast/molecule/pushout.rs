@@ -1,5 +1,5 @@
 //! The attributed pushout of two molecules: glue `self` and `other` on a shared subgraph, meeting
-//! atom / bond / overlay data and combining molecule constraints where they coincide — the umol-ast
+//! atom / bond / overlay data and combining molecule constraints where they coincide — the umol-graph-ir
 //! attribute layer over graph-core's structural `pushout`. A child of `molecule` so it reaches the
 //! private overlay relation-sets directly, without exposing raw accessors.
 

@@ -1,14 +1,14 @@
 ---
-description: How to denote molecules, atoms, and bonds in the umol DSL — the EDN molecule map (`{:atoms [...] :bonds [...]}`), the atom-string and bond-string `#`-predicate grammars (`#h #c #a #R …`), element/value wildcards and query patterns (`*`, `#R+`, sets, bool-exprs), and the construction macros (`mol!`, `mol_ground!`, `dsl!`, `atom!`, `bond!`, `atom_ground!`, `bond_ground!`). Use whenever writing a molecule/atom/bond from a string — test fixtures, examples, inline data, or substructure query patterns — or when unsure which macro or token to use. Normative grammar: `umol-ast/spec/umol-dsl-spec.md`.
+description: How to denote molecules, atoms, and bonds in the umol DSL — the EDN molecule map (`{:atoms [...] :bonds [...]}`), the atom-string and bond-string `#`-predicate grammars (`#h #c #a #R …`), element/value wildcards and query patterns (`*`, `#R+`, sets, bool-exprs), and the construction macros (`mol!`, `mol_ground!`, `dsl!`, `atom!`, `bond!`, `atom_ground!`, `bond_ground!`). Use whenever writing a molecule/atom/bond from a string — test fixtures, examples, inline data, or substructure query patterns — or when unsure which macro or token to use. Normative grammar: `umol-graph-ir/spec/umol-dsl-spec.md`.
 ---
 
 # umol molecule notation
 
-The normative grammar is `umol-ast/spec/umol-dsl-spec.md`. Read it for edge cases
+The normative grammar is `umol-graph-ir/spec/umol-dsl-spec.md`. Read it for edge cases
 (value-expr precedence, stereo strings, constraints, dative/noncovalent/multicenter).
 This is the practical reference for the common 90%.
 
-## Construction macros (umol-ast)
+## Construction macros (umol-graph-ir)
 
 | Macro | Input | Produces | Use for |
 |---|---|---|---|

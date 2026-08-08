@@ -4,7 +4,7 @@
 //! long enough to produce useful samples. Intended to be run under `samply`:
 //!
 //! ```
-//! cargo build --release --example profile_indole -p umol-ast
+//! cargo build --release --example profile_indole -p umol-graph-ir
 //! samply record ./target/release/examples/profile_indole
 //! ```
 

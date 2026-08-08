@@ -12,7 +12,7 @@ description = "Conversions between the geometric and graph molecular models for 
 bench = false
 
 [dependencies]
-umol-ast = { path = "../umol-ast", version = "0.1.0" }
+umol-graph-ir = { path = "../umol-graph-ir", version = "0.1.0" }
 umol-chem = { path = "../umol-chem", version = "0.1.0" }
 umol-geometric = { path = "../umol-geometric", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }

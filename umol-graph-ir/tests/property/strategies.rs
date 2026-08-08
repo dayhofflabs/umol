@@ -1,4 +1,4 @@
-//! Shared proptest generators for the umol-ast property suite. Domain imports
+//! Shared proptest generators for the umol-graph-ir property suite. Domain imports
 //! are re-exported (`pub(crate) use`) so the per-area test modules need only
 //! `use proptest::prelude::*; use crate::strategies::*;`.
 

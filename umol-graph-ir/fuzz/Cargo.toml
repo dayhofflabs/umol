@@ -1,5 +1,5 @@
 [package]
-name = "umol-ast-fuzz"
+name = "umol-graph-ir-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -11,7 +11,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-umol-ast = { path = ".." }
+umol-graph-ir = { path = ".." }
 umol-edn = { path = "../../umol-edn" }
 umol-graph-core = { path = "../../umol-graph-core" }
 

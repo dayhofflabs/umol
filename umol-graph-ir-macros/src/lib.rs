@@ -1,4 +1,4 @@
-//! Proc macros for `umol-ast`: `#[derive(Lattice)]` and `#[derive(Canonicalize)]`,
+//! Proc macros for `umol-graph-ir`: `#[derive(Lattice)]` and `#[derive(Canonicalize)]`,
 //! each generated field-wise over a struct's named fields (every field type must
 //! itself implement the trait).
 

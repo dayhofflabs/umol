@@ -1,4 +1,4 @@
-//! Property-based tests for `umol-ast`.
+//! Property-based tests for `umol-graph-ir`.
 //!
 //! The suite is organized first by subject and, for the larger molecule,
 //! reaction, and stereo families, then by operation. Uniform law and surface

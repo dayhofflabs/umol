@@ -26,7 +26,7 @@ Turn a **settled** design into an ordered build plan. Do not use this to make de
 - **Additive first.** Batch all additive new-functionality (new type, new method, new test) before the breaking refactors — build the vocabulary first, localize risk to late stages.
 - **Only breaking subitems may go red.** Changing a public signature, a return type, or retiring a type. Each must be followed *within its stage* by the caller-migration restoring green.
 - **A stage is a green milestone.** If a stage can't end green, it's mis-cut — pull the caller-fixes in, or split differently.
-- **Foundation before consumers.** graph-core before umol-ast before dsl; a shared kernel before every caller.
+- **Foundation before consumers.** graph-core before umol-graph-ir before dsl; a shared kernel before every caller.
 - **Mark deferrable stages explicitly**, placed last — unifications/optimizations not required for the core deliverable (the general path subsumes them). Note when the core works without them.
 - **Every subitem carries its tests** (per the test-writing skill). "Green" means the suite passes, not just that it compiles.
 - Prefer **one apply-surface change per stage** — batch a signature change and its migration; don't interleave two independent breaking edits to the same function across stages.

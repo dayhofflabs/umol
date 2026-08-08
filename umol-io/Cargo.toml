@@ -29,7 +29,7 @@ regex = "1.11.2"
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
-umol-ast = { path = "../umol-ast", version = "0.1.0" }
+umol-graph-ir = { path = "../umol-graph-ir", version = "0.1.0" }
 umol-geometric-core = { path = "../umol-geometric-core", version = "0.1.0" }
 umol-perm = { path = "../umol-perm", version = "0.1.0" }
 umol-chem = { path = "../umol-chem", version = "0.1.0" }

@@ -4,7 +4,7 @@ description: Apply on ANY task that adds, extends, revises, or reviews DSL seria
 
 # umol DSL serialization conventions
 
-**Scope: all DSL/EDN serialization lives in the `umol-ast` crate (its `dsl` module). No serialization anywhere else.** Other crates (umol-graph, umol-io, …) must go through `umol-ast`'s DSL boundary types — they do not define their own `FromEdn`/`ToEdn`/`parse_`/`fmt_`/`read_`/`render_` for umol DSL or EDN. (Foreign *format* parsers — MOL/SDF/SMILES → AST in umol-io — are a separate concern, not this DSL/EDN serde.)
+**Scope: all DSL/EDN serialization lives in the `umol-graph-ir` crate (its `dsl` module). No serialization anywhere else.** Other crates (umol-graph, umol-io, …) must go through `umol-graph-ir`'s DSL boundary types — they do not define their own `FromEdn`/`ToEdn`/`parse_`/`fmt_`/`read_`/`render_` for umol DSL or EDN. (Foreign *format* parsers — MOL/SDF/SMILES → AST in umol-io — are a separate concern, not this DSL/EDN serde.)
 
 Two surfaces: the **compact string DSL** (`FromStr`/`Display`, winnow) and the **EDN** form (tree `FromEdn`/`ToEdn` + streaming readers). These rules govern how the work is structured and named. When a type can't serialize cleanly, **restructure it** — never declare the problem unsolvable and stop.
 

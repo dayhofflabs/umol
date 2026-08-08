@@ -79,19 +79,19 @@ When the expected for a complex constructor is too verbose, prefer struct litera
 
 ## Crate-specific patterns
 
-### Macros (`umol-ast::macros`)
+### Macros (`umol-graph-ir::macros`)
 
 - Each macro gets one positive test with `#[case]` rows for distinct shapes (e.g., empty + populated).
 - Each fallible macro gets a separate `test_<macro>_macro_error` with `#[should_panic]`.
 - For macros that wrap `FromStr` plus a config (e.g., `mol_ground!`), test against an explicitly-constructed expected via `from_atoms_and_bonds` + `with_*` chains + `into_ground()`. This verifies the macro applies the correct config.
 
-### AST entity tests (`umol-ast::ast::*`)
+### AST entity tests (`umol-graph-ir::ast::*`)
 
 - Method order: `new`/`from_*` → `with_*` → `into_*` → `is_ground` → `matches` → `simplify_*`.
 - `with_*` methods consolidate into one `test_<entity>_with_methods` table.
 - `into_ground` and `into_zeroed` get separate tests; preserve-existing-value cases belong in the same test as the from-empty case.
 
-### Defaults configs (`umol-ast::dsl::config`)
+### Defaults configs (`umol-graph-ir::dsl::config`)
 
 - Test order: `MoleculeDefaults` first (composes), then `AtomDefaults`, then `BondDefaults`, etc., matching definition order.
 - No-op default impls (e.g., `DativeBondDefaults`, `NoncovalentBondDefaults`) need no tests.

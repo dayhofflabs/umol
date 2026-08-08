@@ -6,7 +6,7 @@
 //! matched subgraph keeping its context, Def. 9.8 / Fact 9.9), and the **pullback** (the shared
 //! preimage of two morphisms into a common graph, Def. 2.22). They are **canonical** — each is unique
 //! up to isomorphism — so none takes an algorithm choice. Attributes and overlays are not part of the
-//! `Graph`; the attributed `meet`-glue and rule application live one layer up (umol-ast) and carry
+//! `Graph`; the attributed `meet`-glue and rule application live one layer up (umol-graph-ir) and carry
 //! their data through the morphisms these return.
 //!
 //! A morphism is a [`GraphCorrespondence`]; a rule/overlap is one too (its matched pairs are the

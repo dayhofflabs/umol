@@ -1,5 +1,5 @@
 //! Python bindings for umol: the `umol._native` extension module backing the
-//! `umol` Python package. Types correspond to the Rust API (see `umol-ast`).
+//! `umol` Python package. Types correspond to the Rust API (see `umol-graph-ir`).
 
 use pyo3::prelude::*;
 

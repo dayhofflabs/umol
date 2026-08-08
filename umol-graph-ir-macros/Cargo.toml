@@ -1,5 +1,5 @@
 [package]
-name = "umol-ast-macros"
+name = "umol-graph-ir-macros"
 version = "0.1.0"
 edition = "2021"
 rust-version.workspace = true

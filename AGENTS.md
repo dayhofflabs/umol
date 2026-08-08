@@ -5,7 +5,7 @@
 umol is a Rust workspace for explicit, algorithmically transparent molecular
 representations and operations, with Python bindings in `umol-py`.
 
-- `umol-ast` defines the molecular and reaction DSLs and their semantic ASTs.
+- `umol-graph-ir` defines the molecular and reaction DSLs and their semantic ASTs.
 - `umol-graph-core` provides graph data structures and domain-independent graph
   algorithms.
 - `umol-graph` provides chemistry-aware operations over the AST model.
@@ -21,7 +21,7 @@ models. Do not treat a format boundary type as the one true molecular model.
 
 | Crate | Responsibility |
 | --- | --- |
-| `umol-ast`, `umol-ast-macros` | Molecular and reaction DSLs, ASTs, constraints, edits, deltas, and validation vocabulary |
+| `umol-graph-ir`, `umol-graph-ir-macros` | Molecular and reaction DSLs, ASTs, constraints, edits, deltas, and validation vocabulary |
 | `umol-chem` | Elements, isotopes, spin, occupation, units, and other chemistry vocabulary |
 | `umol-edn`, `umol-edn-macros` | EDN parsing, formatting, and macros |
 | `umol-graph-core` | Graph storage, relations, rewriting primitives, and graph algorithms |
@@ -97,12 +97,12 @@ and follow only the references relevant to the task.
 
 | Work area | Start with |
 | --- | --- |
-| AST, DSL, constraints, entities, reactions | `umol-ast`; docs 113, 131, 132, 164, 165 |
+| AST, DSL, constraints, entities, reactions | `umol-graph-ir`; docs 113, 131, 132, 164, 165 |
 | Graph algorithms and rewriting primitives | `umol-graph-core`; docs 136, 157-162, 167 |
 | Chemistry-aware graph operations | `umol-graph`; docs 145-149, 166 |
 | SMILES, MOL, SDF, and TableIR | `umol-io`; docs 151-153, 155 |
 | Python bindings and workflows | `umol-py`; docs 137, 140, 150, 151 |
-| Stereo and permutation work | `umol-ast`, `umol-perm`; docs 103, 110, 157 |
+| Stereo and permutation work | `umol-graph-ir`, `umol-perm`; docs 103, 110, 157 |
 | Geometry and molecular symmetry | `umol-geometric*`, `umol-msym`; docs 69-76 |
 | Property-testing policy | doc 161 and the crate's property-test modules |
 | Release preparation | doc 163 |

@@ -1,5 +1,5 @@
 //! Validators over a resolved `MoleculeAst`, grouped by tier:
-//! - tier 1 (integrity): entity-structure shape, constraint cross-checks (umol-ast);
+//! - tier 1 (integrity): entity-structure shape, constraint cross-checks (umol-graph-ir);
 //! - tier 2 (invariants): electron-count and spin physics;
 //! - tier 3 (conformance): valence table / atom-typing, aromaticity, stereo (model-carrying).
 //!
