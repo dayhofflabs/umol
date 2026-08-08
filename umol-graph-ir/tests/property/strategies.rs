@@ -11,7 +11,20 @@ pub(crate) use std::ops::RangeInclusive;
 
 use proptest::bool::weighted;
 use proptest::prelude::*;
-pub(crate) use umol_ast::ast::{
+pub(crate) use umol_chem::element::Element;
+pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
+use umol_graph_core::{Correspondence, EdgeId};
+pub(crate) use umol_graph_ir::dsl::{
+    parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
+    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, EditsDsl,
+    MetadataError, MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata,
+    MulticenterBondDsl, MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl,
+    ParseError, ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl,
+    StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl,
+    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl,
+    StereoLigandRef, ValueDsl,
+};
+pub(crate) use umol_graph_ir::ir::{
     aromatic_covalence, AddBond, AromaticSystemAst, AromaticSystemConstraintAst,
     AromaticSystemConstraintKey, AromaticSystemConstraintsAst, AromaticSystemDelta,
     AromaticSystemFieldChange, AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate,
@@ -41,19 +54,6 @@ pub(crate) use umol_ast::ast::{
     TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsAst,
     UnpairedElectronsUpdate, ValueAst, ValuePredicate, ValueTerm,
 };
-pub(crate) use umol_ast::dsl::{
-    parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
-    BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, EditsDsl,
-    MetadataError, MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata,
-    MulticenterBondDsl, MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl,
-    ParseError, ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl,
-    StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl,
-    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl,
-    StereoLigandRef, ValueDsl,
-};
-pub(crate) use umol_chem::element::Element;
-pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
-use umol_graph_core::{Correspondence, EdgeId};
 pub(crate) use umol_perm::{Orientation, Permutation};
 
 const ELEMENTS: &[Element] = &[

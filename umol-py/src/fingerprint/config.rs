@@ -465,13 +465,13 @@ impl ReactionCombinedFingerprintConfig {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
     use umol_graph_core::{
         AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
         RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
         SubgraphEnumerationAlgorithm as GraphCoreSubgraphEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
     };
+    use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
 
     use super::*;
     use crate::convert::into_py_variant;
@@ -843,7 +843,7 @@ mod tests {
     #[case::custom(
         GraphPatternFingerprinter {
             width: 512,
-            match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+            match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         },
@@ -880,7 +880,7 @@ mod tests {
         },
         GraphPatternFingerprinter {
             width: 512,
-            match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+            match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }

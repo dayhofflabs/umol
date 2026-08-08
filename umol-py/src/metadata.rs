@@ -2,14 +2,14 @@
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use pyo3::prelude::*;
-use umol_ast::ast::{
-    AromaticSystemId as AstAromaticSystemId, AtomId as AstAtomId, BondId as AstBondId,
-    DativeBondId as AstDativeBondId, Entity as AstEntity,
-    MulticenterBondId as AstMulticenterBondId, NoncovalentBondId as AstNoncovalentBondId,
-    StereoAtomId as AstStereoAtomId, StereoBondId as AstStereoBondId,
+use umol_graph_ir::dsl::{
+    MoleculeMetadata as GraphIrMoleculeMetadata, ReactionMetadata as GraphIrReactionMetadata,
 };
-use umol_ast::dsl::{
-    MoleculeMetadata as AstMoleculeMetadata, ReactionMetadata as AstReactionMetadata,
+use umol_graph_ir::ir::{
+    AromaticSystemId as GraphIrAromaticSystemId, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
+    DativeBondId as GraphIrDativeBondId, Entity as GraphIrEntity,
+    MulticenterBondId as GraphIrMulticenterBondId, NoncovalentBondId as GraphIrNoncovalentBondId,
+    StereoAtomId as GraphIrStereoAtomId, StereoBondId as GraphIrStereoBondId,
 };
 
 use crate::convert::{hash_rust, variant_repr};
@@ -56,29 +56,33 @@ impl Entity {
 }
 
 impl Entity {
-    pub(crate) fn from_rust(entity: AstEntity) -> Self {
+    pub(crate) fn from_rust(entity: GraphIrEntity) -> Self {
         match entity {
-            AstEntity::Atom(id) => Self::Atom(id.0),
-            AstEntity::Bond(id) => Self::Bond(id.0),
-            AstEntity::DativeBond(id) => Self::DativeBond(id.0),
-            AstEntity::AromaticSystem(id) => Self::AromaticSystem(id.0),
-            AstEntity::MulticenterBond(id) => Self::MulticenterBond(id.0),
-            AstEntity::NoncovalentBond(id) => Self::NoncovalentBond(id.0),
-            AstEntity::StereoAtom(id) => Self::StereoAtom(id.0),
-            AstEntity::StereoBond(id) => Self::StereoBond(id.0),
+            GraphIrEntity::Atom(id) => Self::Atom(id.0),
+            GraphIrEntity::Bond(id) => Self::Bond(id.0),
+            GraphIrEntity::DativeBond(id) => Self::DativeBond(id.0),
+            GraphIrEntity::AromaticSystem(id) => Self::AromaticSystem(id.0),
+            GraphIrEntity::MulticenterBond(id) => Self::MulticenterBond(id.0),
+            GraphIrEntity::NoncovalentBond(id) => Self::NoncovalentBond(id.0),
+            GraphIrEntity::StereoAtom(id) => Self::StereoAtom(id.0),
+            GraphIrEntity::StereoBond(id) => Self::StereoBond(id.0),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstEntity {
+    pub(crate) fn to_rust(self) -> GraphIrEntity {
         match self {
-            Self::Atom(id) => AstEntity::Atom(AstAtomId(id)),
-            Self::Bond(id) => AstEntity::Bond(AstBondId(id)),
-            Self::DativeBond(id) => AstEntity::DativeBond(AstDativeBondId(id)),
-            Self::AromaticSystem(id) => AstEntity::AromaticSystem(AstAromaticSystemId(id)),
-            Self::MulticenterBond(id) => AstEntity::MulticenterBond(AstMulticenterBondId(id)),
-            Self::NoncovalentBond(id) => AstEntity::NoncovalentBond(AstNoncovalentBondId(id)),
-            Self::StereoAtom(id) => AstEntity::StereoAtom(AstStereoAtomId(id)),
-            Self::StereoBond(id) => AstEntity::StereoBond(AstStereoBondId(id)),
+            Self::Atom(id) => GraphIrEntity::Atom(GraphIrAtomId(id)),
+            Self::Bond(id) => GraphIrEntity::Bond(GraphIrBondId(id)),
+            Self::DativeBond(id) => GraphIrEntity::DativeBond(GraphIrDativeBondId(id)),
+            Self::AromaticSystem(id) => GraphIrEntity::AromaticSystem(GraphIrAromaticSystemId(id)),
+            Self::MulticenterBond(id) => {
+                GraphIrEntity::MulticenterBond(GraphIrMulticenterBondId(id))
+            }
+            Self::NoncovalentBond(id) => {
+                GraphIrEntity::NoncovalentBond(GraphIrNoncovalentBondId(id))
+            }
+            Self::StereoAtom(id) => GraphIrEntity::StereoAtom(GraphIrStereoAtomId(id)),
+            Self::StereoBond(id) => GraphIrEntity::StereoBond(GraphIrStereoBondId(id)),
         }
     }
 
@@ -103,13 +107,13 @@ impl Entity {
 /// entity present in the molecule.
 #[pyclass(eq, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MoleculeMetadata(AstMoleculeMetadata);
+pub struct MoleculeMetadata(GraphIrMoleculeMetadata);
 
 #[pymethods]
 impl MoleculeMetadata {
     #[new]
     fn new() -> Self {
-        Self(AstMoleculeMetadata::new())
+        Self(GraphIrMoleculeMetadata::new())
     }
 
     /// Keyword assigned to `entity`, if any.
@@ -140,11 +144,11 @@ impl MoleculeMetadata {
 }
 
 impl MoleculeMetadata {
-    pub(crate) fn from_rust(metadata: AstMoleculeMetadata) -> Self {
+    pub(crate) fn from_rust(metadata: GraphIrMoleculeMetadata) -> Self {
         Self(metadata)
     }
 
-    pub(crate) fn to_rust(&self) -> AstMoleculeMetadata {
+    pub(crate) fn to_rust(&self) -> GraphIrMoleculeMetadata {
         self.0.clone()
     }
 
@@ -164,7 +168,7 @@ impl MoleculeMetadata {
 /// introduced by matching add deltas.
 #[pyclass(eq, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionMetadata(AstReactionMetadata);
+pub struct ReactionMetadata(GraphIrReactionMetadata);
 
 #[pymethods]
 impl ReactionMetadata {
@@ -172,8 +176,8 @@ impl ReactionMetadata {
     #[pyo3(signature = (lhs=None))]
     fn new(lhs: Option<MoleculeMetadata>) -> Self {
         lhs.map_or_else(
-            || Self(AstReactionMetadata::default()),
-            |lhs| Self(AstReactionMetadata::from(lhs.0)),
+            || Self(GraphIrReactionMetadata::default()),
+            |lhs| Self(GraphIrReactionMetadata::from(lhs.0)),
         )
     }
 
@@ -221,16 +225,16 @@ impl ReactionMetadata {
 }
 
 impl ReactionMetadata {
-    pub(crate) fn from_rust(metadata: AstReactionMetadata) -> Self {
+    pub(crate) fn from_rust(metadata: GraphIrReactionMetadata) -> Self {
         Self(metadata)
     }
 
-    pub(crate) fn to_rust(&self) -> AstReactionMetadata {
+    pub(crate) fn to_rust(&self) -> GraphIrReactionMetadata {
         self.0.clone()
     }
 }
 
-fn keyword_repr<'a>(keywords: impl Iterator<Item = (AstEntity, &'a str)>) -> String {
+fn keyword_repr<'a>(keywords: impl Iterator<Item = (GraphIrEntity, &'a str)>) -> String {
     let entries = keywords
         .map(|(entity, keyword)| format!("({}, {keyword:?})", Entity::from_rust(entity).repr(),))
         .collect::<Vec<_>>();
@@ -241,54 +245,54 @@ fn keyword_repr<'a>(keywords: impl Iterator<Item = (AstEntity, &'a str)>) -> Str
 mod tests {
     use pyo3::types::PyAnyMethods;
     use rstest::rstest;
-    use umol_ast::ast::{
-        AromaticSystemId, AtomAst, AtomId, BondId, DativeBondId,
-        MoleculeCorrespondence as AstMoleculeCorrespondence, MulticenterBondId, NoncovalentBondId,
-        StereoAtomId, StereoBondId,
-    };
-    use umol_ast::dsl::AtomDsl;
     use umol_chem::element::Element;
     use umol_graph_core::Correspondence as GraphCoreCorrespondence;
+    use umol_graph_ir::dsl::AtomDsl;
+    use umol_graph_ir::ir::{
+        AromaticSystemId, AtomAst, AtomId, BondId, DativeBondId,
+        MoleculeCorrespondence as GraphIrMoleculeCorrespondence, MulticenterBondId,
+        NoncovalentBondId, StereoAtomId, StereoBondId,
+    };
 
     use super::*;
     use crate::error::MetadataError;
 
     #[rstest]
-    #[case::atom(Entity::Atom(1), AstEntity::Atom(AtomId(1)), "Entity.Atom(1)")]
-    #[case::bond(Entity::Bond(2), AstEntity::Bond(BondId(2)), "Entity.Bond(2)")]
+    #[case::atom(Entity::Atom(1), GraphIrEntity::Atom(AtomId(1)), "Entity.Atom(1)")]
+    #[case::bond(Entity::Bond(2), GraphIrEntity::Bond(BondId(2)), "Entity.Bond(2)")]
     #[case::dative_bond(
         Entity::DativeBond(3),
-        AstEntity::DativeBond(DativeBondId(3)),
+        GraphIrEntity::DativeBond(DativeBondId(3)),
         "Entity.DativeBond(3)"
     )]
     #[case::aromatic_system(
         Entity::AromaticSystem(4),
-        AstEntity::AromaticSystem(AromaticSystemId(4)),
+        GraphIrEntity::AromaticSystem(AromaticSystemId(4)),
         "Entity.AromaticSystem(4)"
     )]
     #[case::multicenter_bond(
         Entity::MulticenterBond(5),
-        AstEntity::MulticenterBond(MulticenterBondId(5)),
+        GraphIrEntity::MulticenterBond(MulticenterBondId(5)),
         "Entity.MulticenterBond(5)"
     )]
     #[case::noncovalent_bond(
         Entity::NoncovalentBond(6),
-        AstEntity::NoncovalentBond(NoncovalentBondId(6)),
+        GraphIrEntity::NoncovalentBond(NoncovalentBondId(6)),
         "Entity.NoncovalentBond(6)"
     )]
     #[case::stereo_atom(
         Entity::StereoAtom(7),
-        AstEntity::StereoAtom(StereoAtomId(7)),
+        GraphIrEntity::StereoAtom(StereoAtomId(7)),
         "Entity.StereoAtom(7)"
     )]
     #[case::stereo_bond(
         Entity::StereoBond(8),
-        AstEntity::StereoBond(StereoBondId(8)),
+        GraphIrEntity::StereoBond(StereoBondId(8)),
         "Entity.StereoBond(8)"
     )]
     fn test_entity_roundtrip(
         #[case] entity: Entity,
-        #[case] expected: AstEntity,
+        #[case] expected: GraphIrEntity,
         #[case] expected_repr: &str,
     ) {
         assert_eq!(entity.to_rust(), expected);
@@ -339,29 +343,32 @@ mod tests {
 
     #[rstest]
     fn test_molecule_metadata_remap() {
-        let mut metadata = AstMoleculeMetadata::new();
+        let mut metadata = GraphIrMoleculeMetadata::new();
         for (entity, keyword) in [
-            (AstEntity::Atom(AtomId(0)), "atom"),
-            (AstEntity::Bond(BondId(0)), "bond"),
-            (AstEntity::DativeBond(DativeBondId(0)), "dative"),
-            (AstEntity::AromaticSystem(AromaticSystemId(0)), "aromatic"),
+            (GraphIrEntity::Atom(AtomId(0)), "atom"),
+            (GraphIrEntity::Bond(BondId(0)), "bond"),
+            (GraphIrEntity::DativeBond(DativeBondId(0)), "dative"),
             (
-                AstEntity::MulticenterBond(MulticenterBondId(0)),
+                GraphIrEntity::AromaticSystem(AromaticSystemId(0)),
+                "aromatic",
+            ),
+            (
+                GraphIrEntity::MulticenterBond(MulticenterBondId(0)),
                 "multicenter",
             ),
             (
-                AstEntity::NoncovalentBond(NoncovalentBondId(0)),
+                GraphIrEntity::NoncovalentBond(NoncovalentBondId(0)),
                 "noncovalent",
             ),
-            (AstEntity::StereoAtom(StereoAtomId(0)), "stereo_atom"),
-            (AstEntity::StereoBond(StereoBondId(0)), "stereo_bond"),
+            (GraphIrEntity::StereoAtom(StereoAtomId(0)), "stereo_atom"),
+            (GraphIrEntity::StereoBond(StereoBondId(0)), "stereo_bond"),
         ] {
             metadata.set_keyword(entity, keyword).unwrap();
         }
         metadata
             .add_atom_alias("carbon", AtomDsl(AtomAst::from_element(Element::C)))
             .unwrap();
-        let correspondence = MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
+        let correspondence = MoleculeCorrespondence::from_rust(GraphIrMoleculeCorrespondence::new(
             GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(1))], 1, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             GraphCoreCorrespondence::new(vec![(BondId(0), BondId(1))], 1, 2)
@@ -490,10 +497,10 @@ mod tests {
 
     #[rstest]
     fn test_reaction_metadata_alias_preservation() {
-        let mut lhs = AstMoleculeMetadata::new();
+        let mut lhs = GraphIrMoleculeMetadata::new();
         lhs.add_atom_alias("carbon", AtomDsl(AtomAst::from_element(Element::C)))
             .unwrap();
-        let mut metadata = AstReactionMetadata::from(lhs);
+        let mut metadata = GraphIrReactionMetadata::from(lhs);
         metadata
             .add_atom_alias("nitrogen", AtomDsl(AtomAst::from_element(Element::N)))
             .unwrap();

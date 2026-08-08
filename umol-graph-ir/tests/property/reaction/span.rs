@@ -7,12 +7,12 @@ use std::iter::once;
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::{
+use umol_chem::element::Element;
+use umol_graph_core::Correspondence;
+use umol_graph_ir::ir::{
     AtomAst, AtomId, BondId, EntitySpan, MoleculeAst, MoleculeCorrespondence, MoleculeEntries,
     ReactionAst, ReactionSpanAst, ReactionSpanEntries, StereoLigand,
 };
-use umol_chem::element::Element;
-use umol_graph_core::Correspondence;
 
 use crate::strategies::{
     comprehensive_reaction_strategy, molecule_entries_strategy,

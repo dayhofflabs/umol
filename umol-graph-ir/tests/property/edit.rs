@@ -1,7 +1,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use proptest::prelude::*;
-use umol_ast::ast::Transaction;
+use umol_graph_ir::ir::Transaction;
 
 use crate::strategies::*;
 

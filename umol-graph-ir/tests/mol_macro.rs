@@ -1,8 +1,8 @@
 use rstest::rstest;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AromaticSystemId, AtomAst, AtomId, BondAst, BondId, MoleculeAst, StereoAtomId, StereoBondId,
 };
-use umol_ast::mol;
+use umol_graph_ir::mol;
 
 #[test]
 fn test_mol_builds_molecule() {

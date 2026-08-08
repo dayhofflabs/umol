@@ -4,13 +4,13 @@
 //! Resolution of the lifted AST (hydrogens, per-atom valence, aromaticity) is the
 //! caller's job.
 
-use umol_ast::ast::{
-    AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoAst, MoleculeAst,
-    MoleculeConstraint, MoleculeEntries, UnpairedElectronsAst, ValueAst,
-};
 use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
 use umol_geometric::molecule::Molecule;
+use umol_graph_ir::ir::{
+    AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoAst, MoleculeAst,
+    MoleculeConstraint, MoleculeEntries, UnpairedElectronsAst, ValueAst,
+};
 
 use crate::bond_perception::{perceive_bonds, BondPerceptionConfig};
 

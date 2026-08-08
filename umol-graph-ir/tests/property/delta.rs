@@ -7,7 +7,7 @@
 //! and is not folded into each diff/application property.
 
 use proptest::prelude::*;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
     BondFieldChange, BondId, Canonicalize, Constraint, ConstraintDelta, DativeBondDelta,
     DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, MulticenterBondDelta,

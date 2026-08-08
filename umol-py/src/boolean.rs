@@ -2,7 +2,7 @@
 //! dative `Aromatic` constraint.
 
 use pyo3::prelude::*;
-use umol_ast::ast::BooleanAst as AstBooleanAst;
+use umol_graph_ir::ir::BooleanAst as GraphIrBooleanAst;
 
 use crate::convert::{hash_rust, variant_repr};
 use crate::lattice::impl_py_lattice;
@@ -34,26 +34,26 @@ impl BooleanAst {
 }
 
 impl BooleanAst {
-    pub(crate) fn from_rust(ast: &AstBooleanAst) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrBooleanAst) -> Self {
         match ast {
-            AstBooleanAst::Undetermined => Self::Undetermined(),
-            AstBooleanAst::Lit(b) => Self::Lit(*b),
+            GraphIrBooleanAst::Undetermined => Self::Undetermined(),
+            GraphIrBooleanAst::Lit(b) => Self::Lit(*b),
         }
     }
 
-    pub(crate) fn to_rust(&self) -> AstBooleanAst {
+    pub(crate) fn to_rust(&self) -> GraphIrBooleanAst {
         match self {
-            Self::Undetermined() => AstBooleanAst::Undetermined,
-            Self::Lit(b) => AstBooleanAst::Lit(*b),
+            Self::Undetermined() => GraphIrBooleanAst::Undetermined,
+            Self::Lit(b) => GraphIrBooleanAst::Lit(*b),
         }
     }
 }
 
 impl_py_lattice!(
     BooleanAst,
-    AstBooleanAst,
-    |value: &BooleanAst, _py: Python<'_>| -> PyResult<AstBooleanAst> { Ok(value.to_rust()) },
-    |_py: Python<'_>, value: AstBooleanAst| -> PyResult<BooleanAst> {
+    GraphIrBooleanAst,
+    |value: &BooleanAst, _py: Python<'_>| -> PyResult<GraphIrBooleanAst> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: GraphIrBooleanAst| -> PyResult<BooleanAst> {
         Ok(BooleanAst::from_rust(&value))
     }
 );
@@ -67,9 +67,9 @@ pub(crate) enum BooleanLike {
 }
 
 impl BooleanLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBooleanAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrBooleanAst {
         match self {
-            BooleanLike::Lit(b) => AstBooleanAst::Lit(*b),
+            BooleanLike::Lit(b) => GraphIrBooleanAst::Lit(*b),
             BooleanLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
@@ -82,10 +82,10 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case(AstBooleanAst::Undetermined)]
-    #[case(AstBooleanAst::Lit(true))]
-    #[case(AstBooleanAst::Lit(false))]
-    fn test_boolean_ast_roundtrip(#[case] ast: AstBooleanAst) {
+    #[case(GraphIrBooleanAst::Undetermined)]
+    #[case(GraphIrBooleanAst::Lit(true))]
+    #[case(GraphIrBooleanAst::Lit(false))]
+    fn test_boolean_ast_roundtrip(#[case] ast: GraphIrBooleanAst) {
         assert_eq!(BooleanAst::from_rust(&ast).to_rust(), ast);
     }
 }

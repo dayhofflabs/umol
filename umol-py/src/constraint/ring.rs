@@ -1,7 +1,9 @@
 //! Ring scope and membership constraint payloads used by atom and bond families.
 
 use pyo3::prelude::*;
-use umol_ast::ast::{RingMembershipAst as AstRingMembershipAst, RingScope as AstRingScope};
+use umol_graph_ir::ir::{
+    RingMembershipAst as GraphIrRingMembershipAst, RingScope as GraphIrRingScope,
+};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
@@ -33,17 +35,17 @@ impl RingScope {
 }
 
 impl RingScope {
-    pub(crate) fn from_rust(ast: &AstRingScope) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrRingScope) -> Self {
         match ast {
-            AstRingScope::All => Self::All(),
-            AstRingScope::Size(size) => Self::Size(*size),
+            GraphIrRingScope::All => Self::All(),
+            GraphIrRingScope::Size(size) => Self::Size(*size),
         }
     }
 
-    pub(crate) fn to_rust(&self) -> AstRingScope {
+    pub(crate) fn to_rust(&self) -> GraphIrRingScope {
         match self {
-            Self::All() => AstRingScope::All,
-            Self::Size(size) => AstRingScope::Size(*size),
+            Self::All() => GraphIrRingScope::All,
+            Self::Size(size) => GraphIrRingScope::Size(*size),
         }
     }
 }
@@ -85,25 +87,25 @@ impl RingMembershipAst {
 
 impl_py_lattice!(
     RingMembershipAst,
-    AstRingMembershipAst,
-    |value: &RingMembershipAst, py: Python<'_>| -> PyResult<AstRingMembershipAst> {
+    GraphIrRingMembershipAst,
+    |value: &RingMembershipAst, py: Python<'_>| -> PyResult<GraphIrRingMembershipAst> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstRingMembershipAst| -> PyResult<RingMembershipAst> {
+    |py: Python<'_>, value: GraphIrRingMembershipAst| -> PyResult<RingMembershipAst> {
         RingMembershipAst::from_rust(py, &value)
     }
 );
 
 impl RingMembershipAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstRingMembershipAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrRingMembershipAst) -> PyResult<Self> {
         Ok(Self {
             scope: into_py_variant(py, RingScope::from_rust(&ast.scope))?,
             count: into_py_variant(py, ValueAst::from_rust(py, &ast.count)?)?,
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstRingMembershipAst {
-        AstRingMembershipAst::new(
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrRingMembershipAst {
+        GraphIrRingMembershipAst::new(
             self.scope.bind(py).borrow().to_rust(),
             self.count.bind(py).borrow().to_rust(py),
         )
@@ -117,16 +119,16 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case(AstRingScope::All)]
-    #[case(AstRingScope::Size(6))]
-    fn test_ring_scope_roundtrip(#[case] ast: AstRingScope) {
+    #[case(GraphIrRingScope::All)]
+    #[case(GraphIrRingScope::Size(6))]
+    fn test_ring_scope_roundtrip(#[case] ast: GraphIrRingScope) {
         assert_eq!(RingScope::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(AstRingMembershipAst::new(AstRingScope::All, 2))]
-    #[case(AstRingMembershipAst::new(AstRingScope::Size(6), 1))]
-    fn test_ring_membership_ast_roundtrip(#[case] ast: AstRingMembershipAst) {
+    #[case(GraphIrRingMembershipAst::new(GraphIrRingScope::All, 2))]
+    #[case(GraphIrRingMembershipAst::new(GraphIrRingScope::Size(6), 1))]
+    fn test_ring_membership_ast_roundtrip(#[case] ast: GraphIrRingMembershipAst) {
         Python::attach(|py| {
             assert_eq!(
                 RingMembershipAst::from_rust(py, &ast).unwrap().to_rust(py),

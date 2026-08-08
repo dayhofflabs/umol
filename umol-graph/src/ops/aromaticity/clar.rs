@@ -8,12 +8,12 @@
 use std::collections::HashSet;
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_chem::element::Element;
+use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
+use umol_graph_ir::ir::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet,
     UnpairedElectronsAst,
 };
-use umol_chem::element::Element;
-use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -134,11 +134,11 @@ fn select_disjoint_sextets(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_ir::ir::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
         MoleculeEntries, RingConfig, RingId, RingModel, RingSetKind, ValueAst,
     };
-    use umol_chem::element::Element;
 
     use super::*;
 

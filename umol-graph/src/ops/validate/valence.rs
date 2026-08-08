@@ -3,7 +3,7 @@
 //! over the atoms, surfacing the first mismatch as `Contradictory`.
 
 use thiserror::Error;
-use umol_ast::ast::MoleculeAst;
+use umol_graph_ir::ir::MoleculeAst;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
@@ -69,7 +69,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_ast::{atom_dsl, mol_dsl_ground};
+    use umol_graph_ir::{atom_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};

@@ -13,11 +13,11 @@ use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use umol_ast::ast::{AtomAst, ElementAst, IntoAst, ValueAst};
-use umol_ast::dsl::{
+use umol_chem::element::Element;
+use umol_graph_ir::dsl::{
     AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
 };
-use umol_chem::element::Element;
+use umol_graph_ir::ir::{AtomAst, ElementAst, IntoAst, ValueAst};
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
@@ -229,12 +229,12 @@ macro_rules! registry {
     ($($source:expr),* $(,)?) => {{
         let mut registry = $crate::ops::valence::AtomTypeRegistry::new();
         $(
-            let dsl: ::umol_ast::dsl::AtomDsl = $source
+            let dsl: ::umol_graph_ir::dsl::AtomDsl = $source
                 .parse()
                 .expect("invalid atom DSL");
-            let atom: ::umol_ast::ast::AtomAst = <_ as ::umol_ast::ast::IntoAst<
-                ::umol_ast::ast::AtomAst,
-            >>::into_ast(dsl, &::umol_ast::dsl::AtomDefaults::zeroed());
+            let atom: ::umol_graph_ir::ir::AtomAst = <_ as ::umol_graph_ir::ir::IntoAst<
+                ::umol_graph_ir::ir::AtomAst,
+            >>::into_ast(dsl, &::umol_graph_ir::dsl::AtomDefaults::zeroed());
             registry.add(atom);
         )*
         registry

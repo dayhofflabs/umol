@@ -4,12 +4,12 @@
 //! with either component still non-literal is underdetermined.
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_chem::error::SpinStateError;
+use umol_chem::spin::SpinState;
+use umol_graph_ir::ir::{
     AromaticSystemId, AsLit, AtomAst, AtomId, BondId, Constraint, Lattice, MoleculeAst,
     MoleculeConstraint, MulticenterBondId, UnpairedElectronsAst,
 };
-use umol_chem::error::SpinStateError;
-use umol_chem::spin::SpinState;
 use umol_utils::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -190,10 +190,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use rstest::rstest;
-    use umol_ast::ast::{
+    use umol_chem::spin::SpinMultiplicity;
+    use umol_graph_ir::ir::{
         AromaticSystemAst, BondAst, MoleculeEntries, MulticenterBondAst, ValueAst,
     };
-    use umol_chem::spin::SpinMultiplicity;
 
     use super::*;
 

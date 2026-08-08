@@ -4,26 +4,29 @@ use std::vec::IntoIter;
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
-use umol_ast::ast::{
-    AromaticSystemAst as AstAromaticSystemAst, AromaticSystemDelta as AstAromaticSystemDelta,
-    AromaticSystemFieldChange as AstAromaticSystemFieldChange,
-    AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
-    AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId, BondAst as AstBondAst,
-    BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
-    Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
-    DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
-    DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
-    Delta as AstDelta, Deltas as AstDeltas, MulticenterBondAst as AstMulticenterBondAst,
-    MulticenterBondDelta as AstMulticenterBondDelta,
-    MulticenterBondFieldChange as AstMulticenterBondFieldChange,
-    MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
-    NoncovalentBondDelta as AstNoncovalentBondDelta,
-    NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
-    NoncovalentBondId as AstNoncovalentBondId, StereoAtomAst as AstStereoAtomAst,
-    StereoAtomDelta as AstStereoAtomDelta, StereoAtomFieldChange as AstStereoAtomFieldChange,
-    StereoAtomId as AstStereoAtomId, StereoBondAst as AstStereoBondAst,
-    StereoBondDelta as AstStereoBondDelta, StereoBondFieldChange as AstStereoBondFieldChange,
-    StereoBondId as AstStereoBondId,
+use umol_graph_ir::ir::{
+    AromaticSystemAst as GraphIrAromaticSystemAst,
+    AromaticSystemDelta as GraphIrAromaticSystemDelta,
+    AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange,
+    AromaticSystemId as GraphIrAromaticSystemId, AtomAst as GraphIrAtomAst,
+    AtomDelta as GraphIrAtomDelta, AtomFieldChange as GraphIrAtomFieldChange,
+    AtomId as GraphIrAtomId, BondAst as GraphIrBondAst, BondDelta as GraphIrBondDelta,
+    BondFieldChange as GraphIrBondFieldChange, BondId as GraphIrBondId,
+    Constraint as GraphIrConstraint, ConstraintDelta as GraphIrConstraintDelta,
+    DativeBondAst as GraphIrDativeBondAst, DativeBondDelta as GraphIrDativeBondDelta,
+    DativeBondFieldChange as GraphIrDativeBondFieldChange, DativeBondId as GraphIrDativeBondId,
+    Delta as GraphIrDelta, Deltas as GraphIrDeltas,
+    MulticenterBondAst as GraphIrMulticenterBondAst,
+    MulticenterBondDelta as GraphIrMulticenterBondDelta,
+    MulticenterBondFieldChange as GraphIrMulticenterBondFieldChange,
+    MulticenterBondId as GraphIrMulticenterBondId, NoncovalentBondAst as GraphIrNoncovalentBondAst,
+    NoncovalentBondDelta as GraphIrNoncovalentBondDelta,
+    NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
+    NoncovalentBondId as GraphIrNoncovalentBondId, StereoAtomAst as GraphIrStereoAtomAst,
+    StereoAtomDelta as GraphIrStereoAtomDelta,
+    StereoAtomFieldChange as GraphIrStereoAtomFieldChange, StereoAtomId as GraphIrStereoAtomId,
+    StereoBondAst as GraphIrStereoBondAst, StereoBondDelta as GraphIrStereoBondDelta,
+    StereoBondFieldChange as GraphIrStereoBondFieldChange, StereoBondId as GraphIrStereoBondId,
 };
 
 use crate::aromatic::AromaticSystemAst;
@@ -185,58 +188,58 @@ field_change! {
 }
 
 impl AtomFieldChange {
-    pub(crate) fn from_rust(py: Python<'_>, change: &AstAtomFieldChange) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, change: &GraphIrAtomFieldChange) -> PyResult<Self> {
         Ok(match change {
-            AstAtomFieldChange::Element { old, new } => Self::Element {
+            GraphIrAtomFieldChange::Element { old, new } => Self::Element {
                 old: into_py_variant(py, ElementAst::from_rust(old))?,
                 new: into_py_variant(py, ElementAst::from_rust(new))?,
             },
-            AstAtomFieldChange::IsotopeMass { old, new } => Self::IsotopeMass {
+            GraphIrAtomFieldChange::IsotopeMass { old, new } => Self::IsotopeMass {
                 old: into_py_variant(py, IsotopeMassAst::from_rust(old))?,
                 new: into_py_variant(py, IsotopeMassAst::from_rust(new))?,
             },
-            AstAtomFieldChange::Charge { old, new } => Self::Charge {
+            GraphIrAtomFieldChange::Charge { old, new } => Self::Charge {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstAtomFieldChange::ImplicitHydrogens { old, new } => Self::ImplicitHydrogens {
+            GraphIrAtomFieldChange::ImplicitHydrogens { old, new } => Self::ImplicitHydrogens {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstAtomFieldChange::LonePairs { old, new } => Self::LonePairs {
+            GraphIrAtomFieldChange::LonePairs { old, new } => Self::LonePairs {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstAtomFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
+            GraphIrAtomFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
                 old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
                 new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAtomFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrAtomFieldChange {
         match self {
-            Self::Element { old, new } => AstAtomFieldChange::Element {
+            Self::Element { old, new } => GraphIrAtomFieldChange::Element {
                 old: old.bind(py).borrow().to_rust(),
                 new: new.bind(py).borrow().to_rust(),
             },
-            Self::IsotopeMass { old, new } => AstAtomFieldChange::IsotopeMass {
+            Self::IsotopeMass { old, new } => GraphIrAtomFieldChange::IsotopeMass {
                 old: old.bind(py).borrow().to_rust(),
                 new: new.bind(py).borrow().to_rust(),
             },
-            Self::Charge { old, new } => AstAtomFieldChange::Charge {
+            Self::Charge { old, new } => GraphIrAtomFieldChange::Charge {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::ImplicitHydrogens { old, new } => AstAtomFieldChange::ImplicitHydrogens {
+            Self::ImplicitHydrogens { old, new } => GraphIrAtomFieldChange::ImplicitHydrogens {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::LonePairs { old, new } => AstAtomFieldChange::LonePairs {
+            Self::LonePairs { old, new } => GraphIrAtomFieldChange::LonePairs {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::UnpairedElectrons { old, new } => AstAtomFieldChange::UnpairedElectrons {
+            Self::UnpairedElectrons { old, new } => GraphIrAtomFieldChange::UnpairedElectrons {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -245,34 +248,34 @@ impl AtomFieldChange {
 }
 
 impl BondFieldChange {
-    pub(crate) fn from_rust(py: Python<'_>, change: &AstBondFieldChange) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, change: &GraphIrBondFieldChange) -> PyResult<Self> {
         Ok(match change {
-            AstBondFieldChange::Order { old, new } => Self::Order {
+            GraphIrBondFieldChange::Order { old, new } => Self::Order {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstBondFieldChange::Charge { old, new } => Self::Charge {
+            GraphIrBondFieldChange::Charge { old, new } => Self::Charge {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstBondFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
+            GraphIrBondFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
                 old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
                 new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBondFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrBondFieldChange {
         match self {
-            Self::Order { old, new } => AstBondFieldChange::Order {
+            Self::Order { old, new } => GraphIrBondFieldChange::Order {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::Charge { old, new } => AstBondFieldChange::Charge {
+            Self::Charge { old, new } => GraphIrBondFieldChange::Charge {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
-            Self::UnpairedElectrons { old, new } => AstBondFieldChange::UnpairedElectrons {
+            Self::UnpairedElectrons { old, new } => GraphIrBondFieldChange::UnpairedElectrons {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -281,18 +284,21 @@ impl BondFieldChange {
 }
 
 impl DativeBondFieldChange {
-    pub(crate) fn from_rust(py: Python<'_>, change: &AstDativeBondFieldChange) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        change: &GraphIrDativeBondFieldChange,
+    ) -> PyResult<Self> {
         Ok(match change {
-            AstDativeBondFieldChange::Order { old, new } => Self::Order {
+            GraphIrDativeBondFieldChange::Order { old, new } => Self::Order {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDativeBondFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondFieldChange {
         match self {
-            Self::Order { old, new } => AstDativeBondFieldChange::Order {
+            Self::Order { old, new } => GraphIrDativeBondFieldChange::Order {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -303,18 +309,18 @@ impl DativeBondFieldChange {
 impl AromaticSystemFieldChange {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        change: &AstAromaticSystemFieldChange,
+        change: &GraphIrAromaticSystemFieldChange,
     ) -> PyResult<Self> {
         Ok(match change {
-            AstAromaticSystemFieldChange::Electrons { old, new } => Self::Electrons {
+            GraphIrAromaticSystemFieldChange::Electrons { old, new } => Self::Electrons {
                 old: into_py_variant(py, ElectronCountsAst::from_rust(old))?,
                 new: into_py_variant(py, ElectronCountsAst::from_rust(new))?,
             },
-            AstAromaticSystemFieldChange::Charge { old, new } => Self::Charge {
+            GraphIrAromaticSystemFieldChange::Charge { old, new } => Self::Charge {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstAromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+            GraphIrAromaticSystemFieldChange::UnpairedElectrons { old, new } => {
                 Self::UnpairedElectrons {
                     old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
                     new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
@@ -323,18 +329,18 @@ impl AromaticSystemFieldChange {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAromaticSystemFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemFieldChange {
         match self {
-            Self::Electrons { old, new } => AstAromaticSystemFieldChange::Electrons {
+            Self::Electrons { old, new } => GraphIrAromaticSystemFieldChange::Electrons {
                 old: old.bind(py).borrow().to_rust(),
                 new: new.bind(py).borrow().to_rust(),
             },
-            Self::Charge { old, new } => AstAromaticSystemFieldChange::Charge {
+            Self::Charge { old, new } => GraphIrAromaticSystemFieldChange::Charge {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
             Self::UnpairedElectrons { old, new } => {
-                AstAromaticSystemFieldChange::UnpairedElectrons {
+                GraphIrAromaticSystemFieldChange::UnpairedElectrons {
                     old: old.bind(py).borrow().to_rust(py),
                     new: new.bind(py).borrow().to_rust(py),
                 }
@@ -346,18 +352,18 @@ impl AromaticSystemFieldChange {
 impl MulticenterBondFieldChange {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        change: &AstMulticenterBondFieldChange,
+        change: &GraphIrMulticenterBondFieldChange,
     ) -> PyResult<Self> {
         Ok(match change {
-            AstMulticenterBondFieldChange::Electrons { old, new } => Self::Electrons {
+            GraphIrMulticenterBondFieldChange::Electrons { old, new } => Self::Electrons {
                 old: into_py_variant(py, ElectronCountsAst::from_rust(old))?,
                 new: into_py_variant(py, ElectronCountsAst::from_rust(new))?,
             },
-            AstMulticenterBondFieldChange::Charge { old, new } => Self::Charge {
+            GraphIrMulticenterBondFieldChange::Charge { old, new } => Self::Charge {
                 old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
             },
-            AstMulticenterBondFieldChange::UnpairedElectrons { old, new } => {
+            GraphIrMulticenterBondFieldChange::UnpairedElectrons { old, new } => {
                 Self::UnpairedElectrons {
                     old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
                     new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
@@ -366,18 +372,18 @@ impl MulticenterBondFieldChange {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondFieldChange {
         match self {
-            Self::Electrons { old, new } => AstMulticenterBondFieldChange::Electrons {
+            Self::Electrons { old, new } => GraphIrMulticenterBondFieldChange::Electrons {
                 old: old.bind(py).borrow().to_rust(),
                 new: new.bind(py).borrow().to_rust(),
             },
-            Self::Charge { old, new } => AstMulticenterBondFieldChange::Charge {
+            Self::Charge { old, new } => GraphIrMulticenterBondFieldChange::Charge {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
             Self::UnpairedElectrons { old, new } => {
-                AstMulticenterBondFieldChange::UnpairedElectrons {
+                GraphIrMulticenterBondFieldChange::UnpairedElectrons {
                     old: old.bind(py).borrow().to_rust(py),
                     new: new.bind(py).borrow().to_rust(py),
                 }
@@ -389,19 +395,19 @@ impl MulticenterBondFieldChange {
 impl NoncovalentBondFieldChange {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        change: &AstNoncovalentBondFieldChange,
+        change: &GraphIrNoncovalentBondFieldChange,
     ) -> PyResult<Self> {
         Ok(match change {
-            AstNoncovalentBondFieldChange::Kind { old, new } => Self::Kind {
+            GraphIrNoncovalentBondFieldChange::Kind { old, new } => Self::Kind {
                 old: into_py_variant(py, NoncovalentBondKindAst::from_rust(old))?,
                 new: into_py_variant(py, NoncovalentBondKindAst::from_rust(new))?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondFieldChange {
         match self {
-            Self::Kind { old, new } => AstNoncovalentBondFieldChange::Kind {
+            Self::Kind { old, new } => GraphIrNoncovalentBondFieldChange::Kind {
                 old: old.bind(py).borrow().to_rust(),
                 new: new.bind(py).borrow().to_rust(),
             },
@@ -410,18 +416,21 @@ impl NoncovalentBondFieldChange {
 }
 
 impl StereoAtomFieldChange {
-    pub(crate) fn from_rust(py: Python<'_>, change: &AstStereoAtomFieldChange) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        change: &GraphIrStereoAtomFieldChange,
+    ) -> PyResult<Self> {
         Ok(match change {
-            AstStereoAtomFieldChange::Configuration { old, new } => Self::Configuration {
+            GraphIrStereoAtomFieldChange::Configuration { old, new } => Self::Configuration {
                 old: into_py_variant(py, StereoConfigurationAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, StereoConfigurationAst::from_rust(py, new)?)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoAtomFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoAtomFieldChange {
         match self {
-            Self::Configuration { old, new } => AstStereoAtomFieldChange::Configuration {
+            Self::Configuration { old, new } => GraphIrStereoAtomFieldChange::Configuration {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -430,18 +439,21 @@ impl StereoAtomFieldChange {
 }
 
 impl StereoBondFieldChange {
-    pub(crate) fn from_rust(py: Python<'_>, change: &AstStereoBondFieldChange) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        change: &GraphIrStereoBondFieldChange,
+    ) -> PyResult<Self> {
         Ok(match change {
-            AstStereoBondFieldChange::Configuration { old, new } => Self::Configuration {
+            GraphIrStereoBondFieldChange::Configuration { old, new } => Self::Configuration {
                 old: into_py_variant(py, StereoConfigurationAst::from_rust(py, old)?)?,
                 new: into_py_variant(py, StereoConfigurationAst::from_rust(py, new)?)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoBondFieldChange {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondFieldChange {
         match self {
-            Self::Configuration { old, new } => AstStereoBondFieldChange::Configuration {
+            Self::Configuration { old, new } => GraphIrStereoBondFieldChange::Configuration {
                 old: old.bind(py).borrow().to_rust(py),
                 new: new.bind(py).borrow().to_rust(py),
             },
@@ -473,11 +485,11 @@ impl<'py> IntoPyObject<'py> for &AtomDeltaAstValue {
 }
 
 impl AtomDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstAtomAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrAtomAst) -> PyResult<Self> {
         Ok(Self(Py::new(py, AtomAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstAtomAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrAtomAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -527,21 +539,21 @@ impl AtomDelta {
 }
 
 impl AtomDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstAtomDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrAtomDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstAtomDelta::Add { id, ast } => Self::Add {
+            GraphIrAtomDelta::Add { id, ast } => Self::Add {
                 id: id.0,
                 ast: AtomDeltaAstValue::from_rust(py, ast)?,
             },
-            AstAtomDelta::Remove { id, ast } => Self::Remove {
+            GraphIrAtomDelta::Remove { id, ast } => Self::Remove {
                 id: id.0,
                 ast: AtomDeltaAstValue::from_rust(py, ast)?,
             },
-            AstAtomDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrAtomDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, AtomFieldChange::from_rust(py, change)?)?,
             },
-            AstAtomDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+            GraphIrAtomDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id: id.0,
                 old: old
                     .as_ref()
@@ -559,22 +571,22 @@ impl AtomDelta {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAtomDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrAtomDelta {
         match self {
-            Self::Add { id, ast } => AstAtomDelta::Add {
-                id: AstAtomId(*id),
+            Self::Add { id, ast } => GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(*id),
                 ast: ast.to_rust(py),
             },
-            Self::Remove { id, ast } => AstAtomDelta::Remove {
-                id: AstAtomId(*id),
+            Self::Remove { id, ast } => GraphIrAtomDelta::Remove {
+                id: GraphIrAtomId(*id),
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstAtomDelta::ModifyField {
-                id: AstAtomId(*id),
+            Self::ModifyField { id, change } => GraphIrAtomDelta::ModifyField {
+                id: GraphIrAtomId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, old, new } => AstAtomDelta::ModifyConstraint {
-                id: AstAtomId(*id),
+            Self::ModifyConstraint { id, old, new } => GraphIrAtomDelta::ModifyConstraint {
+                id: GraphIrAtomId(*id),
                 old: old
                     .as_ref()
                     .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
@@ -610,11 +622,11 @@ impl<'py> IntoPyObject<'py> for &BondDeltaAstValue {
 }
 
 impl BondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrBondAst) -> PyResult<Self> {
         Ok(Self(Py::new(py, BondAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrBondAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -666,23 +678,23 @@ impl BondDelta {
 }
 
 impl BondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrBondDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstBondDelta::Add { id, atoms, ast } => Self::Add {
+            GraphIrBondDelta::Add { id, atoms, ast } => Self::Add {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 ast: BondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstBondDelta::Remove { id, atoms, ast } => Self::Remove {
+            GraphIrBondDelta::Remove { id, atoms, ast } => Self::Remove {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 ast: BondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstBondDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
             },
-            AstBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+            GraphIrBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id: id.0,
                 old: old
                     .as_ref()
@@ -700,24 +712,24 @@ impl BondDelta {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBondDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrBondDelta {
         match self {
-            Self::Add { id, atoms, ast } => AstBondDelta::Add {
-                id: AstBondId(*id),
-                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+            Self::Add { id, atoms, ast } => GraphIrBondDelta::Add {
+                id: GraphIrBondId(*id),
+                atoms: [GraphIrAtomId(atoms.0), GraphIrAtomId(atoms.1)],
                 ast: ast.to_rust(py),
             },
-            Self::Remove { id, atoms, ast } => AstBondDelta::Remove {
-                id: AstBondId(*id),
-                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+            Self::Remove { id, atoms, ast } => GraphIrBondDelta::Remove {
+                id: GraphIrBondId(*id),
+                atoms: [GraphIrAtomId(atoms.0), GraphIrAtomId(atoms.1)],
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstBondDelta::ModifyField {
-                id: AstBondId(*id),
+            Self::ModifyField { id, change } => GraphIrBondDelta::ModifyField {
+                id: GraphIrBondId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, old, new } => AstBondDelta::ModifyConstraint {
-                id: AstBondId(*id),
+            Self::ModifyConstraint { id, old, new } => GraphIrBondDelta::ModifyConstraint {
+                id: GraphIrBondId(*id),
                 old: old
                     .as_ref()
                     .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
@@ -753,11 +765,11 @@ impl<'py> IntoPyObject<'py> for &DativeBondDeltaAstValue {
 }
 
 impl DativeBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstDativeBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrDativeBondAst) -> PyResult<Self> {
         Ok(Self(Py::new(py, DativeBondAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstDativeBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -811,9 +823,9 @@ impl DativeBondDelta {
 }
 
 impl DativeBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstDativeBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrDativeBondDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstDativeBondDelta::Add {
+            GraphIrDativeBondDelta::Add {
                 id,
                 donors,
                 acceptor,
@@ -824,7 +836,7 @@ impl DativeBondDelta {
                 acceptor: acceptor.0,
                 ast: DativeBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstDativeBondDelta::Remove {
+            GraphIrDativeBondDelta::Remove {
                 id,
                 donors,
                 acceptor,
@@ -835,11 +847,11 @@ impl DativeBondDelta {
                 acceptor: acceptor.0,
                 ast: DativeBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstDativeBondDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrDativeBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
             },
-            AstDativeBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+            GraphIrDativeBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id: id.0,
                 old: old
                     .as_ref()
@@ -857,17 +869,17 @@ impl DativeBondDelta {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDativeBondDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondDelta {
         match self {
             Self::Add {
                 id,
                 donors,
                 acceptor,
                 ast,
-            } => AstDativeBondDelta::Add {
-                id: AstDativeBondId(*id),
-                donors: donors.iter().copied().map(AstAtomId).collect(),
-                acceptor: AstAtomId(*acceptor),
+            } => GraphIrDativeBondDelta::Add {
+                id: GraphIrDativeBondId(*id),
+                donors: donors.iter().copied().map(GraphIrAtomId).collect(),
+                acceptor: GraphIrAtomId(*acceptor),
                 ast: ast.to_rust(py),
             },
             Self::Remove {
@@ -875,18 +887,18 @@ impl DativeBondDelta {
                 donors,
                 acceptor,
                 ast,
-            } => AstDativeBondDelta::Remove {
-                id: AstDativeBondId(*id),
-                donors: donors.iter().copied().map(AstAtomId).collect(),
-                acceptor: AstAtomId(*acceptor),
+            } => GraphIrDativeBondDelta::Remove {
+                id: GraphIrDativeBondId(*id),
+                donors: donors.iter().copied().map(GraphIrAtomId).collect(),
+                acceptor: GraphIrAtomId(*acceptor),
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstDativeBondDelta::ModifyField {
-                id: AstDativeBondId(*id),
+            Self::ModifyField { id, change } => GraphIrDativeBondDelta::ModifyField {
+                id: GraphIrDativeBondId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, old, new } => AstDativeBondDelta::ModifyConstraint {
-                id: AstDativeBondId(*id),
+            Self::ModifyConstraint { id, old, new } => GraphIrDativeBondDelta::ModifyConstraint {
+                id: GraphIrDativeBondId(*id),
                 old: old
                     .as_ref()
                     .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
@@ -922,14 +934,14 @@ impl<'py> IntoPyObject<'py> for &AromaticSystemDeltaAstValue {
 }
 
 impl AromaticSystemDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstAromaticSystemAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrAromaticSystemAst) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
             AromaticSystemAst::from_inner(ast.clone()),
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstAromaticSystemAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -986,65 +998,75 @@ impl AromaticSystemDelta {
 }
 
 impl AromaticSystemDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstAromaticSystemDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrAromaticSystemDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstAromaticSystemDelta::Add { id, atoms, ast } => Self::Add {
+            GraphIrAromaticSystemDelta::Add { id, atoms, ast } => Self::Add {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
                 ast: AromaticSystemDeltaAstValue::from_rust(py, ast)?,
             },
-            AstAromaticSystemDelta::Remove { id, atoms, ast } => Self::Remove {
+            GraphIrAromaticSystemDelta::Remove { id, atoms, ast } => Self::Remove {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
                 ast: AromaticSystemDeltaAstValue::from_rust(py, ast)?,
             },
-            AstAromaticSystemDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrAromaticSystemDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
             },
-            AstAromaticSystemDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-            },
+            GraphIrAromaticSystemDelta::ModifyConstraint { id, old, new } => {
+                Self::ModifyConstraint {
+                    id: id.0,
+                    old: old
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(
+                                py,
+                                AromaticSystemConstraintAst::from_rust(py, constraint)?,
+                            )
+                        })
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(
+                                py,
+                                AromaticSystemConstraintAst::from_rust(py, constraint)?,
+                            )
+                        })
+                        .transpose()?,
+                }
+            }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAromaticSystemDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemDelta {
         match self {
-            Self::Add { id, atoms, ast } => AstAromaticSystemDelta::Add {
-                id: AstAromaticSystemId(*id),
-                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+            Self::Add { id, atoms, ast } => GraphIrAromaticSystemDelta::Add {
+                id: GraphIrAromaticSystemId(*id),
+                atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 ast: ast.to_rust(py),
             },
-            Self::Remove { id, atoms, ast } => AstAromaticSystemDelta::Remove {
-                id: AstAromaticSystemId(*id),
-                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+            Self::Remove { id, atoms, ast } => GraphIrAromaticSystemDelta::Remove {
+                id: GraphIrAromaticSystemId(*id),
+                atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstAromaticSystemDelta::ModifyField {
-                id: AstAromaticSystemId(*id),
+            Self::ModifyField { id, change } => GraphIrAromaticSystemDelta::ModifyField {
+                id: GraphIrAromaticSystemId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, old, new } => AstAromaticSystemDelta::ModifyConstraint {
-                id: AstAromaticSystemId(*id),
-                old: old
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-                new: new
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-            },
+            Self::ModifyConstraint { id, old, new } => {
+                GraphIrAromaticSystemDelta::ModifyConstraint {
+                    id: GraphIrAromaticSystemId(*id),
+                    old: old
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                    new: new
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                }
+            }
         }
     }
 }
@@ -1076,14 +1098,14 @@ impl<'py> IntoPyObject<'py> for &MulticenterBondDeltaAstValue {
 }
 
 impl MulticenterBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstMulticenterBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrMulticenterBondAst) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
             MulticenterBondAst::from_inner(ast.clone()),
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1140,71 +1162,75 @@ impl MulticenterBondDelta {
 }
 
 impl MulticenterBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstMulticenterBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrMulticenterBondDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstMulticenterBondDelta::Add { id, atoms, ast } => Self::Add {
+            GraphIrMulticenterBondDelta::Add { id, atoms, ast } => Self::Add {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
                 ast: MulticenterBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstMulticenterBondDelta::Remove { id, atoms, ast } => Self::Remove {
+            GraphIrMulticenterBondDelta::Remove { id, atoms, ast } => Self::Remove {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
                 ast: MulticenterBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstMulticenterBondDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrMulticenterBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, MulticenterBondFieldChange::from_rust(py, change)?)?,
             },
-            AstMulticenterBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(
-                            py,
-                            MulticenterBondConstraintAst::from_rust(py, constraint)?,
-                        )
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(
-                            py,
-                            MulticenterBondConstraintAst::from_rust(py, constraint)?,
-                        )
-                    })
-                    .transpose()?,
-            },
+            GraphIrMulticenterBondDelta::ModifyConstraint { id, old, new } => {
+                Self::ModifyConstraint {
+                    id: id.0,
+                    old: old
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(
+                                py,
+                                MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                            )
+                        })
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(
+                                py,
+                                MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                            )
+                        })
+                        .transpose()?,
+                }
+            }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondDelta {
         match self {
-            Self::Add { id, atoms, ast } => AstMulticenterBondDelta::Add {
-                id: AstMulticenterBondId(*id),
-                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+            Self::Add { id, atoms, ast } => GraphIrMulticenterBondDelta::Add {
+                id: GraphIrMulticenterBondId(*id),
+                atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 ast: ast.to_rust(py),
             },
-            Self::Remove { id, atoms, ast } => AstMulticenterBondDelta::Remove {
-                id: AstMulticenterBondId(*id),
-                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+            Self::Remove { id, atoms, ast } => GraphIrMulticenterBondDelta::Remove {
+                id: GraphIrMulticenterBondId(*id),
+                atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstMulticenterBondDelta::ModifyField {
-                id: AstMulticenterBondId(*id),
+            Self::ModifyField { id, change } => GraphIrMulticenterBondDelta::ModifyField {
+                id: GraphIrMulticenterBondId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, old, new } => AstMulticenterBondDelta::ModifyConstraint {
-                id: AstMulticenterBondId(*id),
-                old: old
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-                new: new
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-            },
+            Self::ModifyConstraint { id, old, new } => {
+                GraphIrMulticenterBondDelta::ModifyConstraint {
+                    id: GraphIrMulticenterBondId(*id),
+                    old: old
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                    new: new
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                }
+            }
         }
     }
 }
@@ -1236,14 +1262,14 @@ impl<'py> IntoPyObject<'py> for &NoncovalentBondDeltaAstValue {
 }
 
 impl NoncovalentBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstNoncovalentBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrNoncovalentBondAst) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
             NoncovalentBondAst::from_inner(ast.clone()),
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1300,71 +1326,75 @@ impl NoncovalentBondDelta {
 }
 
 impl NoncovalentBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstNoncovalentBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrNoncovalentBondDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstNoncovalentBondDelta::Add { id, atoms, ast } => Self::Add {
+            GraphIrNoncovalentBondDelta::Add { id, atoms, ast } => Self::Add {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 ast: NoncovalentBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstNoncovalentBondDelta::Remove { id, atoms, ast } => Self::Remove {
+            GraphIrNoncovalentBondDelta::Remove { id, atoms, ast } => Self::Remove {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 ast: NoncovalentBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstNoncovalentBondDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrNoncovalentBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, NoncovalentBondFieldChange::from_rust(py, change)?)?,
             },
-            AstNoncovalentBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(
-                            py,
-                            NoncovalentBondConstraintAst::from_rust(py, constraint)?,
-                        )
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(
-                            py,
-                            NoncovalentBondConstraintAst::from_rust(py, constraint)?,
-                        )
-                    })
-                    .transpose()?,
-            },
+            GraphIrNoncovalentBondDelta::ModifyConstraint { id, old, new } => {
+                Self::ModifyConstraint {
+                    id: id.0,
+                    old: old
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(
+                                py,
+                                NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                            )
+                        })
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(
+                                py,
+                                NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                            )
+                        })
+                        .transpose()?,
+                }
+            }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondDelta {
         match self {
-            Self::Add { id, atoms, ast } => AstNoncovalentBondDelta::Add {
-                id: AstNoncovalentBondId(*id),
-                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+            Self::Add { id, atoms, ast } => GraphIrNoncovalentBondDelta::Add {
+                id: GraphIrNoncovalentBondId(*id),
+                atoms: [GraphIrAtomId(atoms.0), GraphIrAtomId(atoms.1)],
                 ast: ast.to_rust(py),
             },
-            Self::Remove { id, atoms, ast } => AstNoncovalentBondDelta::Remove {
-                id: AstNoncovalentBondId(*id),
-                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+            Self::Remove { id, atoms, ast } => GraphIrNoncovalentBondDelta::Remove {
+                id: GraphIrNoncovalentBondId(*id),
+                atoms: [GraphIrAtomId(atoms.0), GraphIrAtomId(atoms.1)],
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstNoncovalentBondDelta::ModifyField {
-                id: AstNoncovalentBondId(*id),
+            Self::ModifyField { id, change } => GraphIrNoncovalentBondDelta::ModifyField {
+                id: GraphIrNoncovalentBondId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, old, new } => AstNoncovalentBondDelta::ModifyConstraint {
-                id: AstNoncovalentBondId(*id),
-                old: old
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-                new: new
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-            },
+            Self::ModifyConstraint { id, old, new } => {
+                GraphIrNoncovalentBondDelta::ModifyConstraint {
+                    id: GraphIrNoncovalentBondId(*id),
+                    old: old
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                    new: new
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                }
+            }
         }
     }
 }
@@ -1393,11 +1423,11 @@ impl<'py> IntoPyObject<'py> for &StereoAtomDeltaAstValue {
 }
 
 impl StereoAtomDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstStereoAtomAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrStereoAtomAst) -> PyResult<Self> {
         Ok(Self(Py::new(py, StereoAtomAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstStereoAtomAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrStereoAtomAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1468,9 +1498,9 @@ impl StereoAtomDelta {
 }
 
 impl StereoAtomDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstStereoAtomDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrStereoAtomDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstStereoAtomDelta::Add {
+            GraphIrStereoAtomDelta::Add {
                 id,
                 site,
                 ligands,
@@ -1485,7 +1515,7 @@ impl StereoAtomDelta {
                     .collect(),
                 ast: StereoAtomDeltaAstValue::from_rust(py, ast)?,
             },
-            AstStereoAtomDelta::Remove {
+            GraphIrStereoAtomDelta::Remove {
                 id,
                 site,
                 ligands,
@@ -1500,27 +1530,29 @@ impl StereoAtomDelta {
                     .collect(),
                 ast: StereoAtomDeltaAstValue::from_rust(py, ast)?,
             },
-            AstStereoAtomDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrStereoAtomDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
             },
-            AstStereoAtomDelta::ModifyConstraint { id, kind, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                kind: kind.map(StereoKind::from_rust),
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, StereoAtomConstraintAst::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, StereoAtomConstraintAst::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-            },
-            AstStereoAtomDelta::Apply {
+            GraphIrStereoAtomDelta::ModifyConstraint { id, kind, old, new } => {
+                Self::ModifyConstraint {
+                    id: id.0,
+                    kind: kind.map(StereoKind::from_rust),
+                    old: old
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(py, StereoAtomConstraintAst::from_rust(py, constraint)?)
+                        })
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(py, StereoAtomConstraintAst::from_rust(py, constraint)?)
+                        })
+                        .transpose()?,
+                }
+            }
+            GraphIrStereoAtomDelta::Apply {
                 id,
                 kind,
                 permutation,
@@ -1529,27 +1561,27 @@ impl StereoAtomDelta {
                 kind: StereoKind::from_rust(*kind),
                 permutation: Permutation::from_inner(*permutation),
             },
-            AstStereoAtomDelta::Swap { id, kind } => Self::Swap {
+            GraphIrStereoAtomDelta::Swap { id, kind } => Self::Swap {
                 id: id.0,
                 kind: StereoKind::from_rust(*kind),
             },
-            AstStereoAtomDelta::Mirror { id, kind } => Self::Mirror {
+            GraphIrStereoAtomDelta::Mirror { id, kind } => Self::Mirror {
                 id: id.0,
                 kind: StereoKind::from_rust(*kind),
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoAtomDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoAtomDelta {
         match self {
             Self::Add {
                 id,
                 site,
                 ligands,
                 ast,
-            } => AstStereoAtomDelta::Add {
-                id: AstStereoAtomId(*id),
-                site: AstAtomId(*site),
+            } => GraphIrStereoAtomDelta::Add {
+                id: GraphIrStereoAtomId(*id),
+                site: GraphIrAtomId(*site),
                 ligands: ligands.iter().copied().map(StereoLigand::to_rust).collect(),
                 ast: ast.to_rust(py),
             },
@@ -1558,41 +1590,43 @@ impl StereoAtomDelta {
                 site,
                 ligands,
                 ast,
-            } => AstStereoAtomDelta::Remove {
-                id: AstStereoAtomId(*id),
-                site: AstAtomId(*site),
+            } => GraphIrStereoAtomDelta::Remove {
+                id: GraphIrStereoAtomId(*id),
+                site: GraphIrAtomId(*site),
                 ligands: ligands.iter().copied().map(StereoLigand::to_rust).collect(),
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstStereoAtomDelta::ModifyField {
-                id: AstStereoAtomId(*id),
+            Self::ModifyField { id, change } => GraphIrStereoAtomDelta::ModifyField {
+                id: GraphIrStereoAtomId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, kind, old, new } => AstStereoAtomDelta::ModifyConstraint {
-                id: AstStereoAtomId(*id),
-                kind: kind.map(StereoKind::to_rust),
-                old: old
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-                new: new
-                    .as_ref()
-                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
-            },
+            Self::ModifyConstraint { id, kind, old, new } => {
+                GraphIrStereoAtomDelta::ModifyConstraint {
+                    id: GraphIrStereoAtomId(*id),
+                    kind: kind.map(StereoKind::to_rust),
+                    old: old
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                    new: new
+                        .as_ref()
+                        .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                }
+            }
             Self::Apply {
                 id,
                 kind,
                 permutation,
-            } => AstStereoAtomDelta::Apply {
-                id: AstStereoAtomId(*id),
+            } => GraphIrStereoAtomDelta::Apply {
+                id: GraphIrStereoAtomId(*id),
                 kind: kind.to_rust(),
                 permutation: permutation.inner(),
             },
-            Self::Swap { id, kind } => AstStereoAtomDelta::Swap {
-                id: AstStereoAtomId(*id),
+            Self::Swap { id, kind } => GraphIrStereoAtomDelta::Swap {
+                id: GraphIrStereoAtomId(*id),
                 kind: kind.to_rust(),
             },
-            Self::Mirror { id, kind } => AstStereoAtomDelta::Mirror {
-                id: AstStereoAtomId(*id),
+            Self::Mirror { id, kind } => GraphIrStereoAtomDelta::Mirror {
+                id: GraphIrStereoAtomId(*id),
                 kind: kind.to_rust(),
             },
         }
@@ -1621,10 +1655,10 @@ impl<'py> IntoPyObject<'py> for &StereoBondDeltaAstValue {
 }
 
 impl StereoBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &AstStereoBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrStereoBondAst) -> PyResult<Self> {
         Ok(Self(Py::new(py, StereoBondAst::from_inner(ast.clone()))?))
     }
-    fn to_rust(&self, py: Python<'_>) -> AstStereoBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondAst {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1692,9 +1726,9 @@ impl StereoBondDelta {
 }
 
 impl StereoBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstStereoBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrStereoBondDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstStereoBondDelta::Add {
+            GraphIrStereoBondDelta::Add {
                 id,
                 site,
                 ligands,
@@ -1709,7 +1743,7 @@ impl StereoBondDelta {
                     .collect(),
                 ast: StereoBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstStereoBondDelta::Remove {
+            GraphIrStereoBondDelta::Remove {
                 id,
                 site,
                 ligands,
@@ -1724,23 +1758,25 @@ impl StereoBondDelta {
                     .collect(),
                 ast: StereoBondDeltaAstValue::from_rust(py, ast)?,
             },
-            AstStereoBondDelta::ModifyField { id, change } => Self::ModifyField {
+            GraphIrStereoBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
                 change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
             },
-            AstStereoBondDelta::ModifyConstraint { id, kind, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                kind: kind.map(StereoKind::from_rust),
-                old: old
-                    .as_ref()
-                    .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
-                    .transpose()?,
-            },
-            AstStereoBondDelta::Apply {
+            GraphIrStereoBondDelta::ModifyConstraint { id, kind, old, new } => {
+                Self::ModifyConstraint {
+                    id: id.0,
+                    kind: kind.map(StereoKind::from_rust),
+                    old: old
+                        .as_ref()
+                        .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
+                        .transpose()?,
+                }
+            }
+            GraphIrStereoBondDelta::Apply {
                 id,
                 kind,
                 permutation,
@@ -1749,26 +1785,26 @@ impl StereoBondDelta {
                 kind: StereoKind::from_rust(*kind),
                 permutation: Permutation::from_inner(*permutation),
             },
-            AstStereoBondDelta::Swap { id, kind } => Self::Swap {
+            GraphIrStereoBondDelta::Swap { id, kind } => Self::Swap {
                 id: id.0,
                 kind: StereoKind::from_rust(*kind),
             },
-            AstStereoBondDelta::Mirror { id, kind } => Self::Mirror {
+            GraphIrStereoBondDelta::Mirror { id, kind } => Self::Mirror {
                 id: id.0,
                 kind: StereoKind::from_rust(*kind),
             },
         })
     }
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoBondDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondDelta {
         match self {
             Self::Add {
                 id,
                 site,
                 ligands,
                 ast,
-            } => AstStereoBondDelta::Add {
-                id: AstStereoBondId(*id),
-                site: AstBondId(*site),
+            } => GraphIrStereoBondDelta::Add {
+                id: GraphIrStereoBondId(*id),
+                site: GraphIrBondId(*site),
                 ligands: ligands.iter().copied().map(StereoLigand::to_rust).collect(),
                 ast: ast.to_rust(py),
             },
@@ -1777,37 +1813,39 @@ impl StereoBondDelta {
                 site,
                 ligands,
                 ast,
-            } => AstStereoBondDelta::Remove {
-                id: AstStereoBondId(*id),
-                site: AstBondId(*site),
+            } => GraphIrStereoBondDelta::Remove {
+                id: GraphIrStereoBondId(*id),
+                site: GraphIrBondId(*site),
                 ligands: ligands.iter().copied().map(StereoLigand::to_rust).collect(),
                 ast: ast.to_rust(py),
             },
-            Self::ModifyField { id, change } => AstStereoBondDelta::ModifyField {
-                id: AstStereoBondId(*id),
+            Self::ModifyField { id, change } => GraphIrStereoBondDelta::ModifyField {
+                id: GraphIrStereoBondId(*id),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyConstraint { id, kind, old, new } => AstStereoBondDelta::ModifyConstraint {
-                id: AstStereoBondId(*id),
-                kind: kind.map(StereoKind::to_rust),
-                old: old.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
-                new: new.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
-            },
+            Self::ModifyConstraint { id, kind, old, new } => {
+                GraphIrStereoBondDelta::ModifyConstraint {
+                    id: GraphIrStereoBondId(*id),
+                    kind: kind.map(StereoKind::to_rust),
+                    old: old.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
+                    new: new.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
+                }
+            }
             Self::Apply {
                 id,
                 kind,
                 permutation,
-            } => AstStereoBondDelta::Apply {
-                id: AstStereoBondId(*id),
+            } => GraphIrStereoBondDelta::Apply {
+                id: GraphIrStereoBondId(*id),
                 kind: kind.to_rust(),
                 permutation: permutation.inner(),
             },
-            Self::Swap { id, kind } => AstStereoBondDelta::Swap {
-                id: AstStereoBondId(*id),
+            Self::Swap { id, kind } => GraphIrStereoBondDelta::Swap {
+                id: GraphIrStereoBondId(*id),
                 kind: kind.to_rust(),
             },
-            Self::Mirror { id, kind } => AstStereoBondDelta::Mirror {
-                id: AstStereoBondId(*id),
+            Self::Mirror { id, kind } => GraphIrStereoBondDelta::Mirror {
+                id: GraphIrStereoBondId(*id),
                 kind: kind.to_rust(),
             },
         }
@@ -1841,14 +1879,14 @@ impl<'py> IntoPyObject<'py> for &ConstraintDeltaValue {
 }
 
 impl ConstraintDeltaValue {
-    fn from_rust(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, constraint: &GraphIrConstraint) -> PyResult<Self> {
         Ok(Self(into_py_variant(
             py,
             Constraint::from_rust(py, constraint)?,
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> AstConstraint {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrConstraint {
         self.0.bind(py).borrow().to_rust(py)
     }
 }
@@ -1886,21 +1924,21 @@ impl ConstraintDelta {
 }
 
 impl ConstraintDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstConstraintDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrConstraintDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstConstraintDelta::Add(constraint) => Self::Add {
+            GraphIrConstraintDelta::Add(constraint) => Self::Add {
                 constraint: ConstraintDeltaValue::from_rust(py, constraint)?,
             },
-            AstConstraintDelta::Remove(constraint) => Self::Remove {
+            GraphIrConstraintDelta::Remove(constraint) => Self::Remove {
                 constraint: ConstraintDeltaValue::from_rust(py, constraint)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstConstraintDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrConstraintDelta {
         match self {
-            Self::Add { constraint } => AstConstraintDelta::Add(constraint.to_rust(py)),
-            Self::Remove { constraint } => AstConstraintDelta::Remove(constraint.to_rust(py)),
+            Self::Add { constraint } => GraphIrConstraintDelta::Add(constraint.to_rust(py)),
+            Self::Remove { constraint } => GraphIrConstraintDelta::Remove(constraint.to_rust(py)),
         }
     }
 }
@@ -1947,58 +1985,66 @@ impl Delta {
 }
 
 impl Delta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &AstDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrDelta) -> PyResult<Self> {
         Ok(match delta {
-            AstDelta::Atom(delta) => {
+            GraphIrDelta::Atom(delta) => {
                 Self::Atom(into_py_variant(py, AtomDelta::from_rust(py, delta)?)?)
             }
-            AstDelta::Bond(delta) => {
+            GraphIrDelta::Bond(delta) => {
                 Self::Bond(into_py_variant(py, BondDelta::from_rust(py, delta)?)?)
             }
-            AstDelta::DativeBond(delta) => {
+            GraphIrDelta::DativeBond(delta) => {
                 Self::DativeBond(into_py_variant(py, DativeBondDelta::from_rust(py, delta)?)?)
             }
-            AstDelta::AromaticSystem(delta) => Self::AromaticSystem(into_py_variant(
+            GraphIrDelta::AromaticSystem(delta) => Self::AromaticSystem(into_py_variant(
                 py,
                 AromaticSystemDelta::from_rust(py, delta)?,
             )?),
-            AstDelta::MulticenterBond(delta) => Self::MulticenterBond(into_py_variant(
+            GraphIrDelta::MulticenterBond(delta) => Self::MulticenterBond(into_py_variant(
                 py,
                 MulticenterBondDelta::from_rust(py, delta)?,
             )?),
-            AstDelta::NoncovalentBond(delta) => Self::NoncovalentBond(into_py_variant(
+            GraphIrDelta::NoncovalentBond(delta) => Self::NoncovalentBond(into_py_variant(
                 py,
                 NoncovalentBondDelta::from_rust(py, delta)?,
             )?),
-            AstDelta::StereoAtom(delta) => {
+            GraphIrDelta::StereoAtom(delta) => {
                 Self::StereoAtom(into_py_variant(py, StereoAtomDelta::from_rust(py, delta)?)?)
             }
-            AstDelta::StereoBond(delta) => {
+            GraphIrDelta::StereoBond(delta) => {
                 Self::StereoBond(into_py_variant(py, StereoBondDelta::from_rust(py, delta)?)?)
             }
-            AstDelta::Constraint(delta) => {
+            GraphIrDelta::Constraint(delta) => {
                 Self::Constraint(into_py_variant(py, ConstraintDelta::from_rust(py, delta)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDelta {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrDelta {
         match self {
-            Self::Atom(delta) => AstDelta::Atom(delta.bind(py).borrow().to_rust(py)),
-            Self::Bond(delta) => AstDelta::Bond(delta.bind(py).borrow().to_rust(py)),
-            Self::DativeBond(delta) => AstDelta::DativeBond(delta.bind(py).borrow().to_rust(py)),
+            Self::Atom(delta) => GraphIrDelta::Atom(delta.bind(py).borrow().to_rust(py)),
+            Self::Bond(delta) => GraphIrDelta::Bond(delta.bind(py).borrow().to_rust(py)),
+            Self::DativeBond(delta) => {
+                GraphIrDelta::DativeBond(delta.bind(py).borrow().to_rust(py))
+            }
             Self::AromaticSystem(delta) => {
-                AstDelta::AromaticSystem(delta.bind(py).borrow().to_rust(py))
+                GraphIrDelta::AromaticSystem(delta.bind(py).borrow().to_rust(py))
             }
             Self::MulticenterBond(delta) => {
-                AstDelta::MulticenterBond(delta.bind(py).borrow().to_rust(py))
+                GraphIrDelta::MulticenterBond(delta.bind(py).borrow().to_rust(py))
             }
             Self::NoncovalentBond(delta) => {
-                AstDelta::NoncovalentBond(delta.bind(py).borrow().to_rust(py))
+                GraphIrDelta::NoncovalentBond(delta.bind(py).borrow().to_rust(py))
             }
-            Self::StereoAtom(delta) => AstDelta::StereoAtom(delta.bind(py).borrow().to_rust(py)),
-            Self::StereoBond(delta) => AstDelta::StereoBond(delta.bind(py).borrow().to_rust(py)),
-            Self::Constraint(delta) => AstDelta::Constraint(delta.bind(py).borrow().to_rust(py)),
+            Self::StereoAtom(delta) => {
+                GraphIrDelta::StereoAtom(delta.bind(py).borrow().to_rust(py))
+            }
+            Self::StereoBond(delta) => {
+                GraphIrDelta::StereoBond(delta.bind(py).borrow().to_rust(py))
+            }
+            Self::Constraint(delta) => {
+                GraphIrDelta::Constraint(delta.bind(py).borrow().to_rust(py))
+            }
         }
     }
 }
@@ -2018,7 +2064,7 @@ fn resolve_delta_index(len: usize, index: isize) -> PyResult<usize> {
 }
 
 /// Build a detached iterator of concrete Python delta variants.
-fn delta_iter(py: Python<'_>, deltas: &AstDeltas) -> PyResult<DeltaIter> {
+fn delta_iter(py: Python<'_>, deltas: &GraphIrDeltas) -> PyResult<DeltaIter> {
     let entries = deltas
         .iter()
         .map(|delta| into_py_variant(py, Delta::from_rust(py, delta)?))
@@ -2067,11 +2113,11 @@ impl DeltasExtend {
 }
 
 /// An extend input containing no Python references that need to be read.
-pub(crate) struct ResolvedDeltasExtend(Vec<AstDelta>);
+pub(crate) struct ResolvedDeltasExtend(Vec<GraphIrDelta>);
 
 impl ResolvedDeltasExtend {
     /// Append the resolved deltas in order, preserving duplicates.
-    fn apply(self, target: &mut AstDeltas) {
+    fn apply(self, target: &mut GraphIrDeltas) {
         for delta in self.0 {
             target.push(delta);
         }
@@ -2081,7 +2127,7 @@ impl ResolvedDeltasExtend {
 /// Resolved deltas in insertion order. Mutable, value-equal, and unhashable.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
-pub struct Deltas(AstDeltas);
+pub struct Deltas(GraphIrDeltas);
 
 #[pymethods]
 impl Deltas {
@@ -2133,21 +2179,21 @@ impl Deltas {
 
 impl_py_canonicalize!(
     Deltas,
-    AstDeltas,
-    |value: &Deltas, _py: Python<'_>| -> PyResult<AstDeltas> { Ok(value.to_rust()) },
-    |_py: Python<'_>, value: AstDeltas| -> PyResult<Deltas> { Ok(Deltas::from_rust(value)) }
+    GraphIrDeltas,
+    |value: &Deltas, _py: Python<'_>| -> PyResult<GraphIrDeltas> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: GraphIrDeltas| -> PyResult<Deltas> { Ok(Deltas::from_rust(value)) }
 );
 
 impl Deltas {
-    pub(crate) fn from_rust(deltas: AstDeltas) -> Self {
+    pub(crate) fn from_rust(deltas: GraphIrDeltas) -> Self {
         Self(deltas)
     }
 
-    pub(crate) fn to_rust(&self) -> AstDeltas {
+    pub(crate) fn to_rust(&self) -> GraphIrDeltas {
         self.0.clone()
     }
 
-    fn inner_mut(&mut self) -> &mut AstDeltas {
+    fn inner_mut(&mut self) -> &mut GraphIrDeltas {
         &mut self.0
     }
 }
@@ -2155,62 +2201,63 @@ impl Deltas {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
-        AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
-        BooleanAst as AstBooleanAst, DativeBondConstraintAst as AstDativeBondConstraintAst,
-        ElectronCountsAst as AstElectronCountsAst, ElementAst as AstElementAst,
-        IsotopeMassAst as AstIsotopeMassAst,
-        MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
-        NoncovalentBondKind as AstNoncovalentBondKind,
-        NoncovalentBondKindAst as AstNoncovalentBondKindAst,
-        StereoAtomConstraintAst as AstStereoAtomConstraintAst,
-        StereoBondConstraintAst as AstStereoBondConstraintAst,
-        StereoConfigurationAst as AstStereoConfigurationAst, StereoCoset as AstStereoCoset,
-        StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
-        StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
-        StereogenicityAst as AstStereogenicityAst, UnpairedElectronsAst as AstUnpairedElectronsAst,
-        ValueAst as AstValueAst,
-    };
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_ir::ir::{
+        AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
+        AtomConstraintAst as GraphIrAtomConstraintAst,
+        BondConstraintAst as GraphIrBondConstraintAst, BooleanAst as GraphIrBooleanAst,
+        DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
+        ElectronCountsAst as GraphIrElectronCountsAst, ElementAst as GraphIrElementAst,
+        IsotopeMassAst as GraphIrIsotopeMassAst,
+        MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
+        NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind,
+        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst,
+        StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
+        StereoBondConstraintAst as GraphIrStereoBondConstraintAst,
+        StereoConfigurationAst as GraphIrStereoConfigurationAst, StereoCoset as GraphIrStereoCoset,
+        StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
+        StereoLigandKind as GraphIrStereoLigandKind, Stereogenicity as GraphIrStereogenicity,
+        StereogenicityAst as GraphIrStereogenicityAst,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+    };
     use umol_perm::Permutation as PermPermutation;
 
     use super::*;
     use crate::error::ContradictionError;
 
     #[rstest]
-    #[case::element(AstAtomFieldChange::Element {
-        old: AstElementAst::Lit(ChemElement::C),
-        new: AstElementAst::Lit(ChemElement::N),
+    #[case::element(GraphIrAtomFieldChange::Element {
+        old: GraphIrElementAst::Lit(ChemElement::C),
+        new: GraphIrElementAst::Lit(ChemElement::N),
     })]
-    #[case::isotope_mass(AstAtomFieldChange::IsotopeMass {
-        old: AstIsotopeMassAst::Lit(12),
-        new: AstIsotopeMassAst::Lit(13),
+    #[case::isotope_mass(GraphIrAtomFieldChange::IsotopeMass {
+        old: GraphIrIsotopeMassAst::Lit(12),
+        new: GraphIrIsotopeMassAst::Lit(13),
     })]
-    #[case::charge(AstAtomFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(-1),
+    #[case::charge(GraphIrAtomFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(-1),
     })]
-    #[case::implicit_hydrogens(AstAtomFieldChange::ImplicitHydrogens {
-        old: AstValueAst::Lit(3),
-        new: AstValueAst::Lit(2),
+    #[case::implicit_hydrogens(GraphIrAtomFieldChange::ImplicitHydrogens {
+        old: GraphIrValueAst::Lit(3),
+        new: GraphIrValueAst::Lit(2),
     })]
-    #[case::lone_pairs(AstAtomFieldChange::LonePairs {
-        old: AstValueAst::Lit(1),
-        new: AstValueAst::Lit(2),
+    #[case::lone_pairs(GraphIrAtomFieldChange::LonePairs {
+        old: GraphIrValueAst::Lit(1),
+        new: GraphIrValueAst::Lit(2),
     })]
-    #[case::unpaired_electrons(AstAtomFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrAtomFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(1),
-            multiplicity: AstValueAst::Lit(2),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(1),
+            multiplicity: GraphIrValueAst::Lit(2),
         },
     })]
-    fn test_atom_field_change_roundtrip(#[case] change: AstAtomFieldChange) {
+    fn test_atom_field_change_roundtrip(#[case] change: GraphIrAtomFieldChange) {
         Python::attach(|py| {
             assert_eq!(
                 AtomFieldChange::from_rust(py, &change).unwrap().to_rust(py),
@@ -2221,30 +2268,30 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+        GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
-        AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+        GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
         true,
     )]
     #[case::different(
-        AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+        GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
-        AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(1),
+        GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(1),
         },
         false,
     )]
     fn test_atom_field_change_eq(
-        #[case] lhs: AstAtomFieldChange,
-        #[case] rhs: AstAtomFieldChange,
+        #[case] lhs: GraphIrAtomFieldChange,
+        #[case] rhs: GraphIrAtomFieldChange,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -2256,59 +2303,59 @@ mod tests {
 
     #[rstest]
     #[case::element(
-        AstAtomFieldChange::Element {
-            old: AstElementAst::Lit(ChemElement::C),
-            new: AstElementAst::Lit(ChemElement::N),
+        GraphIrAtomFieldChange::Element {
+            old: GraphIrElementAst::Lit(ChemElement::C),
+            new: GraphIrElementAst::Lit(ChemElement::N),
         },
         "ElementAst.Lit(Element('C'))",
         "ElementAst.Lit(Element('N'))",
         "AtomFieldChange.Element(old=ElementAst.Lit(Element('C')), new=ElementAst.Lit(Element('N')))"
     )]
     #[case::isotope_mass(
-        AstAtomFieldChange::IsotopeMass {
-            old: AstIsotopeMassAst::Lit(12),
-            new: AstIsotopeMassAst::Lit(13),
+        GraphIrAtomFieldChange::IsotopeMass {
+            old: GraphIrIsotopeMassAst::Lit(12),
+            new: GraphIrIsotopeMassAst::Lit(13),
         },
         "IsotopeMassAst.Lit(12)",
         "IsotopeMassAst.Lit(13)",
         "AtomFieldChange.IsotopeMass(old=IsotopeMassAst.Lit(12), new=IsotopeMassAst.Lit(13))"
     )]
     #[case::charge(
-        AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+        GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
         "ValueAst.Lit(0)",
         "ValueAst.Lit(-1)",
         "AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))"
     )]
     #[case::implicit_hydrogens(
-        AstAtomFieldChange::ImplicitHydrogens {
-            old: AstValueAst::Lit(3),
-            new: AstValueAst::Lit(2),
+        GraphIrAtomFieldChange::ImplicitHydrogens {
+            old: GraphIrValueAst::Lit(3),
+            new: GraphIrValueAst::Lit(2),
         },
         "ValueAst.Lit(3)",
         "ValueAst.Lit(2)",
         "AtomFieldChange.ImplicitHydrogens(old=ValueAst.Lit(3), new=ValueAst.Lit(2))"
     )]
     #[case::lone_pairs(
-        AstAtomFieldChange::LonePairs {
-            old: AstValueAst::Lit(1),
-            new: AstValueAst::Lit(2),
+        GraphIrAtomFieldChange::LonePairs {
+            old: GraphIrValueAst::Lit(1),
+            new: GraphIrValueAst::Lit(2),
         },
         "ValueAst.Lit(1)",
         "ValueAst.Lit(2)",
         "AtomFieldChange.LonePairs(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
     )]
     #[case::unpaired_electrons(
-        AstAtomFieldChange::UnpairedElectrons {
-            old: AstUnpairedElectronsAst {
-                count: AstValueAst::Lit(0),
-                multiplicity: AstValueAst::Lit(1),
+        GraphIrAtomFieldChange::UnpairedElectrons {
+            old: GraphIrUnpairedElectronsAst {
+                count: GraphIrValueAst::Lit(0),
+                multiplicity: GraphIrValueAst::Lit(1),
             },
-            new: AstUnpairedElectronsAst {
-                count: AstValueAst::Lit(1),
-                multiplicity: AstValueAst::Lit(2),
+            new: GraphIrUnpairedElectronsAst {
+                count: GraphIrValueAst::Lit(1),
+                multiplicity: GraphIrValueAst::Lit(2),
             },
         },
         "UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1))",
@@ -2316,7 +2363,7 @@ mod tests {
         "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2)))"
     )]
     fn test_atom_field_change_repr(
-        #[case] change: AstAtomFieldChange,
+        #[case] change: GraphIrAtomFieldChange,
         #[case] old: &str,
         #[case] new: &str,
         #[case] expected: &str,
@@ -2350,37 +2397,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::element(AstAtomFieldChange::Element {
-        old: AstElementAst::Lit(ChemElement::C),
-        new: AstElementAst::Lit(ChemElement::N),
+    #[case::element(GraphIrAtomFieldChange::Element {
+        old: GraphIrElementAst::Lit(ChemElement::C),
+        new: GraphIrElementAst::Lit(ChemElement::N),
     })]
-    #[case::isotope_mass(AstAtomFieldChange::IsotopeMass {
-        old: AstIsotopeMassAst::Lit(12),
-        new: AstIsotopeMassAst::Lit(13),
+    #[case::isotope_mass(GraphIrAtomFieldChange::IsotopeMass {
+        old: GraphIrIsotopeMassAst::Lit(12),
+        new: GraphIrIsotopeMassAst::Lit(13),
     })]
-    #[case::charge(AstAtomFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(-1),
+    #[case::charge(GraphIrAtomFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(-1),
     })]
-    #[case::implicit_hydrogens(AstAtomFieldChange::ImplicitHydrogens {
-        old: AstValueAst::Lit(3),
-        new: AstValueAst::Lit(2),
+    #[case::implicit_hydrogens(GraphIrAtomFieldChange::ImplicitHydrogens {
+        old: GraphIrValueAst::Lit(3),
+        new: GraphIrValueAst::Lit(2),
     })]
-    #[case::lone_pairs(AstAtomFieldChange::LonePairs {
-        old: AstValueAst::Lit(1),
-        new: AstValueAst::Lit(2),
+    #[case::lone_pairs(GraphIrAtomFieldChange::LonePairs {
+        old: GraphIrValueAst::Lit(1),
+        new: GraphIrValueAst::Lit(2),
     })]
-    #[case::unpaired_electrons(AstAtomFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrAtomFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(1),
-            multiplicity: AstValueAst::Lit(2),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(1),
+            multiplicity: GraphIrValueAst::Lit(2),
         },
     })]
-    fn test_atom_field_change_inverse(#[case] change: AstAtomFieldChange) {
+    fn test_atom_field_change_inverse(#[case] change: GraphIrAtomFieldChange) {
         Python::attach(|py| {
             let binding = AtomFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2394,25 +2441,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::order(AstBondFieldChange::Order {
-        old: AstValueAst::Lit(1),
-        new: AstValueAst::Lit(2),
+    #[case::order(GraphIrBondFieldChange::Order {
+        old: GraphIrValueAst::Lit(1),
+        new: GraphIrValueAst::Lit(2),
     })]
-    #[case::charge(AstBondFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(1),
+    #[case::charge(GraphIrBondFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(1),
     })]
-    #[case::unpaired_electrons(AstBondFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrBondFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(1),
-            multiplicity: AstValueAst::Lit(2),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(1),
+            multiplicity: GraphIrValueAst::Lit(2),
         },
     })]
-    fn test_bond_field_change_roundtrip(#[case] change: AstBondFieldChange) {
+    fn test_bond_field_change_roundtrip(#[case] change: GraphIrBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
                 BondFieldChange::from_rust(py, &change).unwrap().to_rust(py),
@@ -2422,25 +2469,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::order(AstBondFieldChange::Order {
-        old: AstValueAst::Lit(1),
-        new: AstValueAst::Lit(2),
+    #[case::order(GraphIrBondFieldChange::Order {
+        old: GraphIrValueAst::Lit(1),
+        new: GraphIrValueAst::Lit(2),
     })]
-    #[case::charge(AstBondFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(1),
+    #[case::charge(GraphIrBondFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(1),
     })]
-    #[case::unpaired_electrons(AstBondFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrBondFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(1),
-            multiplicity: AstValueAst::Lit(2),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(1),
+            multiplicity: GraphIrValueAst::Lit(2),
         },
     })]
-    fn test_bond_field_change_inverse(#[case] change: AstBondFieldChange) {
+    fn test_bond_field_change_inverse(#[case] change: GraphIrBondFieldChange) {
         Python::attach(|py| {
             let binding = BondFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2454,11 +2501,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::order(AstDativeBondFieldChange::Order {
-        old: AstValueAst::Lit(1),
-        new: AstValueAst::Lit(2),
+    #[case::order(GraphIrDativeBondFieldChange::Order {
+        old: GraphIrValueAst::Lit(1),
+        new: GraphIrValueAst::Lit(2),
     })]
-    fn test_dative_bond_field_change_roundtrip(#[case] change: AstDativeBondFieldChange) {
+    fn test_dative_bond_field_change_roundtrip(#[case] change: GraphIrDativeBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
                 DativeBondFieldChange::from_rust(py, &change)
@@ -2470,11 +2517,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::order(AstDativeBondFieldChange::Order {
-        old: AstValueAst::Lit(1),
-        new: AstValueAst::Lit(2),
+    #[case::order(GraphIrDativeBondFieldChange::Order {
+        old: GraphIrValueAst::Lit(1),
+        new: GraphIrValueAst::Lit(2),
     })]
-    fn test_dative_bond_field_change_inverse(#[case] change: AstDativeBondFieldChange) {
+    fn test_dative_bond_field_change_inverse(#[case] change: GraphIrDativeBondFieldChange) {
         Python::attach(|py| {
             let binding = DativeBondFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2488,25 +2535,27 @@ mod tests {
     }
 
     #[rstest]
-    #[case::electrons(AstAromaticSystemFieldChange::Electrons {
-        old: AstElectronCountsAst::Undetermined,
-        new: AstElectronCountsAst::Lit(vec![1, 1, 1]),
+    #[case::electrons(GraphIrAromaticSystemFieldChange::Electrons {
+        old: GraphIrElectronCountsAst::Undetermined,
+        new: GraphIrElectronCountsAst::Lit(vec![1, 1, 1]),
     })]
-    #[case::charge(AstAromaticSystemFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(-1),
+    #[case::charge(GraphIrAromaticSystemFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(-1),
     })]
-    #[case::unpaired_electrons(AstAromaticSystemFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrAromaticSystemFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(1),
-            multiplicity: AstValueAst::Lit(2),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(1),
+            multiplicity: GraphIrValueAst::Lit(2),
         },
     })]
-    fn test_aromatic_system_field_change_roundtrip(#[case] change: AstAromaticSystemFieldChange) {
+    fn test_aromatic_system_field_change_roundtrip(
+        #[case] change: GraphIrAromaticSystemFieldChange,
+    ) {
         Python::attach(|py| {
             assert_eq!(
                 AromaticSystemFieldChange::from_rust(py, &change)
@@ -2518,25 +2567,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::electrons(AstAromaticSystemFieldChange::Electrons {
-        old: AstElectronCountsAst::Undetermined,
-        new: AstElectronCountsAst::Lit(vec![1, 1, 1]),
+    #[case::electrons(GraphIrAromaticSystemFieldChange::Electrons {
+        old: GraphIrElectronCountsAst::Undetermined,
+        new: GraphIrElectronCountsAst::Lit(vec![1, 1, 1]),
     })]
-    #[case::charge(AstAromaticSystemFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(-1),
+    #[case::charge(GraphIrAromaticSystemFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(-1),
     })]
-    #[case::unpaired_electrons(AstAromaticSystemFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrAromaticSystemFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(1),
-            multiplicity: AstValueAst::Lit(2),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(1),
+            multiplicity: GraphIrValueAst::Lit(2),
         },
     })]
-    fn test_aromatic_system_field_change_inverse(#[case] change: AstAromaticSystemFieldChange) {
+    fn test_aromatic_system_field_change_inverse(#[case] change: GraphIrAromaticSystemFieldChange) {
         Python::attach(|py| {
             let binding = AromaticSystemFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2550,25 +2599,27 @@ mod tests {
     }
 
     #[rstest]
-    #[case::electrons(AstMulticenterBondFieldChange::Electrons {
-        old: AstElectronCountsAst::Lit(vec![1, 0, 1]),
-        new: AstElectronCountsAst::Lit(vec![2, 0, 1]),
+    #[case::electrons(GraphIrMulticenterBondFieldChange::Electrons {
+        old: GraphIrElectronCountsAst::Lit(vec![1, 0, 1]),
+        new: GraphIrElectronCountsAst::Lit(vec![2, 0, 1]),
     })]
-    #[case::charge(AstMulticenterBondFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(1),
+    #[case::charge(GraphIrMulticenterBondFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(1),
     })]
-    #[case::unpaired_electrons(AstMulticenterBondFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrMulticenterBondFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(2),
-            multiplicity: AstValueAst::Lit(3),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(2),
+            multiplicity: GraphIrValueAst::Lit(3),
         },
     })]
-    fn test_multicenter_bond_field_change_roundtrip(#[case] change: AstMulticenterBondFieldChange) {
+    fn test_multicenter_bond_field_change_roundtrip(
+        #[case] change: GraphIrMulticenterBondFieldChange,
+    ) {
         Python::attach(|py| {
             assert_eq!(
                 MulticenterBondFieldChange::from_rust(py, &change)
@@ -2580,25 +2631,27 @@ mod tests {
     }
 
     #[rstest]
-    #[case::electrons(AstMulticenterBondFieldChange::Electrons {
-        old: AstElectronCountsAst::Lit(vec![1, 0, 1]),
-        new: AstElectronCountsAst::Lit(vec![2, 0, 1]),
+    #[case::electrons(GraphIrMulticenterBondFieldChange::Electrons {
+        old: GraphIrElectronCountsAst::Lit(vec![1, 0, 1]),
+        new: GraphIrElectronCountsAst::Lit(vec![2, 0, 1]),
     })]
-    #[case::charge(AstMulticenterBondFieldChange::Charge {
-        old: AstValueAst::Lit(0),
-        new: AstValueAst::Lit(1),
+    #[case::charge(GraphIrMulticenterBondFieldChange::Charge {
+        old: GraphIrValueAst::Lit(0),
+        new: GraphIrValueAst::Lit(1),
     })]
-    #[case::unpaired_electrons(AstMulticenterBondFieldChange::UnpairedElectrons {
-        old: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(0),
-            multiplicity: AstValueAst::Lit(1),
+    #[case::unpaired_electrons(GraphIrMulticenterBondFieldChange::UnpairedElectrons {
+        old: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(0),
+            multiplicity: GraphIrValueAst::Lit(1),
         },
-        new: AstUnpairedElectronsAst {
-            count: AstValueAst::Lit(2),
-            multiplicity: AstValueAst::Lit(3),
+        new: GraphIrUnpairedElectronsAst {
+            count: GraphIrValueAst::Lit(2),
+            multiplicity: GraphIrValueAst::Lit(3),
         },
     })]
-    fn test_multicenter_bond_field_change_inverse(#[case] change: AstMulticenterBondFieldChange) {
+    fn test_multicenter_bond_field_change_inverse(
+        #[case] change: GraphIrMulticenterBondFieldChange,
+    ) {
         Python::attach(|py| {
             let binding = MulticenterBondFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2612,11 +2665,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::kind(AstNoncovalentBondFieldChange::Kind {
-        old: AstNoncovalentBondKindAst::Undetermined,
-        new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+    #[case::kind(GraphIrNoncovalentBondFieldChange::Kind {
+        old: GraphIrNoncovalentBondKindAst::Undetermined,
+        new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
-    fn test_noncovalent_bond_field_change_roundtrip(#[case] change: AstNoncovalentBondFieldChange) {
+    fn test_noncovalent_bond_field_change_roundtrip(
+        #[case] change: GraphIrNoncovalentBondFieldChange,
+    ) {
         Python::attach(|py| {
             assert_eq!(
                 NoncovalentBondFieldChange::from_rust(py, &change)
@@ -2628,11 +2683,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::kind(AstNoncovalentBondFieldChange::Kind {
-        old: AstNoncovalentBondKindAst::Undetermined,
-        new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+    #[case::kind(GraphIrNoncovalentBondFieldChange::Kind {
+        old: GraphIrNoncovalentBondKindAst::Undetermined,
+        new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
-    fn test_noncovalent_bond_field_change_inverse(#[case] change: AstNoncovalentBondFieldChange) {
+    fn test_noncovalent_bond_field_change_inverse(
+        #[case] change: GraphIrNoncovalentBondFieldChange,
+    ) {
         Python::attach(|py| {
             let binding = NoncovalentBondFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2646,24 +2703,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::geometry_unknown(AstStereoAtomFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Undetermined,
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Undetermined,
+    #[case::geometry_unknown(GraphIrStereoAtomFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Undetermined,
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Undetermined,
         ),
     })]
-    #[case::coset_resolved(AstStereoAtomFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Undetermined,
+    #[case::coset_resolved(GraphIrStereoAtomFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Undetermined,
         ),
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Lit(1),
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(1),
         ),
     })]
-    fn test_stereo_atom_field_change_roundtrip(#[case] change: AstStereoAtomFieldChange) {
+    fn test_stereo_atom_field_change_roundtrip(#[case] change: GraphIrStereoAtomFieldChange) {
         Python::attach(|py| {
             assert_eq!(
                 StereoAtomFieldChange::from_rust(py, &change)
@@ -2676,42 +2733,42 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
-        AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
         true,
     )]
     #[case::different(
-        AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
-        AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(1),
+        GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(1),
             ),
         },
         false,
     )]
     fn test_stereo_atom_field_change_eq(
-        #[case] lhs: AstStereoAtomFieldChange,
-        #[case] rhs: AstStereoAtomFieldChange,
+        #[case] lhs: GraphIrStereoAtomFieldChange,
+        #[case] rhs: GraphIrStereoAtomFieldChange,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -2723,11 +2780,11 @@ mod tests {
 
     #[rstest]
     #[case::geometry_unknown(
-        AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
         "StereoConfigurationAst.Undetermined()",
@@ -2735,14 +2792,14 @@ mod tests {
         "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()))",
     )]
     #[case::coset_resolved(
-        AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Undetermined,
             ),
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(1),
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(1),
             ),
         },
         "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
@@ -2750,7 +2807,7 @@ mod tests {
         "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)))",
     )]
     fn test_stereo_atom_field_change_repr(
-        #[case] change: AstStereoAtomFieldChange,
+        #[case] change: GraphIrStereoAtomFieldChange,
         #[case] old: &str,
         #[case] new: &str,
         #[case] expected: &str,
@@ -2785,24 +2842,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::geometry_unknown(AstStereoAtomFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Undetermined,
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Undetermined,
+    #[case::geometry_unknown(GraphIrStereoAtomFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Undetermined,
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Undetermined,
         ),
     })]
-    #[case::coset_resolved(AstStereoAtomFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Undetermined,
+    #[case::coset_resolved(GraphIrStereoAtomFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Undetermined,
         ),
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Lit(1),
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(1),
         ),
     })]
-    fn test_stereo_atom_field_change_inverse(#[case] change: AstStereoAtomFieldChange) {
+    fn test_stereo_atom_field_change_inverse(#[case] change: GraphIrStereoAtomFieldChange) {
         Python::attach(|py| {
             let binding = StereoAtomFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2816,24 +2873,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::geometry_unknown(AstStereoBondFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Undetermined,
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Undetermined,
+    #[case::geometry_unknown(GraphIrStereoBondFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Undetermined,
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Undetermined,
         ),
     })]
-    #[case::coset_resolved(AstStereoBondFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Undetermined,
+    #[case::coset_resolved(GraphIrStereoBondFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Undetermined,
         ),
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Lit(1),
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Lit(1),
         ),
     })]
-    fn test_stereo_bond_field_change_roundtrip(#[case] change: AstStereoBondFieldChange) {
+    fn test_stereo_bond_field_change_roundtrip(#[case] change: GraphIrStereoBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
                 StereoBondFieldChange::from_rust(py, &change)
@@ -2846,42 +2903,42 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
-        AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
         true,
     )]
     #[case::different(
-        AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
-        AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(1),
+        GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(1),
             ),
         },
         false,
     )]
     fn test_stereo_bond_field_change_eq(
-        #[case] lhs: AstStereoBondFieldChange,
-        #[case] rhs: AstStereoBondFieldChange,
+        #[case] lhs: GraphIrStereoBondFieldChange,
+        #[case] rhs: GraphIrStereoBondFieldChange,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -2893,11 +2950,11 @@ mod tests {
 
     #[rstest]
     #[case::geometry_unknown(
-        AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Undetermined,
             ),
         },
         "StereoConfigurationAst.Undetermined()",
@@ -2905,14 +2962,14 @@ mod tests {
         "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()))",
     )]
     #[case::coset_resolved(
-        AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Undetermined,
+        GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Undetermined,
             ),
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(1),
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(1),
             ),
         },
         "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
@@ -2920,7 +2977,7 @@ mod tests {
         "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1)))",
     )]
     fn test_stereo_bond_field_change_repr(
-        #[case] change: AstStereoBondFieldChange,
+        #[case] change: GraphIrStereoBondFieldChange,
         #[case] old: &str,
         #[case] new: &str,
         #[case] expected: &str,
@@ -2955,24 +3012,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::geometry_unknown(AstStereoBondFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Undetermined,
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Undetermined,
+    #[case::geometry_unknown(GraphIrStereoBondFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Undetermined,
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Undetermined,
         ),
     })]
-    #[case::coset_resolved(AstStereoBondFieldChange::Configuration {
-        old: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Undetermined,
+    #[case::coset_resolved(GraphIrStereoBondFieldChange::Configuration {
+        old: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Undetermined,
         ),
-        new: AstStereoConfigurationAst::Kinded(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Lit(1),
+        new: GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Lit(1),
         ),
     })]
-    fn test_stereo_bond_field_change_inverse(#[case] change: AstStereoBondFieldChange) {
+    fn test_stereo_bond_field_change_inverse(#[case] change: GraphIrStereoBondFieldChange) {
         Python::attach(|py| {
             let binding = StereoBondFieldChange::from_rust(py, &change).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -2986,37 +3043,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstAtomDelta::Add {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::add(GraphIrAtomDelta::Add {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     })]
-    #[case::remove(AstAtomDelta::Remove {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::remove(GraphIrAtomDelta::Remove {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     })]
-    #[case::modify_field(AstAtomDelta::ModifyField {
-        id: AstAtomId(3),
-        change: AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+    #[case::modify_field(GraphIrAtomDelta::ModifyField {
+        id: GraphIrAtomId(3),
+        change: GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
     })]
-    #[case::constraint_added(AstAtomDelta::ModifyConstraint {
-        id: AstAtomId(3),
+    #[case::constraint_added(GraphIrAtomDelta::ModifyConstraint {
+        id: GraphIrAtomId(3),
         old: None,
-        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
     })]
-    #[case::constraint_removed(AstAtomDelta::ModifyConstraint {
-        id: AstAtomId(3),
-        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    #[case::constraint_removed(GraphIrAtomDelta::ModifyConstraint {
+        id: GraphIrAtomId(3),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
         new: None,
     })]
-    #[case::constraint_modified(AstAtomDelta::ModifyConstraint {
-        id: AstAtomId(3),
-        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(3))),
-        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    #[case::constraint_modified(GraphIrAtomDelta::ModifyConstraint {
+        id: GraphIrAtomId(3),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(3))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
     })]
-    fn test_atom_delta_roundtrip(#[case] delta: AstAtomDelta) {
+    fn test_atom_delta_roundtrip(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
             assert_eq!(AtomDelta::from_rust(py, &delta).unwrap().to_rust(py), delta);
         });
@@ -3024,30 +3081,30 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         },
-        AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         },
         true,
     )]
     #[case::different(
-        AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         },
-        AstAtomDelta::Add {
-            id: AstAtomId(4),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(4),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         },
         false,
     )]
     fn test_atom_delta_eq(
-        #[case] lhs: AstAtomDelta,
-        #[case] rhs: AstAtomDelta,
+        #[case] lhs: GraphIrAtomDelta,
+        #[case] rhs: GraphIrAtomDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -3059,38 +3116,38 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         },
         "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))",
     )]
     #[case::remove(
-        AstAtomDelta::Remove {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrAtomDelta::Remove {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         },
         "AtomDelta.Remove(id=3, ast=AtomAst.parse('C'))",
     )]
     #[case::modify_field(
-        AstAtomDelta::ModifyField {
-            id: AstAtomId(3),
-            change: AstAtomFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(-1),
+        GraphIrAtomDelta::ModifyField {
+            id: GraphIrAtomId(3),
+            change: GraphIrAtomFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(-1),
             },
         },
         "AtomDelta.ModifyField(id=3, change=AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
     )]
     #[case::modify_constraint(
-        AstAtomDelta::ModifyConstraint {
-            id: AstAtomId(3),
+        GraphIrAtomDelta::ModifyConstraint {
+            id: GraphIrAtomId(3),
             old: None,
-            new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+            new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
         },
         "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
     )]
-    fn test_atom_delta_repr(#[case] delta: AstAtomDelta, #[case] expected: &str) {
+    fn test_atom_delta_repr(#[case] delta: GraphIrAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let delta = into_py_variant(py, AtomDelta::from_rust(py, &delta).unwrap()).unwrap();
             assert_eq!(
@@ -3107,37 +3164,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstAtomDelta::Add {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::add(GraphIrAtomDelta::Add {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     })]
-    #[case::remove(AstAtomDelta::Remove {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::remove(GraphIrAtomDelta::Remove {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     })]
-    #[case::modify_field(AstAtomDelta::ModifyField {
-        id: AstAtomId(3),
-        change: AstAtomFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+    #[case::modify_field(GraphIrAtomDelta::ModifyField {
+        id: GraphIrAtomId(3),
+        change: GraphIrAtomFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
     })]
-    #[case::constraint_added(AstAtomDelta::ModifyConstraint {
-        id: AstAtomId(3),
+    #[case::constraint_added(GraphIrAtomDelta::ModifyConstraint {
+        id: GraphIrAtomId(3),
         old: None,
-        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
     })]
-    #[case::constraint_removed(AstAtomDelta::ModifyConstraint {
-        id: AstAtomId(3),
-        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    #[case::constraint_removed(GraphIrAtomDelta::ModifyConstraint {
+        id: GraphIrAtomId(3),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
         new: None,
     })]
-    #[case::constraint_modified(AstAtomDelta::ModifyConstraint {
-        id: AstAtomId(3),
-        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(3))),
-        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    #[case::constraint_modified(GraphIrAtomDelta::ModifyConstraint {
+        id: GraphIrAtomId(3),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(3))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
     })]
-    fn test_atom_delta_inverse(#[case] delta: AstAtomDelta) {
+    fn test_atom_delta_inverse(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
             let binding = AtomDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -3151,39 +3208,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstBondDelta::Add {
-        id: AstBondId(2),
-        atoms: [AstAtomId(5), AstAtomId(1)],
-        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    #[case::add(GraphIrBondDelta::Add {
+        id: GraphIrBondId(2),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::remove(AstBondDelta::Remove {
-        id: AstBondId(2),
-        atoms: [AstAtomId(5), AstAtomId(1)],
-        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    #[case::remove(GraphIrBondDelta::Remove {
+        id: GraphIrBondId(2),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::modify_field(AstBondDelta::ModifyField {
-        id: AstBondId(2),
-        change: AstBondFieldChange::Order {
-            old: AstValueAst::Lit(1),
-            new: AstValueAst::Lit(2),
+    #[case::modify_field(GraphIrBondDelta::ModifyField {
+        id: GraphIrBondId(2),
+        change: GraphIrBondFieldChange::Order {
+            old: GraphIrValueAst::Lit(1),
+            new: GraphIrValueAst::Lit(2),
         },
     })]
-    #[case::constraint_added(AstBondDelta::ModifyConstraint {
-        id: AstBondId(2),
+    #[case::constraint_added(GraphIrBondDelta::ModifyConstraint {
+        id: GraphIrBondId(2),
         old: None,
-        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    #[case::constraint_removed(AstBondDelta::ModifyConstraint {
-        id: AstBondId(2),
-        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_removed(GraphIrBondDelta::ModifyConstraint {
+        id: GraphIrBondId(2),
+        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
         new: None,
     })]
-    #[case::constraint_modified(AstBondDelta::ModifyConstraint {
-        id: AstBondId(2),
-        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
-        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_modified(GraphIrBondDelta::ModifyConstraint {
+        id: GraphIrBondId(2),
+        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(false))),
+        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    fn test_bond_delta_roundtrip(#[case] delta: AstBondDelta) {
+    fn test_bond_delta_roundtrip(#[case] delta: GraphIrBondDelta) {
         Python::attach(|py| {
             assert_eq!(BondDelta::from_rust(py, &delta).unwrap().to_rust(py), delta);
         });
@@ -3191,34 +3248,34 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstBondDelta::Add {
-            id: AstBondId(2),
-            atoms: [AstAtomId(5), AstAtomId(1)],
-            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        GraphIrBondDelta::Add {
+            id: GraphIrBondId(2),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
         },
-        AstBondDelta::Add {
-            id: AstBondId(2),
-            atoms: [AstAtomId(5), AstAtomId(1)],
-            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        GraphIrBondDelta::Add {
+            id: GraphIrBondId(2),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
         },
         true,
     )]
     #[case::different_order(
-        AstBondDelta::Add {
-            id: AstBondId(2),
-            atoms: [AstAtomId(5), AstAtomId(1)],
-            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        GraphIrBondDelta::Add {
+            id: GraphIrBondId(2),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
         },
-        AstBondDelta::Add {
-            id: AstBondId(2),
-            atoms: [AstAtomId(1), AstAtomId(5)],
-            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        GraphIrBondDelta::Add {
+            id: GraphIrBondId(2),
+            atoms: [GraphIrAtomId(1), GraphIrAtomId(5)],
+            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
         },
         false,
     )]
     fn test_bond_delta_eq(
-        #[case] lhs: AstBondDelta,
-        #[case] rhs: AstBondDelta,
+        #[case] lhs: GraphIrBondDelta,
+        #[case] rhs: GraphIrBondDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -3230,40 +3287,40 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstBondDelta::Add {
-            id: AstBondId(2),
-            atoms: [AstAtomId(5), AstAtomId(1)],
-            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        GraphIrBondDelta::Add {
+            id: GraphIrBondId(2),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
         },
         "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
     )]
     #[case::remove(
-        AstBondDelta::Remove {
-            id: AstBondId(2),
-            atoms: [AstAtomId(5), AstAtomId(1)],
-            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        GraphIrBondDelta::Remove {
+            id: GraphIrBondId(2),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
         },
         "BondDelta.Remove(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
     )]
     #[case::modify_field(
-        AstBondDelta::ModifyField {
-            id: AstBondId(2),
-            change: AstBondFieldChange::Order {
-                old: AstValueAst::Lit(1),
-                new: AstValueAst::Lit(2),
+        GraphIrBondDelta::ModifyField {
+            id: GraphIrBondId(2),
+            change: GraphIrBondFieldChange::Order {
+                old: GraphIrValueAst::Lit(1),
+                new: GraphIrValueAst::Lit(2),
             },
         },
         "BondDelta.ModifyField(id=2, change=BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
     )]
     #[case::modify_constraint(
-        AstBondDelta::ModifyConstraint {
-            id: AstBondId(2),
+        GraphIrBondDelta::ModifyConstraint {
+            id: GraphIrBondId(2),
             old: None,
-            new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+            new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
         },
         "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
     )]
-    fn test_bond_delta_repr(#[case] delta: AstBondDelta, #[case] expected: &str) {
+    fn test_bond_delta_repr(#[case] delta: GraphIrBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let delta = into_py_variant(py, BondDelta::from_rust(py, &delta).unwrap()).unwrap();
             assert_eq!(
@@ -3280,39 +3337,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstBondDelta::Add {
-        id: AstBondId(2),
-        atoms: [AstAtomId(5), AstAtomId(1)],
-        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    #[case::add(GraphIrBondDelta::Add {
+        id: GraphIrBondId(2),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::remove(AstBondDelta::Remove {
-        id: AstBondId(2),
-        atoms: [AstAtomId(5), AstAtomId(1)],
-        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    #[case::remove(GraphIrBondDelta::Remove {
+        id: GraphIrBondId(2),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::modify_field(AstBondDelta::ModifyField {
-        id: AstBondId(2),
-        change: AstBondFieldChange::Order {
-            old: AstValueAst::Lit(1),
-            new: AstValueAst::Lit(2),
+    #[case::modify_field(GraphIrBondDelta::ModifyField {
+        id: GraphIrBondId(2),
+        change: GraphIrBondFieldChange::Order {
+            old: GraphIrValueAst::Lit(1),
+            new: GraphIrValueAst::Lit(2),
         },
     })]
-    #[case::constraint_added(AstBondDelta::ModifyConstraint {
-        id: AstBondId(2),
+    #[case::constraint_added(GraphIrBondDelta::ModifyConstraint {
+        id: GraphIrBondId(2),
         old: None,
-        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    #[case::constraint_removed(AstBondDelta::ModifyConstraint {
-        id: AstBondId(2),
-        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_removed(GraphIrBondDelta::ModifyConstraint {
+        id: GraphIrBondId(2),
+        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
         new: None,
     })]
-    #[case::constraint_modified(AstBondDelta::ModifyConstraint {
-        id: AstBondId(2),
-        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
-        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_modified(GraphIrBondDelta::ModifyConstraint {
+        id: GraphIrBondId(2),
+        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(false))),
+        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    fn test_bond_delta_inverse(#[case] delta: AstBondDelta) {
+    fn test_bond_delta_inverse(#[case] delta: GraphIrBondDelta) {
         Python::attach(|py| {
             let binding = BondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -3326,41 +3383,41 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstDativeBondDelta::Add {
-        id: AstDativeBondId(1),
-        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        acceptor: AstAtomId(3),
-        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    #[case::add(GraphIrDativeBondDelta::Add {
+        id: GraphIrDativeBondId(1),
+        donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        acceptor: GraphIrAtomId(3),
+        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::remove(AstDativeBondDelta::Remove {
-        id: AstDativeBondId(1),
-        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        acceptor: AstAtomId(3),
-        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    #[case::remove(GraphIrDativeBondDelta::Remove {
+        id: GraphIrDativeBondId(1),
+        donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        acceptor: GraphIrAtomId(3),
+        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::modify_field(AstDativeBondDelta::ModifyField {
-        id: AstDativeBondId(1),
-        change: AstDativeBondFieldChange::Order {
-            old: AstValueAst::Lit(1),
-            new: AstValueAst::Lit(2),
+    #[case::modify_field(GraphIrDativeBondDelta::ModifyField {
+        id: GraphIrDativeBondId(1),
+        change: GraphIrDativeBondFieldChange::Order {
+            old: GraphIrValueAst::Lit(1),
+            new: GraphIrValueAst::Lit(2),
         },
     })]
-    #[case::constraint_added(AstDativeBondDelta::ModifyConstraint {
-        id: AstDativeBondId(1),
+    #[case::constraint_added(GraphIrDativeBondDelta::ModifyConstraint {
+        id: GraphIrDativeBondId(1),
         old: None,
-        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    #[case::constraint_removed(AstDativeBondDelta::ModifyConstraint {
-        id: AstDativeBondId(1),
-        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_removed(GraphIrDativeBondDelta::ModifyConstraint {
+        id: GraphIrDativeBondId(1),
+        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
         new: None,
     })]
-    #[case::constraint_modified(AstDativeBondDelta::ModifyConstraint {
-        id: AstDativeBondId(1),
-        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
-        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_modified(GraphIrDativeBondDelta::ModifyConstraint {
+        id: GraphIrDativeBondId(1),
+        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(false))),
+        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    fn test_dative_bond_delta_roundtrip(#[case] delta: AstDativeBondDelta) {
+    fn test_dative_bond_delta_roundtrip(#[case] delta: GraphIrDativeBondDelta) {
         Python::attach(|py| {
             assert_eq!(
                 DativeBondDelta::from_rust(py, &delta).unwrap().to_rust(py),
@@ -3371,38 +3428,38 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstDativeBondDelta::Add {
-            id: AstDativeBondId(1),
-            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            acceptor: AstAtomId(3),
-            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        GraphIrDativeBondDelta::Add {
+            id: GraphIrDativeBondId(1),
+            donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            acceptor: GraphIrAtomId(3),
+            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
         },
-        AstDativeBondDelta::Add {
-            id: AstDativeBondId(1),
-            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            acceptor: AstAtomId(3),
-            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        GraphIrDativeBondDelta::Add {
+            id: GraphIrDativeBondId(1),
+            donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            acceptor: GraphIrAtomId(3),
+            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
         },
         true,
     )]
     #[case::different_donor_order(
-        AstDativeBondDelta::Add {
-            id: AstDativeBondId(1),
-            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            acceptor: AstAtomId(3),
-            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        GraphIrDativeBondDelta::Add {
+            id: GraphIrDativeBondId(1),
+            donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            acceptor: GraphIrAtomId(3),
+            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
         },
-        AstDativeBondDelta::Add {
-            id: AstDativeBondId(1),
-            donors: vec![AstAtomId(2), AstAtomId(4), AstAtomId(4)],
-            acceptor: AstAtomId(3),
-            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        GraphIrDativeBondDelta::Add {
+            id: GraphIrDativeBondId(1),
+            donors: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
+            acceptor: GraphIrAtomId(3),
+            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
         },
         false,
     )]
     fn test_dative_bond_delta_eq(
-        #[case] lhs: AstDativeBondDelta,
-        #[case] rhs: AstDativeBondDelta,
+        #[case] lhs: GraphIrDativeBondDelta,
+        #[case] rhs: GraphIrDativeBondDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -3414,42 +3471,42 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstDativeBondDelta::Add {
-            id: AstDativeBondId(1),
-            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            acceptor: AstAtomId(3),
-            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        GraphIrDativeBondDelta::Add {
+            id: GraphIrDativeBondId(1),
+            donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            acceptor: GraphIrAtomId(3),
+            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
         },
         "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
     )]
     #[case::remove(
-        AstDativeBondDelta::Remove {
-            id: AstDativeBondId(1),
-            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            acceptor: AstAtomId(3),
-            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        GraphIrDativeBondDelta::Remove {
+            id: GraphIrDativeBondId(1),
+            donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            acceptor: GraphIrAtomId(3),
+            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
         },
         "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
     )]
     #[case::modify_field(
-        AstDativeBondDelta::ModifyField {
-            id: AstDativeBondId(1),
-            change: AstDativeBondFieldChange::Order {
-                old: AstValueAst::Lit(1),
-                new: AstValueAst::Lit(2),
+        GraphIrDativeBondDelta::ModifyField {
+            id: GraphIrDativeBondId(1),
+            change: GraphIrDativeBondFieldChange::Order {
+                old: GraphIrValueAst::Lit(1),
+                new: GraphIrValueAst::Lit(2),
             },
         },
         "DativeBondDelta.ModifyField(id=1, change=DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
     )]
     #[case::modify_constraint(
-        AstDativeBondDelta::ModifyConstraint {
-            id: AstDativeBondId(1),
+        GraphIrDativeBondDelta::ModifyConstraint {
+            id: GraphIrDativeBondId(1),
             old: None,
-            new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+            new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
         },
         "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
     )]
-    fn test_dative_bond_delta_repr(#[case] delta: AstDativeBondDelta, #[case] expected: &str) {
+    fn test_dative_bond_delta_repr(#[case] delta: GraphIrDativeBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let delta =
                 into_py_variant(py, DativeBondDelta::from_rust(py, &delta).unwrap()).unwrap();
@@ -3467,41 +3524,41 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstDativeBondDelta::Add {
-        id: AstDativeBondId(1),
-        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        acceptor: AstAtomId(3),
-        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    #[case::add(GraphIrDativeBondDelta::Add {
+        id: GraphIrDativeBondId(1),
+        donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        acceptor: GraphIrAtomId(3),
+        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::remove(AstDativeBondDelta::Remove {
-        id: AstDativeBondId(1),
-        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        acceptor: AstAtomId(3),
-        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    #[case::remove(GraphIrDativeBondDelta::Remove {
+        id: GraphIrDativeBondId(1),
+        donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        acceptor: GraphIrAtomId(3),
+        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
     })]
-    #[case::modify_field(AstDativeBondDelta::ModifyField {
-        id: AstDativeBondId(1),
-        change: AstDativeBondFieldChange::Order {
-            old: AstValueAst::Lit(1),
-            new: AstValueAst::Lit(2),
+    #[case::modify_field(GraphIrDativeBondDelta::ModifyField {
+        id: GraphIrDativeBondId(1),
+        change: GraphIrDativeBondFieldChange::Order {
+            old: GraphIrValueAst::Lit(1),
+            new: GraphIrValueAst::Lit(2),
         },
     })]
-    #[case::constraint_added(AstDativeBondDelta::ModifyConstraint {
-        id: AstDativeBondId(1),
+    #[case::constraint_added(GraphIrDativeBondDelta::ModifyConstraint {
+        id: GraphIrDativeBondId(1),
         old: None,
-        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    #[case::constraint_removed(AstDativeBondDelta::ModifyConstraint {
-        id: AstDativeBondId(1),
-        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_removed(GraphIrDativeBondDelta::ModifyConstraint {
+        id: GraphIrDativeBondId(1),
+        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
         new: None,
     })]
-    #[case::constraint_modified(AstDativeBondDelta::ModifyConstraint {
-        id: AstDativeBondId(1),
-        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
-        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    #[case::constraint_modified(GraphIrDativeBondDelta::ModifyConstraint {
+        id: GraphIrDativeBondId(1),
+        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(false))),
+        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanAst::Lit(true))),
     })]
-    fn test_dative_bond_delta_inverse(#[case] delta: AstDativeBondDelta) {
+    fn test_dative_bond_delta_inverse(#[case] delta: GraphIrDativeBondDelta) {
         Python::attach(|py| {
             let binding = DativeBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -3515,39 +3572,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstAromaticSystemDelta::Add {
-        id: AstAromaticSystemId(2),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    #[case::add(GraphIrAromaticSystemDelta::Add {
+        id: GraphIrAromaticSystemId(2),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::remove(AstAromaticSystemDelta::Remove {
-        id: AstAromaticSystemId(2),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    #[case::remove(GraphIrAromaticSystemDelta::Remove {
+        id: GraphIrAromaticSystemId(2),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::modify_field(AstAromaticSystemDelta::ModifyField {
-        id: AstAromaticSystemId(2),
-        change: AstAromaticSystemFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+    #[case::modify_field(GraphIrAromaticSystemDelta::ModifyField {
+        id: GraphIrAromaticSystemId(2),
+        change: GraphIrAromaticSystemFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
     })]
-    #[case::constraint_added(AstAromaticSystemDelta::ModifyConstraint {
-        id: AstAromaticSystemId(2),
+    #[case::constraint_added(GraphIrAromaticSystemDelta::ModifyConstraint {
+        id: GraphIrAromaticSystemId(2),
         old: None,
-        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    #[case::constraint_removed(AstAromaticSystemDelta::ModifyConstraint {
-        id: AstAromaticSystemId(2),
-        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_removed(GraphIrAromaticSystemDelta::ModifyConstraint {
+        id: GraphIrAromaticSystemId(2),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
         new: None,
     })]
-    #[case::constraint_modified(AstAromaticSystemDelta::ModifyConstraint {
-        id: AstAromaticSystemId(2),
-        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(5))),
-        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_modified(GraphIrAromaticSystemDelta::ModifyConstraint {
+        id: GraphIrAromaticSystemId(2),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    fn test_aromatic_system_delta_roundtrip(#[case] delta: AstAromaticSystemDelta) {
+    fn test_aromatic_system_delta_roundtrip(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
             assert_eq!(
                 AromaticSystemDelta::from_rust(py, &delta)
@@ -3560,34 +3617,34 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstAromaticSystemDelta::Add {
-            id: AstAromaticSystemId(2),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        GraphIrAromaticSystemDelta::Add {
+            id: GraphIrAromaticSystemId(2),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
         },
-        AstAromaticSystemDelta::Add {
-            id: AstAromaticSystemId(2),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        GraphIrAromaticSystemDelta::Add {
+            id: GraphIrAromaticSystemId(2),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
         },
         true,
     )]
     #[case::different_atom_order(
-        AstAromaticSystemDelta::Add {
-            id: AstAromaticSystemId(2),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        GraphIrAromaticSystemDelta::Add {
+            id: GraphIrAromaticSystemId(2),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
         },
-        AstAromaticSystemDelta::Add {
-            id: AstAromaticSystemId(2),
-            atoms: vec![AstAtomId(2), AstAtomId(4), AstAtomId(4)],
-            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        GraphIrAromaticSystemDelta::Add {
+            id: GraphIrAromaticSystemId(2),
+            atoms: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
+            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
         },
         false,
     )]
     fn test_aromatic_system_delta_eq(
-        #[case] lhs: AstAromaticSystemDelta,
-        #[case] rhs: AstAromaticSystemDelta,
+        #[case] lhs: GraphIrAromaticSystemDelta,
+        #[case] rhs: GraphIrAromaticSystemDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -3599,41 +3656,41 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstAromaticSystemDelta::Add {
-            id: AstAromaticSystemId(2),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        GraphIrAromaticSystemDelta::Add {
+            id: GraphIrAromaticSystemId(2),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
         },
         "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
     )]
     #[case::remove(
-        AstAromaticSystemDelta::Remove {
-            id: AstAromaticSystemId(2),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        GraphIrAromaticSystemDelta::Remove {
+            id: GraphIrAromaticSystemId(2),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
         },
         "AromaticSystemDelta.Remove(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
     )]
     #[case::modify_field(
-        AstAromaticSystemDelta::ModifyField {
-            id: AstAromaticSystemId(2),
-            change: AstAromaticSystemFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(-1),
+        GraphIrAromaticSystemDelta::ModifyField {
+            id: GraphIrAromaticSystemId(2),
+            change: GraphIrAromaticSystemFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(-1),
             },
         },
         "AromaticSystemDelta.ModifyField(id=2, change=AromaticSystemFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
     )]
     #[case::modify_constraint(
-        AstAromaticSystemDelta::ModifyConstraint {
-            id: AstAromaticSystemId(2),
+        GraphIrAromaticSystemDelta::ModifyConstraint {
+            id: GraphIrAromaticSystemId(2),
             old: None,
-            new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+            new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
         },
         "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
     )]
     fn test_aromatic_system_delta_repr(
-        #[case] delta: AstAromaticSystemDelta,
+        #[case] delta: GraphIrAromaticSystemDelta,
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
@@ -3653,39 +3710,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstAromaticSystemDelta::Add {
-        id: AstAromaticSystemId(2),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    #[case::add(GraphIrAromaticSystemDelta::Add {
+        id: GraphIrAromaticSystemId(2),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::remove(AstAromaticSystemDelta::Remove {
-        id: AstAromaticSystemId(2),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    #[case::remove(GraphIrAromaticSystemDelta::Remove {
+        id: GraphIrAromaticSystemId(2),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::modify_field(AstAromaticSystemDelta::ModifyField {
-        id: AstAromaticSystemId(2),
-        change: AstAromaticSystemFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+    #[case::modify_field(GraphIrAromaticSystemDelta::ModifyField {
+        id: GraphIrAromaticSystemId(2),
+        change: GraphIrAromaticSystemFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
     })]
-    #[case::constraint_added(AstAromaticSystemDelta::ModifyConstraint {
-        id: AstAromaticSystemId(2),
+    #[case::constraint_added(GraphIrAromaticSystemDelta::ModifyConstraint {
+        id: GraphIrAromaticSystemId(2),
         old: None,
-        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    #[case::constraint_removed(AstAromaticSystemDelta::ModifyConstraint {
-        id: AstAromaticSystemId(2),
-        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_removed(GraphIrAromaticSystemDelta::ModifyConstraint {
+        id: GraphIrAromaticSystemId(2),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
         new: None,
     })]
-    #[case::constraint_modified(AstAromaticSystemDelta::ModifyConstraint {
-        id: AstAromaticSystemId(2),
-        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(5))),
-        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_modified(GraphIrAromaticSystemDelta::ModifyConstraint {
+        id: GraphIrAromaticSystemId(2),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    fn test_aromatic_system_delta_inverse(#[case] delta: AstAromaticSystemDelta) {
+    fn test_aromatic_system_delta_inverse(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
             let binding = AromaticSystemDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -3699,39 +3756,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstMulticenterBondDelta::Add {
-        id: AstMulticenterBondId(3),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    #[case::add(GraphIrMulticenterBondDelta::Add {
+        id: GraphIrMulticenterBondId(3),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::remove(AstMulticenterBondDelta::Remove {
-        id: AstMulticenterBondId(3),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    #[case::remove(GraphIrMulticenterBondDelta::Remove {
+        id: GraphIrMulticenterBondId(3),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::modify_field(AstMulticenterBondDelta::ModifyField {
-        id: AstMulticenterBondId(3),
-        change: AstMulticenterBondFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+    #[case::modify_field(GraphIrMulticenterBondDelta::ModifyField {
+        id: GraphIrMulticenterBondId(3),
+        change: GraphIrMulticenterBondFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
     })]
-    #[case::constraint_added(AstMulticenterBondDelta::ModifyConstraint {
-        id: AstMulticenterBondId(3),
+    #[case::constraint_added(GraphIrMulticenterBondDelta::ModifyConstraint {
+        id: GraphIrMulticenterBondId(3),
         old: None,
-        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    #[case::constraint_removed(AstMulticenterBondDelta::ModifyConstraint {
-        id: AstMulticenterBondId(3),
-        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_removed(GraphIrMulticenterBondDelta::ModifyConstraint {
+        id: GraphIrMulticenterBondId(3),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
         new: None,
     })]
-    #[case::constraint_modified(AstMulticenterBondDelta::ModifyConstraint {
-        id: AstMulticenterBondId(3),
-        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(5))),
-        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_modified(GraphIrMulticenterBondDelta::ModifyConstraint {
+        id: GraphIrMulticenterBondId(3),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    fn test_multicenter_bond_delta_roundtrip(#[case] delta: AstMulticenterBondDelta) {
+    fn test_multicenter_bond_delta_roundtrip(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
             assert_eq!(
                 MulticenterBondDelta::from_rust(py, &delta)
@@ -3744,34 +3801,34 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstMulticenterBondDelta::Add {
-            id: AstMulticenterBondId(3),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        GraphIrMulticenterBondDelta::Add {
+            id: GraphIrMulticenterBondId(3),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
         },
-        AstMulticenterBondDelta::Add {
-            id: AstMulticenterBondId(3),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        GraphIrMulticenterBondDelta::Add {
+            id: GraphIrMulticenterBondId(3),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
         },
         true,
     )]
     #[case::different_atom_order(
-        AstMulticenterBondDelta::Add {
-            id: AstMulticenterBondId(3),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        GraphIrMulticenterBondDelta::Add {
+            id: GraphIrMulticenterBondId(3),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
         },
-        AstMulticenterBondDelta::Add {
-            id: AstMulticenterBondId(3),
-            atoms: vec![AstAtomId(2), AstAtomId(4), AstAtomId(4)],
-            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        GraphIrMulticenterBondDelta::Add {
+            id: GraphIrMulticenterBondId(3),
+            atoms: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
+            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
         },
         false,
     )]
     fn test_multicenter_bond_delta_eq(
-        #[case] lhs: AstMulticenterBondDelta,
-        #[case] rhs: AstMulticenterBondDelta,
+        #[case] lhs: GraphIrMulticenterBondDelta,
+        #[case] rhs: GraphIrMulticenterBondDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -3783,41 +3840,41 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstMulticenterBondDelta::Add {
-            id: AstMulticenterBondId(3),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        GraphIrMulticenterBondDelta::Add {
+            id: GraphIrMulticenterBondId(3),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
         },
         "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
     )]
     #[case::remove(
-        AstMulticenterBondDelta::Remove {
-            id: AstMulticenterBondId(3),
-            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        GraphIrMulticenterBondDelta::Remove {
+            id: GraphIrMulticenterBondId(3),
+            atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
         },
         "MulticenterBondDelta.Remove(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
     )]
     #[case::modify_field(
-        AstMulticenterBondDelta::ModifyField {
-            id: AstMulticenterBondId(3),
-            change: AstMulticenterBondFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(-1),
+        GraphIrMulticenterBondDelta::ModifyField {
+            id: GraphIrMulticenterBondId(3),
+            change: GraphIrMulticenterBondFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(-1),
             },
         },
         "MulticenterBondDelta.ModifyField(id=3, change=MulticenterBondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
     )]
     #[case::modify_constraint(
-        AstMulticenterBondDelta::ModifyConstraint {
-            id: AstMulticenterBondId(3),
+        GraphIrMulticenterBondDelta::ModifyConstraint {
+            id: GraphIrMulticenterBondId(3),
             old: None,
-            new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+            new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
         },
         "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
     )]
     fn test_multicenter_bond_delta_repr(
-        #[case] delta: AstMulticenterBondDelta,
+        #[case] delta: GraphIrMulticenterBondDelta,
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
@@ -3837,39 +3894,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstMulticenterBondDelta::Add {
-        id: AstMulticenterBondId(3),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    #[case::add(GraphIrMulticenterBondDelta::Add {
+        id: GraphIrMulticenterBondId(3),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::remove(AstMulticenterBondDelta::Remove {
-        id: AstMulticenterBondId(3),
-        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
-        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    #[case::remove(GraphIrMulticenterBondDelta::Remove {
+        id: GraphIrMulticenterBondId(3),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
+        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
     })]
-    #[case::modify_field(AstMulticenterBondDelta::ModifyField {
-        id: AstMulticenterBondId(3),
-        change: AstMulticenterBondFieldChange::Charge {
-            old: AstValueAst::Lit(0),
-            new: AstValueAst::Lit(-1),
+    #[case::modify_field(GraphIrMulticenterBondDelta::ModifyField {
+        id: GraphIrMulticenterBondId(3),
+        change: GraphIrMulticenterBondFieldChange::Charge {
+            old: GraphIrValueAst::Lit(0),
+            new: GraphIrValueAst::Lit(-1),
         },
     })]
-    #[case::constraint_added(AstMulticenterBondDelta::ModifyConstraint {
-        id: AstMulticenterBondId(3),
+    #[case::constraint_added(GraphIrMulticenterBondDelta::ModifyConstraint {
+        id: GraphIrMulticenterBondId(3),
         old: None,
-        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    #[case::constraint_removed(AstMulticenterBondDelta::ModifyConstraint {
-        id: AstMulticenterBondId(3),
-        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_removed(GraphIrMulticenterBondDelta::ModifyConstraint {
+        id: GraphIrMulticenterBondId(3),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
         new: None,
     })]
-    #[case::constraint_modified(AstMulticenterBondDelta::ModifyConstraint {
-        id: AstMulticenterBondId(3),
-        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(5))),
-        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    #[case::constraint_modified(GraphIrMulticenterBondDelta::ModifyConstraint {
+        id: GraphIrMulticenterBondId(3),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
     })]
-    fn test_multicenter_bond_delta_inverse(#[case] delta: AstMulticenterBondDelta) {
+    fn test_multicenter_bond_delta_inverse(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
             let binding = MulticenterBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -3883,39 +3940,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstNoncovalentBondDelta::Add {
-        id: AstNoncovalentBondId(4),
-        atoms: [AstAtomId(5), AstAtomId(2)],
-        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    #[case::add(GraphIrNoncovalentBondDelta::Add {
+        id: GraphIrNoncovalentBondId(4),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
-    #[case::remove(AstNoncovalentBondDelta::Remove {
-        id: AstNoncovalentBondId(4),
-        atoms: [AstAtomId(5), AstAtomId(2)],
-        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    #[case::remove(GraphIrNoncovalentBondDelta::Remove {
+        id: GraphIrNoncovalentBondId(4),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
-    #[case::modify_field(AstNoncovalentBondDelta::ModifyField {
-        id: AstNoncovalentBondId(4),
-        change: AstNoncovalentBondFieldChange::Kind {
-            old: AstNoncovalentBondKindAst::Undetermined,
-            new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+    #[case::modify_field(GraphIrNoncovalentBondDelta::ModifyField {
+        id: GraphIrNoncovalentBondId(4),
+        change: GraphIrNoncovalentBondFieldChange::Kind {
+            old: GraphIrNoncovalentBondKindAst::Undetermined,
+            new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
         },
     })]
-    #[case::constraint_added(AstNoncovalentBondDelta::ModifyConstraint {
-        id: AstNoncovalentBondId(4),
+    #[case::constraint_added(GraphIrNoncovalentBondDelta::ModifyConstraint {
+        id: GraphIrNoncovalentBondId(4),
         old: None,
-        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
     })]
-    #[case::constraint_removed(AstNoncovalentBondDelta::ModifyConstraint {
-        id: AstNoncovalentBondId(4),
-        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    #[case::constraint_removed(GraphIrNoncovalentBondDelta::ModifyConstraint {
+        id: GraphIrNoncovalentBondId(4),
+        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
         new: None,
     })]
-    #[case::constraint_modified(AstNoncovalentBondDelta::ModifyConstraint {
-        id: AstNoncovalentBondId(4),
-        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(false))),
-        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    #[case::constraint_modified(GraphIrNoncovalentBondDelta::ModifyConstraint {
+        id: GraphIrNoncovalentBondId(4),
+        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(false))),
+        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
     })]
-    fn test_noncovalent_bond_delta_roundtrip(#[case] delta: AstNoncovalentBondDelta) {
+    fn test_noncovalent_bond_delta_roundtrip(#[case] delta: GraphIrNoncovalentBondDelta) {
         Python::attach(|py| {
             assert_eq!(
                 NoncovalentBondDelta::from_rust(py, &delta)
@@ -3928,34 +3985,34 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstNoncovalentBondDelta::Add {
-            id: AstNoncovalentBondId(4),
-            atoms: [AstAtomId(5), AstAtomId(2)],
-            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::Add {
+            id: GraphIrNoncovalentBondId(4),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
-        AstNoncovalentBondDelta::Add {
-            id: AstNoncovalentBondId(4),
-            atoms: [AstAtomId(5), AstAtomId(2)],
-            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::Add {
+            id: GraphIrNoncovalentBondId(4),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         true,
     )]
     #[case::different_atom_order(
-        AstNoncovalentBondDelta::Add {
-            id: AstNoncovalentBondId(4),
-            atoms: [AstAtomId(5), AstAtomId(2)],
-            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::Add {
+            id: GraphIrNoncovalentBondId(4),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
-        AstNoncovalentBondDelta::Add {
-            id: AstNoncovalentBondId(4),
-            atoms: [AstAtomId(2), AstAtomId(5)],
-            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::Add {
+            id: GraphIrNoncovalentBondId(4),
+            atoms: [GraphIrAtomId(2), GraphIrAtomId(5)],
+            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         false,
     )]
     fn test_noncovalent_bond_delta_eq(
-        #[case] lhs: AstNoncovalentBondDelta,
-        #[case] rhs: AstNoncovalentBondDelta,
+        #[case] lhs: GraphIrNoncovalentBondDelta,
+        #[case] rhs: GraphIrNoncovalentBondDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -3967,41 +4024,41 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstNoncovalentBondDelta::Add {
-            id: AstNoncovalentBondId(4),
-            atoms: [AstAtomId(5), AstAtomId(2)],
-            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::Add {
+            id: GraphIrNoncovalentBondId(4),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
     )]
     #[case::remove(
-        AstNoncovalentBondDelta::Remove {
-            id: AstNoncovalentBondId(4),
-            atoms: [AstAtomId(5), AstAtomId(2)],
-            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::Remove {
+            id: GraphIrNoncovalentBondId(4),
+            atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         "NoncovalentBondDelta.Remove(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
     )]
     #[case::modify_field(
-        AstNoncovalentBondDelta::ModifyField {
-            id: AstNoncovalentBondId(4),
-            change: AstNoncovalentBondFieldChange::Kind {
-                old: AstNoncovalentBondKindAst::Undetermined,
-                new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+        GraphIrNoncovalentBondDelta::ModifyField {
+            id: GraphIrNoncovalentBondId(4),
+            change: GraphIrNoncovalentBondFieldChange::Kind {
+                old: GraphIrNoncovalentBondKindAst::Undetermined,
+                new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
             },
         },
         "NoncovalentBondDelta.ModifyField(id=4, change=NoncovalentBondFieldChange.Kind(old=NoncovalentBondKindAst.Undetermined(), new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)))",
     )]
     #[case::modify_constraint(
-        AstNoncovalentBondDelta::ModifyConstraint {
-            id: AstNoncovalentBondId(4),
+        GraphIrNoncovalentBondDelta::ModifyConstraint {
+            id: GraphIrNoncovalentBondId(4),
             old: None,
-            new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+            new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
         },
         "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)))",
     )]
     fn test_noncovalent_bond_delta_repr(
-        #[case] delta: AstNoncovalentBondDelta,
+        #[case] delta: GraphIrNoncovalentBondDelta,
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
@@ -4021,39 +4078,39 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstNoncovalentBondDelta::Add {
-        id: AstNoncovalentBondId(4),
-        atoms: [AstAtomId(5), AstAtomId(2)],
-        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    #[case::add(GraphIrNoncovalentBondDelta::Add {
+        id: GraphIrNoncovalentBondId(4),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
-    #[case::remove(AstNoncovalentBondDelta::Remove {
-        id: AstNoncovalentBondId(4),
-        atoms: [AstAtomId(5), AstAtomId(2)],
-        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    #[case::remove(GraphIrNoncovalentBondDelta::Remove {
+        id: GraphIrNoncovalentBondId(4),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
-    #[case::modify_field(AstNoncovalentBondDelta::ModifyField {
-        id: AstNoncovalentBondId(4),
-        change: AstNoncovalentBondFieldChange::Kind {
-            old: AstNoncovalentBondKindAst::Undetermined,
-            new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+    #[case::modify_field(GraphIrNoncovalentBondDelta::ModifyField {
+        id: GraphIrNoncovalentBondId(4),
+        change: GraphIrNoncovalentBondFieldChange::Kind {
+            old: GraphIrNoncovalentBondKindAst::Undetermined,
+            new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
         },
     })]
-    #[case::constraint_added(AstNoncovalentBondDelta::ModifyConstraint {
-        id: AstNoncovalentBondId(4),
+    #[case::constraint_added(GraphIrNoncovalentBondDelta::ModifyConstraint {
+        id: GraphIrNoncovalentBondId(4),
         old: None,
-        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
     })]
-    #[case::constraint_removed(AstNoncovalentBondDelta::ModifyConstraint {
-        id: AstNoncovalentBondId(4),
-        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    #[case::constraint_removed(GraphIrNoncovalentBondDelta::ModifyConstraint {
+        id: GraphIrNoncovalentBondId(4),
+        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
         new: None,
     })]
-    #[case::constraint_modified(AstNoncovalentBondDelta::ModifyConstraint {
-        id: AstNoncovalentBondId(4),
-        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(false))),
-        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    #[case::constraint_modified(GraphIrNoncovalentBondDelta::ModifyConstraint {
+        id: GraphIrNoncovalentBondId(4),
+        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(false))),
+        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Lit(true))),
     })]
-    fn test_noncovalent_bond_delta_inverse(#[case] delta: AstNoncovalentBondDelta) {
+    fn test_noncovalent_bond_delta_inverse(#[case] delta: GraphIrNoncovalentBondDelta) {
         Python::attach(|py| {
             let binding = NoncovalentBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -4067,76 +4124,76 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstStereoAtomDelta::Add {
-        id: AstStereoAtomId(5),
-        site: AstAtomId(3),
+    #[case::add(GraphIrStereoAtomDelta::Add {
+        id: GraphIrStereoAtomId(5),
+        site: GraphIrAtomId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::remove(AstStereoAtomDelta::Remove {
-        id: AstStereoAtomId(5),
-        site: AstAtomId(3),
+    #[case::remove(GraphIrStereoAtomDelta::Remove {
+        id: GraphIrStereoAtomId(5),
+        site: GraphIrAtomId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::modify_field(AstStereoAtomDelta::ModifyField {
-        id: AstStereoAtomId(5),
-        change: AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+    #[case::modify_field(GraphIrStereoAtomDelta::ModifyField {
+        id: GraphIrStereoAtomId(5),
+        change: GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
     })]
-    #[case::constraint_added_with_kind(AstStereoAtomDelta::ModifyConstraint {
-        id: AstStereoAtomId(5),
-        kind: Some(AstStereoKind::Tetrahedral),
+    #[case::constraint_added_with_kind(GraphIrStereoAtomDelta::ModifyConstraint {
+        id: GraphIrStereoAtomId(5),
+        kind: Some(GraphIrStereoKind::Tetrahedral),
         old: None,
-        new: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::constraint_removed_without_kind(AstStereoAtomDelta::ModifyConstraint {
-        id: AstStereoAtomId(5),
+    #[case::constraint_removed_without_kind(GraphIrStereoAtomDelta::ModifyConstraint {
+        id: GraphIrStereoAtomId(5),
         kind: None,
-        old: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
         new: None,
     })]
-    #[case::constraint_modified(AstStereoAtomDelta::ModifyConstraint {
-        id: AstStereoAtomId(5),
-        kind: Some(AstStereoKind::Tetrahedral),
-        old: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+    #[case::constraint_modified(GraphIrStereoAtomDelta::ModifyConstraint {
+        id: GraphIrStereoAtomId(5),
+        kind: Some(GraphIrStereoKind::Tetrahedral),
+        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
-        new: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(AstStereoAtomDelta::Apply {
-        id: AstStereoAtomId(5),
-        kind: AstStereoKind::Tetrahedral,
+    #[case::apply(GraphIrStereoAtomDelta::Apply {
+        id: GraphIrStereoAtomId(5),
+        kind: GraphIrStereoKind::Tetrahedral,
         permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
-    #[case::swap(AstStereoAtomDelta::Swap {
-        id: AstStereoAtomId(5),
-        kind: AstStereoKind::Tetrahedral,
+    #[case::swap(GraphIrStereoAtomDelta::Swap {
+        id: GraphIrStereoAtomId(5),
+        kind: GraphIrStereoKind::Tetrahedral,
     })]
-    #[case::mirror(AstStereoAtomDelta::Mirror {
-        id: AstStereoAtomId(5),
-        kind: AstStereoKind::Tetrahedral,
+    #[case::mirror(GraphIrStereoAtomDelta::Mirror {
+        id: GraphIrStereoAtomId(5),
+        kind: GraphIrStereoKind::Tetrahedral,
     })]
-    fn test_stereo_atom_delta_roundtrip(#[case] delta: AstStereoAtomDelta) {
+    fn test_stereo_atom_delta_roundtrip(#[case] delta: GraphIrStereoAtomDelta) {
         Python::attach(|py| {
             assert_eq!(
                 StereoAtomDelta::from_rust(py, &delta).unwrap().to_rust(py),
@@ -4147,61 +4204,61 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstStereoAtomDelta::Apply {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Apply {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
-        AstStereoAtomDelta::Apply {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Apply {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         true,
     )]
     #[case::different_ligand_order(
-        AstStereoAtomDelta::Add {
-            id: AstStereoAtomId(5),
-            site: AstAtomId(3),
+        GraphIrStereoAtomDelta::Add {
+            id: GraphIrStereoAtomId(5),
+            site: GraphIrAtomId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             ],
-            ast: AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
-        AstStereoAtomDelta::Add {
-            id: AstStereoAtomId(5),
-            site: AstAtomId(3),
+        GraphIrStereoAtomDelta::Add {
+            id: GraphIrStereoAtomId(5),
+            site: GraphIrAtomId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             ],
-            ast: AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
         false,
     )]
     #[case::different_permutation(
-        AstStereoAtomDelta::Apply {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Apply {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
-        AstStereoAtomDelta::Apply {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Apply {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
             permutation: PermPermutation::from_image(&[2, 0, 1, 3]),
         },
         false,
     )]
     fn test_stereo_atom_delta_eq(
-        #[case] lhs: AstStereoAtomDelta,
-        #[case] rhs: AstStereoAtomDelta,
+        #[case] lhs: GraphIrStereoAtomDelta,
+        #[case] rhs: GraphIrStereoAtomDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -4213,82 +4270,82 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstStereoAtomDelta::Add {
-            id: AstStereoAtomId(5),
-            site: AstAtomId(3),
+        GraphIrStereoAtomDelta::Add {
+            id: GraphIrStereoAtomId(5),
+            site: GraphIrAtomId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::LonePair),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
         "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomAst.parse('Th0'))",
     )]
     #[case::remove(
-        AstStereoAtomDelta::Remove {
-            id: AstStereoAtomId(5),
-            site: AstAtomId(3),
+        GraphIrStereoAtomDelta::Remove {
+            id: GraphIrStereoAtomId(5),
+            site: GraphIrAtomId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::LonePair),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
         "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomAst.parse('Th0'))",
     )]
     #[case::modify_field(
-        AstStereoAtomDelta::ModifyField {
-            id: AstStereoAtomId(5),
-            change: AstStereoAtomFieldChange::Configuration {
-                old: AstStereoConfigurationAst::Undetermined,
-                new: AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0),
+        GraphIrStereoAtomDelta::ModifyField {
+            id: GraphIrStereoAtomId(5),
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationAst::Undetermined,
+                new: GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
                 ),
             },
         },
         "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
     )]
     #[case::modify_constraint(
-        AstStereoAtomDelta::ModifyConstraint {
-            id: AstStereoAtomId(5),
-            kind: Some(AstStereoKind::Tetrahedral),
+        GraphIrStereoAtomDelta::ModifyConstraint {
+            id: GraphIrStereoAtomId(5),
+            kind: Some(GraphIrStereoKind::Tetrahedral),
             old: None,
-            new: Some(AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Undetermined,
+            new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Undetermined,
             )),
         },
         "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
     )]
     #[case::apply(
-        AstStereoAtomDelta::Apply {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Apply {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         "StereoAtomDelta.Apply(id=5, kind=StereoKind.Tetrahedral, permutation=Permutation([1, 2, 0, 3]))",
     )]
     #[case::swap(
-        AstStereoAtomDelta::Swap {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Swap {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
         },
         "StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)",
     )]
     #[case::mirror(
-        AstStereoAtomDelta::Mirror {
-            id: AstStereoAtomId(5),
-            kind: AstStereoKind::Tetrahedral,
+        GraphIrStereoAtomDelta::Mirror {
+            id: GraphIrStereoAtomId(5),
+            kind: GraphIrStereoKind::Tetrahedral,
         },
         "StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral)",
     )]
-    fn test_stereo_atom_delta_repr(#[case] delta: AstStereoAtomDelta, #[case] expected: &str) {
+    fn test_stereo_atom_delta_repr(#[case] delta: GraphIrStereoAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let delta =
                 into_py_variant(py, StereoAtomDelta::from_rust(py, &delta).unwrap()).unwrap();
@@ -4306,74 +4363,74 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstStereoAtomDelta::Add {
-        id: AstStereoAtomId(5),
-        site: AstAtomId(3),
+    #[case::add(GraphIrStereoAtomDelta::Add {
+        id: GraphIrStereoAtomId(5),
+        site: GraphIrAtomId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::remove(AstStereoAtomDelta::Remove {
-        id: AstStereoAtomId(5),
-        site: AstAtomId(3),
+    #[case::remove(GraphIrStereoAtomDelta::Remove {
+        id: GraphIrStereoAtomId(5),
+        site: GraphIrAtomId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::modify_field(AstStereoAtomDelta::ModifyField {
-        id: AstStereoAtomId(5),
-        change: AstStereoAtomFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+    #[case::modify_field(GraphIrStereoAtomDelta::ModifyField {
+        id: GraphIrStereoAtomId(5),
+        change: GraphIrStereoAtomFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
     })]
-    #[case::constraint_added_with_kind(AstStereoAtomDelta::ModifyConstraint {
-        id: AstStereoAtomId(5),
-        kind: Some(AstStereoKind::Tetrahedral),
+    #[case::constraint_added_with_kind(GraphIrStereoAtomDelta::ModifyConstraint {
+        id: GraphIrStereoAtomId(5),
+        kind: Some(GraphIrStereoKind::Tetrahedral),
         old: None,
-        new: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::constraint_removed_without_kind(AstStereoAtomDelta::ModifyConstraint {
-        id: AstStereoAtomId(5),
+    #[case::constraint_removed_without_kind(GraphIrStereoAtomDelta::ModifyConstraint {
+        id: GraphIrStereoAtomId(5),
         kind: None,
-        old: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
         new: None,
     })]
-    #[case::constraint_modified(AstStereoAtomDelta::ModifyConstraint {
-        id: AstStereoAtomId(5),
-        kind: Some(AstStereoKind::Tetrahedral),
-        old: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+    #[case::constraint_modified(GraphIrStereoAtomDelta::ModifyConstraint {
+        id: GraphIrStereoAtomId(5),
+        kind: Some(GraphIrStereoKind::Tetrahedral),
+        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
-        new: Some(AstStereoAtomConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(AstStereoAtomDelta::Apply {
-        id: AstStereoAtomId(5),
-        kind: AstStereoKind::Tetrahedral,
+    #[case::apply(GraphIrStereoAtomDelta::Apply {
+        id: GraphIrStereoAtomId(5),
+        kind: GraphIrStereoKind::Tetrahedral,
         permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
-    #[case::swap(AstStereoAtomDelta::Swap {
-        id: AstStereoAtomId(5),
-        kind: AstStereoKind::Tetrahedral,
+    #[case::swap(GraphIrStereoAtomDelta::Swap {
+        id: GraphIrStereoAtomId(5),
+        kind: GraphIrStereoKind::Tetrahedral,
     })]
-    #[case::mirror(AstStereoAtomDelta::Mirror {
-        id: AstStereoAtomId(5),
-        kind: AstStereoKind::Tetrahedral,
+    #[case::mirror(GraphIrStereoAtomDelta::Mirror {
+        id: GraphIrStereoAtomId(5),
+        kind: GraphIrStereoKind::Tetrahedral,
     })]
-    fn test_stereo_atom_delta_inverse(#[case] delta: AstStereoAtomDelta) {
+    fn test_stereo_atom_delta_inverse(#[case] delta: GraphIrStereoAtomDelta) {
         Python::attach(|py| {
             let binding = StereoAtomDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -4386,76 +4443,76 @@ mod tests {
         });
     }
     #[rstest]
-    #[case::add(AstStereoBondDelta::Add {
-        id: AstStereoBondId(5),
-        site: AstBondId(3),
+    #[case::add(GraphIrStereoBondDelta::Add {
+        id: GraphIrStereoBondId(5),
+        site: GraphIrBondId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::remove(AstStereoBondDelta::Remove {
-        id: AstStereoBondId(5),
-        site: AstBondId(3),
+    #[case::remove(GraphIrStereoBondDelta::Remove {
+        id: GraphIrStereoBondId(5),
+        site: GraphIrBondId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::modify_field(AstStereoBondDelta::ModifyField {
-        id: AstStereoBondId(5),
-        change: AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(0),
+    #[case::modify_field(GraphIrStereoBondDelta::ModifyField {
+        id: GraphIrStereoBondId(5),
+        change: GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
     })]
-    #[case::constraint_added_with_kind(AstStereoBondDelta::ModifyConstraint {
-        id: AstStereoBondId(5),
-        kind: Some(AstStereoKind::CisTrans),
+    #[case::constraint_added_with_kind(GraphIrStereoBondDelta::ModifyConstraint {
+        id: GraphIrStereoBondId(5),
+        kind: Some(GraphIrStereoKind::CisTrans),
         old: None,
-        new: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::constraint_removed_without_kind(AstStereoBondDelta::ModifyConstraint {
-        id: AstStereoBondId(5),
+    #[case::constraint_removed_without_kind(GraphIrStereoBondDelta::ModifyConstraint {
+        id: GraphIrStereoBondId(5),
         kind: None,
-        old: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
         new: None,
     })]
-    #[case::constraint_modified(AstStereoBondDelta::ModifyConstraint {
-        id: AstStereoBondId(5),
-        kind: Some(AstStereoKind::CisTrans),
-        old: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+    #[case::constraint_modified(GraphIrStereoBondDelta::ModifyConstraint {
+        id: GraphIrStereoBondId(5),
+        kind: Some(GraphIrStereoKind::CisTrans),
+        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
-        new: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(AstStereoBondDelta::Apply {
-        id: AstStereoBondId(5),
-        kind: AstStereoKind::CisTrans,
+    #[case::apply(GraphIrStereoBondDelta::Apply {
+        id: GraphIrStereoBondId(5),
+        kind: GraphIrStereoKind::CisTrans,
         permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
-    #[case::swap(AstStereoBondDelta::Swap {
-        id: AstStereoBondId(5),
-        kind: AstStereoKind::CisTrans,
+    #[case::swap(GraphIrStereoBondDelta::Swap {
+        id: GraphIrStereoBondId(5),
+        kind: GraphIrStereoKind::CisTrans,
     })]
-    #[case::mirror(AstStereoBondDelta::Mirror {
-        id: AstStereoBondId(5),
-        kind: AstStereoKind::CisTrans,
+    #[case::mirror(GraphIrStereoBondDelta::Mirror {
+        id: GraphIrStereoBondId(5),
+        kind: GraphIrStereoKind::CisTrans,
     })]
-    fn test_stereo_bond_delta_roundtrip(#[case] delta: AstStereoBondDelta) {
+    fn test_stereo_bond_delta_roundtrip(#[case] delta: GraphIrStereoBondDelta) {
         Python::attach(|py| {
             assert_eq!(
                 StereoBondDelta::from_rust(py, &delta).unwrap().to_rust(py),
@@ -4466,61 +4523,61 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstStereoBondDelta::Apply {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Apply {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
-        AstStereoBondDelta::Apply {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Apply {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         true,
     )]
     #[case::different_ligand_order(
-        AstStereoBondDelta::Add {
-            id: AstStereoBondId(5),
-            site: AstBondId(3),
+        GraphIrStereoBondDelta::Add {
+            id: GraphIrStereoBondId(5),
+            site: GraphIrBondId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             ],
-            ast: AstStereoBondAst::new(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoBondAst::new(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
-        AstStereoBondDelta::Add {
-            id: AstStereoBondId(5),
-            site: AstBondId(3),
+        GraphIrStereoBondDelta::Add {
+            id: GraphIrStereoBondId(5),
+            site: GraphIrBondId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             ],
-            ast: AstStereoBondAst::new(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoBondAst::new(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
         false,
     )]
     #[case::different_permutation(
-        AstStereoBondDelta::Apply {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Apply {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
-        AstStereoBondDelta::Apply {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Apply {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
             permutation: PermPermutation::from_image(&[2, 0, 1, 3]),
         },
         false,
     )]
     fn test_stereo_bond_delta_eq(
-        #[case] lhs: AstStereoBondDelta,
-        #[case] rhs: AstStereoBondDelta,
+        #[case] lhs: GraphIrStereoBondDelta,
+        #[case] rhs: GraphIrStereoBondDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -4532,82 +4589,82 @@ mod tests {
 
     #[rstest]
     #[case::add(
-        AstStereoBondDelta::Add {
-            id: AstStereoBondId(5),
-            site: AstBondId(3),
+        GraphIrStereoBondDelta::Add {
+            id: GraphIrStereoBondId(5),
+            site: GraphIrBondId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::LonePair),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: AstStereoBondAst::new(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoBondAst::new(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
         "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
     )]
     #[case::remove(
-        AstStereoBondDelta::Remove {
-            id: AstStereoBondId(5),
-            site: AstBondId(3),
+        GraphIrStereoBondDelta::Remove {
+            id: GraphIrStereoBondId(5),
+            site: GraphIrBondId(3),
             ligands: vec![
-                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::LonePair),
+                GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: AstStereoBondAst::new(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoBondAst::new(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
         "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
     )]
     #[case::modify_field(
-        AstStereoBondDelta::ModifyField {
-            id: AstStereoBondId(5),
-            change: AstStereoBondFieldChange::Configuration {
-                old: AstStereoConfigurationAst::Undetermined,
-                new: AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::CisTrans,
-                    AstStereoCoset::Lit(0),
+        GraphIrStereoBondDelta::ModifyField {
+            id: GraphIrStereoBondId(5),
+            change: GraphIrStereoBondFieldChange::Configuration {
+                old: GraphIrStereoConfigurationAst::Undetermined,
+                new: GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
                 ),
             },
         },
         "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
     )]
     #[case::modify_constraint(
-        AstStereoBondDelta::ModifyConstraint {
-            id: AstStereoBondId(5),
-            kind: Some(AstStereoKind::CisTrans),
+        GraphIrStereoBondDelta::ModifyConstraint {
+            id: GraphIrStereoBondId(5),
+            kind: Some(GraphIrStereoKind::CisTrans),
             old: None,
-            new: Some(AstStereoBondConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Undetermined,
+            new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Undetermined,
             )),
         },
         "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
     )]
     #[case::apply(
-        AstStereoBondDelta::Apply {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Apply {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
             permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         "StereoBondDelta.Apply(id=5, kind=StereoKind.CisTrans, permutation=Permutation([1, 2, 0, 3]))",
     )]
     #[case::swap(
-        AstStereoBondDelta::Swap {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Swap {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
         },
         "StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans)",
     )]
     #[case::mirror(
-        AstStereoBondDelta::Mirror {
-            id: AstStereoBondId(5),
-            kind: AstStereoKind::CisTrans,
+        GraphIrStereoBondDelta::Mirror {
+            id: GraphIrStereoBondId(5),
+            kind: GraphIrStereoKind::CisTrans,
         },
         "StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans)",
     )]
-    fn test_stereo_bond_delta_repr(#[case] delta: AstStereoBondDelta, #[case] expected: &str) {
+    fn test_stereo_bond_delta_repr(#[case] delta: GraphIrStereoBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let delta =
                 into_py_variant(py, StereoBondDelta::from_rust(py, &delta).unwrap()).unwrap();
@@ -4625,74 +4682,74 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(AstStereoBondDelta::Add {
-        id: AstStereoBondId(5),
-        site: AstBondId(3),
+    #[case::add(GraphIrStereoBondDelta::Add {
+        id: GraphIrStereoBondId(5),
+        site: GraphIrBondId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::remove(AstStereoBondDelta::Remove {
-        id: AstStereoBondId(5),
-        site: AstBondId(3),
+    #[case::remove(GraphIrStereoBondDelta::Remove {
+        id: GraphIrStereoBondId(5),
+        site: GraphIrBondId(3),
         ligands: vec![
-            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
-            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
+            GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
-    #[case::modify_field(AstStereoBondDelta::ModifyField {
-        id: AstStereoBondId(5),
-        change: AstStereoBondFieldChange::Configuration {
-            old: AstStereoConfigurationAst::Undetermined,
-            new: AstStereoConfigurationAst::Kinded(
-                AstStereoKind::CisTrans,
-                AstStereoCoset::Lit(0),
+    #[case::modify_field(GraphIrStereoBondDelta::ModifyField {
+        id: GraphIrStereoBondId(5),
+        change: GraphIrStereoBondFieldChange::Configuration {
+            old: GraphIrStereoConfigurationAst::Undetermined,
+            new: GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoKind::CisTrans,
+                GraphIrStereoCoset::Lit(0),
             ),
         },
     })]
-    #[case::constraint_added_with_kind(AstStereoBondDelta::ModifyConstraint {
-        id: AstStereoBondId(5),
-        kind: Some(AstStereoKind::CisTrans),
+    #[case::constraint_added_with_kind(GraphIrStereoBondDelta::ModifyConstraint {
+        id: GraphIrStereoBondId(5),
+        kind: Some(GraphIrStereoKind::CisTrans),
         old: None,
-        new: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::constraint_removed_without_kind(AstStereoBondDelta::ModifyConstraint {
-        id: AstStereoBondId(5),
+    #[case::constraint_removed_without_kind(GraphIrStereoBondDelta::ModifyConstraint {
+        id: GraphIrStereoBondId(5),
         kind: None,
-        old: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
         new: None,
     })]
-    #[case::constraint_modified(AstStereoBondDelta::ModifyConstraint {
-        id: AstStereoBondId(5),
-        kind: Some(AstStereoKind::CisTrans),
-        old: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Undetermined,
+    #[case::constraint_modified(GraphIrStereoBondDelta::ModifyConstraint {
+        id: GraphIrStereoBondId(5),
+        kind: Some(GraphIrStereoKind::CisTrans),
+        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Undetermined,
         )),
-        new: Some(AstStereoBondConstraintAst::Stereogenicity(
-            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
+            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(AstStereoBondDelta::Apply {
-        id: AstStereoBondId(5),
-        kind: AstStereoKind::CisTrans,
+    #[case::apply(GraphIrStereoBondDelta::Apply {
+        id: GraphIrStereoBondId(5),
+        kind: GraphIrStereoKind::CisTrans,
         permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
-    #[case::swap(AstStereoBondDelta::Swap {
-        id: AstStereoBondId(5),
-        kind: AstStereoKind::CisTrans,
+    #[case::swap(GraphIrStereoBondDelta::Swap {
+        id: GraphIrStereoBondId(5),
+        kind: GraphIrStereoKind::CisTrans,
     })]
-    #[case::mirror(AstStereoBondDelta::Mirror {
-        id: AstStereoBondId(5),
-        kind: AstStereoKind::CisTrans,
+    #[case::mirror(GraphIrStereoBondDelta::Mirror {
+        id: GraphIrStereoBondId(5),
+        kind: GraphIrStereoKind::CisTrans,
     })]
-    fn test_stereo_bond_delta_inverse(#[case] delta: AstStereoBondDelta) {
+    fn test_stereo_bond_delta_inverse(#[case] delta: GraphIrStereoBondDelta) {
         Python::attach(|py| {
             let binding = StereoBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -4706,15 +4763,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add_leaf(AstConstraintDelta::Add(AstConstraint::Atom(
-        AstAtomId(3),
-        AstAtomConstraintAst::degree(2),
+    #[case::add_leaf(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+        GraphIrAtomId(3),
+        GraphIrAtomConstraintAst::degree(2),
     )))]
-    #[case::remove_recursive(AstConstraintDelta::Remove(AstConstraint::And(vec![
-        AstConstraint::Atom(AstAtomId(7), AstAtomConstraintAst::valence(4)),
-        AstConstraint::Not(Box::new(AstConstraint::Or(Vec::new()))),
+    #[case::remove_recursive(GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
+        GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintAst::valence(4)),
+        GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
     ])))]
-    fn test_constraint_delta_roundtrip(#[case] delta: AstConstraintDelta) {
+    fn test_constraint_delta_roundtrip(#[case] delta: GraphIrConstraintDelta) {
         Python::attach(|py| {
             let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
             assert_eq!(binding.to_rust(py), delta);
@@ -4723,41 +4780,41 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         )),
-        AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         )),
         true
     )]
     #[case::variant(
-        AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         )),
-        AstConstraintDelta::Remove(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrConstraintDelta::Remove(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         )),
         false
     )]
     #[case::constraint(
-        AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         )),
-        AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::valence(2),
+        GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::valence(2),
         )),
         false
     )]
     fn test_constraint_delta_eq(
-        #[case] left: AstConstraintDelta,
-        #[case] right: AstConstraintDelta,
+        #[case] left: GraphIrConstraintDelta,
+        #[case] right: GraphIrConstraintDelta,
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
@@ -4769,20 +4826,20 @@ mod tests {
 
     #[rstest]
     #[case::add_leaf(
-        AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         )),
         "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2))))",
     )]
     #[case::remove_recursive(
-        AstConstraintDelta::Remove(AstConstraint::And(vec![
-            AstConstraint::Atom(AstAtomId(7), AstAtomConstraintAst::valence(4)),
-            AstConstraint::Not(Box::new(AstConstraint::Or(Vec::new()))),
+        GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
+            GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintAst::valence(4)),
+            GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
         ])),
         "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
     )]
-    fn test_constraint_delta_repr(#[case] delta: AstConstraintDelta, #[case] expected: &str) {
+    fn test_constraint_delta_repr(#[case] delta: GraphIrConstraintDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let binding =
                 into_py_variant(py, ConstraintDelta::from_rust(py, &delta).unwrap()).unwrap();
@@ -4800,15 +4857,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add_leaf(AstConstraintDelta::Add(AstConstraint::Atom(
-        AstAtomId(3),
-        AstAtomConstraintAst::degree(2),
+    #[case::add_leaf(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+        GraphIrAtomId(3),
+        GraphIrAtomConstraintAst::degree(2),
     )))]
-    #[case::remove_recursive(AstConstraintDelta::Remove(AstConstraint::And(vec![
-        AstConstraint::Atom(AstAtomId(7), AstAtomConstraintAst::valence(4)),
-        AstConstraint::Not(Box::new(AstConstraint::Or(Vec::new()))),
+    #[case::remove_recursive(GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
+        GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintAst::valence(4)),
+        GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
     ])))]
-    fn test_constraint_delta_inverse(#[case] delta: AstConstraintDelta) {
+    fn test_constraint_delta_inverse(#[case] delta: GraphIrConstraintDelta) {
         Python::attach(|py| {
             let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -4822,59 +4879,58 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom(AstDelta::Atom(AstAtomDelta::Add {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::atom(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     }))]
-    #[case::bond(AstDelta::Bond(AstBondDelta::Add {
-        id: AstBondId(2),
-        atoms: [AstAtomId(5), AstAtomId(1)],
-        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    #[case::bond(GraphIrDelta::Bond(GraphIrBondDelta::Add {
+        id: GraphIrBondId(2),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
     }))]
-    #[case::dative_bond(AstDelta::DativeBond(AstDativeBondDelta::Add {
-        id: AstDativeBondId(1),
-        donors: vec![AstAtomId(4), AstAtomId(2)],
-        acceptor: AstAtomId(3),
-        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    #[case::dative_bond(GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
+        id: GraphIrDativeBondId(1),
+        donors: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
+        acceptor: GraphIrAtomId(3),
+        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
     }))]
-    #[case::aromatic_system(AstDelta::AromaticSystem(AstAromaticSystemDelta::Add {
-        id: AstAromaticSystemId(2),
-        atoms: vec![AstAtomId(4), AstAtomId(2)],
-        ast: AstAromaticSystemAst::from_electrons(vec![1, 1]),
+    #[case::aromatic_system(GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
+        id: GraphIrAromaticSystemId(2),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
+        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1]),
     }))]
-    #[case::multicenter_bond(AstDelta::MulticenterBond(AstMulticenterBondDelta::Add {
-        id: AstMulticenterBondId(3),
-        atoms: vec![AstAtomId(4), AstAtomId(2)],
-        ast: AstMulticenterBondAst::from_electrons(vec![1, 1]),
+    #[case::multicenter_bond(GraphIrDelta::MulticenterBond(GraphIrMulticenterBondDelta::Add {
+        id: GraphIrMulticenterBondId(3),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
+        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1]),
     }))]
-    #[case::noncovalent_bond(AstDelta::NoncovalentBond(AstNoncovalentBondDelta::Add {
-        id: AstNoncovalentBondId(4),
-        atoms: [AstAtomId(5), AstAtomId(2)],
-        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    #[case::noncovalent_bond(GraphIrDelta::NoncovalentBond(GraphIrNoncovalentBondDelta::Add {
+        id: GraphIrNoncovalentBondId(4),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     }))]
-    #[case::stereo_atom(AstDelta::StereoAtom(AstStereoAtomDelta::Add {
-        id: AstStereoAtomId(5),
-        site: AstAtomId(3),
-        ligands: vec![AstStereoLigand::new(
-            AstAtomId(4),
-            AstStereoLigandKind::Atom,
+    #[case::stereo_atom(GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
+        id: GraphIrStereoAtomId(5),
+        site: GraphIrAtomId(3),
+        ligands: vec![GraphIrStereoLigand::new(
+            GraphIrAtomId(4),
+            GraphIrStereoLigandKind::Atom,
         )],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     }))]
-    #[case::stereo_bond(AstDelta::StereoBond(AstStereoBondDelta::Add {
-        id: AstStereoBondId(5),
-        site: AstBondId(3),
-        ligands: vec![AstStereoLigand::new(
-            AstAtomId(4),
-            AstStereoLigandKind::Atom,
+    #[case::stereo_bond(GraphIrDelta::StereoBond(GraphIrStereoBondDelta::Add {
+        id: GraphIrStereoBondId(5),
+        site: GraphIrBondId(3),
+        ligands: vec![GraphIrStereoLigand::new(
+            GraphIrAtomId(4),
+            GraphIrStereoLigandKind::Atom,
         )],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     }))]
-    #[case::constraint(AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-        AstAtomId(3),
-        AstAtomConstraintAst::degree(2)
-    ),)))]
-    fn test_delta_roundtrip(#[case] delta: AstDelta) {
+    #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+    )))]
+    fn test_delta_roundtrip(#[case] delta: GraphIrDelta) {
         Python::attach(|py| {
             let binding = Delta::from_rust(py, &delta).unwrap();
             assert_eq!(binding.to_rust(py), delta);
@@ -4883,39 +4939,43 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
         true,
     )]
     #[case::outer_variant(
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
-        AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         ))),
         false,
     )]
     #[case::child(
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(4),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(4),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
         false,
     )]
-    fn test_delta_eq(#[case] left: AstDelta, #[case] right: AstDelta, #[case] expected: bool) {
+    fn test_delta_eq(
+        #[case] left: GraphIrDelta,
+        #[case] right: GraphIrDelta,
+        #[case] expected: bool,
+    ) {
         Python::attach(|py| {
             let left = Delta::from_rust(py, &left).unwrap();
             let right = Delta::from_rust(py, &right).unwrap();
@@ -4925,35 +4985,35 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
         "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))"
     )]
     #[case::stereo_atom(
-        AstDelta::StereoAtom(AstStereoAtomDelta::Add {
-            id: AstStereoAtomId(5),
-            site: AstAtomId(3),
-            ligands: vec![AstStereoLigand::new(
-                AstAtomId(4),
-                AstStereoLigandKind::Atom,
+        GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
+            id: GraphIrStereoAtomId(5),
+            site: GraphIrAtomId(3),
+            ligands: vec![GraphIrStereoLigand::new(
+                GraphIrAtomId(4),
+                GraphIrStereoLigandKind::Atom,
             )],
-            ast: AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            ast: GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ),
         }),
         "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0')))"
     )]
     #[case::constraint(
-        AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         ))),
         "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))"
     )]
-    fn test_delta_repr(#[case] delta: AstDelta, #[case] expected: &str) {
+    fn test_delta_repr(#[case] delta: GraphIrDelta, #[case] expected: &str) {
         Python::attach(|py| {
             let binding = into_py_variant(py, Delta::from_rust(py, &delta).unwrap()).unwrap();
             assert_eq!(
@@ -4970,59 +5030,58 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom(AstDelta::Atom(AstAtomDelta::Add {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::atom(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     }))]
-    #[case::bond(AstDelta::Bond(AstBondDelta::Add {
-        id: AstBondId(2),
-        atoms: [AstAtomId(5), AstAtomId(1)],
-        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    #[case::bond(GraphIrDelta::Bond(GraphIrBondDelta::Add {
+        id: GraphIrBondId(2),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
+        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
     }))]
-    #[case::dative_bond(AstDelta::DativeBond(AstDativeBondDelta::Add {
-        id: AstDativeBondId(1),
-        donors: vec![AstAtomId(4), AstAtomId(2)],
-        acceptor: AstAtomId(3),
-        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    #[case::dative_bond(GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
+        id: GraphIrDativeBondId(1),
+        donors: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
+        acceptor: GraphIrAtomId(3),
+        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
     }))]
-    #[case::aromatic_system(AstDelta::AromaticSystem(AstAromaticSystemDelta::Add {
-        id: AstAromaticSystemId(2),
-        atoms: vec![AstAtomId(4), AstAtomId(2)],
-        ast: AstAromaticSystemAst::from_electrons(vec![1, 1]),
+    #[case::aromatic_system(GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
+        id: GraphIrAromaticSystemId(2),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
+        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1]),
     }))]
-    #[case::multicenter_bond(AstDelta::MulticenterBond(AstMulticenterBondDelta::Add {
-        id: AstMulticenterBondId(3),
-        atoms: vec![AstAtomId(4), AstAtomId(2)],
-        ast: AstMulticenterBondAst::from_electrons(vec![1, 1]),
+    #[case::multicenter_bond(GraphIrDelta::MulticenterBond(GraphIrMulticenterBondDelta::Add {
+        id: GraphIrMulticenterBondId(3),
+        atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
+        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1]),
     }))]
-    #[case::noncovalent_bond(AstDelta::NoncovalentBond(AstNoncovalentBondDelta::Add {
-        id: AstNoncovalentBondId(4),
-        atoms: [AstAtomId(5), AstAtomId(2)],
-        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    #[case::noncovalent_bond(GraphIrDelta::NoncovalentBond(GraphIrNoncovalentBondDelta::Add {
+        id: GraphIrNoncovalentBondId(4),
+        atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
+        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     }))]
-    #[case::stereo_atom(AstDelta::StereoAtom(AstStereoAtomDelta::Add {
-        id: AstStereoAtomId(5),
-        site: AstAtomId(3),
-        ligands: vec![AstStereoLigand::new(
-            AstAtomId(4),
-            AstStereoLigandKind::Atom,
+    #[case::stereo_atom(GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
+        id: GraphIrStereoAtomId(5),
+        site: GraphIrAtomId(3),
+        ligands: vec![GraphIrStereoLigand::new(
+            GraphIrAtomId(4),
+            GraphIrStereoLigandKind::Atom,
         )],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     }))]
-    #[case::stereo_bond(AstDelta::StereoBond(AstStereoBondDelta::Add {
-        id: AstStereoBondId(5),
-        site: AstBondId(3),
-        ligands: vec![AstStereoLigand::new(
-            AstAtomId(4),
-            AstStereoLigandKind::Atom,
+    #[case::stereo_bond(GraphIrDelta::StereoBond(GraphIrStereoBondDelta::Add {
+        id: GraphIrStereoBondId(5),
+        site: GraphIrBondId(3),
+        ligands: vec![GraphIrStereoLigand::new(
+            GraphIrAtomId(4),
+            GraphIrStereoLigandKind::Atom,
         )],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     }))]
-    #[case::constraint(AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-        AstAtomId(3),
-        AstAtomConstraintAst::degree(2)
-    ),)))]
-    fn test_delta_inverse(#[case] delta: AstDelta) {
+    #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+    )))]
+    fn test_delta_inverse(#[case] delta: GraphIrDelta) {
         Python::attach(|py| {
             let binding = Delta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
@@ -5062,16 +5121,16 @@ mod tests {
     #[rstest]
     #[case::empty(Vec::new())]
     #[case::populated(vec![
-        AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         }),
-        AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
+        GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+            GraphIrAtomId(3),
+            GraphIrAtomConstraintAst::degree(2),
         ))),
     ])]
-    fn test_deltas_new(#[case] entries: Vec<AstDelta>) {
+    fn test_deltas_new(#[case] entries: Vec<GraphIrDelta>) {
         Python::attach(|py| {
             let python_entries = entries
                 .iter()
@@ -5086,30 +5145,30 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        vec![AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         })],
-        vec![AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         })],
         true,
     )]
     #[case::different(
-        vec![AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         })],
-        vec![AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(4),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(4),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         })],
         false,
     )]
     fn test_deltas_eq(
-        #[case] left: Vec<AstDelta>,
-        #[case] right: Vec<AstDelta>,
+        #[case] left: Vec<GraphIrDelta>,
+        #[case] right: Vec<GraphIrDelta>,
         #[case] expected: bool,
     ) {
         assert_eq!(
@@ -5123,18 +5182,18 @@ mod tests {
     #[case::empty(Vec::new(), "Deltas([])")]
     #[case::populated(
         vec![
-            AstDelta::Atom(AstAtomDelta::Add {
-                id: AstAtomId(3),
-                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(3),
+                ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
             }),
-            AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                AstAtomId(3),
-                AstAtomConstraintAst::degree(2),
+            GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+                GraphIrAtomId(3),
+                GraphIrAtomConstraintAst::degree(2),
             ))),
         ],
         "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))])",
     )]
-    fn test_deltas_repr(#[case] entries: Vec<AstDelta>, #[case] expected: &str) {
+    fn test_deltas_repr(#[case] entries: Vec<GraphIrDelta>, #[case] expected: &str) {
         Python::attach(|py| {
             let deltas = Deltas::from_rust(entries.into_iter().collect());
             assert_eq!(deltas.__repr__(py).unwrap(), expected);
@@ -5143,15 +5202,14 @@ mod tests {
 
     #[rstest]
     fn test_deltas_append() {
-        let appended = AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-            AstAtomId(3),
-            AstAtomConstraintAst::degree(2),
-        )));
+        let appended = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+            GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+        ));
         Python::attach(|py| {
             let mut deltas = Deltas::from_rust(
-                vec![AstDelta::Atom(AstAtomDelta::Add {
-                    id: AstAtomId(3),
-                    ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    id: GraphIrAtomId(3),
+                    ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
                 })]
                 .into_iter()
                 .collect(),
@@ -5163,9 +5221,9 @@ mod tests {
             assert_eq!(
                 deltas.to_rust().as_slice(),
                 &[
-                    AstDelta::Atom(AstAtomDelta::Add {
-                        id: AstAtomId(3),
-                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(3),
+                        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
                     }),
                     appended,
                 ]
@@ -5179,9 +5237,9 @@ mod tests {
             let target = Py::new(
                 py,
                 Deltas::from_rust(
-                    vec![AstDelta::Atom(AstAtomDelta::Add {
-                        id: AstAtomId(3),
-                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(3),
+                        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
                     })]
                     .into_iter()
                     .collect(),
@@ -5191,8 +5249,11 @@ mod tests {
             let source = Py::new(
                 py,
                 Deltas::from_rust(
-                    vec![AstDelta::Constraint(AstConstraintDelta::Add(
-                        AstConstraint::Atom(AstAtomId(3), AstAtomConstraintAst::degree(2)),
+                    vec![GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+                        GraphIrConstraint::Atom(
+                            GraphIrAtomId(3),
+                            GraphIrAtomConstraintAst::degree(2),
+                        ),
                     ))]
                     .into_iter()
                     .collect(),
@@ -5205,13 +5266,13 @@ mod tests {
             assert_eq!(
                 target.bind(py).borrow().to_rust().as_slice(),
                 &[
-                    AstDelta::Atom(AstAtomDelta::Add {
-                        id: AstAtomId(3),
-                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(3),
+                        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
                     }),
-                    AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                        AstAtomId(3),
-                        AstAtomConstraintAst::degree(2),
+                    GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+                        GraphIrAtomId(3),
+                        GraphIrAtomConstraintAst::degree(2),
                     ))),
                 ]
             );
@@ -5221,15 +5282,14 @@ mod tests {
     #[rstest]
     fn test_deltas_extend_entries() {
         Python::attach(|py| {
-            let target = Py::new(py, Deltas::from_rust(AstDeltas::new())).unwrap();
-            let atom = AstDelta::Atom(AstAtomDelta::Add {
-                id: AstAtomId(3),
-                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            let target = Py::new(py, Deltas::from_rust(GraphIrDeltas::new())).unwrap();
+            let atom = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(3),
+                ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
             });
-            let constraint = AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                AstAtomId(3),
-                AstAtomConstraintAst::degree(2),
-            )));
+            let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+            ));
             let entries = vec![
                 into_py_variant(py, Delta::from_rust(py, &atom).unwrap()).unwrap(),
                 into_py_variant(py, Delta::from_rust(py, &constraint).unwrap()).unwrap(),
@@ -5247,14 +5307,13 @@ mod tests {
     #[rstest]
     fn test_deltas_extend_self() {
         Python::attach(|py| {
-            let atom = AstDelta::Atom(AstAtomDelta::Add {
-                id: AstAtomId(3),
-                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            let atom = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(3),
+                ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
             });
-            let constraint = AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                AstAtomId(3),
-                AstAtomConstraintAst::degree(2),
-            )));
+            let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+            ));
             let target = Py::new(
                 py,
                 Deltas::from_rust(vec![atom.clone(), constraint.clone()].into_iter().collect()),
@@ -5277,77 +5336,80 @@ mod tests {
     #[rstest]
     #[case::field_fusion(
         vec![
-            AstDelta::Atom(AstAtomDelta::ModifyField {
-                id: AstAtomId(0),
-                change: AstAtomFieldChange::Charge {
-                    old: AstValueAst::Lit(0),
-                    new: AstValueAst::Lit(1),
+            GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                id: GraphIrAtomId(0),
+                change: GraphIrAtomFieldChange::Charge {
+                    old: GraphIrValueAst::Lit(0),
+                    new: GraphIrValueAst::Lit(1),
                 },
             }),
-            AstDelta::Atom(AstAtomDelta::ModifyField {
-                id: AstAtomId(0),
-                change: AstAtomFieldChange::Charge {
-                    old: AstValueAst::Lit(1),
-                    new: AstValueAst::Lit(2),
+            GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                id: GraphIrAtomId(0),
+                change: GraphIrAtomFieldChange::Charge {
+                    old: GraphIrValueAst::Lit(1),
+                    new: GraphIrValueAst::Lit(2),
                 },
             }),
         ],
-        vec![AstDelta::Atom(AstAtomDelta::ModifyField {
-            id: AstAtomId(0),
-            change: AstAtomFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(2),
+        vec![GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+            id: GraphIrAtomId(0),
+            change: GraphIrAtomFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(2),
             },
         })],
     )]
     #[case::add_remove_cancellation(
         vec![
-            AstDelta::Atom(AstAtomDelta::Add {
-                id: AstAtomId(0),
-                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(0),
+                ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
             }),
-            AstDelta::Atom(AstAtomDelta::Remove {
-                id: AstAtomId(0),
-                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
+                id: GraphIrAtomId(0),
+                ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
             }),
         ],
         Vec::new(),
     )]
     #[case::family_order(
         vec![
-            AstDelta::Bond(AstBondDelta::ModifyField {
-                id: AstBondId(0),
-                change: AstBondFieldChange::Order {
-                    old: AstValueAst::Lit(1),
-                    new: AstValueAst::Lit(2),
+            GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
+                id: GraphIrBondId(0),
+                change: GraphIrBondFieldChange::Order {
+                    old: GraphIrValueAst::Lit(1),
+                    new: GraphIrValueAst::Lit(2),
                 },
             }),
-            AstDelta::Atom(AstAtomDelta::ModifyField {
-                id: AstAtomId(0),
-                change: AstAtomFieldChange::Charge {
-                    old: AstValueAst::Lit(0),
-                    new: AstValueAst::Lit(1),
+            GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                id: GraphIrAtomId(0),
+                change: GraphIrAtomFieldChange::Charge {
+                    old: GraphIrValueAst::Lit(0),
+                    new: GraphIrValueAst::Lit(1),
                 },
             }),
         ],
         vec![
-            AstDelta::Atom(AstAtomDelta::ModifyField {
-                id: AstAtomId(0),
-                change: AstAtomFieldChange::Charge {
-                    old: AstValueAst::Lit(0),
-                    new: AstValueAst::Lit(1),
+            GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                id: GraphIrAtomId(0),
+                change: GraphIrAtomFieldChange::Charge {
+                    old: GraphIrValueAst::Lit(0),
+                    new: GraphIrValueAst::Lit(1),
                 },
             }),
-            AstDelta::Bond(AstBondDelta::ModifyField {
-                id: AstBondId(0),
-                change: AstBondFieldChange::Order {
-                    old: AstValueAst::Lit(1),
-                    new: AstValueAst::Lit(2),
+            GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
+                id: GraphIrBondId(0),
+                change: GraphIrBondFieldChange::Order {
+                    old: GraphIrValueAst::Lit(1),
+                    new: GraphIrValueAst::Lit(2),
                 },
             }),
         ],
     )]
-    fn test_deltas_canonicalize(#[case] input: Vec<AstDelta>, #[case] expected: Vec<AstDelta>) {
+    fn test_deltas_canonicalize(
+        #[case] input: Vec<GraphIrDelta>,
+        #[case] expected: Vec<GraphIrDelta>,
+    ) {
         let source = Deltas::from_rust(input.into_iter().collect());
         let before = source.to_rust();
 
@@ -5364,18 +5426,18 @@ mod tests {
     fn test_deltas_canonicalize_error() {
         let source = Deltas::from_rust(
             vec![
-                AstDelta::Atom(AstAtomDelta::ModifyField {
-                    id: AstAtomId(0),
-                    change: AstAtomFieldChange::Charge {
-                        old: AstValueAst::Lit(0),
-                        new: AstValueAst::Lit(1),
+                GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                    id: GraphIrAtomId(0),
+                    change: GraphIrAtomFieldChange::Charge {
+                        old: GraphIrValueAst::Lit(0),
+                        new: GraphIrValueAst::Lit(1),
                     },
                 }),
-                AstDelta::Atom(AstAtomDelta::ModifyField {
-                    id: AstAtomId(0),
-                    change: AstAtomFieldChange::Charge {
-                        old: AstValueAst::Lit(2),
-                        new: AstValueAst::Lit(3),
+                GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                    id: GraphIrAtomId(0),
+                    change: GraphIrAtomFieldChange::Charge {
+                        old: GraphIrValueAst::Lit(2),
+                        new: GraphIrValueAst::Lit(3),
                     },
                 }),
             ]
@@ -5398,13 +5460,13 @@ mod tests {
     #[rstest]
     #[case::empty(Vec::new(), 0)]
     #[case::populated(
-        vec![AstDelta::Atom(AstAtomDelta::Add {
-            id: AstAtomId(3),
-            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+            id: GraphIrAtomId(3),
+            ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
         })],
         1,
     )]
-    fn test_deltas_len(#[case] entries: Vec<AstDelta>, #[case] expected: usize) {
+    fn test_deltas_len(#[case] entries: Vec<GraphIrDelta>, #[case] expected: usize) {
         assert_eq!(
             Deltas::from_rust(entries.into_iter().collect()).__len__(),
             expected
@@ -5412,24 +5474,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::positive(0, AstDelta::Atom(AstAtomDelta::Add {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::positive(0, GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     }))]
-    #[case::negative(-1, AstDelta::Constraint(AstConstraintDelta::Add(
-        AstConstraint::Atom(AstAtomId(3), AstAtomConstraintAst::degree(2)),
+    #[case::negative(-1, GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
+        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
     )))]
-    fn test_deltas_getitem(#[case] index: isize, #[case] expected: AstDelta) {
+    fn test_deltas_getitem(#[case] index: isize, #[case] expected: GraphIrDelta) {
         Python::attach(|py| {
             let deltas = Deltas::from_rust(
                 vec![
-                    AstDelta::Atom(AstAtomDelta::Add {
-                        id: AstAtomId(3),
-                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(3),
+                        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
                     }),
-                    AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                        AstAtomId(3),
-                        AstAtomConstraintAst::degree(2),
+                    GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+                        GraphIrAtomId(3),
+                        GraphIrAtomConstraintAst::degree(2),
                     ))),
                 ]
                 .into_iter()
@@ -5446,13 +5508,13 @@ mod tests {
         Python::attach(|py| {
             let deltas = Deltas::from_rust(
                 vec![
-                    AstDelta::Atom(AstAtomDelta::Add {
-                        id: AstAtomId(3),
-                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(3),
+                        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
                     }),
-                    AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                        AstAtomId(3),
-                        AstAtomConstraintAst::degree(2),
+                    GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+                        GraphIrAtomId(3),
+                        GraphIrAtomConstraintAst::degree(2),
                     ))),
                 ]
                 .into_iter()
@@ -5466,13 +5528,13 @@ mod tests {
     #[rstest]
     fn test_deltas_iter() {
         let expected = vec![
-            AstDelta::Atom(AstAtomDelta::Add {
-                id: AstAtomId(3),
-                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(3),
+                ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
             }),
-            AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
-                AstAtomId(3),
-                AstAtomConstraintAst::degree(2),
+            GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
+                GraphIrAtomId(3),
+                GraphIrAtomConstraintAst::degree(2),
             ))),
         ];
         Python::attach(|py| {
@@ -5492,12 +5554,12 @@ mod tests {
 
     #[rstest]
     #[case::empty(Vec::new())]
-    #[case::populated(vec![AstDelta::Atom(AstAtomDelta::Add {
-        id: AstAtomId(3),
-        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    #[case::populated(vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+        id: GraphIrAtomId(3),
+        ast: GraphIrAtomAst::new(GraphIrElementAst::Lit(ChemElement::C)),
     })])]
-    fn test_deltas_roundtrip(#[case] entries: Vec<AstDelta>) {
-        let rust: AstDeltas = entries.into_iter().collect();
+    fn test_deltas_roundtrip(#[case] entries: Vec<GraphIrDelta>) {
+        let rust: GraphIrDeltas = entries.into_iter().collect();
         assert_eq!(Deltas::from_rust(rust.clone()).to_rust(), rust);
     }
 }

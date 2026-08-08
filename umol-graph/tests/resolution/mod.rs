@@ -9,12 +9,12 @@ use std::path::{Component, Path, PathBuf};
 
 use insta::{assert_snapshot, Settings};
 use rstest::*;
-use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
-use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, StereoModel, ValenceModel};
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ValenceTable;
+use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
+use umol_graph_ir::ir::{FromAst, IntoAst, MoleculeAst};
 use umol_utils::solution::Solution;
 
 #[derive(FromEdn)]

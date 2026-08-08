@@ -1,8 +1,8 @@
 //! Raise-time stereo helpers for `super`: ligand orderings, directional-bond faces, and the
 //! capability/validation predicates the `raise_*` functions build on.
 
-use umol_ast::ast::NoncovalentBondKind;
 use umol_geometric_core::{complementary_direction, signed_volume, Point3D};
+use umol_graph_ir::ir::NoncovalentBondKind;
 
 use super::RaiseError;
 use crate::table_ir::bond::{BondNoncovalent as TableNoncovalent, BondOrder as TableBondOrder};

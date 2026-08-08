@@ -3,8 +3,8 @@
 use std::any::Any;
 
 use thiserror::Error;
-use umol_ast::ast::{AtomId, MoleculeAst, ReactionAst, TryIntoAst};
 use umol_graph_core::Correspondence;
+use umol_graph_ir::ir::{AtomId, MoleculeAst, ReactionAst, TryIntoAst};
 use umol_io::smiles::{ParseError as SmilesParseError, ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
 use umol_io::table_ir::Molecule as TableMolecule;
@@ -270,11 +270,11 @@ mod tests {
     use std::error::Error as _;
 
     use rstest::rstest;
-    use umol_ast::ast::{
+    use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceAst, AtomId, BooleanAst, Deltas, ElectronCountsAst,
         StereoCoset, TetrahedralStereoAst, ValueAst,
     };
-    use umol_ast::{atom_dsl, mol_dsl};
+    use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::aromaticity::{

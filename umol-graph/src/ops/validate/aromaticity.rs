@@ -2,7 +2,7 @@
 //! aromatic constraints and systems agree with the selected model.
 
 use thiserror::Error;
-use umol_ast::ast::MoleculeAst;
+use umol_graph_ir::ir::MoleculeAst;
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
@@ -60,12 +60,12 @@ impl AromaticityConformanceValidator {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{AromaticSystemId, AtomId, BondId, RingConfig};
-    use umol_ast::mol_dsl;
     use umol_graph_core::{
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
+    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, RingConfig};
+    use umol_graph_ir::mol_dsl;
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};

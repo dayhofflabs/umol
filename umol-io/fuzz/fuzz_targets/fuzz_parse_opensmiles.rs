@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
+use umol_graph_ir::ir::{MoleculeAst, TryIntoAst};
 use umol_io::smiles::Smiles;
 
 fuzz_target!(|data: &[u8]| {

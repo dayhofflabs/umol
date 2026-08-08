@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{FileFailurePersistence, TestCaseResult};
-use umol_ast::ast::{RingConfig, RingModel};
+use umol_graph_ir::ir::{RingConfig, RingModel};
 
 use super::REGRESSION_FILE;
 use crate::strategies::*;

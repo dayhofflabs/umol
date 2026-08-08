@@ -8,11 +8,11 @@ use std::collections::BTreeMap;
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
-use umol_ast::ast::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, UnpairedElectronsAst,
-};
 use umol_chem::element::Element;
 use umol_graph_core::ConnectedComponentsAlgorithm;
+use umol_graph_ir::ir::{
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, UnpairedElectronsAst,
+};
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use crate::ops::model::ElementScope;
@@ -303,11 +303,11 @@ pub struct HmoOutput {
 mod tests {
     use float_cmp::*;
     use rstest::*;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_ir::ir::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, MoleculeAst,
         MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
     };
-    use umol_chem::element::Element;
 
     use super::*;
 

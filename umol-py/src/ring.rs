@@ -1,14 +1,14 @@
 //! Python bindings for ring-enumeration configuration.
 
 use pyo3::prelude::*;
-use umol_ast::ast::RingConfig as AstRingConfig;
+use umol_graph_ir::ir::RingConfig as GraphIrRingConfig;
 
 use crate::algorithm::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
 
 /// Algorithms used to compute each supported ring-set kind.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RingConfig(AstRingConfig);
+pub struct RingConfig(GraphIrRingConfig);
 
 #[pymethods]
 impl RingConfig {
@@ -19,7 +19,7 @@ impl RingConfig {
         relevant_cycle_algorithm: Option<RelevantCycleEnumerationAlgorithm>,
     ) -> Self {
         let defaults = Self::default().0;
-        Self(AstRingConfig {
+        Self(GraphIrRingConfig {
             simple_cycle_algorithm: simple_cycle_algorithm
                 .map_or(defaults.simple_cycle_algorithm, |algorithm| {
                     algorithm.to_rust()
@@ -55,7 +55,7 @@ impl RingConfig {
         dead_code,
         reason = "Rust-to-Python conversion API for ring-consuming configurations"
     )]
-    pub(crate) fn from_rust(config: AstRingConfig) -> Self {
+    pub(crate) fn from_rust(config: GraphIrRingConfig) -> Self {
         Self(config)
     }
 
@@ -63,7 +63,7 @@ impl RingConfig {
         dead_code,
         reason = "Python-to-Rust conversion API for ring-consuming configurations"
     )]
-    pub(crate) fn to_rust(self) -> AstRingConfig {
+    pub(crate) fn to_rust(self) -> GraphIrRingConfig {
         self.0
     }
 }
@@ -82,13 +82,13 @@ mod tests {
     #[case::default(
         None,
         None,
-        AstRingConfig::default(),
+        GraphIrRingConfig::default(),
         "RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())",
     )]
     #[case::explicit(
         Some(SimpleCycleEnumerationAlgorithm::ReadTarjan()),
         Some(RelevantCycleEnumerationAlgorithm::Vismara()),
-        AstRingConfig {
+        GraphIrRingConfig {
             simple_cycle_algorithm: GraphCoreSimpleCycleEnumerationAlgorithm::ReadTarjan,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         },
@@ -97,7 +97,7 @@ mod tests {
     fn test_ring_config_new(
         #[case] simple_cycle_algorithm: Option<SimpleCycleEnumerationAlgorithm>,
         #[case] relevant_cycle_algorithm: Option<RelevantCycleEnumerationAlgorithm>,
-        #[case] expected: AstRingConfig,
+        #[case] expected: GraphIrRingConfig,
         #[case] expected_repr: &str,
     ) {
         let config = RingConfig::new(simple_cycle_algorithm, relevant_cycle_algorithm);
@@ -107,8 +107,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(AstRingConfig::default())]
-    fn test_ring_config_from_rust(#[case] config: AstRingConfig) {
+    #[case::default(GraphIrRingConfig::default())]
+    fn test_ring_config_from_rust(#[case] config: GraphIrRingConfig) {
         assert_eq!(RingConfig::from_rust(config).to_rust(), config);
     }
 }

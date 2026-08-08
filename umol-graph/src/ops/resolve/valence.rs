@@ -2,7 +2,7 @@
 //! defined in [`crate::ops::valence`].
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
     MoleculeAst, TransactionError,
 };
@@ -102,12 +102,12 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_ir::ir::{
         AtomConstraintAst, AtomFieldChange, AtomHandle, AtomId, Edit, Edits, IsotopeMassAst,
         ValueAst,
     };
-    use umol_ast::{atom_dsl, mol_dsl};
-    use umol_chem::element::Element;
+    use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};

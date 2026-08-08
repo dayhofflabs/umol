@@ -17,11 +17,11 @@
 use std::ops::ControlFlow;
 use std::sync::LazyLock;
 
-use umol_ast::ast::{
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_ir::ir::{
     AsLit, BondId, MoleculeAst, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
-use umol_ast::mol_dsl;
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_ir::mol_dsl;
 
 use super::bit_fp::BitFp;
 use super::feature_set::FeatureSet;

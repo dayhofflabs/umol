@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::dsl::{
+use umol_graph_ir::dsl::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     StereoAtomRef, StereoBondRef,
 };

@@ -1,4 +1,4 @@
-use umol_ast::mol;
+use umol_graph_ir::mol;
 
 fn main() {
     // `^name` port markers belong to `frag!`; `mol!` must reject them.

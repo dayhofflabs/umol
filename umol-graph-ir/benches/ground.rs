@@ -14,13 +14,13 @@ use std::collections::BTreeSet;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_ast::ast::{
+use umol_chem::element::Element;
+use umol_edn::FromEdn;
+use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
+use umol_graph_ir::ir::{
     AtomAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp, MoleculeAst,
     MoleculeEntries, RelOp, UnpairedElectronsAst, ValueAst, ValuePredicate, ValueTerm,
 };
-use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_chem::element::Element;
-use umol_edn::FromEdn;
 
 #[path = "fixtures.rs"]
 #[allow(dead_code)]

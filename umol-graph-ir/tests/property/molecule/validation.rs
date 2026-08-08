@@ -3,13 +3,13 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
-use umol_ast::ast::{
-    AtomAst, AtomConstraintAst, AtomId, Constraint, ConstraintValidateConfig, ConstraintValidator,
-    Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
-};
 use umol_chem::element::Element;
 use umol_graph_core::{
     ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
+use umol_graph_ir::ir::{
+    AtomAst, AtomConstraintAst, AtomId, Constraint, ConstraintValidateConfig, ConstraintValidator,
+    Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
 };
 
 use super::REGRESSION_FILE;

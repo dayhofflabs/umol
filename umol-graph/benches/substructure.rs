@@ -11,11 +11,6 @@ use std::fs::read_to_string;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-use umol_ast::ast::{
-    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig, ValueAst,
-};
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
@@ -23,6 +18,11 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 };
 use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+};
+use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
+use umol_graph_ir::ir::{
+    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig, ValueAst,
 };
 use walkdir::WalkDir;
 

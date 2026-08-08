@@ -8,8 +8,8 @@
 //! no-op: re-aromatizing requires kekulizing first.
 
 use thiserror::Error;
-use umol_ast::ast::{AtomView, ElementAst, MoleculeAst, ValueAst};
 use umol_chem::element::Element;
+use umol_graph_ir::ir::{AtomView, ElementAst, MoleculeAst, ValueAst};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
@@ -103,16 +103,16 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
-        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst,
-        MoleculeEntries, RingConfig, UnpairedElectronsAst,
-    };
-    use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
     use umol_graph_core::{
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
+    use umol_graph_ir::ir::{
+        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst,
+        MoleculeEntries, RingConfig, UnpairedElectronsAst,
+    };
+    use umol_graph_ir::mol_dsl_ground;
 
     use super::*;
 

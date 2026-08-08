@@ -4,12 +4,12 @@ use std::fmt::Debug;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use umol_ast::ast::{
+use umol_graph_core::{Correspondence as GraphCoreCorrespondence, NodeId};
+use umol_graph_ir::ir::{
     AromaticSystemId, AtomId, BondId, DativeBondId,
-    MoleculeCorrespondence as AstMoleculeCorrespondence, MulticenterBondId, NoncovalentBondId,
+    MoleculeCorrespondence as GraphIrMoleculeCorrespondence, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use umol_graph_core::{Correspondence as GraphCoreCorrespondence, NodeId};
 
 /// An id that can cross the Python boundary as an integer index.
 pub(crate) trait CorrespondenceId: Copy + Debug + Ord + From<usize> {
@@ -184,7 +184,7 @@ impl Correspondence {
 /// A read-only correspondence across every molecule entity family.
 #[pyclass(eq, frozen, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MoleculeCorrespondence(AstMoleculeCorrespondence);
+pub struct MoleculeCorrespondence(GraphIrMoleculeCorrespondence);
 
 #[pymethods]
 impl MoleculeCorrespondence {
@@ -261,7 +261,7 @@ impl MoleculeCorrespondence {
                 Ok(item.borrow().0.clone())
             })
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(AstMoleculeCorrespondence::compose_all(correspondences).map(Self))
+        Ok(GraphIrMoleculeCorrespondence::compose_all(correspondences).map(Self))
     }
 
     fn __repr__(&self) -> String {
@@ -289,11 +289,11 @@ impl MoleculeCorrespondence {
         dead_code,
         reason = "Rust-to-Python conversion API for molecule correspondence values"
     )]
-    pub(crate) fn from_rust(correspondence: AstMoleculeCorrespondence) -> Self {
+    pub(crate) fn from_rust(correspondence: GraphIrMoleculeCorrespondence) -> Self {
         Self(correspondence)
     }
 
-    pub(crate) fn inner(&self) -> &AstMoleculeCorrespondence {
+    pub(crate) fn inner(&self) -> &GraphIrMoleculeCorrespondence {
         &self.0
     }
 }
@@ -306,8 +306,8 @@ mod tests {
     use super::*;
 
     #[fixture]
-    fn molecule_correspondence() -> AstMoleculeCorrespondence {
-        AstMoleculeCorrespondence::new(
+    fn molecule_correspondence() -> GraphIrMoleculeCorrespondence {
+        GraphIrMoleculeCorrespondence::new(
             GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(1))], 2, 3)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             GraphCoreCorrespondence::new(vec![(BondId(0), BondId(2))], 1, 3)
@@ -712,7 +712,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_correspondence_accessors(molecule_correspondence: AstMoleculeCorrespondence) {
+    fn test_molecule_correspondence_accessors(
+        molecule_correspondence: GraphIrMoleculeCorrespondence,
+    ) {
         let correspondence = MoleculeCorrespondence::from_rust(molecule_correspondence);
 
         assert_eq!(
@@ -774,7 +776,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty_spaces(AstMoleculeCorrespondence::new(
+    #[case::empty_spaces(GraphIrMoleculeCorrespondence::new(
         GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
@@ -784,22 +786,26 @@ mod tests {
         GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
         GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
     ))]
-    fn test_molecule_correspondence_is_total(#[case] correspondence: AstMoleculeCorrespondence) {
+    fn test_molecule_correspondence_is_total(
+        #[case] correspondence: GraphIrMoleculeCorrespondence,
+    ) {
         assert!(MoleculeCorrespondence::from_rust(correspondence).is_total());
     }
 
     #[rstest]
     fn test_molecule_correspondence_is_total_partial(
-        molecule_correspondence: AstMoleculeCorrespondence,
+        molecule_correspondence: GraphIrMoleculeCorrespondence,
     ) {
         assert!(!MoleculeCorrespondence::from_rust(molecule_correspondence).is_total());
     }
 
     #[rstest]
-    fn test_molecule_correspondence_reverse(molecule_correspondence: AstMoleculeCorrespondence) {
+    fn test_molecule_correspondence_reverse(
+        molecule_correspondence: GraphIrMoleculeCorrespondence,
+    ) {
         assert_eq!(
             MoleculeCorrespondence::from_rust(molecule_correspondence).reverse(),
-            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
+            MoleculeCorrespondence::from_rust(GraphIrMoleculeCorrespondence::new(
                 GraphCoreCorrespondence::new(vec![(AtomId(1), AtomId(0))], 3, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 GraphCoreCorrespondence::new(vec![(BondId(2), BondId(0))], 3, 1)
@@ -836,13 +842,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_correspondence_compose(molecule_correspondence: AstMoleculeCorrespondence) {
+    fn test_molecule_correspondence_compose(
+        molecule_correspondence: GraphIrMoleculeCorrespondence,
+    ) {
         let left = MoleculeCorrespondence::from_rust(molecule_correspondence.clone());
         let right = left.reverse();
 
         assert_eq!(
             left.compose(&right),
-            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::new(
+            MoleculeCorrespondence::from_rust(GraphIrMoleculeCorrespondence::new(
                 GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(0))], 2, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 GraphCoreCorrespondence::new(vec![(BondId(0), BondId(0))], 1, 1)
@@ -880,7 +888,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_correspondence_compose_all(
-        molecule_correspondence: AstMoleculeCorrespondence,
+        molecule_correspondence: GraphIrMoleculeCorrespondence,
     ) {
         Python::attach(|py| {
             let left = MoleculeCorrespondence::from_rust(molecule_correspondence);
@@ -912,7 +920,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_correspondence_value(molecule_correspondence: AstMoleculeCorrespondence) {
+    fn test_molecule_correspondence_value(molecule_correspondence: GraphIrMoleculeCorrespondence) {
         Python::attach(|py| {
             let correspondence = Py::new(
                 py,

@@ -1,6 +1,6 @@
 fn main() {
     // `x` is referenced but never declared — the macro must reject this at compile time.
-    let _ = umol_ast::mol! {
+    let _ = umol_graph_ir::mol! {
         (c: C) - (x),
     };
 }

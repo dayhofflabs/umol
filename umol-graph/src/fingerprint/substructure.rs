@@ -11,8 +11,8 @@
 
 use std::ops::ControlFlow;
 
-use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{AutomorphismAlgorithm, GraphCorrespondence, SubgraphEnumerationAlgorithm};
+use umol_graph_ir::ir::{AsLit, AtomId, BondId, MoleculeAst};
 
 use super::feature_set::FeatureSet;
 use super::featurizer::FingerprintError;
@@ -111,7 +111,7 @@ fn canonical_key(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_ground;
 
     use super::*;
 

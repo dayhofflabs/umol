@@ -12,8 +12,8 @@ use std::borrow::Cow;
 
 use strum::EnumCount;
 use thiserror::Error;
-use umol_ast::ast::StereoKind;
 use umol_chem::element::Element;
+use umol_graph_ir::ir::StereoKind;
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 

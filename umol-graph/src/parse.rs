@@ -2,7 +2,7 @@
 //!
 //! SMILES ingestion lives in [`crate::ingest`].
 
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
+use umol_graph_ir::ir::{MoleculeAst, TryIntoAst};
 use umol_io::ctfile::config::CtfileIoConfig;
 use umol_io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
 use umol_utils::error::UmolError;
@@ -57,8 +57,8 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::*;
-    use umol_ast::ast::{AromaticValenceAst, AtomId, ValueAst};
     use umol_chem::element::Element;
+    use umol_graph_ir::ir::{AromaticValenceAst, AtomId, ValueAst};
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ast;
 

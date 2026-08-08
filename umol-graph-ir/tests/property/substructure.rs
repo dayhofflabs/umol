@@ -1,14 +1,14 @@
 use proptest::prelude::*;
-use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-use umol_ast::ast::{
-    AtomId, EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig,
-};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+};
+use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
+use umol_graph_ir::ir::{
+    AtomId, EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig,
 };
 use umol_utils::solution::Solution;
 

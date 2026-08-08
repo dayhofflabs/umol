@@ -1,12 +1,12 @@
 use rstest::rstest;
 use serde::Deserialize;
-use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-    MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
-};
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
 use umol_graph_core::MaximumIndependentSetAlgorithm;
+use umol_graph_ir::ir::{
+    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
+    MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
+};
 
 #[derive(Deserialize)]
 struct GraphFixture {

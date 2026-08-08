@@ -1,5 +1,5 @@
 use proptest::prelude::*;
-use umol_ast::ast::StereoKind;
+use umol_graph_ir::ir::StereoKind;
 
 use crate::strategies::*;
 

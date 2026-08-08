@@ -25,7 +25,7 @@ pub use stereo::{
     StereoResolveConfig, StereoResolver,
 };
 use thiserror::Error;
-use umol_ast::ast::{MoleculeAst, Transaction, TransactionError};
+use umol_graph_ir::ir::{MoleculeAst, Transaction, TransactionError};
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
@@ -354,12 +354,12 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_ir::ir::{
         AtomConstraintAst, AtomId, EntityKind, IncidenceConstraintContradiction,
         MulticenterValenceAst,
     };
-    use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
-    use umol_chem::element::Element;
+    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::aromaticity::{AromaticityError, AromaticityInconsistency};

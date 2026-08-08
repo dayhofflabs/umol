@@ -3,7 +3,7 @@
 //! valence and aromaticity passes.
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     BondHandle, BondUpdate, Edits, Lattice, MoleculeAst, TransactionError, UnpairedElectronsAst,
     ValueAst,
 };
@@ -65,8 +65,8 @@ impl BondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{BondFieldChange, BondId, Edit, Edits};
-    use umol_ast::mol_dsl;
+    use umol_graph_ir::ir::{BondFieldChange, BondId, Edit, Edits};
+    use umol_graph_ir::mol_dsl;
 
     use super::*;
 

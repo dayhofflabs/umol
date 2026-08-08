@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AtomConstraintAst, AtomHandle, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
     CisTransStereoAst, Edits, Lattice, MoleculeAst, StereoAtomHandle, StereoBondHandle,
     TetrahedralStereoAst, TransactionError,
@@ -362,11 +362,11 @@ impl StereoResolver {
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{
+    use umol_graph_ir::ir::{
         AtomId, BondId, Edit, Edits, StereoAtomAst, StereoAtomId, StereoBondAst, StereoBondId,
         StereoCoset, StereoKind, StereoLigandKind,
     };
-    use umol_ast::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_ground;
 
     use super::*;
 

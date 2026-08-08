@@ -6,11 +6,11 @@ use std::vec::IntoIter;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
-use umol_ast::ast::{
-    AtomId as AstAtomId, MoleculeAst as AstMoleculeAst,
-    MulticenterBondAst as AstMulticenterBondAst, MulticenterBondId as AstMulticenterBondId,
-    MulticenterBondUpdate as AstMulticenterBondUpdate,
-    MulticenterBondView as AstMulticenterBondView,
+use umol_graph_ir::ir::{
+    AtomId as GraphIrAtomId, MoleculeAst as GraphIrMoleculeAst,
+    MulticenterBondAst as GraphIrMulticenterBondAst, MulticenterBondId as GraphIrMulticenterBondId,
+    MulticenterBondUpdate as GraphIrMulticenterBondUpdate,
+    MulticenterBondView as GraphIrMulticenterBondView,
 };
 
 use crate::constraint::multicenter::{
@@ -33,7 +33,7 @@ use crate::value::{ValueAst, ValueLike};
 /// Attribute updates for a multicenter bond.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
-pub struct MulticenterBondUpdate(AstMulticenterBondUpdate);
+pub struct MulticenterBondUpdate(GraphIrMulticenterBondUpdate);
 
 #[pymethods]
 impl MulticenterBondUpdate {
@@ -46,7 +46,7 @@ impl MulticenterBondUpdate {
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
-        Self::from_rust(&AstMulticenterBondUpdate {
+        Self::from_rust(&GraphIrMulticenterBondUpdate {
             electrons: electrons.map(|value| value.to_rust(py)),
             charge: charge.map(|value| value.to_rust(py)),
             unpaired_electrons: unpaired_electrons
@@ -61,7 +61,7 @@ impl MulticenterBondUpdate {
     /// Parse a multicenter-bond-update DSL string into a `MulticenterBondUpdate`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstMulticenterBondUpdate::from_str(s)
+        GraphIrMulticenterBondUpdate::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -108,11 +108,11 @@ impl MulticenterBondUpdate {
 }
 
 impl MulticenterBondUpdate {
-    pub(crate) fn from_rust(update: &AstMulticenterBondUpdate) -> Self {
+    pub(crate) fn from_rust(update: &GraphIrMulticenterBondUpdate) -> Self {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> AstMulticenterBondUpdate {
+    pub(crate) fn to_rust(&self) -> GraphIrMulticenterBondUpdate {
         self.0.clone()
     }
 }
@@ -123,7 +123,7 @@ impl MulticenterBondUpdate {
 /// `electrons` vector is positional, aligned to that atom order.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct MulticenterBondAst(AstMulticenterBondAst);
+pub struct MulticenterBondAst(GraphIrMulticenterBondAst);
 
 #[pymethods]
 impl MulticenterBondAst {
@@ -138,7 +138,7 @@ impl MulticenterBondAst {
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
-        let mut bond = AstMulticenterBondAst::new(electrons.to_rust(py));
+        let mut bond = GraphIrMulticenterBondAst::new(electrons.to_rust(py));
         if let Some(charge) = charge {
             bond = bond.with_charge(charge.to_rust(py));
         }
@@ -154,7 +154,7 @@ impl MulticenterBondAst {
     /// Parse a multicenter-bond-DSL string (e.g. `"[1,1,1]#e6"`) into a `MulticenterBondAst`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstMulticenterBondAst::from_str(s)
+        GraphIrMulticenterBondAst::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -236,29 +236,29 @@ impl MulticenterBondAst {
 
 impl MulticenterBondAst {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &AstMulticenterBondAst {
+    pub(crate) fn inner(&self) -> &GraphIrMulticenterBondAst {
         &self.0
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut AstMulticenterBondAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrMulticenterBondAst {
         &mut self.0
     }
 
     /// Wrap an owned Rust multicenter-bond AST.
-    pub(crate) fn from_inner(bond: AstMulticenterBondAst) -> Self {
+    pub(crate) fn from_inner(bond: GraphIrMulticenterBondAst) -> Self {
         MulticenterBondAst(bond)
     }
 }
 
 impl_py_lattice!(
     MulticenterBondAst,
-    AstMulticenterBondAst,
-    |value: &MulticenterBondAst, _py: Python<'_>| -> PyResult<AstMulticenterBondAst> {
+    GraphIrMulticenterBondAst,
+    |value: &MulticenterBondAst, _py: Python<'_>| -> PyResult<GraphIrMulticenterBondAst> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: AstMulticenterBondAst| -> PyResult<MulticenterBondAst> {
+    |_py: Python<'_>, value: GraphIrMulticenterBondAst| -> PyResult<MulticenterBondAst> {
         Ok(MulticenterBondAst::from_inner(value))
     }
 );
@@ -270,14 +270,14 @@ impl_py_lattice!(
 #[pyclass]
 pub struct MulticenterBondView {
     owner: Py<MoleculeAst>,
-    id: AstMulticenterBondId,
+    id: GraphIrMulticenterBondId,
 }
 
 impl MulticenterBondView {
     fn multicenter_bond<'a>(
         &self,
-        molecule: &'a AstMoleculeAst,
-    ) -> PyResult<AstMulticenterBondView<'a>> {
+        molecule: &'a GraphIrMoleculeAst,
+    ) -> PyResult<GraphIrMulticenterBondView<'a>> {
         molecule
             .multicenter_bonds()
             .get(self.id)
@@ -419,9 +419,9 @@ impl MulticenterBondView {
 /// existing multicenter bond id, or `IndexError`. `MulticenterBondId` is `RelationId`-
 /// backed but contiguous for fresh molecules, so integer positions address it directly.
 fn resolve_multicenter_bond_index(
-    molecule: &AstMoleculeAst,
+    molecule: &GraphIrMoleculeAst,
     index: isize,
-) -> PyResult<AstMulticenterBondId> {
+) -> PyResult<GraphIrMulticenterBondId> {
     let count = molecule.multicenter_bonds().count();
     let resolved = if index < 0 {
         index + count as isize
@@ -431,7 +431,7 @@ fn resolve_multicenter_bond_index(
     if resolved < 0 {
         return Err(PyIndexError::new_err("multicenter bond id out of range"));
     }
-    let id = AstMulticenterBondId(resolved as u32);
+    let id = GraphIrMulticenterBondId(resolved as u32);
     if molecule.multicenter_bonds().contains(id) {
         Ok(id)
     } else {
@@ -496,7 +496,7 @@ impl MulticenterBondViews {
         molecule
             .inner()
             .multicenter_bonds()
-            .of_id(atoms.into_iter().map(AstAtomId))
+            .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| MulticenterBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -509,7 +509,7 @@ impl MulticenterBondViews {
         molecule
             .inner()
             .multicenter_bonds()
-            .incident_ids(AstAtomId(atom))
+            .incident_ids(GraphIrAtomId(atom))
             .map(|id| MulticenterBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -543,7 +543,7 @@ impl MulticenterBondViews {
 #[pyclass]
 struct MulticenterBondViewIter {
     owner: Py<MoleculeAst>,
-    ids: IntoIter<AstMulticenterBondId>,
+    ids: IntoIter<GraphIrMulticenterBondId>,
 }
 
 #[pymethods]
@@ -563,14 +563,15 @@ impl MulticenterBondViewIter {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AtomAst as AstAtomAst, AtomId as AstAtomId, ElectronCountsAst as AstElectronCountsAst,
-        MoleculeEntries, MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
-        MulticenterBondConstraintKey as AstMulticenterBondConstraintKey,
-        MulticenterBondConstraintsAst as AstMulticenterBondConstraintsAst,
-        UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
-    };
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_ir::ir::{
+        AtomAst as GraphIrAtomAst, AtomId as GraphIrAtomId,
+        ElectronCountsAst as GraphIrElectronCountsAst, MoleculeEntries,
+        MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
+        MulticenterBondConstraintKey as GraphIrMulticenterBondConstraintKey,
+        MulticenterBondConstraintsAst as GraphIrMulticenterBondConstraintsAst,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+    };
 
     use super::*;
     use crate::convert::into_py_variant;
@@ -578,11 +579,11 @@ mod tests {
     /// Three borons (atom ids 0–2) joined by one 3-center multicenter bond over all
     /// three (electrons `[1,1,1]`), multicenter bond id 0.
     fn three_center_bond(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AstAtomAst::from_element(ChemElement::B); 3],
+        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![GraphIrAtomAst::from_element(ChemElement::B); 3],
             multicenter: vec![(
-                (0u32..3).map(AstAtomId).collect(),
-                AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+                (0u32..3).map(GraphIrAtomId).collect(),
+                GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
             )],
             ..Default::default()
         });
@@ -592,7 +593,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_ast_new() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = AstUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons_ast = GraphIrUnpairedElectronsAst::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
                 UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
@@ -607,9 +608,9 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().electrons,
-                AstElectronCountsAst::Lit(vec![1, 1, 1])
+                GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
             );
-            assert_eq!(bond.inner().charge, AstValueAst::Lit(-2));
+            assert_eq!(bond.inner().charge, GraphIrValueAst::Lit(-2));
             assert_eq!(bond.inner().unpaired_electrons, unpaired_electrons_ast);
         });
     }
@@ -621,7 +622,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -637,7 +638,7 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().constraints.electron_count(),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -664,17 +665,17 @@ mod tests {
     fn test_multicenter_bond_ast_electrons() {
         Python::attach(|py| {
             let mut bond =
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ]));
             assert_eq!(
                 bond.electrons().to_rust(),
-                AstElectronCountsAst::Lit(vec![1, 1, 1])
+                GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
             );
             bond.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2]));
             assert_eq!(
                 bond.electrons().to_rust(),
-                AstElectronCountsAst::Lit(vec![2, 2])
+                GraphIrElectronCountsAst::Lit(vec![2, 2])
             );
         });
     }
@@ -683,25 +684,28 @@ mod tests {
     fn test_multicenter_bond_ast_charge() {
         Python::attach(|py| {
             let mut bond =
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ]));
             bond.set_charge(py, ValueLike::Lit(-1));
-            assert_eq!(bond.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
+            assert_eq!(
+                bond.charge(py).unwrap().to_rust(py),
+                GraphIrValueAst::Lit(-1)
+            );
         });
     }
 
     #[rstest]
     fn test_multicenter_bond_ast_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = AstUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons_ast = GraphIrUnpairedElectronsAst::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
                 UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
             )
             .unwrap();
             let mut bond =
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ]));
             bond.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
@@ -718,8 +722,8 @@ mod tests {
             let src = Py::new(
                 py,
                 MulticenterBondAst::from_inner(
-                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
-                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                    GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(GraphIrMulticenterBondConstraintAst::electron_count(6)),
                 ),
             )
             .unwrap();
@@ -732,7 +736,7 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -745,7 +749,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.electron_count(),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -754,8 +758,8 @@ mod tests {
     fn test_multicenter_bond_ast_asdict() {
         Python::attach(|py| {
             let bond = MulticenterBondAst::from_inner(
-                AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
-                    .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                    .with_constraint(GraphIrMulticenterBondConstraintAst::electron_count(6)),
             );
             let dict = bond.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
@@ -773,7 +777,7 @@ mod tests {
         Python::attach(|py| {
             let view = MulticenterBondView {
                 owner: three_center_bond(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(view.id(), 0);
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
@@ -788,20 +792,20 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
                 view.electrons(py).unwrap().to_rust(),
-                AstElectronCountsAst::Lit(vec![1, 1, 1])
+                GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
             );
             view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2]));
             let fresh = MulticenterBondView {
                 owner,
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
                 fresh.electrons(py).unwrap().to_rust(),
-                AstElectronCountsAst::Lit(vec![2, 2, 2])
+                GraphIrElectronCountsAst::Lit(vec![2, 2, 2])
             );
         });
     }
@@ -812,21 +816,24 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             view.set_charge(py, ValueLike::Lit(-1));
             let fresh = MulticenterBondView {
                 owner,
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
-            assert_eq!(fresh.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
+            assert_eq!(
+                fresh.charge(py).unwrap().to_rust(py),
+                GraphIrValueAst::Lit(-1)
+            );
         });
     }
 
     #[rstest]
     fn test_multicenter_bond_view_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = AstUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons_ast = GraphIrUnpairedElectronsAst::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
                 UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
@@ -835,12 +842,12 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
             let fresh = MulticenterBondView {
                 owner,
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
                 fresh.unpaired_electrons(py).unwrap().to_rust(py),
@@ -854,11 +861,11 @@ mod tests {
         Python::attach(|py| {
             let view = MulticenterBondView {
                 owner: three_center_bond(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             match view.constraints(py).backing {
                 MulticenterBondConstraintsBacking::Molecule { id, .. } => {
-                    assert_eq!(id, AstMulticenterBondId(0))
+                    assert_eq!(id, GraphIrMulticenterBondId(0))
                 }
                 _ => panic!("expected molecule-backed view"),
             }
@@ -871,7 +878,7 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             let constraints = Py::new(
                 py,
@@ -881,7 +888,7 @@ mod tests {
                         py,
                         MulticenterBondConstraintAst::from_rust(
                             py,
-                            &AstMulticenterBondConstraintAst::electron_count(6),
+                            &GraphIrMulticenterBondConstraintAst::electron_count(6),
                         )
                         .unwrap(),
                     )
@@ -893,7 +900,7 @@ mod tests {
                 .unwrap();
             let fresh = MulticenterBondView {
                 owner,
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
                 fresh
@@ -901,7 +908,7 @@ mod tests {
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -911,7 +918,7 @@ mod tests {
         Python::attach(|py| {
             let view = MulticenterBondView {
                 owner: three_center_bond(py),
-                id: AstMulticenterBondId(0),
+                id: GraphIrMulticenterBondId(0),
             };
             let dict = view.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
@@ -957,7 +964,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     2, 2, 2,
                 ])),
             )
@@ -969,7 +976,7 @@ mod tests {
             // value replaced, members preserved
             assert_eq!(
                 view.electrons(py).unwrap().to_rust(),
-                AstElectronCountsAst::Lit(vec![2, 2, 2])
+                GraphIrElectronCountsAst::Lit(vec![2, 2, 2])
             );
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
             assert_eq!(atom_ids, vec![0, 1, 2]);
@@ -984,7 +991,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1011,11 +1018,11 @@ mod tests {
     fn test_multicenter_bond_views_incident() {
         Python::attach(|py| {
             // three borons bonded plus one isolated boron (atom id 3)
-            let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AstAtomAst::from_element(ChemElement::B); 4],
+            let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+                atoms: vec![GraphIrAtomAst::from_element(ChemElement::B); 4],
                 multicenter: vec![(
-                    (0u32..3).map(AstAtomId).collect(),
-                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+                    (0u32..3).map(GraphIrAtomId).collect(),
+                    GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
                 )],
                 ..Default::default()
             });
@@ -1049,33 +1056,33 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraint_key_roundtrip() {
         let key = MulticenterBondConstraintKey::from_rust(
-            &AstMulticenterBondConstraintKey::ElectronCount,
+            &GraphIrMulticenterBondConstraintKey::ElectronCount,
         );
         assert_eq!(
             key.to_rust(),
-            AstMulticenterBondConstraintKey::ElectronCount
+            GraphIrMulticenterBondConstraintKey::ElectronCount
         );
     }
 
     #[rstest]
     fn test_multicenter_bond_constraint_ast_key() {
         Python::attach(|py| {
-            let constraint = AstMulticenterBondConstraintAst::electron_count(6);
+            let constraint = GraphIrMulticenterBondConstraintAst::electron_count(6);
             let key = MulticenterBondConstraintAst::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
             assert_eq!(
                 key.to_rust(),
-                AstMulticenterBondConstraintKey::ElectronCount
+                GraphIrMulticenterBondConstraintKey::ElectronCount
             );
         });
     }
 
     #[rstest]
-    #[case(AstMulticenterBondConstraintAst::electron_count(6))]
-    #[case(AstMulticenterBondConstraintAst::electron_count(AstValueAst::Undetermined))]
+    #[case(GraphIrMulticenterBondConstraintAst::electron_count(6))]
+    #[case(GraphIrMulticenterBondConstraintAst::electron_count(GraphIrValueAst::Undetermined))]
     fn test_multicenter_bond_constraint_ast_roundtrip(
-        #[case] ast: AstMulticenterBondConstraintAst,
+        #[case] ast: GraphIrMulticenterBondConstraintAst,
     ) {
         Python::attach(|py| {
             assert_eq!(
@@ -1094,7 +1101,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1103,7 +1110,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1115,7 +1122,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1136,7 +1143,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1145,7 +1152,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1157,7 +1164,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1167,7 +1174,7 @@ mod tests {
             let removed = constraints.pop(py, key).unwrap();
             match removed {
                 Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1179,8 +1186,8 @@ mod tests {
     fn test_multicenter_bond_constraints_ast_update() {
         Python::attach(|py| {
             let constraints = Py::new(py, MulticenterBondConstraintsAst::new(py, vec![])).unwrap();
-            let mut other = AstMulticenterBondConstraintsAst::new();
-            other.set(AstMulticenterBondConstraintAst::electron_count(6));
+            let mut other = GraphIrMulticenterBondConstraintsAst::new();
+            other.set(GraphIrMulticenterBondConstraintAst::electron_count(6));
             MulticenterBondConstraintsAst::update(
                 constraints.clone_ref(py),
                 py,
@@ -1193,7 +1200,7 @@ mod tests {
             assert_eq!(c.__len__(), 1);
             assert_eq!(
                 c.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1206,7 +1213,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1221,7 +1228,7 @@ mod tests {
             assert_eq!(c.__len__(), 1);
             assert_eq!(
                 c.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1235,7 +1242,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1255,7 +1262,7 @@ mod tests {
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1268,8 +1275,8 @@ mod tests {
             let bond = Py::new(
                 py,
                 MulticenterBondAst::from_inner(
-                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
-                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                    GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(GraphIrMulticenterBondConstraintAst::electron_count(6)),
                 ),
             )
             .unwrap();
@@ -1288,7 +1295,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.electron_count(),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1301,8 +1308,8 @@ mod tests {
             let bond = Py::new(
                 py,
                 MulticenterBondAst::from_inner(
-                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
-                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                    GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(GraphIrMulticenterBondConstraintAst::electron_count(6)),
                 ),
             )
             .unwrap();
@@ -1320,7 +1327,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.electron_count(),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1338,7 +1345,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1358,7 +1365,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1368,25 +1375,25 @@ mod tests {
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
                 keys.__next__().unwrap().bind(py).borrow().to_rust(),
-                AstMulticenterBondConstraintKey::ElectronCount
+                GraphIrMulticenterBondConstraintKey::ElectronCount
             );
             assert!(keys.__next__().is_none());
 
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
                 values.__next__().unwrap().bind(py).borrow().to_rust(py),
-                AstMulticenterBondConstraintAst::electron_count(6)
+                GraphIrMulticenterBondConstraintAst::electron_count(6)
             );
 
             let mut items = constraints.items(py).unwrap();
             let (key, value) = items.__next__().unwrap();
             assert_eq!(
                 key.bind(py).borrow().to_rust(),
-                AstMulticenterBondConstraintKey::ElectronCount
+                GraphIrMulticenterBondConstraintKey::ElectronCount
             );
             assert_eq!(
                 value.bind(py).borrow().to_rust(py),
-                AstMulticenterBondConstraintAst::electron_count(6)
+                GraphIrMulticenterBondConstraintAst::electron_count(6)
             );
         });
     }
@@ -1398,7 +1405,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1415,7 +1422,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1454,13 +1461,13 @@ mod tests {
             let empty = MulticenterBondConstraintsAst::new(py, vec![]);
             assert_eq!(
                 empty.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Undetermined
+                GraphIrValueAst::Undetermined
             );
             let ec = into_py_variant(
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1468,7 +1475,7 @@ mod tests {
             let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1480,7 +1487,7 @@ mod tests {
             constraints.set_electron_count(py, ValueLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1510,7 +1517,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1519,9 +1526,11 @@ mod tests {
             let dict = constraints.asdict(py).unwrap();
             assert_eq!(dict.len(), 1);
             let value = dict.get_item("electron_count").unwrap().unwrap();
-            let expected =
-                into_py_variant(py, ValueAst::from_rust(py, &AstValueAst::Lit(6)).unwrap())
-                    .unwrap();
+            let expected = into_py_variant(
+                py,
+                ValueAst::from_rust(py, &GraphIrValueAst::Lit(6)).unwrap(),
+            )
+            .unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
         });
     }
@@ -1531,7 +1540,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1543,7 +1552,7 @@ mod tests {
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1556,7 +1565,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1567,8 +1576,8 @@ mod tests {
             let bond = Py::new(
                 py,
                 MulticenterBondAst::from_inner(
-                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
-                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                    GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(GraphIrMulticenterBondConstraintAst::electron_count(6)),
                 ),
             )
             .unwrap();
@@ -1583,7 +1592,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1599,7 +1608,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1607,8 +1616,8 @@ mod tests {
             let view = MulticenterBondConstraintsView {
                 backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
             };
-            let mut other = AstMulticenterBondConstraintsAst::new();
-            other.set(AstMulticenterBondConstraintAst::electron_count(6));
+            let mut other = GraphIrMulticenterBondConstraintsAst::new();
+            other.set(GraphIrMulticenterBondConstraintAst::electron_count(6));
             view.update(
                 py,
                 MulticenterBondConstraintsUpdate::Container(
@@ -1622,7 +1631,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1632,7 +1641,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1642,7 +1651,7 @@ mod tests {
             };
             assert_eq!(
                 view.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Undetermined
+                GraphIrValueAst::Undetermined
             );
             view.set_electron_count(py, ValueLike::Lit(6));
             let fresh = MulticenterBondConstraintsView {
@@ -1650,7 +1659,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }
@@ -1662,14 +1671,14 @@ mod tests {
             let view = MulticenterBondConstraintsView {
                 backing: MulticenterBondConstraintsBacking::Molecule {
                     owner: owner.clone_ref(py),
-                    id: AstMulticenterBondId(0),
+                    id: GraphIrMulticenterBondId(0),
                 },
             };
             let ec = into_py_variant(
                 py,
                 MulticenterBondConstraintAst::from_rust(
                     py,
-                    &AstMulticenterBondConstraintAst::electron_count(6),
+                    &GraphIrMulticenterBondConstraintAst::electron_count(6),
                 )
                 .unwrap(),
             )
@@ -1678,13 +1687,13 @@ mod tests {
             let fresh = MulticenterBondConstraintsView {
                 backing: MulticenterBondConstraintsBacking::Molecule {
                     owner,
-                    id: AstMulticenterBondId(0),
+                    id: GraphIrMulticenterBondId(0),
                 },
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                AstValueAst::Lit(6)
+                GraphIrValueAst::Lit(6)
             );
         });
     }

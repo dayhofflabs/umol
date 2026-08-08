@@ -1,4 +1,4 @@
-use umol_ast::mol;
+use umol_graph_ir::mol;
 
 fn main() {
     // atom `x` and bond `x` collide: atom and bond labels share one namespace.

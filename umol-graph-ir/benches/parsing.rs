@@ -12,11 +12,11 @@ use std::hint::black_box;
 
 use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use umol_ast::dsl::{
+use umol_edn::{read_string, FromEdn};
+use umol_graph_ir::dsl::{
     AromaticSystemDsl, AtomDsl, BondDsl, ConstraintDsl, ConstraintsDsl, DativeBondDsl, MoleculeDsl,
     MulticenterBondDsl, NoncovalentBondDsl,
 };
-use umol_edn::{read_string, FromEdn};
 
 #[path = "fixtures.rs"]
 mod fixtures;

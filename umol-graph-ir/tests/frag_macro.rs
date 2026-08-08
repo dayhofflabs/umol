@@ -1,6 +1,6 @@
 use rstest::rstest;
-use umol_ast::ast::{AtomAst, AtomId, BondAst, BondId, ElementAst, Fragment, Port};
-use umol_ast::frag;
+use umol_graph_ir::frag;
+use umol_graph_ir::ir::{AtomAst, AtomId, BondAst, BondId, ElementAst, Fragment, Port};
 
 #[rstest]
 fn test_frag_port() {

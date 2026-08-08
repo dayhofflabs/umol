@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 use std::iter::once;
 
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomId, ElectronCountsAst, ElementAst,
     MoleculeAst, ValueAst,
 };
@@ -124,7 +124,7 @@ impl Transformer for DelocalizeCharge {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
-    use umol_ast::{mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
 

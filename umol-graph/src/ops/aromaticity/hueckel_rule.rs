@@ -7,11 +7,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use umol_ast::ast::{
+use umol_graph_core::UnionFind;
+use umol_graph_ir::ir::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, RingView,
     UnpairedElectronsAst,
 };
-use umol_graph_core::UnionFind;
 
 use crate::ops::model::{ElementScope, RingLimits};
 
@@ -248,11 +248,11 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSe
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_ir::ir::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
         ElementAst, MoleculeAst, MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
     };
-    use umol_chem::element::Element;
 
     use super::*;
 

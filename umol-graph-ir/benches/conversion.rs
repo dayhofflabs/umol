@@ -7,9 +7,9 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
-use umol_ast::ast::{FromAst, IntoAst};
-use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
+use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
+use umol_graph_ir::ir::{FromAst, IntoAst};
 
 #[path = "fixtures.rs"]
 mod fixtures;

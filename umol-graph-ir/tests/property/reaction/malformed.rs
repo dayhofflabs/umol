@@ -2,12 +2,12 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::{
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_ir::ir::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
     StereoBondDelta, SubstructureMatchAlgorithm, SubstructureMatchConfig, TransactionError,
 };
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
 use crate::strategies::*;
 

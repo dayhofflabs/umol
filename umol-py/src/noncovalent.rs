@@ -7,13 +7,13 @@ use std::vec::IntoIter;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use umol_ast::ast::{
-    AsLit, AtomId as AstAtomId, MoleculeAst as AstMoleculeAst,
-    NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
-    NoncovalentBondKind as AstNoncovalentBondKind,
-    NoncovalentBondKindAst as AstNoncovalentBondKindAst,
-    NoncovalentBondUpdate as AstNoncovalentBondUpdate,
-    NoncovalentBondView as AstNoncovalentBondView,
+use umol_graph_ir::ir::{
+    AsLit, AtomId as GraphIrAtomId, MoleculeAst as GraphIrMoleculeAst,
+    NoncovalentBondAst as GraphIrNoncovalentBondAst, NoncovalentBondId as GraphIrNoncovalentBondId,
+    NoncovalentBondKind as GraphIrNoncovalentBondKind,
+    NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst,
+    NoncovalentBondUpdate as GraphIrNoncovalentBondUpdate,
+    NoncovalentBondView as GraphIrNoncovalentBondView,
 };
 
 use crate::constraint::noncovalent::{
@@ -43,23 +43,23 @@ pub enum NoncovalentBondKind {
 }
 
 impl NoncovalentBondKind {
-    pub(crate) fn from_rust(ast: AstNoncovalentBondKind) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrNoncovalentBondKind) -> Self {
         match ast {
-            AstNoncovalentBondKind::HydrogenBond => Self::HydrogenBond,
-            AstNoncovalentBondKind::HalogenBond => Self::HalogenBond,
-            AstNoncovalentBondKind::ChalcogenBond => Self::ChalcogenBond,
-            AstNoncovalentBondKind::Ionic => Self::Ionic,
-            AstNoncovalentBondKind::VanDerWaals => Self::VanDerWaals,
+            GraphIrNoncovalentBondKind::HydrogenBond => Self::HydrogenBond,
+            GraphIrNoncovalentBondKind::HalogenBond => Self::HalogenBond,
+            GraphIrNoncovalentBondKind::ChalcogenBond => Self::ChalcogenBond,
+            GraphIrNoncovalentBondKind::Ionic => Self::Ionic,
+            GraphIrNoncovalentBondKind::VanDerWaals => Self::VanDerWaals,
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstNoncovalentBondKind {
+    pub(crate) fn to_rust(self) -> GraphIrNoncovalentBondKind {
         match self {
-            Self::HydrogenBond => AstNoncovalentBondKind::HydrogenBond,
-            Self::HalogenBond => AstNoncovalentBondKind::HalogenBond,
-            Self::ChalcogenBond => AstNoncovalentBondKind::ChalcogenBond,
-            Self::Ionic => AstNoncovalentBondKind::Ionic,
-            Self::VanDerWaals => AstNoncovalentBondKind::VanDerWaals,
+            Self::HydrogenBond => GraphIrNoncovalentBondKind::HydrogenBond,
+            Self::HalogenBond => GraphIrNoncovalentBondKind::HalogenBond,
+            Self::ChalcogenBond => GraphIrNoncovalentBondKind::ChalcogenBond,
+            Self::Ionic => GraphIrNoncovalentBondKind::Ionic,
+            Self::VanDerWaals => GraphIrNoncovalentBondKind::VanDerWaals,
         }
     }
 }
@@ -103,27 +103,27 @@ impl NoncovalentBondKindAst {
 
 impl_py_lattice!(
     NoncovalentBondKindAst,
-    AstNoncovalentBondKindAst,
-    |value: &NoncovalentBondKindAst, _py: Python<'_>| -> PyResult<AstNoncovalentBondKindAst> {
+    GraphIrNoncovalentBondKindAst,
+    |value: &NoncovalentBondKindAst, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondKindAst> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: AstNoncovalentBondKindAst| -> PyResult<NoncovalentBondKindAst> {
+    |_py: Python<'_>, value: GraphIrNoncovalentBondKindAst| -> PyResult<NoncovalentBondKindAst> {
         Ok(NoncovalentBondKindAst::from_rust(&value))
     }
 );
 
 impl NoncovalentBondKindAst {
-    pub(crate) fn from_rust(ast: &AstNoncovalentBondKindAst) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrNoncovalentBondKindAst) -> Self {
         match ast {
-            AstNoncovalentBondKindAst::Undetermined => Self::Undetermined(),
-            AstNoncovalentBondKindAst::Lit(k) => Self::Lit(NoncovalentBondKind::from_rust(*k)),
+            GraphIrNoncovalentBondKindAst::Undetermined => Self::Undetermined(),
+            GraphIrNoncovalentBondKindAst::Lit(k) => Self::Lit(NoncovalentBondKind::from_rust(*k)),
         }
     }
 
-    pub(crate) fn to_rust(&self) -> AstNoncovalentBondKindAst {
+    pub(crate) fn to_rust(&self) -> GraphIrNoncovalentBondKindAst {
         match self {
-            Self::Undetermined() => AstNoncovalentBondKindAst::Undetermined,
-            Self::Lit(k) => AstNoncovalentBondKindAst::Lit(k.to_rust()),
+            Self::Undetermined() => GraphIrNoncovalentBondKindAst::Undetermined,
+            Self::Lit(k) => GraphIrNoncovalentBondKindAst::Lit(k.to_rust()),
         }
     }
 }
@@ -138,9 +138,9 @@ pub(crate) enum NoncovalentBondKindLike {
 }
 
 impl NoncovalentBondKindLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondKindAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondKindAst {
         match self {
-            NoncovalentBondKindLike::Kind(k) => AstNoncovalentBondKindAst::Lit(k.to_rust()),
+            NoncovalentBondKindLike::Kind(k) => GraphIrNoncovalentBondKindAst::Lit(k.to_rust()),
             NoncovalentBondKindLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
@@ -149,7 +149,7 @@ impl NoncovalentBondKindLike {
 /// Attribute updates for a noncovalent bond.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
-pub struct NoncovalentBondUpdate(AstNoncovalentBondUpdate);
+pub struct NoncovalentBondUpdate(GraphIrNoncovalentBondUpdate);
 
 #[pymethods]
 impl NoncovalentBondUpdate {
@@ -160,7 +160,7 @@ impl NoncovalentBondUpdate {
         kind: Option<NoncovalentBondKindLike>,
         constraints: Option<Py<NoncovalentBondConstraintsAst>>,
     ) -> Self {
-        Self::from_rust(&AstNoncovalentBondUpdate {
+        Self::from_rust(&GraphIrNoncovalentBondUpdate {
             kind: kind.map(|value| value.to_rust(py)),
             constraints: constraints
                 .map(|value| value.bind(py).borrow().inner().clone())
@@ -171,7 +171,7 @@ impl NoncovalentBondUpdate {
     /// Parse a noncovalent-bond-update DSL string into a `NoncovalentBondUpdate`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstNoncovalentBondUpdate::from_str(s)
+        GraphIrNoncovalentBondUpdate::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -204,11 +204,11 @@ impl NoncovalentBondUpdate {
 }
 
 impl NoncovalentBondUpdate {
-    pub(crate) fn from_rust(update: &AstNoncovalentBondUpdate) -> Self {
+    pub(crate) fn from_rust(update: &GraphIrNoncovalentBondUpdate) -> Self {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> AstNoncovalentBondUpdate {
+    pub(crate) fn to_rust(&self) -> GraphIrNoncovalentBondUpdate {
         self.0.clone()
     }
 }
@@ -220,7 +220,7 @@ impl NoncovalentBondUpdate {
 /// not part of the value.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct NoncovalentBondAst(AstNoncovalentBondAst);
+pub struct NoncovalentBondAst(GraphIrNoncovalentBondAst);
 
 #[pymethods]
 impl NoncovalentBondAst {
@@ -233,7 +233,7 @@ impl NoncovalentBondAst {
         kind: NoncovalentBondKindLike,
         constraints: Option<Py<NoncovalentBondConstraintsAst>>,
     ) -> Self {
-        let mut bond = AstNoncovalentBondAst::new(kind.to_rust(py));
+        let mut bond = GraphIrNoncovalentBondAst::new(kind.to_rust(py));
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
@@ -243,7 +243,7 @@ impl NoncovalentBondAst {
     /// Parse a noncovalent-bond-DSL string (e.g. `"Hbd#I"`) into a `NoncovalentBondAst`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstNoncovalentBondAst::from_str(s)
+        GraphIrNoncovalentBondAst::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -305,29 +305,29 @@ impl NoncovalentBondAst {
 
 impl NoncovalentBondAst {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &AstNoncovalentBondAst {
+    pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondAst {
         &self.0
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut AstNoncovalentBondAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrNoncovalentBondAst {
         &mut self.0
     }
 
     /// Wrap an owned Rust noncovalent-bond AST.
-    pub(crate) fn from_inner(bond: AstNoncovalentBondAst) -> Self {
+    pub(crate) fn from_inner(bond: GraphIrNoncovalentBondAst) -> Self {
         NoncovalentBondAst(bond)
     }
 }
 
 impl_py_lattice!(
     NoncovalentBondAst,
-    AstNoncovalentBondAst,
-    |value: &NoncovalentBondAst, _py: Python<'_>| -> PyResult<AstNoncovalentBondAst> {
+    GraphIrNoncovalentBondAst,
+    |value: &NoncovalentBondAst, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondAst> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: AstNoncovalentBondAst| -> PyResult<NoncovalentBondAst> {
+    |_py: Python<'_>, value: GraphIrNoncovalentBondAst| -> PyResult<NoncovalentBondAst> {
         Ok(NoncovalentBondAst::from_inner(value))
     }
 );
@@ -339,14 +339,14 @@ impl_py_lattice!(
 #[pyclass]
 pub struct NoncovalentBondView {
     owner: Py<MoleculeAst>,
-    id: AstNoncovalentBondId,
+    id: GraphIrNoncovalentBondId,
 }
 
 impl NoncovalentBondView {
     fn noncovalent_bond<'a>(
         &self,
-        molecule: &'a AstMoleculeAst,
-    ) -> PyResult<AstNoncovalentBondView<'a>> {
+        molecule: &'a GraphIrMoleculeAst,
+    ) -> PyResult<GraphIrNoncovalentBondView<'a>> {
         molecule
             .noncovalent_bonds()
             .get(self.id)
@@ -441,9 +441,9 @@ impl NoncovalentBondView {
 /// existing noncovalent bond id, or `IndexError`. `NoncovalentBondId` is `RelationId`-
 /// backed but contiguous for fresh molecules, so integer positions address it directly.
 fn resolve_noncovalent_bond_index(
-    molecule: &AstMoleculeAst,
+    molecule: &GraphIrMoleculeAst,
     index: isize,
-) -> PyResult<AstNoncovalentBondId> {
+) -> PyResult<GraphIrNoncovalentBondId> {
     let count = molecule.noncovalent_bonds().count();
     let resolved = if index < 0 {
         index + count as isize
@@ -453,7 +453,7 @@ fn resolve_noncovalent_bond_index(
     if resolved < 0 {
         return Err(PyIndexError::new_err("noncovalent bond id out of range"));
     }
-    let id = AstNoncovalentBondId(resolved as u32);
+    let id = GraphIrNoncovalentBondId(resolved as u32);
     if molecule.noncovalent_bonds().contains(id) {
         Ok(id)
     } else {
@@ -518,7 +518,7 @@ impl NoncovalentBondViews {
         molecule
             .inner()
             .noncovalent_bonds()
-            .of_id(AstAtomId(first), AstAtomId(second))
+            .of_id(GraphIrAtomId(first), GraphIrAtomId(second))
             .map(|id| NoncovalentBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -531,7 +531,7 @@ impl NoncovalentBondViews {
         molecule
             .inner()
             .noncovalent_bonds()
-            .incident_ids(AstAtomId(atom))
+            .incident_ids(GraphIrAtomId(atom))
             .map(|id| NoncovalentBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -565,7 +565,7 @@ impl NoncovalentBondViews {
 #[pyclass]
 struct NoncovalentBondViewIter {
     owner: Py<MoleculeAst>,
-    ids: IntoIter<AstNoncovalentBondId>,
+    ids: IntoIter<GraphIrNoncovalentBondId>,
 }
 
 #[pymethods]
@@ -585,43 +585,43 @@ impl NoncovalentBondViewIter {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AtomAst as AstAtomAst, BooleanAst as AstBooleanAst, MoleculeEntries,
-        NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
-        NoncovalentBondConstraintKey as AstNoncovalentBondConstraintKey,
-        NoncovalentBondConstraintsAst as AstNoncovalentBondConstraintsAst,
-    };
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_ir::ir::{
+        AtomAst as GraphIrAtomAst, BooleanAst as GraphIrBooleanAst, MoleculeEntries,
+        NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+        NoncovalentBondConstraintKey as GraphIrNoncovalentBondConstraintKey,
+        NoncovalentBondConstraintsAst as GraphIrNoncovalentBondConstraintsAst,
+    };
 
     use super::*;
     use crate::boolean::{BooleanAst, BooleanLike};
     use crate::convert::into_py_variant;
 
     #[rstest]
-    #[case(AstNoncovalentBondKindAst::Undetermined)]
-    #[case(AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond))]
-    #[case(AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::VanDerWaals))]
-    fn test_noncovalent_bond_kind_ast_roundtrip(#[case] ast: AstNoncovalentBondKindAst) {
+    #[case(GraphIrNoncovalentBondKindAst::Undetermined)]
+    #[case(GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond))]
+    #[case(GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::VanDerWaals))]
+    fn test_noncovalent_bond_kind_ast_roundtrip(#[case] ast: GraphIrNoncovalentBondKindAst) {
         assert_eq!(NoncovalentBondKindAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(AstNoncovalentBondKindAst::Undetermined, None)]
+    #[case(GraphIrNoncovalentBondKindAst::Undetermined, None)]
     #[case(
-        AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic),
+        GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic),
         Some(NoncovalentBondKind::Ionic)
     )]
     fn test_noncovalent_bond_kind_ast_as_lit(
-        #[case] ast: AstNoncovalentBondKindAst,
+        #[case] ast: GraphIrNoncovalentBondKindAst,
         #[case] expected: Option<NoncovalentBondKind>,
     ) {
         assert_eq!(NoncovalentBondKindAst::from_rust(&ast).as_lit(), expected);
     }
 
     #[rstest]
-    #[case(AstNoncovalentBondKind::HydrogenBond)]
-    #[case(AstNoncovalentBondKind::ChalcogenBond)]
-    fn test_noncovalent_bond_kind_roundtrip(#[case] ast: AstNoncovalentBondKind) {
+    #[case(GraphIrNoncovalentBondKind::HydrogenBond)]
+    #[case(GraphIrNoncovalentBondKind::ChalcogenBond)]
+    fn test_noncovalent_bond_kind_roundtrip(#[case] ast: GraphIrNoncovalentBondKind) {
         assert_eq!(NoncovalentBondKind::from_rust(ast).to_rust(), ast);
     }
 
@@ -631,13 +631,13 @@ mod tests {
             // a bare kind coerces to Lit
             assert_eq!(
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::HydrogenBond).to_rust(py),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             // a NoncovalentBondKindAst passes through
             let ast = Py::new(py, NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)).unwrap();
             assert_eq!(
                 NoncovalentBondKindLike::Ast(ast).to_rust(py),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
     }
@@ -648,7 +648,7 @@ mod tests {
             py,
             NoncovalentBondConstraintAst::from_rust(
                 py,
-                &AstNoncovalentBondConstraintAst::intramolecular(b),
+                &GraphIrNoncovalentBondConstraintAst::intramolecular(b),
             )
             .unwrap(),
         )
@@ -662,34 +662,34 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_constraint_key_roundtrip() {
         let key = NoncovalentBondConstraintKey::from_rust(
-            &AstNoncovalentBondConstraintKey::Intramolecular,
+            &GraphIrNoncovalentBondConstraintKey::Intramolecular,
         );
         assert_eq!(
             key.to_rust(),
-            AstNoncovalentBondConstraintKey::Intramolecular
+            GraphIrNoncovalentBondConstraintKey::Intramolecular
         );
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraint_ast_key() {
         Python::attach(|py| {
-            let constraint = AstNoncovalentBondConstraintAst::intramolecular(true);
+            let constraint = GraphIrNoncovalentBondConstraintAst::intramolecular(true);
             let key = NoncovalentBondConstraintAst::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
             assert_eq!(
                 key.to_rust(),
-                AstNoncovalentBondConstraintKey::Intramolecular
+                GraphIrNoncovalentBondConstraintKey::Intramolecular
             );
         });
     }
 
     #[rstest]
-    #[case(AstNoncovalentBondConstraintAst::intramolecular(true))]
-    #[case(AstNoncovalentBondConstraintAst::intramolecular(false))]
-    #[case(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Undetermined))]
+    #[case(GraphIrNoncovalentBondConstraintAst::intramolecular(true))]
+    #[case(GraphIrNoncovalentBondConstraintAst::intramolecular(false))]
+    #[case(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Undetermined))]
     fn test_noncovalent_bond_constraint_ast_roundtrip(
-        #[case] ast: AstNoncovalentBondConstraintAst,
+        #[case] ast: GraphIrNoncovalentBondConstraintAst,
     ) {
         Python::attach(|py| {
             assert_eq!(
@@ -709,7 +709,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.intramolecular().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -734,7 +734,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.intramolecular().to_rust(),
-                AstBooleanAst::Lit(false)
+                GraphIrBooleanAst::Lit(false)
             );
         });
     }
@@ -747,7 +747,7 @@ mod tests {
             let removed = constraints.pop(py, intramolecular_key(py)).unwrap();
             match removed {
                 Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
             }
@@ -759,8 +759,8 @@ mod tests {
     fn test_noncovalent_bond_constraints_ast_update_container() {
         Python::attach(|py| {
             let constraints = Py::new(py, NoncovalentBondConstraintsAst::new(py, vec![])).unwrap();
-            let mut other = AstNoncovalentBondConstraintsAst::new();
-            other.set(AstNoncovalentBondConstraintAst::intramolecular(true));
+            let mut other = GraphIrNoncovalentBondConstraintsAst::new();
+            other.set(GraphIrNoncovalentBondConstraintAst::intramolecular(true));
             NoncovalentBondConstraintsAst::update(
                 constraints.clone_ref(py),
                 py,
@@ -771,7 +771,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().intramolecular().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -788,7 +788,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().intramolecular().to_rust(),
-                AstBooleanAst::Lit(false)
+                GraphIrBooleanAst::Lit(false)
             );
         });
     }
@@ -811,7 +811,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().intramolecular().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -836,23 +836,23 @@ mod tests {
             let mut keys = constraints.keys(py).unwrap();
             assert_eq!(
                 keys.__next__().unwrap().bind(py).borrow().to_rust(),
-                AstNoncovalentBondConstraintKey::Intramolecular
+                GraphIrNoncovalentBondConstraintKey::Intramolecular
             );
             assert!(keys.__next__().is_none());
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
                 values.__next__().unwrap().bind(py).borrow().to_rust(py),
-                AstNoncovalentBondConstraintAst::intramolecular(true)
+                GraphIrNoncovalentBondConstraintAst::intramolecular(true)
             );
             let mut items = constraints.items(py).unwrap();
             let (k, v) = items.__next__().unwrap();
             assert_eq!(
                 k.bind(py).borrow().to_rust(),
-                AstNoncovalentBondConstraintKey::Intramolecular
+                GraphIrNoncovalentBondConstraintKey::Intramolecular
             );
             assert_eq!(
                 v.bind(py).borrow().to_rust(py),
-                AstNoncovalentBondConstraintAst::intramolecular(true)
+                GraphIrNoncovalentBondConstraintAst::intramolecular(true)
             );
         });
     }
@@ -876,12 +876,15 @@ mod tests {
     fn test_noncovalent_bond_constraints_ast_intramolecular() {
         Python::attach(|py| {
             let present = NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
-            assert_eq!(present.intramolecular().to_rust(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                present.intramolecular().to_rust(),
+                GraphIrBooleanAst::Lit(true)
+            );
             // absent → Undetermined (non-optional accessor)
             let empty = NoncovalentBondConstraintsAst::new(py, vec![]);
             assert_eq!(
                 empty.intramolecular().to_rust(),
-                AstBooleanAst::Undetermined
+                GraphIrBooleanAst::Undetermined
             );
         });
     }
@@ -893,7 +896,7 @@ mod tests {
             constraints.set_intramolecular(py, BooleanLike::Lit(false));
             assert_eq!(
                 constraints.intramolecular().to_rust(),
-                AstBooleanAst::Lit(false)
+                GraphIrBooleanAst::Lit(false)
             );
         });
     }
@@ -930,8 +933,8 @@ mod tests {
     fn hbond(py: Python<'_>) -> Py<NoncovalentBondAst> {
         Py::new(
             py,
-            NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
-                AstNoncovalentBondKind::HydrogenBond,
+            NoncovalentBondAst::from_inner(GraphIrNoncovalentBondAst::from_kind(
+                GraphIrNoncovalentBondKind::HydrogenBond,
             )),
         )
         .unwrap()
@@ -947,7 +950,7 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().kind,
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             assert_eq!(bond.inner().constraints.len(), 0);
         });
@@ -968,7 +971,7 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -995,12 +998,12 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_ast_kind() {
         Python::attach(|py| {
-            let mut bond = NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
-                AstNoncovalentBondKind::HydrogenBond,
+            let mut bond = NoncovalentBondAst::from_inner(GraphIrNoncovalentBondAst::from_kind(
+                GraphIrNoncovalentBondKind::HydrogenBond,
             ));
             assert_eq!(
                 bond.kind().to_rust(),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             bond.set_kind(
                 py,
@@ -1008,7 +1011,7 @@ mod tests {
             );
             assert_eq!(
                 bond.kind().to_rust(),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
     }
@@ -1030,7 +1033,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1042,8 +1045,8 @@ mod tests {
             let source = Py::new(
                 py,
                 NoncovalentBondAst::from_inner(
-                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                    GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
                 ),
             )
             .unwrap();
@@ -1057,7 +1060,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 dest.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1071,8 +1074,8 @@ mod tests {
             let bond = Py::new(
                 py,
                 NoncovalentBondAst::from_inner(
-                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                    GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
                 ),
             )
             .unwrap();
@@ -1085,7 +1088,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1099,7 +1102,7 @@ mod tests {
             // the write hit the standalone bond, not a copy
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1108,8 +1111,8 @@ mod tests {
     fn test_noncovalent_bond_ast_asdict() {
         Python::attach(|py| {
             let bond = NoncovalentBondAst::from_inner(
-                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
-                    .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
+                    .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
             );
             let dict = bond.asdict(py).unwrap();
             let kind = dict.get_item("kind").unwrap().unwrap();
@@ -1139,7 +1142,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.intramolecular(py).unwrap().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1150,8 +1153,8 @@ mod tests {
             let bond = Py::new(
                 py,
                 NoncovalentBondAst::from_inner(
-                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                    GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
                 ),
             )
             .unwrap();
@@ -1161,7 +1164,7 @@ mod tests {
             let removed = view.pop(py, intramolecular_key(py)).unwrap();
             match removed {
                 Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
             }
@@ -1186,7 +1189,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(false)
+                GraphIrBooleanAst::Lit(false)
             );
         });
     }
@@ -1200,8 +1203,8 @@ mod tests {
             let bond = Py::new(
                 py,
                 NoncovalentBondAst::from_inner(
-                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                    GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
                 ),
             )
             .unwrap();
@@ -1218,7 +1221,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1233,22 +1236,22 @@ mod tests {
             view.set_intramolecular(py, BooleanLike::Lit(true));
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
 
     /// A molecule of two oxygens with one hydrogen bond over atoms (0, 1), noncovalent id 0.
     fn molecule_with_hbond(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AstAtomAst::from_element(ChemElement::O),
-                AstAtomAst::from_element(ChemElement::O),
+                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomAst::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
-                AstAtomId(0),
-                AstAtomId(1),
-                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+                GraphIrAtomId(0),
+                GraphIrAtomId(1),
+                GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         });
@@ -1261,7 +1264,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner,
-                id: AstNoncovalentBondId(0),
+                id: GraphIrNoncovalentBondId(0),
             };
             assert_eq!(view.id(), 0);
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
@@ -1275,11 +1278,11 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner: owner.clone_ref(py),
-                id: AstNoncovalentBondId(0),
+                id: GraphIrNoncovalentBondId(0),
             };
             assert_eq!(
                 view.kind(py).unwrap().to_rust(),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             view.set_kind(
                 py,
@@ -1288,11 +1291,11 @@ mod tests {
             // a fresh read proves the write hit the molecule
             let fresh = NoncovalentBondView {
                 owner,
-                id: AstNoncovalentBondId(0),
+                id: GraphIrNoncovalentBondId(0),
             };
             assert_eq!(
                 fresh.kind(py).unwrap().to_rust(),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
     }
@@ -1303,7 +1306,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner: owner.clone_ref(py),
-                id: AstNoncovalentBondId(0),
+                id: GraphIrNoncovalentBondId(0),
             };
             // the constraints handle is molecule-backed; a write goes through to the bond
             view.constraints(py)
@@ -1313,11 +1316,11 @@ mod tests {
                     .bind(py)
                     .borrow()
                     .inner()
-                    .noncovalent_bond(AstNoncovalentBondId(0))
+                    .noncovalent_bond(GraphIrNoncovalentBondId(0))
                     .ast
                     .constraints
                     .intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1328,7 +1331,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner: owner.clone_ref(py),
-                id: AstNoncovalentBondId(0),
+                id: GraphIrNoncovalentBondId(0),
             };
             let constraints = Py::new(
                 py,
@@ -1342,11 +1345,11 @@ mod tests {
                     .bind(py)
                     .borrow()
                     .inner()
-                    .noncovalent_bond(AstNoncovalentBondId(0))
+                    .noncovalent_bond(GraphIrNoncovalentBondId(0))
                     .ast
                     .constraints
                     .intramolecular(),
-                AstBooleanAst::Lit(false)
+                GraphIrBooleanAst::Lit(false)
             );
         });
     }
@@ -1361,14 +1364,14 @@ mod tests {
                 .bind(py)
                 .borrow_mut()
                 .inner_mut()
-                .noncovalent_bond_mut(AstNoncovalentBondId(0))
+                .noncovalent_bond_mut(GraphIrNoncovalentBondId(0))
                 .ast
                 .constraints
-                .set(AstNoncovalentBondConstraintAst::intramolecular(true));
+                .set(GraphIrNoncovalentBondConstraintAst::intramolecular(true));
             let view = NoncovalentBondConstraintsView {
                 backing: NoncovalentBondConstraintsBacking::Molecule {
                     owner: owner.clone_ref(py),
-                    id: AstNoncovalentBondId(0),
+                    id: GraphIrNoncovalentBondId(0),
                 },
             };
             let other = Py::new(
@@ -1376,7 +1379,7 @@ mod tests {
                 NoncovalentBondConstraintsView {
                     backing: NoncovalentBondConstraintsBacking::Molecule {
                         owner: owner.clone_ref(py),
-                        id: AstNoncovalentBondId(0),
+                        id: GraphIrNoncovalentBondId(0),
                     },
                 },
             )
@@ -1388,11 +1391,11 @@ mod tests {
                     .bind(py)
                     .borrow()
                     .inner()
-                    .noncovalent_bond(AstNoncovalentBondId(0))
+                    .noncovalent_bond(GraphIrNoncovalentBondId(0))
                     .ast
                     .constraints
                     .intramolecular(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1403,7 +1406,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner,
-                id: AstNoncovalentBondId(0),
+                id: GraphIrNoncovalentBondId(0),
             };
             let dict = view.asdict(py).unwrap();
             assert_eq!(
@@ -1426,16 +1429,16 @@ mod tests {
     /// Three atoms, one hydrogen bond over (0, 1), atom 2 isolated. For the collection
     /// negative cases (`of` / `incident` with no bond).
     fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AstAtomAst::from_element(ChemElement::O),
-                AstAtomAst::from_element(ChemElement::O),
-                AstAtomAst::from_element(ChemElement::O),
+                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomAst::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
-                AstAtomId(0),
-                AstAtomId(1),
-                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+                GraphIrAtomId(0),
+                GraphIrAtomId(1),
+                GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         });
@@ -1467,8 +1470,8 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
-                    AstNoncovalentBondKind::Ionic,
+                NoncovalentBondAst::from_inner(GraphIrNoncovalentBondAst::from_kind(
+                    GraphIrNoncovalentBondKind::Ionic,
                 )),
             )
             .unwrap();
@@ -1479,7 +1482,7 @@ mod tests {
             // value replaced, endpoints preserved
             assert_eq!(
                 view.kind(py).unwrap().to_rust(),
-                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
         });
@@ -1493,8 +1496,8 @@ mod tests {
             };
             let bond = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
-                    AstNoncovalentBondKind::Ionic,
+                NoncovalentBondAst::from_inner(GraphIrNoncovalentBondAst::from_kind(
+                    GraphIrNoncovalentBondKind::Ionic,
                 )),
             )
             .unwrap();

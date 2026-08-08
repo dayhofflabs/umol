@@ -1,31 +1,31 @@
 //! Python bindings for DSL-to-AST construction defaults.
 
 use pyo3::prelude::*;
-use umol_ast::dsl::{
-    MoleculeDefaults as AstMoleculeDefaults, ReactionDefaults as AstReactionDefaults,
+use umol_graph_ir::dsl::{
+    MoleculeDefaults as GraphIrMoleculeDefaults, ReactionDefaults as GraphIrReactionDefaults,
 };
 
 /// Defaults applied while constructing a molecule AST from its DSL.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MoleculeDefaults(AstMoleculeDefaults);
+pub struct MoleculeDefaults(GraphIrMoleculeDefaults);
 
 #[pymethods]
 impl MoleculeDefaults {
     /// Preserve every AST value; omitted input values remain undetermined.
     #[new]
     pub(crate) fn new() -> Self {
-        Self(AstMoleculeDefaults::new())
+        Self(GraphIrMoleculeDefaults::new())
     }
 
     /// Ground ordinary entity fields while leaving constraints required.
     #[staticmethod]
     pub(crate) fn ground() -> Self {
-        Self(AstMoleculeDefaults::ground())
+        Self(GraphIrMoleculeDefaults::ground())
     }
 
     fn __repr__(&self) -> &'static str {
-        if self.0 == AstMoleculeDefaults::ground() {
+        if self.0 == GraphIrMoleculeDefaults::ground() {
             "MoleculeDefaults.ground()"
         } else {
             "MoleculeDefaults()"
@@ -34,7 +34,7 @@ impl MoleculeDefaults {
 }
 
 impl MoleculeDefaults {
-    pub(crate) fn to_rust(&self) -> AstMoleculeDefaults {
+    pub(crate) fn to_rust(&self) -> GraphIrMoleculeDefaults {
         self.0.clone()
     }
 }
@@ -42,24 +42,24 @@ impl MoleculeDefaults {
 /// Defaults applied while constructing a reaction AST from its DSL.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionDefaults(AstReactionDefaults);
+pub struct ReactionDefaults(GraphIrReactionDefaults);
 
 #[pymethods]
 impl ReactionDefaults {
     /// Preserve every AST value; omitted input values remain undetermined.
     #[new]
     pub(crate) fn new() -> Self {
-        Self(AstReactionDefaults::new())
+        Self(GraphIrReactionDefaults::new())
     }
 
     /// Ground ordinary fields in the LHS and delta entity snapshots.
     #[staticmethod]
     pub(crate) fn ground() -> Self {
-        Self(AstReactionDefaults::ground())
+        Self(GraphIrReactionDefaults::ground())
     }
 
     fn __repr__(&self) -> &'static str {
-        if self.0 == AstReactionDefaults::ground() {
+        if self.0 == GraphIrReactionDefaults::ground() {
             "ReactionDefaults.ground()"
         } else {
             "ReactionDefaults()"
@@ -68,7 +68,7 @@ impl ReactionDefaults {
 }
 
 impl ReactionDefaults {
-    pub(crate) fn to_rust(&self) -> AstReactionDefaults {
+    pub(crate) fn to_rust(&self) -> GraphIrReactionDefaults {
         self.0.clone()
     }
 }
@@ -83,7 +83,7 @@ mod tests {
     fn test_molecule_defaults_new() {
         let defaults = MoleculeDefaults::new();
 
-        assert_eq!(defaults.to_rust(), AstMoleculeDefaults::new());
+        assert_eq!(defaults.to_rust(), GraphIrMoleculeDefaults::new());
         assert_eq!(defaults.__repr__(), "MoleculeDefaults()");
     }
 
@@ -91,7 +91,7 @@ mod tests {
     fn test_molecule_defaults_ground() {
         let defaults = MoleculeDefaults::ground();
 
-        assert_eq!(defaults.to_rust(), AstMoleculeDefaults::ground());
+        assert_eq!(defaults.to_rust(), GraphIrMoleculeDefaults::ground());
         assert_eq!(defaults.__repr__(), "MoleculeDefaults.ground()");
     }
 
@@ -99,7 +99,7 @@ mod tests {
     fn test_reaction_defaults_new() {
         let defaults = ReactionDefaults::new();
 
-        assert_eq!(defaults.to_rust(), AstReactionDefaults::new());
+        assert_eq!(defaults.to_rust(), GraphIrReactionDefaults::new());
         assert_eq!(defaults.__repr__(), "ReactionDefaults()");
     }
 
@@ -107,7 +107,7 @@ mod tests {
     fn test_reaction_defaults_ground() {
         let defaults = ReactionDefaults::ground();
 
-        assert_eq!(defaults.to_rust(), AstReactionDefaults::ground());
+        assert_eq!(defaults.to_rust(), GraphIrReactionDefaults::ground());
         assert_eq!(defaults.__repr__(), "ReactionDefaults.ground()");
     }
 }

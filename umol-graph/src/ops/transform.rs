@@ -11,7 +11,7 @@ pub mod kekulizer;
 pub use aromatizer::{Aromatizer, AromatizerError};
 pub use delocalize_charge::DelocalizeCharge;
 pub use kekulizer::{KekulizationConfig, Kekulizer, KekulizerError, MaximumMatchingAlgorithm};
-use umol_ast::ast::MoleculeAst;
+use umol_graph_ir::ir::MoleculeAst;
 
 pub trait Transformer {
     type Error;

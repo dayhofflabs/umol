@@ -9,11 +9,11 @@
 //! is table-sensitive, so isotope bit-exactness depends on our mass tables
 //! agreeing with RDKit's; natural atoms are always 0.
 
-use umol_ast::ast::{
-    AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingConfig, RingModel, RingSet,
-};
 use umol_chem::isotope::Isotope;
 use umol_graph_core::CircularRefinementAlgorithm;
+use umol_graph_ir::ir::{
+    AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingConfig, RingModel, RingSet,
+};
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::featurizer::FingerprintError;

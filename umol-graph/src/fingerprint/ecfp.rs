@@ -5,10 +5,10 @@
 //! hash is [`EcfpHashScheme::Xxh3Width64V1`]; the paper leaves the hash
 //! unspecified, so this is the frozen umol ECFP identity.
 
-use umol_ast::ast::{
+use umol_graph_core::CircularRefinementAlgorithm;
+use umol_graph_ir::ir::{
     AsLit, AtomId, BondId, IsotopeMass, MoleculeAst, RingConfig, RingModel, RingSet,
 };
-use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::featurizer::FingerprintError;
@@ -97,7 +97,7 @@ fn bond_label(mol: &MoleculeAst, id: BondId) -> u32 {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_ground;
 
     use super::*;
 

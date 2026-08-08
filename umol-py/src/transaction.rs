@@ -2,7 +2,9 @@
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use umol_ast::ast::{MoleculeEditor as AstMoleculeEditor, Transaction as AstTransaction};
+use umol_graph_ir::ir::{
+    MoleculeEditor as GraphIrMoleculeEditor, Transaction as GraphIrTransaction,
+};
 
 use crate::edit::Edits;
 use crate::error::transaction_error;
@@ -11,11 +13,11 @@ use crate::molecule::MoleculeAst;
 /// A mutable molecule editor that can be inspected before it is finalized.
 #[pyclass]
 pub struct MoleculeEditor {
-    inner: Option<AstMoleculeEditor>,
+    inner: Option<GraphIrMoleculeEditor>,
 }
 
 impl MoleculeEditor {
-    pub(crate) fn from_rust(editor: AstMoleculeEditor) -> Self {
+    pub(crate) fn from_rust(editor: GraphIrMoleculeEditor) -> Self {
         Self {
             inner: Some(editor),
         }
@@ -56,7 +58,7 @@ impl MoleculeEditor {
 #[pyclass]
 #[derive(Debug)]
 pub struct Transaction {
-    inner: Option<AstTransaction>,
+    inner: Option<GraphIrTransaction>,
 }
 
 #[pymethods]
@@ -87,12 +89,13 @@ mod tests {
     use pyo3::exceptions::PyRuntimeError;
     use pyo3::prelude::*;
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{
-        AtomAst as AstAtomAst, AtomFieldChange as AstAtomFieldChange, AtomHandle as AstAtomHandle,
-        AtomId as AstAtomId, Edit as AstEdit, Edits as AstEdits, ValueAst as AstValueAst,
-    };
-    use umol_ast::mol_dsl;
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_ir::ir::{
+        AtomAst as GraphIrAtomAst, AtomFieldChange as GraphIrAtomFieldChange,
+        AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId, Edit as GraphIrEdit,
+        Edits as GraphIrEdits, ValueAst as GraphIrValueAst,
+    };
+    use umol_graph_ir::mol_dsl;
 
     use super::*;
     use crate::error::TransactionError;
@@ -106,8 +109,8 @@ mod tests {
 
     #[fixture]
     fn add_nitrogen() -> Edits {
-        let mut edits = AstEdits::new();
-        edits.add_atom(AstAtomAst::from_element(ChemElement::N));
+        let mut edits = GraphIrEdits::new();
+        edits.add_atom(GraphIrAtomAst::from_element(ChemElement::N));
         Edits::from_rust(edits)
     }
 
@@ -123,7 +126,7 @@ mod tests {
             .inner
             .as_mut()
             .unwrap()
-            .add_atom(AstAtomAst::from_element(ChemElement::N));
+            .add_atom(GraphIrAtomAst::from_element(ChemElement::N));
         let second = editor.snapshot().unwrap();
 
         assert_eq!(first.inner(), &initial);
@@ -140,7 +143,8 @@ mod tests {
         let snapshot = editor.snapshot().unwrap();
 
         let mut built = editor.build().unwrap();
-        *built.inner_mut().atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::N);
+        *built.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
+            GraphIrAtomAst::from_element(ChemElement::N);
         let snapshot_error = editor.snapshot().unwrap_err();
         let build_error = editor.build().unwrap_err();
 
@@ -187,13 +191,13 @@ mod tests {
     #[rstest]
     fn test_molecule_editor_transact_error(mut carbon_editor: MoleculeEditor) {
         let initial = carbon_editor.snapshot().unwrap();
-        let mut edits = AstEdits::new();
-        edits.add_atom(AstAtomAst::from_element(ChemElement::N));
-        edits.push(AstEdit::ModifyAtomField {
-            id: AstAtomHandle::Id(AstAtomId(7)),
-            change: AstAtomFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(1),
+        let mut edits = GraphIrEdits::new();
+        edits.add_atom(GraphIrAtomAst::from_element(ChemElement::N));
+        edits.push(GraphIrEdit::ModifyAtomField {
+            id: GraphIrAtomHandle::Id(GraphIrAtomId(7)),
+            change: GraphIrAtomFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(1),
             },
         });
 

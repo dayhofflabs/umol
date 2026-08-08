@@ -1,9 +1,4 @@
 use rstest::{fixture, rstest};
-use umol_ast::ast::{
-    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
-    RingConfig, ValueAst,
-};
-use umol_ast::{mol_dsl, mol_dsl_ground};
 use umol_graph::fingerprint::{
     featurize_reaction, EcfpFeaturizer, Featurizer, FingerprintError, MorganFeaturizer,
     PatternFingerprinter, ReactionCombinator, ReactionFingerprint, ReactionSide,
@@ -13,6 +8,11 @@ use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::{
     RefinementRounds, RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
 };
+use umol_graph_ir::ir::{
+    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
+    RingConfig, ValueAst,
+};
+use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
 #[fixture]
 fn ethanol() -> MoleculeAst {

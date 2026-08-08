@@ -8,8 +8,8 @@ use indexmap::IndexMap;
 use nom::character::complete::multispace0;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
 use umol_geometric_core::Point3D;
+use umol_graph_ir::ir::{MoleculeAst, TryIntoAst};
 use umol_utils::error::UmolError;
 
 use self::accumulator::PropertyAccumulator;

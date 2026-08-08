@@ -1,7 +1,6 @@
 //! Python values selecting graph algorithms.
 
 use pyo3::prelude::*;
-use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
 use umol_graph_core::{
     AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
     CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
@@ -12,6 +11,7 @@ use umol_graph_core::{
     SubgraphEnumerationAlgorithm as GraphCoreSubgraphEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
+use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
 
 /// Algorithm used to find graph automorphisms.
 #[pyclass(from_py_object)]
@@ -412,17 +412,17 @@ impl SubstructureMatchAlgorithm {
         dead_code,
         reason = "Rust-to-Python conversion API for substructure match algorithms"
     )]
-    pub(crate) fn from_rust(algorithm: AstSubstructureMatchAlgorithm) -> Self {
+    pub(crate) fn from_rust(algorithm: GraphIrSubstructureMatchAlgorithm) -> Self {
         match algorithm {
-            AstSubstructureMatchAlgorithm::GraphAndOverlays => Self::GraphAndOverlays(),
-            AstSubstructureMatchAlgorithm::Incidence => Self::Incidence(),
+            GraphIrSubstructureMatchAlgorithm::GraphAndOverlays => Self::GraphAndOverlays(),
+            GraphIrSubstructureMatchAlgorithm::Incidence => Self::Incidence(),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstSubstructureMatchAlgorithm {
+    pub(crate) fn to_rust(self) -> GraphIrSubstructureMatchAlgorithm {
         match self {
-            Self::GraphAndOverlays() => AstSubstructureMatchAlgorithm::GraphAndOverlays,
-            Self::Incidence() => AstSubstructureMatchAlgorithm::Incidence,
+            Self::GraphAndOverlays() => GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
+            Self::Incidence() => GraphIrSubstructureMatchAlgorithm::Incidence,
         }
     }
 }
@@ -799,15 +799,15 @@ mod tests {
 
     #[rstest]
     #[case::graph_and_overlays(
-        AstSubstructureMatchAlgorithm::GraphAndOverlays,
+        GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
         SubstructureMatchAlgorithm::GraphAndOverlays()
     )]
     #[case::incidence(
-        AstSubstructureMatchAlgorithm::Incidence,
+        GraphIrSubstructureMatchAlgorithm::Incidence,
         SubstructureMatchAlgorithm::Incidence()
     )]
     fn test_substructure_match_algorithm_from_rust(
-        #[case] algorithm: AstSubstructureMatchAlgorithm,
+        #[case] algorithm: GraphIrSubstructureMatchAlgorithm,
         #[case] expected: SubstructureMatchAlgorithm,
     ) {
         assert_eq!(SubstructureMatchAlgorithm::from_rust(algorithm), expected);
@@ -816,15 +816,15 @@ mod tests {
     #[rstest]
     #[case::graph_and_overlays(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
-        AstSubstructureMatchAlgorithm::GraphAndOverlays
+        GraphIrSubstructureMatchAlgorithm::GraphAndOverlays
     )]
     #[case::incidence(
         SubstructureMatchAlgorithm::Incidence(),
-        AstSubstructureMatchAlgorithm::Incidence
+        GraphIrSubstructureMatchAlgorithm::Incidence
     )]
     fn test_substructure_match_algorithm_to_rust(
         #[case] algorithm: SubstructureMatchAlgorithm,
-        #[case] expected: AstSubstructureMatchAlgorithm,
+        #[case] expected: GraphIrSubstructureMatchAlgorithm,
     ) {
         assert_eq!(algorithm.to_rust(), expected);
     }

@@ -6,18 +6,21 @@ use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
-use umol_ast::ast::{
-    AddBond as AstAddBond, AromaticSystemHandle as AstAromaticSystemHandle,
-    AromaticSystemId as AstAromaticSystemId, AtomHandle as AstAtomHandle, AtomId as AstAtomId,
-    BondHandle as AstBondHandle, BondId as AstBondId, ConstraintEdit as AstConstraintEdit,
-    DativeBondHandle as AstDativeBondHandle, DativeBondId as AstDativeBondId, Edit as AstEdit,
-    Edits as AstEdits, Entity as AstEntity, EntityHandle as AstEntityHandle, FromAst, IntoAst,
-    MulticenterBondHandle as AstMulticenterBondHandle, MulticenterBondId as AstMulticenterBondId,
-    NoncovalentBondHandle as AstNoncovalentBondHandle, NoncovalentBondId as AstNoncovalentBondId,
-    StereoAtomHandle as AstStereoAtomHandle, StereoAtomId as AstStereoAtomId,
-    StereoBondHandle as AstStereoBondHandle, StereoBondId as AstStereoBondId,
+use umol_graph_ir::dsl::EditsDsl as GraphIrEditsDsl;
+use umol_graph_ir::ir::{
+    AddBond as GraphIrAddBond, AromaticSystemHandle as GraphIrAromaticSystemHandle,
+    AromaticSystemId as GraphIrAromaticSystemId, AtomHandle as GraphIrAtomHandle,
+    AtomId as GraphIrAtomId, BondHandle as GraphIrBondHandle, BondId as GraphIrBondId,
+    ConstraintEdit as GraphIrConstraintEdit, DativeBondHandle as GraphIrDativeBondHandle,
+    DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
+    Entity as GraphIrEntity, EntityHandle as GraphIrEntityHandle, FromAst, IntoAst,
+    MulticenterBondHandle as GraphIrMulticenterBondHandle,
+    MulticenterBondId as GraphIrMulticenterBondId,
+    NoncovalentBondHandle as GraphIrNoncovalentBondHandle,
+    NoncovalentBondId as GraphIrNoncovalentBondId, StereoAtomHandle as GraphIrStereoAtomHandle,
+    StereoAtomId as GraphIrStereoAtomId, StereoBondHandle as GraphIrStereoBondHandle,
+    StereoBondId as GraphIrStereoBondId,
 };
-use umol_ast::dsl::EditsDsl as AstEditsDsl;
 
 use crate::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 use crate::atom::{AtomAst, AtomUpdate};
@@ -72,16 +75,16 @@ impl New {
 }
 
 impl New {
-    fn from_rust(handle: AstEntityHandle) -> Self {
+    fn from_rust(handle: GraphIrEntityHandle) -> Self {
         let index = match handle {
-            AstEntityHandle::Atom(AstAtomHandle::New(index))
-            | AstEntityHandle::Bond(AstBondHandle::New(index))
-            | AstEntityHandle::DativeBond(AstDativeBondHandle::New(index))
-            | AstEntityHandle::AromaticSystem(AstAromaticSystemHandle::New(index))
-            | AstEntityHandle::MulticenterBond(AstMulticenterBondHandle::New(index))
-            | AstEntityHandle::NoncovalentBond(AstNoncovalentBondHandle::New(index))
-            | AstEntityHandle::StereoAtom(AstStereoAtomHandle::New(index))
-            | AstEntityHandle::StereoBond(AstStereoBondHandle::New(index)) => index,
+            GraphIrEntityHandle::Atom(GraphIrAtomHandle::New(index))
+            | GraphIrEntityHandle::Bond(GraphIrBondHandle::New(index))
+            | GraphIrEntityHandle::DativeBond(GraphIrDativeBondHandle::New(index))
+            | GraphIrEntityHandle::AromaticSystem(GraphIrAromaticSystemHandle::New(index))
+            | GraphIrEntityHandle::MulticenterBond(GraphIrMulticenterBondHandle::New(index))
+            | GraphIrEntityHandle::NoncovalentBond(GraphIrNoncovalentBondHandle::New(index))
+            | GraphIrEntityHandle::StereoAtom(GraphIrStereoAtomHandle::New(index))
+            | GraphIrEntityHandle::StereoBond(GraphIrStereoBondHandle::New(index)) => index,
             _ => unreachable!("Edits addition methods always return creation handles"),
         };
         Self { index }
@@ -104,134 +107,140 @@ pub(crate) enum HandleLike {
     reason = "Python-to-Rust handle conversions for the Edit and Edits bindings"
 )]
 impl HandleLike {
-    fn from_atom_handle(handle: &AstAtomHandle) -> Self {
+    fn from_atom_handle(handle: &GraphIrAtomHandle) -> Self {
         match handle {
-            AstAtomHandle::Id(id) => Self::Id(id.0),
-            AstAtomHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrAtomHandle::Id(id) => Self::Id(id.0),
+            GraphIrAtomHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_bond_handle(handle: &AstBondHandle) -> Self {
+    fn from_bond_handle(handle: &GraphIrBondHandle) -> Self {
         match handle {
-            AstBondHandle::Id(id) => Self::Id(id.0),
-            AstBondHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrBondHandle::Id(id) => Self::Id(id.0),
+            GraphIrBondHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_dative_bond_handle(handle: &AstDativeBondHandle) -> Self {
+    fn from_dative_bond_handle(handle: &GraphIrDativeBondHandle) -> Self {
         match handle {
-            AstDativeBondHandle::Id(id) => Self::Id(id.0),
-            AstDativeBondHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrDativeBondHandle::Id(id) => Self::Id(id.0),
+            GraphIrDativeBondHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_aromatic_system_handle(handle: &AstAromaticSystemHandle) -> Self {
+    fn from_aromatic_system_handle(handle: &GraphIrAromaticSystemHandle) -> Self {
         match handle {
-            AstAromaticSystemHandle::Id(id) => Self::Id(id.0),
-            AstAromaticSystemHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrAromaticSystemHandle::Id(id) => Self::Id(id.0),
+            GraphIrAromaticSystemHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_multicenter_bond_handle(handle: &AstMulticenterBondHandle) -> Self {
+    fn from_multicenter_bond_handle(handle: &GraphIrMulticenterBondHandle) -> Self {
         match handle {
-            AstMulticenterBondHandle::Id(id) => Self::Id(id.0),
-            AstMulticenterBondHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrMulticenterBondHandle::Id(id) => Self::Id(id.0),
+            GraphIrMulticenterBondHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_noncovalent_bond_handle(handle: &AstNoncovalentBondHandle) -> Self {
+    fn from_noncovalent_bond_handle(handle: &GraphIrNoncovalentBondHandle) -> Self {
         match handle {
-            AstNoncovalentBondHandle::Id(id) => Self::Id(id.0),
-            AstNoncovalentBondHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrNoncovalentBondHandle::Id(id) => Self::Id(id.0),
+            GraphIrNoncovalentBondHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_stereo_atom_handle(handle: &AstStereoAtomHandle) -> Self {
+    fn from_stereo_atom_handle(handle: &GraphIrStereoAtomHandle) -> Self {
         match handle {
-            AstStereoAtomHandle::Id(id) => Self::Id(id.0),
-            AstStereoAtomHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrStereoAtomHandle::Id(id) => Self::Id(id.0),
+            GraphIrStereoAtomHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    fn from_stereo_bond_handle(handle: &AstStereoBondHandle) -> Self {
+    fn from_stereo_bond_handle(handle: &GraphIrStereoBondHandle) -> Self {
         match handle {
-            AstStereoBondHandle::Id(id) => Self::Id(id.0),
-            AstStereoBondHandle::New(index) => Self::New(New { index: *index }),
+            GraphIrStereoBondHandle::Id(id) => Self::Id(id.0),
+            GraphIrStereoBondHandle::New(index) => Self::New(New { index: *index }),
         }
     }
 
-    pub(crate) fn to_atom_handle(&self) -> AstAtomHandle {
+    pub(crate) fn to_atom_handle(&self) -> GraphIrAtomHandle {
         match self {
-            Self::Id(index) => AstAtomHandle::Id(AstAtomId(*index)),
-            Self::New(new) => AstAtomHandle::New(new.index),
+            Self::Id(index) => GraphIrAtomHandle::Id(GraphIrAtomId(*index)),
+            Self::New(new) => GraphIrAtomHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_bond_handle(&self) -> AstBondHandle {
+    pub(crate) fn to_bond_handle(&self) -> GraphIrBondHandle {
         match self {
-            Self::Id(index) => AstBondHandle::Id(AstBondId(*index)),
-            Self::New(new) => AstBondHandle::New(new.index),
+            Self::Id(index) => GraphIrBondHandle::Id(GraphIrBondId(*index)),
+            Self::New(new) => GraphIrBondHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_dative_bond_handle(&self) -> AstDativeBondHandle {
+    pub(crate) fn to_dative_bond_handle(&self) -> GraphIrDativeBondHandle {
         match self {
-            Self::Id(index) => AstDativeBondHandle::Id(AstDativeBondId(*index)),
-            Self::New(new) => AstDativeBondHandle::New(new.index),
+            Self::Id(index) => GraphIrDativeBondHandle::Id(GraphIrDativeBondId(*index)),
+            Self::New(new) => GraphIrDativeBondHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_aromatic_system_handle(&self) -> AstAromaticSystemHandle {
+    pub(crate) fn to_aromatic_system_handle(&self) -> GraphIrAromaticSystemHandle {
         match self {
-            Self::Id(index) => AstAromaticSystemHandle::Id(AstAromaticSystemId(*index)),
-            Self::New(new) => AstAromaticSystemHandle::New(new.index),
+            Self::Id(index) => GraphIrAromaticSystemHandle::Id(GraphIrAromaticSystemId(*index)),
+            Self::New(new) => GraphIrAromaticSystemHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_multicenter_bond_handle(&self) -> AstMulticenterBondHandle {
+    pub(crate) fn to_multicenter_bond_handle(&self) -> GraphIrMulticenterBondHandle {
         match self {
-            Self::Id(index) => AstMulticenterBondHandle::Id(AstMulticenterBondId(*index)),
-            Self::New(new) => AstMulticenterBondHandle::New(new.index),
+            Self::Id(index) => GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(*index)),
+            Self::New(new) => GraphIrMulticenterBondHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_noncovalent_bond_handle(&self) -> AstNoncovalentBondHandle {
+    pub(crate) fn to_noncovalent_bond_handle(&self) -> GraphIrNoncovalentBondHandle {
         match self {
-            Self::Id(index) => AstNoncovalentBondHandle::Id(AstNoncovalentBondId(*index)),
-            Self::New(new) => AstNoncovalentBondHandle::New(new.index),
+            Self::Id(index) => GraphIrNoncovalentBondHandle::Id(GraphIrNoncovalentBondId(*index)),
+            Self::New(new) => GraphIrNoncovalentBondHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_stereo_atom_handle(&self) -> AstStereoAtomHandle {
+    pub(crate) fn to_stereo_atom_handle(&self) -> GraphIrStereoAtomHandle {
         match self {
-            Self::Id(index) => AstStereoAtomHandle::Id(AstStereoAtomId(*index)),
-            Self::New(new) => AstStereoAtomHandle::New(new.index),
+            Self::Id(index) => GraphIrStereoAtomHandle::Id(GraphIrStereoAtomId(*index)),
+            Self::New(new) => GraphIrStereoAtomHandle::New(new.index),
         }
     }
 
-    pub(crate) fn to_stereo_bond_handle(&self) -> AstStereoBondHandle {
+    pub(crate) fn to_stereo_bond_handle(&self) -> GraphIrStereoBondHandle {
         match self {
-            Self::Id(index) => AstStereoBondHandle::Id(AstStereoBondId(*index)),
-            Self::New(new) => AstStereoBondHandle::New(new.index),
+            Self::Id(index) => GraphIrStereoBondHandle::Id(GraphIrStereoBondId(*index)),
+            Self::New(new) => GraphIrStereoBondHandle::New(new.index),
         }
     }
 
-    fn to_entity_handle(&self, entity: AstEntity) -> AstEntityHandle {
+    fn to_entity_handle(&self, entity: GraphIrEntity) -> GraphIrEntityHandle {
         match entity {
-            AstEntity::Atom(_) => AstEntityHandle::Atom(self.to_atom_handle()),
-            AstEntity::Bond(_) => AstEntityHandle::Bond(self.to_bond_handle()),
-            AstEntity::DativeBond(_) => AstEntityHandle::DativeBond(self.to_dative_bond_handle()),
-            AstEntity::AromaticSystem(_) => {
-                AstEntityHandle::AromaticSystem(self.to_aromatic_system_handle())
+            GraphIrEntity::Atom(_) => GraphIrEntityHandle::Atom(self.to_atom_handle()),
+            GraphIrEntity::Bond(_) => GraphIrEntityHandle::Bond(self.to_bond_handle()),
+            GraphIrEntity::DativeBond(_) => {
+                GraphIrEntityHandle::DativeBond(self.to_dative_bond_handle())
             }
-            AstEntity::MulticenterBond(_) => {
-                AstEntityHandle::MulticenterBond(self.to_multicenter_bond_handle())
+            GraphIrEntity::AromaticSystem(_) => {
+                GraphIrEntityHandle::AromaticSystem(self.to_aromatic_system_handle())
             }
-            AstEntity::NoncovalentBond(_) => {
-                AstEntityHandle::NoncovalentBond(self.to_noncovalent_bond_handle())
+            GraphIrEntity::MulticenterBond(_) => {
+                GraphIrEntityHandle::MulticenterBond(self.to_multicenter_bond_handle())
             }
-            AstEntity::StereoAtom(_) => AstEntityHandle::StereoAtom(self.to_stereo_atom_handle()),
-            AstEntity::StereoBond(_) => AstEntityHandle::StereoBond(self.to_stereo_bond_handle()),
+            GraphIrEntity::NoncovalentBond(_) => {
+                GraphIrEntityHandle::NoncovalentBond(self.to_noncovalent_bond_handle())
+            }
+            GraphIrEntity::StereoAtom(_) => {
+                GraphIrEntityHandle::StereoAtom(self.to_stereo_atom_handle())
+            }
+            GraphIrEntity::StereoBond(_) => {
+                GraphIrEntityHandle::StereoBond(self.to_stereo_bond_handle())
+            }
         }
     }
 }
@@ -262,7 +271,7 @@ impl<'py> IntoPyObject<'py> for HandleLike {
 /// A handle-aware molecule constraint used by standalone edit entries.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConstraintEdit(AstConstraintEdit);
+pub struct ConstraintEdit(GraphIrConstraintEdit);
 
 #[pymethods]
 impl ConstraintEdit {
@@ -275,9 +284,9 @@ impl ConstraintEdit {
     ) -> PyResult<Self> {
         let constraint = constraint.bind(py).borrow().to_rust(py);
         let Some(handles) = handles else {
-            return Ok(Self(AstConstraintEdit::from(constraint)));
+            return Ok(Self(GraphIrConstraintEdit::from(constraint)));
         };
-        AstConstraintEdit::new(constraint, |entity| {
+        GraphIrConstraintEdit::new(constraint, |entity| {
             handles
                 .get(&Entity::from_rust(entity))
                 .map(|handle| handle.to_entity_handle(entity))
@@ -296,11 +305,11 @@ impl ConstraintEdit {
         dead_code,
         reason = "Rust-to-Python conversion API used by Edit snapshots"
     )]
-    pub(crate) fn from_rust(constraint: &AstConstraintEdit) -> Self {
+    pub(crate) fn from_rust(constraint: &GraphIrConstraintEdit) -> Self {
         Self(constraint.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> AstConstraintEdit {
+    pub(crate) fn to_rust(&self) -> GraphIrConstraintEdit {
         self.0.clone()
     }
 }
@@ -609,16 +618,16 @@ impl Edit {
         dead_code,
         reason = "Rust-to-Python conversion API used by Edits snapshots"
     )]
-    pub(crate) fn from_rust(py: Python<'_>, edit: &AstEdit) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, edit: &GraphIrEdit) -> PyResult<Self> {
         Ok(match edit {
-            AstEdit::AddAtoms { atoms } => Self::AddAtoms {
+            GraphIrEdit::AddAtoms { atoms } => Self::AddAtoms {
                 atoms: atoms
                     .iter()
                     .cloned()
                     .map(|atom| Py::new(py, AtomAst::from_inner(atom)))
                     .collect::<PyResult<_>>()?,
             },
-            AstEdit::AddBonds { bonds } => Self::AddBonds {
+            GraphIrEdit::AddBonds { bonds } => Self::AddBonds {
                 bonds: bonds
                     .iter()
                     .map(|bond| {
@@ -632,23 +641,23 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
-            AstEdit::RemoveTopology { atoms, bonds } => Self::RemoveTopology {
+            GraphIrEdit::RemoveTopology { atoms, bonds } => Self::RemoveTopology {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
                 bonds: bonds.iter().map(HandleLike::from_bond_handle).collect(),
             },
-            AstEdit::ModifyAtomField { id, change } => Self::ModifyAtomField {
+            GraphIrEdit::ModifyAtomField { id, change } => Self::ModifyAtomField {
                 id: HandleLike::from_atom_handle(id),
                 change: into_py_variant(py, AtomFieldChange::from_rust(py, change)?)?,
             },
-            AstEdit::ModifyBondField { id, change } => Self::ModifyBondField {
+            GraphIrEdit::ModifyBondField { id, change } => Self::ModifyBondField {
                 id: HandleLike::from_bond_handle(id),
                 change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
             },
-            AstEdit::AddDativeBond { atoms, ast } => Self::AddDativeBond {
+            GraphIrEdit::AddDativeBond { atoms, ast } => Self::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
                 ast: Py::new(py, DativeBondAst::from_inner(ast.clone()))?,
             },
-            AstEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
+            GraphIrEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -660,15 +669,15 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
-            AstEdit::ModifyDativeBondField { id, change } => Self::ModifyDativeBondField {
+            GraphIrEdit::ModifyDativeBondField { id, change } => Self::ModifyDativeBondField {
                 id: HandleLike::from_dative_bond_handle(id),
                 change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
             },
-            AstEdit::AddAromaticSystem { atoms, ast } => Self::AddAromaticSystem {
+            GraphIrEdit::AddAromaticSystem { atoms, ast } => Self::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
                 ast: Py::new(py, AromaticSystemAst::from_inner(ast.clone()))?,
             },
-            AstEdit::RemoveAromaticSystems { removes } => Self::RemoveAromaticSystems {
+            GraphIrEdit::RemoveAromaticSystems { removes } => Self::RemoveAromaticSystems {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -680,15 +689,17 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
-            AstEdit::ModifyAromaticSystemField { id, change } => Self::ModifyAromaticSystemField {
-                id: HandleLike::from_aromatic_system_handle(id),
-                change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
-            },
-            AstEdit::AddMulticenterBond { atoms, ast } => Self::AddMulticenterBond {
+            GraphIrEdit::ModifyAromaticSystemField { id, change } => {
+                Self::ModifyAromaticSystemField {
+                    id: HandleLike::from_aromatic_system_handle(id),
+                    change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
+                }
+            }
+            GraphIrEdit::AddMulticenterBond { atoms, ast } => Self::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
                 ast: Py::new(py, MulticenterBondAst::from_inner(ast.clone()))?,
             },
-            AstEdit::RemoveMulticenterBonds { removes } => Self::RemoveMulticenterBonds {
+            GraphIrEdit::RemoveMulticenterBonds { removes } => Self::RemoveMulticenterBonds {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -700,7 +711,7 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
-            AstEdit::ModifyMulticenterBondField { id, change } => {
+            GraphIrEdit::ModifyMulticenterBondField { id, change } => {
                 Self::ModifyMulticenterBondField {
                     id: HandleLike::from_multicenter_bond_handle(id),
                     change: into_py_variant(
@@ -709,14 +720,14 @@ impl Edit {
                     )?,
                 }
             }
-            AstEdit::AddNoncovalentBond { atoms, ast } => Self::AddNoncovalentBond {
+            GraphIrEdit::AddNoncovalentBond { atoms, ast } => Self::AddNoncovalentBond {
                 atoms: (
                     HandleLike::from_atom_handle(&atoms[0]),
                     HandleLike::from_atom_handle(&atoms[1]),
                 ),
                 ast: Py::new(py, NoncovalentBondAst::from_inner(ast.clone()))?,
             },
-            AstEdit::RemoveNoncovalentBonds { removes } => Self::RemoveNoncovalentBonds {
+            GraphIrEdit::RemoveNoncovalentBonds { removes } => Self::RemoveNoncovalentBonds {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -731,7 +742,7 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
-            AstEdit::ModifyNoncovalentBondField { id, change } => {
+            GraphIrEdit::ModifyNoncovalentBondField { id, change } => {
                 Self::ModifyNoncovalentBondField {
                     id: HandleLike::from_noncovalent_bond_handle(id),
                     change: into_py_variant(
@@ -740,7 +751,7 @@ impl Edit {
                     )?,
                 }
             }
-            AstEdit::AddStereoAtom { site, ligands, ast } => Self::AddStereoAtom {
+            GraphIrEdit::AddStereoAtom { site, ligands, ast } => Self::AddStereoAtom {
                 site: HandleLike::from_atom_handle(site),
                 ligands: ligands
                     .iter()
@@ -753,7 +764,7 @@ impl Edit {
                     .collect(),
                 ast: Py::new(py, StereoAtomAst::from_inner(ast.clone()))?,
             },
-            AstEdit::RemoveStereoAtoms { removes } => Self::RemoveStereoAtoms {
+            GraphIrEdit::RemoveStereoAtoms { removes } => Self::RemoveStereoAtoms {
                 removes: StereoAtomRemovals(
                     removes
                         .iter()
@@ -776,11 +787,11 @@ impl Edit {
                         .collect::<PyResult<_>>()?,
                 ),
             },
-            AstEdit::ModifyStereoAtomField { id, change } => Self::ModifyStereoAtomField {
+            GraphIrEdit::ModifyStereoAtomField { id, change } => Self::ModifyStereoAtomField {
                 id: HandleLike::from_stereo_atom_handle(id),
                 change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
             },
-            AstEdit::AddStereoBond { site, ligands, ast } => Self::AddStereoBond {
+            GraphIrEdit::AddStereoBond { site, ligands, ast } => Self::AddStereoBond {
                 site: HandleLike::from_bond_handle(site),
                 ligands: ligands
                     .iter()
@@ -793,7 +804,7 @@ impl Edit {
                     .collect(),
                 ast: Py::new(py, StereoBondAst::from_inner(ast.clone()))?,
             },
-            AstEdit::RemoveStereoBonds { removes } => Self::RemoveStereoBonds {
+            GraphIrEdit::RemoveStereoBonds { removes } => Self::RemoveStereoBonds {
                 removes: StereoBondRemovals(
                     removes
                         .iter()
@@ -816,11 +827,11 @@ impl Edit {
                         .collect::<PyResult<_>>()?,
                 ),
             },
-            AstEdit::ModifyStereoBondField { id, change } => Self::ModifyStereoBondField {
+            GraphIrEdit::ModifyStereoBondField { id, change } => Self::ModifyStereoBondField {
                 id: HandleLike::from_stereo_bond_handle(id),
                 change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
             },
-            AstEdit::ModifyAtomConstraint { id, old, new } => Self::ModifyAtomConstraint {
+            GraphIrEdit::ModifyAtomConstraint { id, old, new } => Self::ModifyAtomConstraint {
                 id: HandleLike::from_atom_handle(id),
                 old: old
                     .as_ref()
@@ -831,7 +842,7 @@ impl Edit {
                     .map(|value| into_py_variant(py, AtomConstraintAst::from_rust(py, value)?))
                     .transpose()?,
             },
-            AstEdit::ModifyBondConstraint { id, old, new } => Self::ModifyBondConstraint {
+            GraphIrEdit::ModifyBondConstraint { id, old, new } => Self::ModifyBondConstraint {
                 id: HandleLike::from_bond_handle(id),
                 old: old
                     .as_ref()
@@ -842,7 +853,7 @@ impl Edit {
                     .map(|value| into_py_variant(py, BondConstraintAst::from_rust(py, value)?))
                     .transpose()?,
             },
-            AstEdit::ModifyDativeBondConstraint { id, old, new } => {
+            GraphIrEdit::ModifyDativeBondConstraint { id, old, new } => {
                 Self::ModifyDativeBondConstraint {
                     id: HandleLike::from_dative_bond_handle(id),
                     old: old
@@ -859,7 +870,7 @@ impl Edit {
                         .transpose()?,
                 }
             }
-            AstEdit::ModifyAromaticSystemConstraint { id, old, new } => {
+            GraphIrEdit::ModifyAromaticSystemConstraint { id, old, new } => {
                 Self::ModifyAromaticSystemConstraint {
                     id: HandleLike::from_aromatic_system_handle(id),
                     old: old
@@ -876,7 +887,7 @@ impl Edit {
                         .transpose()?,
                 }
             }
-            AstEdit::ModifyMulticenterBondConstraint { id, old, new } => {
+            GraphIrEdit::ModifyMulticenterBondConstraint { id, old, new } => {
                 Self::ModifyMulticenterBondConstraint {
                     id: HandleLike::from_multicenter_bond_handle(id),
                     old: old
@@ -893,7 +904,7 @@ impl Edit {
                         .transpose()?,
                 }
             }
-            AstEdit::ModifyNoncovalentBondConstraint { id, old, new } => {
+            GraphIrEdit::ModifyNoncovalentBondConstraint { id, old, new } => {
                 Self::ModifyNoncovalentBondConstraint {
                     id: HandleLike::from_noncovalent_bond_handle(id),
                     old: old
@@ -910,7 +921,7 @@ impl Edit {
                         .transpose()?,
                 }
             }
-            AstEdit::ModifyStereoAtomConstraint { id, kind, old, new } => {
+            GraphIrEdit::ModifyStereoAtomConstraint { id, kind, old, new } => {
                 Self::ModifyStereoAtomConstraint {
                     id: HandleLike::from_stereo_atom_handle(id),
                     kind: kind.map(StereoKind::from_rust),
@@ -928,7 +939,7 @@ impl Edit {
                         .transpose()?,
                 }
             }
-            AstEdit::ModifyStereoBondConstraint { id, kind, old, new } => {
+            GraphIrEdit::ModifyStereoBondConstraint { id, kind, old, new } => {
                 Self::ModifyStereoBondConstraint {
                     id: HandleLike::from_stereo_bond_handle(id),
                     kind: kind.map(StereoKind::from_rust),
@@ -946,49 +957,51 @@ impl Edit {
                         .transpose()?,
                 }
             }
-            AstEdit::AddMoleculeConstraint { constraint } => Self::AddMoleculeConstraint {
+            GraphIrEdit::AddMoleculeConstraint { constraint } => Self::AddMoleculeConstraint {
                 constraint: Py::new(py, ConstraintEdit::from_rust(constraint))?,
             },
-            AstEdit::RemoveMoleculeConstraint { constraint } => Self::RemoveMoleculeConstraint {
-                constraint: Py::new(py, ConstraintEdit::from_rust(constraint))?,
-            },
+            GraphIrEdit::RemoveMoleculeConstraint { constraint } => {
+                Self::RemoveMoleculeConstraint {
+                    constraint: Py::new(py, ConstraintEdit::from_rust(constraint))?,
+                }
+            }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstEdit {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrEdit {
         match self {
-            Self::AddAtoms { atoms } => AstEdit::AddAtoms {
+            Self::AddAtoms { atoms } => GraphIrEdit::AddAtoms {
                 atoms: atoms
                     .iter()
                     .map(|atom| atom.bind(py).borrow().inner().clone())
                     .collect(),
             },
-            Self::AddBonds { bonds } => AstEdit::AddBonds {
+            Self::AddBonds { bonds } => GraphIrEdit::AddBonds {
                 bonds: bonds
                     .iter()
-                    .map(|((first, second), ast)| AstAddBond {
+                    .map(|((first, second), ast)| GraphIrAddBond {
                         endpoints: [first.to_atom_handle(), second.to_atom_handle()],
                         ast: ast.bind(py).borrow().inner().clone(),
                     })
                     .collect(),
             },
-            Self::RemoveTopology { atoms, bonds } => AstEdit::RemoveTopology {
+            Self::RemoveTopology { atoms, bonds } => GraphIrEdit::RemoveTopology {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 bonds: bonds.iter().map(HandleLike::to_bond_handle).collect(),
             },
-            Self::ModifyAtomField { id, change } => AstEdit::ModifyAtomField {
+            Self::ModifyAtomField { id, change } => GraphIrEdit::ModifyAtomField {
                 id: id.to_atom_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyBondField { id, change } => AstEdit::ModifyBondField {
+            Self::ModifyBondField { id, change } => GraphIrEdit::ModifyBondField {
                 id: id.to_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddDativeBond { atoms, ast } => AstEdit::AddDativeBond {
+            Self::AddDativeBond { atoms, ast } => GraphIrEdit::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 ast: ast.bind(py).borrow().inner().clone(),
             },
-            Self::RemoveDativeBonds { removes } => AstEdit::RemoveDativeBonds {
+            Self::RemoveDativeBonds { removes } => GraphIrEdit::RemoveDativeBonds {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -1000,15 +1013,15 @@ impl Edit {
                     })
                     .collect(),
             },
-            Self::ModifyDativeBondField { id, change } => AstEdit::ModifyDativeBondField {
+            Self::ModifyDativeBondField { id, change } => GraphIrEdit::ModifyDativeBondField {
                 id: id.to_dative_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddAromaticSystem { atoms, ast } => AstEdit::AddAromaticSystem {
+            Self::AddAromaticSystem { atoms, ast } => GraphIrEdit::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 ast: ast.bind(py).borrow().inner().clone(),
             },
-            Self::RemoveAromaticSystems { removes } => AstEdit::RemoveAromaticSystems {
+            Self::RemoveAromaticSystems { removes } => GraphIrEdit::RemoveAromaticSystems {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -1020,15 +1033,17 @@ impl Edit {
                     })
                     .collect(),
             },
-            Self::ModifyAromaticSystemField { id, change } => AstEdit::ModifyAromaticSystemField {
-                id: id.to_aromatic_system_handle(),
-                change: change.bind(py).borrow().to_rust(py),
-            },
-            Self::AddMulticenterBond { atoms, ast } => AstEdit::AddMulticenterBond {
+            Self::ModifyAromaticSystemField { id, change } => {
+                GraphIrEdit::ModifyAromaticSystemField {
+                    id: id.to_aromatic_system_handle(),
+                    change: change.bind(py).borrow().to_rust(py),
+                }
+            }
+            Self::AddMulticenterBond { atoms, ast } => GraphIrEdit::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 ast: ast.bind(py).borrow().inner().clone(),
             },
-            Self::RemoveMulticenterBonds { removes } => AstEdit::RemoveMulticenterBonds {
+            Self::RemoveMulticenterBonds { removes } => GraphIrEdit::RemoveMulticenterBonds {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -1041,16 +1056,16 @@ impl Edit {
                     .collect(),
             },
             Self::ModifyMulticenterBondField { id, change } => {
-                AstEdit::ModifyMulticenterBondField {
+                GraphIrEdit::ModifyMulticenterBondField {
                     id: id.to_multicenter_bond_handle(),
                     change: change.bind(py).borrow().to_rust(py),
                 }
             }
-            Self::AddNoncovalentBond { atoms, ast } => AstEdit::AddNoncovalentBond {
+            Self::AddNoncovalentBond { atoms, ast } => GraphIrEdit::AddNoncovalentBond {
                 atoms: [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
                 ast: ast.bind(py).borrow().inner().clone(),
             },
-            Self::RemoveNoncovalentBonds { removes } => AstEdit::RemoveNoncovalentBonds {
+            Self::RemoveNoncovalentBonds { removes } => GraphIrEdit::RemoveNoncovalentBonds {
                 removes: removes
                     .iter()
                     .map(|(id, atoms, ast)| {
@@ -1063,12 +1078,12 @@ impl Edit {
                     .collect(),
             },
             Self::ModifyNoncovalentBondField { id, change } => {
-                AstEdit::ModifyNoncovalentBondField {
+                GraphIrEdit::ModifyNoncovalentBondField {
                     id: id.to_noncovalent_bond_handle(),
                     change: change.bind(py).borrow().to_rust(py),
                 }
             }
-            Self::AddStereoAtom { site, ligands, ast } => AstEdit::AddStereoAtom {
+            Self::AddStereoAtom { site, ligands, ast } => GraphIrEdit::AddStereoAtom {
                 site: site.to_atom_handle(),
                 ligands: ligands
                     .iter()
@@ -1076,7 +1091,7 @@ impl Edit {
                     .collect(),
                 ast: ast.bind(py).borrow().inner().clone(),
             },
-            Self::RemoveStereoAtoms { removes } => AstEdit::RemoveStereoAtoms {
+            Self::RemoveStereoAtoms { removes } => GraphIrEdit::RemoveStereoAtoms {
                 removes: removes
                     .0
                     .iter()
@@ -1093,11 +1108,11 @@ impl Edit {
                     })
                     .collect(),
             },
-            Self::ModifyStereoAtomField { id, change } => AstEdit::ModifyStereoAtomField {
+            Self::ModifyStereoAtomField { id, change } => GraphIrEdit::ModifyStereoAtomField {
                 id: id.to_stereo_atom_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddStereoBond { site, ligands, ast } => AstEdit::AddStereoBond {
+            Self::AddStereoBond { site, ligands, ast } => GraphIrEdit::AddStereoBond {
                 site: site.to_bond_handle(),
                 ligands: ligands
                     .iter()
@@ -1105,7 +1120,7 @@ impl Edit {
                     .collect(),
                 ast: ast.bind(py).borrow().inner().clone(),
             },
-            Self::RemoveStereoBonds { removes } => AstEdit::RemoveStereoBonds {
+            Self::RemoveStereoBonds { removes } => GraphIrEdit::RemoveStereoBonds {
                 removes: removes
                     .0
                     .iter()
@@ -1122,11 +1137,11 @@ impl Edit {
                     })
                     .collect(),
             },
-            Self::ModifyStereoBondField { id, change } => AstEdit::ModifyStereoBondField {
+            Self::ModifyStereoBondField { id, change } => GraphIrEdit::ModifyStereoBondField {
                 id: id.to_stereo_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::ModifyAtomConstraint { id, old, new } => AstEdit::ModifyAtomConstraint {
+            Self::ModifyAtomConstraint { id, old, new } => GraphIrEdit::ModifyAtomConstraint {
                 id: id.to_atom_handle(),
                 old: old
                     .as_ref()
@@ -1135,7 +1150,7 @@ impl Edit {
                     .as_ref()
                     .map(|value| value.bind(py).borrow().to_rust(py)),
             },
-            Self::ModifyBondConstraint { id, old, new } => AstEdit::ModifyBondConstraint {
+            Self::ModifyBondConstraint { id, old, new } => GraphIrEdit::ModifyBondConstraint {
                 id: id.to_bond_handle(),
                 old: old
                     .as_ref()
@@ -1145,7 +1160,7 @@ impl Edit {
                     .map(|value| value.bind(py).borrow().to_rust(py)),
             },
             Self::ModifyDativeBondConstraint { id, old, new } => {
-                AstEdit::ModifyDativeBondConstraint {
+                GraphIrEdit::ModifyDativeBondConstraint {
                     id: id.to_dative_bond_handle(),
                     old: old
                         .as_ref()
@@ -1156,7 +1171,7 @@ impl Edit {
                 }
             }
             Self::ModifyAromaticSystemConstraint { id, old, new } => {
-                AstEdit::ModifyAromaticSystemConstraint {
+                GraphIrEdit::ModifyAromaticSystemConstraint {
                     id: id.to_aromatic_system_handle(),
                     old: old
                         .as_ref()
@@ -1167,7 +1182,7 @@ impl Edit {
                 }
             }
             Self::ModifyMulticenterBondConstraint { id, old, new } => {
-                AstEdit::ModifyMulticenterBondConstraint {
+                GraphIrEdit::ModifyMulticenterBondConstraint {
                     id: id.to_multicenter_bond_handle(),
                     old: old
                         .as_ref()
@@ -1178,7 +1193,7 @@ impl Edit {
                 }
             }
             Self::ModifyNoncovalentBondConstraint { id, old, new } => {
-                AstEdit::ModifyNoncovalentBondConstraint {
+                GraphIrEdit::ModifyNoncovalentBondConstraint {
                     id: id.to_noncovalent_bond_handle(),
                     old: old
                         .as_ref()
@@ -1189,7 +1204,7 @@ impl Edit {
                 }
             }
             Self::ModifyStereoAtomConstraint { id, kind, old, new } => {
-                AstEdit::ModifyStereoAtomConstraint {
+                GraphIrEdit::ModifyStereoAtomConstraint {
                     id: id.to_stereo_atom_handle(),
                     kind: kind.map(StereoKind::to_rust),
                     old: old
@@ -1201,7 +1216,7 @@ impl Edit {
                 }
             }
             Self::ModifyStereoBondConstraint { id, kind, old, new } => {
-                AstEdit::ModifyStereoBondConstraint {
+                GraphIrEdit::ModifyStereoBondConstraint {
                     id: id.to_stereo_bond_handle(),
                     kind: kind.map(StereoKind::to_rust),
                     old: old
@@ -1212,12 +1227,14 @@ impl Edit {
                         .map(|value| value.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::AddMoleculeConstraint { constraint } => AstEdit::AddMoleculeConstraint {
+            Self::AddMoleculeConstraint { constraint } => GraphIrEdit::AddMoleculeConstraint {
                 constraint: constraint.bind(py).borrow().to_rust(),
             },
-            Self::RemoveMoleculeConstraint { constraint } => AstEdit::RemoveMoleculeConstraint {
-                constraint: constraint.bind(py).borrow().to_rust(),
-            },
+            Self::RemoveMoleculeConstraint { constraint } => {
+                GraphIrEdit::RemoveMoleculeConstraint {
+                    constraint: constraint.bind(py).borrow().to_rust(),
+                }
+            }
         }
     }
 }
@@ -1235,7 +1252,7 @@ fn resolve_edit_index(len: usize, index: isize) -> PyResult<usize> {
     }
 }
 
-fn edit_iter(py: Python<'_>, edits: &AstEdits) -> PyResult<EditIter> {
+fn edit_iter(py: Python<'_>, edits: &GraphIrEdits) -> PyResult<EditIter> {
     let entries = edits
         .iter()
         .map(|edit| into_py_variant(py, Edit::from_rust(py, edit)?))
@@ -1265,7 +1282,7 @@ impl EditIter {
 /// An ordered, append-only batch of host-specific molecule edits.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
-pub struct Edits(AstEdits);
+pub struct Edits(GraphIrEdits);
 
 #[pymethods]
 impl Edits {
@@ -1284,7 +1301,7 @@ impl Edits {
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let edits = AstEditsDsl::from_str(text)
+        let edits = GraphIrEditsDsl::from_str(text)
             .map_err(parse_error)?
             .into_ast(&defaults);
         Ok(Self::from_rust(edits))
@@ -1293,7 +1310,7 @@ impl Edits {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        AstEditsDsl::from_ast(&self.0, &defaults).to_string()
+        GraphIrEditsDsl::from_ast(&self.0, &defaults).to_string()
     }
 
     /// Append one detached raw edit and account for every entity it creates.
@@ -1315,7 +1332,7 @@ impl Edits {
     }
 
     fn add_atom(&mut self, py: Python<'_>, ast: Py<AtomAst>) -> New {
-        New::from_rust(AstEntityHandle::Atom(
+        New::from_rust(GraphIrEntityHandle::Atom(
             self.0.add_atom(ast.bind(py).borrow().inner().clone()),
         ))
     }
@@ -1328,7 +1345,7 @@ impl Edits {
                     .map(|ast| ast.bind(py).borrow().inner().clone()),
             )
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::Atom(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::Atom(handle)))
             .collect()
     }
 
@@ -1339,7 +1356,7 @@ impl Edits {
         second: HandleLike,
         ast: Py<BondAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::Bond(self.0.add_bond(
+        New::from_rust(GraphIrEntityHandle::Bond(self.0.add_bond(
             first.to_atom_handle(),
             second.to_atom_handle(),
             ast.bind(py).borrow().inner().clone(),
@@ -1348,12 +1365,16 @@ impl Edits {
 
     fn add_bonds(&mut self, py: Python<'_>, bonds: Vec<BondAddition>) -> Vec<New> {
         self.0
-            .add_bonds(bonds.into_iter().map(|((first, second), ast)| AstAddBond {
-                endpoints: [first.to_atom_handle(), second.to_atom_handle()],
-                ast: ast.bind(py).borrow().inner().clone(),
-            }))
+            .add_bonds(
+                bonds
+                    .into_iter()
+                    .map(|((first, second), ast)| GraphIrAddBond {
+                        endpoints: [first.to_atom_handle(), second.to_atom_handle()],
+                        ast: ast.bind(py).borrow().inner().clone(),
+                    }),
+            )
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::Bond(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::Bond(handle)))
             .collect()
     }
 
@@ -1363,7 +1384,7 @@ impl Edits {
         atoms: Vec<HandleLike>,
         ast: Py<DativeBondAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::DativeBond(self.0.add_dative_bond(
+        New::from_rust(GraphIrEntityHandle::DativeBond(self.0.add_dative_bond(
             atoms.iter().map(HandleLike::to_atom_handle).collect(),
             ast.bind(py).borrow().inner().clone(),
         )))
@@ -1378,7 +1399,7 @@ impl Edits {
                 )
             }))
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::DativeBond(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::DativeBond(handle)))
             .collect()
     }
 
@@ -1388,10 +1409,12 @@ impl Edits {
         atoms: Vec<HandleLike>,
         ast: Py<AromaticSystemAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::AromaticSystem(self.0.add_aromatic_system(
-            atoms.iter().map(HandleLike::to_atom_handle).collect(),
-            ast.bind(py).borrow().inner().clone(),
-        )))
+        New::from_rust(GraphIrEntityHandle::AromaticSystem(
+            self.0.add_aromatic_system(
+                atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                ast.bind(py).borrow().inner().clone(),
+            ),
+        ))
     }
 
     fn add_aromatic_systems(
@@ -1407,7 +1430,7 @@ impl Edits {
                 )
             }))
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::AromaticSystem(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::AromaticSystem(handle)))
             .collect()
     }
 
@@ -1417,7 +1440,7 @@ impl Edits {
         atoms: Vec<HandleLike>,
         ast: Py<MulticenterBondAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::MulticenterBond(
+        New::from_rust(GraphIrEntityHandle::MulticenterBond(
             self.0.add_multicenter_bond(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 ast.bind(py).borrow().inner().clone(),
@@ -1438,7 +1461,7 @@ impl Edits {
                 )
             }))
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::MulticenterBond(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::MulticenterBond(handle)))
             .collect()
     }
 
@@ -1448,7 +1471,7 @@ impl Edits {
         atoms: (HandleLike, HandleLike),
         ast: Py<NoncovalentBondAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::NoncovalentBond(
+        New::from_rust(GraphIrEntityHandle::NoncovalentBond(
             self.0.add_noncovalent_bond(
                 [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
                 ast.bind(py).borrow().inner().clone(),
@@ -1469,7 +1492,7 @@ impl Edits {
                 )
             }))
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::NoncovalentBond(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::NoncovalentBond(handle)))
             .collect()
     }
 
@@ -1480,7 +1503,7 @@ impl Edits {
         ligands: Vec<StereoLigandInput>,
         ast: Py<StereoAtomAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::StereoAtom(
+        New::from_rust(GraphIrEntityHandle::StereoAtom(
             self.0.add_stereo_atom(
                 site.to_atom_handle(),
                 ligands
@@ -1505,7 +1528,7 @@ impl Edits {
                 )
             }))
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::StereoAtom(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::StereoAtom(handle)))
             .collect()
     }
 
@@ -1516,7 +1539,7 @@ impl Edits {
         ligands: Vec<StereoLigandInput>,
         ast: Py<StereoBondAst>,
     ) -> New {
-        New::from_rust(AstEntityHandle::StereoBond(
+        New::from_rust(GraphIrEntityHandle::StereoBond(
             self.0.add_stereo_bond(
                 site.to_bond_handle(),
                 ligands
@@ -1541,7 +1564,7 @@ impl Edits {
                 )
             }))
             .into_iter()
-            .map(|handle| New::from_rust(AstEntityHandle::StereoBond(handle)))
+            .map(|handle| New::from_rust(GraphIrEntityHandle::StereoBond(handle)))
             .collect()
     }
 
@@ -1768,11 +1791,11 @@ impl Edits {
 }
 
 impl Edits {
-    pub(crate) fn from_rust(edits: AstEdits) -> Self {
+    pub(crate) fn from_rust(edits: GraphIrEdits) -> Self {
         Self(edits)
     }
 
-    pub(crate) fn to_rust(&self) -> AstEdits {
+    pub(crate) fn to_rust(&self) -> GraphIrEdits {
         self.0.clone()
     }
 }
@@ -1780,56 +1803,69 @@ impl Edits {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AromaticSystemAst as AstAromaticSystemAst,
-        AromaticSystemFieldChange as AstAromaticSystemFieldChange, AtomAst as AstAtomAst,
-        AtomFieldChange as AstAtomFieldChange, BondAst as AstBondAst,
-        BondFieldChange as AstBondFieldChange, Constraint as AstConstraint,
-        DativeBondAst as AstDativeBondAst, DativeBondFieldChange as AstDativeBondFieldChange,
-        MoleculeConstraint as AstMoleculeConstraint, MulticenterBondAst as AstMulticenterBondAst,
-        MulticenterBondFieldChange as AstMulticenterBondFieldChange,
-        NoncovalentBondAst as AstNoncovalentBondAst,
-        NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
-        NoncovalentBondKind as AstNoncovalentBondKind,
-        NoncovalentBondKindAst as AstNoncovalentBondKindAst, StereoAtomAst as AstStereoAtomAst,
-        StereoAtomFieldChange as AstStereoAtomFieldChange, StereoBondAst as AstStereoBondAst,
-        StereoBondFieldChange as AstStereoBondFieldChange,
-        StereoConfigurationAst as AstStereoConfigurationAst, StereoKind as AstStereoKind,
-        StereoLigandKind as AstStereoLigandKind, ValueAst as AstValueAst,
+    use umol_graph_ir::ir::{
+        AromaticSystemAst as GraphIrAromaticSystemAst,
+        AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange, AtomAst as GraphIrAtomAst,
+        AtomFieldChange as GraphIrAtomFieldChange, BondAst as GraphIrBondAst,
+        BondFieldChange as GraphIrBondFieldChange, Constraint as GraphIrConstraint,
+        DativeBondAst as GraphIrDativeBondAst,
+        DativeBondFieldChange as GraphIrDativeBondFieldChange,
+        MoleculeConstraint as GraphIrMoleculeConstraint,
+        MulticenterBondAst as GraphIrMulticenterBondAst,
+        MulticenterBondFieldChange as GraphIrMulticenterBondFieldChange,
+        NoncovalentBondAst as GraphIrNoncovalentBondAst,
+        NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind,
+        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst,
+        StereoAtomAst as GraphIrStereoAtomAst,
+        StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
+        StereoBondAst as GraphIrStereoBondAst,
+        StereoBondFieldChange as GraphIrStereoBondFieldChange,
+        StereoConfigurationAst as GraphIrStereoConfigurationAst, StereoKind as GraphIrStereoKind,
+        StereoLigandKind as GraphIrStereoLigandKind, ValueAst as GraphIrValueAst,
     };
 
     use super::*;
 
     #[rstest]
-    #[case::id(HandleLike::Id(7), AstAtomHandle::Id(AstAtomId(7)))]
-    #[case::new(HandleLike::New(New { index: 7 }), AstAtomHandle::New(7))]
-    fn test_handle_like_to_atom_handle(#[case] input: HandleLike, #[case] expected: AstAtomHandle) {
+    #[case::id(HandleLike::Id(7), GraphIrAtomHandle::Id(GraphIrAtomId(7)))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrAtomHandle::New(7))]
+    fn test_handle_like_to_atom_handle(
+        #[case] input: HandleLike,
+        #[case] expected: GraphIrAtomHandle,
+    ) {
         assert_eq!(input.to_atom_handle(), expected);
     }
 
     #[rstest]
-    #[case::id(HandleLike::Id(7), AstBondHandle::Id(AstBondId(7)))]
-    #[case::new(HandleLike::New(New { index: 7 }), AstBondHandle::New(7))]
-    fn test_handle_like_to_bond_handle(#[case] input: HandleLike, #[case] expected: AstBondHandle) {
+    #[case::id(HandleLike::Id(7), GraphIrBondHandle::Id(GraphIrBondId(7)))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrBondHandle::New(7))]
+    fn test_handle_like_to_bond_handle(
+        #[case] input: HandleLike,
+        #[case] expected: GraphIrBondHandle,
+    ) {
         assert_eq!(input.to_bond_handle(), expected);
     }
 
     #[rstest]
-    #[case::id(HandleLike::Id(7), AstDativeBondHandle::Id(AstDativeBondId(7)))]
-    #[case::new(HandleLike::New(New { index: 7 }), AstDativeBondHandle::New(7))]
+    #[case::id(HandleLike::Id(7), GraphIrDativeBondHandle::Id(GraphIrDativeBondId(7)))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrDativeBondHandle::New(7))]
     fn test_handle_like_to_dative_bond_handle(
         #[case] input: HandleLike,
-        #[case] expected: AstDativeBondHandle,
+        #[case] expected: GraphIrDativeBondHandle,
     ) {
         assert_eq!(input.to_dative_bond_handle(), expected);
     }
 
     #[rstest]
-    #[case::id(HandleLike::Id(7), AstAromaticSystemHandle::Id(AstAromaticSystemId(7)))]
-    #[case::new(HandleLike::New(New { index: 7 }), AstAromaticSystemHandle::New(7))]
+    #[case::id(
+        HandleLike::Id(7),
+        GraphIrAromaticSystemHandle::Id(GraphIrAromaticSystemId(7))
+    )]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrAromaticSystemHandle::New(7))]
     fn test_handle_like_to_aromatic_system_handle(
         #[case] input: HandleLike,
-        #[case] expected: AstAromaticSystemHandle,
+        #[case] expected: GraphIrAromaticSystemHandle,
     ) {
         assert_eq!(input.to_aromatic_system_handle(), expected);
     }
@@ -1837,12 +1873,12 @@ mod tests {
     #[rstest]
     #[case::id(
         HandleLike::Id(7),
-        AstMulticenterBondHandle::Id(AstMulticenterBondId(7))
+        GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(7))
     )]
-    #[case::new(HandleLike::New(New { index: 7 }), AstMulticenterBondHandle::New(7))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrMulticenterBondHandle::New(7))]
     fn test_handle_like_to_multicenter_bond_handle(
         #[case] input: HandleLike,
-        #[case] expected: AstMulticenterBondHandle,
+        #[case] expected: GraphIrMulticenterBondHandle,
     ) {
         assert_eq!(input.to_multicenter_bond_handle(), expected);
     }
@@ -1850,41 +1886,41 @@ mod tests {
     #[rstest]
     #[case::id(
         HandleLike::Id(7),
-        AstNoncovalentBondHandle::Id(AstNoncovalentBondId(7))
+        GraphIrNoncovalentBondHandle::Id(GraphIrNoncovalentBondId(7))
     )]
-    #[case::new(HandleLike::New(New { index: 7 }), AstNoncovalentBondHandle::New(7))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrNoncovalentBondHandle::New(7))]
     fn test_handle_like_to_noncovalent_bond_handle(
         #[case] input: HandleLike,
-        #[case] expected: AstNoncovalentBondHandle,
+        #[case] expected: GraphIrNoncovalentBondHandle,
     ) {
         assert_eq!(input.to_noncovalent_bond_handle(), expected);
     }
 
     #[rstest]
-    #[case::id(HandleLike::Id(7), AstStereoAtomHandle::Id(AstStereoAtomId(7)))]
-    #[case::new(HandleLike::New(New { index: 7 }), AstStereoAtomHandle::New(7))]
+    #[case::id(HandleLike::Id(7), GraphIrStereoAtomHandle::Id(GraphIrStereoAtomId(7)))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrStereoAtomHandle::New(7))]
     fn test_handle_like_to_stereo_atom_handle(
         #[case] input: HandleLike,
-        #[case] expected: AstStereoAtomHandle,
+        #[case] expected: GraphIrStereoAtomHandle,
     ) {
         assert_eq!(input.to_stereo_atom_handle(), expected);
     }
 
     #[rstest]
-    #[case::id(HandleLike::Id(7), AstStereoBondHandle::Id(AstStereoBondId(7)))]
-    #[case::new(HandleLike::New(New { index: 7 }), AstStereoBondHandle::New(7))]
+    #[case::id(HandleLike::Id(7), GraphIrStereoBondHandle::Id(GraphIrStereoBondId(7)))]
+    #[case::new(HandleLike::New(New { index: 7 }), GraphIrStereoBondHandle::New(7))]
     fn test_handle_like_to_stereo_bond_handle(
         #[case] input: HandleLike,
-        #[case] expected: AstStereoBondHandle,
+        #[case] expected: GraphIrStereoBondHandle,
     ) {
         assert_eq!(input.to_stereo_bond_handle(), expected);
     }
 
     #[rstest]
-    #[case::identity(AstConstraintEdit::from(AstConstraint::Molecule(
-        AstMoleculeConstraint::Connected { atoms: None },
+    #[case::identity(GraphIrConstraintEdit::from(GraphIrConstraint::Molecule(
+        GraphIrMoleculeConstraint::Connected { atoms: None },
     )))]
-    fn test_constraint_edit_roundtrip(#[case] expected: AstConstraintEdit) {
+    fn test_constraint_edit_roundtrip(#[case] expected: GraphIrConstraintEdit) {
         let constraint = ConstraintEdit::from_rust(&expected);
 
         assert_eq!(constraint.to_rust(), expected);
@@ -1892,167 +1928,167 @@ mod tests {
 
     #[rstest]
     #[case::inventory(vec![
-        AstEdit::AddAtoms { atoms: vec![AstAtomAst::default()] },
-        AstEdit::AddBonds { bonds: vec![AstAddBond {
-            endpoints: [AstAtomHandle::Id(AstAtomId(0)), AstAtomHandle::New(0)],
-            ast: AstBondAst::default(),
+        GraphIrEdit::AddAtoms { atoms: vec![GraphIrAtomAst::default()] },
+        GraphIrEdit::AddBonds { bonds: vec![GraphIrAddBond {
+            endpoints: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            ast: GraphIrBondAst::default(),
         }] },
-        AstEdit::RemoveTopology {
-            atoms: vec![AstAtomHandle::New(0)],
-            bonds: vec![AstBondHandle::Id(AstBondId(1))],
+        GraphIrEdit::RemoveTopology {
+            atoms: vec![GraphIrAtomHandle::New(0)],
+            bonds: vec![GraphIrBondHandle::Id(GraphIrBondId(1))],
         },
-        AstEdit::ModifyAtomField {
-            id: AstAtomHandle::Id(AstAtomId(0)),
-            change: AstAtomFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(1),
+        GraphIrEdit::ModifyAtomField {
+            id: GraphIrAtomHandle::Id(GraphIrAtomId(0)),
+            change: GraphIrAtomFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(1),
             },
         },
-        AstEdit::ModifyBondField {
-            id: AstBondHandle::New(0),
-            change: AstBondFieldChange::Order {
-                old: AstValueAst::Lit(1),
-                new: AstValueAst::Lit(2),
+        GraphIrEdit::ModifyBondField {
+            id: GraphIrBondHandle::New(0),
+            change: GraphIrBondFieldChange::Order {
+                old: GraphIrValueAst::Lit(1),
+                new: GraphIrValueAst::Lit(2),
             },
         },
-        AstEdit::AddDativeBond {
-            atoms: vec![AstAtomHandle::Id(AstAtomId(0)), AstAtomHandle::New(0)],
-            ast: AstDativeBondAst::default(),
+        GraphIrEdit::AddDativeBond {
+            atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            ast: GraphIrDativeBondAst::default(),
         },
-        AstEdit::RemoveDativeBonds { removes: vec![(
-            AstDativeBondHandle::New(0),
-            vec![AstAtomHandle::Id(AstAtomId(0))],
-            AstDativeBondAst::default(),
+        GraphIrEdit::RemoveDativeBonds { removes: vec![(
+            GraphIrDativeBondHandle::New(0),
+            vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            GraphIrDativeBondAst::default(),
         )] },
-        AstEdit::ModifyDativeBondField {
-            id: AstDativeBondHandle::Id(AstDativeBondId(0)),
-            change: AstDativeBondFieldChange::Order {
-                old: AstValueAst::Lit(1),
-                new: AstValueAst::Lit(2),
+        GraphIrEdit::ModifyDativeBondField {
+            id: GraphIrDativeBondHandle::Id(GraphIrDativeBondId(0)),
+            change: GraphIrDativeBondFieldChange::Order {
+                old: GraphIrValueAst::Lit(1),
+                new: GraphIrValueAst::Lit(2),
             },
         },
-        AstEdit::AddAromaticSystem {
-            atoms: vec![AstAtomHandle::New(0)],
-            ast: AstAromaticSystemAst::default(),
+        GraphIrEdit::AddAromaticSystem {
+            atoms: vec![GraphIrAtomHandle::New(0)],
+            ast: GraphIrAromaticSystemAst::default(),
         },
-        AstEdit::RemoveAromaticSystems { removes: vec![(
-            AstAromaticSystemHandle::Id(AstAromaticSystemId(0)),
-            vec![AstAtomHandle::New(0)],
-            AstAromaticSystemAst::default(),
+        GraphIrEdit::RemoveAromaticSystems { removes: vec![(
+            GraphIrAromaticSystemHandle::Id(GraphIrAromaticSystemId(0)),
+            vec![GraphIrAtomHandle::New(0)],
+            GraphIrAromaticSystemAst::default(),
         )] },
-        AstEdit::ModifyAromaticSystemField {
-            id: AstAromaticSystemHandle::New(0),
-            change: AstAromaticSystemFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(-1),
+        GraphIrEdit::ModifyAromaticSystemField {
+            id: GraphIrAromaticSystemHandle::New(0),
+            change: GraphIrAromaticSystemFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(-1),
             },
         },
-        AstEdit::AddMulticenterBond {
-            atoms: vec![AstAtomHandle::Id(AstAtomId(0)), AstAtomHandle::New(0)],
-            ast: AstMulticenterBondAst::default(),
+        GraphIrEdit::AddMulticenterBond {
+            atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            ast: GraphIrMulticenterBondAst::default(),
         },
-        AstEdit::RemoveMulticenterBonds { removes: vec![(
-            AstMulticenterBondHandle::New(0),
-            vec![AstAtomHandle::Id(AstAtomId(0))],
-            AstMulticenterBondAst::default(),
+        GraphIrEdit::RemoveMulticenterBonds { removes: vec![(
+            GraphIrMulticenterBondHandle::New(0),
+            vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            GraphIrMulticenterBondAst::default(),
         )] },
-        AstEdit::ModifyMulticenterBondField {
-            id: AstMulticenterBondHandle::Id(AstMulticenterBondId(0)),
-            change: AstMulticenterBondFieldChange::Charge {
-                old: AstValueAst::Lit(0),
-                new: AstValueAst::Lit(1),
+        GraphIrEdit::ModifyMulticenterBondField {
+            id: GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(0)),
+            change: GraphIrMulticenterBondFieldChange::Charge {
+                old: GraphIrValueAst::Lit(0),
+                new: GraphIrValueAst::Lit(1),
             },
         },
-        AstEdit::AddNoncovalentBond {
-            atoms: [AstAtomHandle::Id(AstAtomId(0)), AstAtomHandle::New(0)],
-            ast: AstNoncovalentBondAst::default(),
+        GraphIrEdit::AddNoncovalentBond {
+            atoms: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            ast: GraphIrNoncovalentBondAst::default(),
         },
-        AstEdit::RemoveNoncovalentBonds { removes: vec![(
-            AstNoncovalentBondHandle::New(0),
-            [AstAtomHandle::Id(AstAtomId(0)), AstAtomHandle::New(0)],
-            AstNoncovalentBondAst::default(),
+        GraphIrEdit::RemoveNoncovalentBonds { removes: vec![(
+            GraphIrNoncovalentBondHandle::New(0),
+            [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            GraphIrNoncovalentBondAst::default(),
         )] },
-        AstEdit::ModifyNoncovalentBondField {
-            id: AstNoncovalentBondHandle::Id(AstNoncovalentBondId(0)),
-            change: AstNoncovalentBondFieldChange::Kind {
-                old: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
-                new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic),
+        GraphIrEdit::ModifyNoncovalentBondField {
+            id: GraphIrNoncovalentBondHandle::Id(GraphIrNoncovalentBondId(0)),
+            change: GraphIrNoncovalentBondFieldChange::Kind {
+                old: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+                new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic),
             },
         },
-        AstEdit::AddStereoAtom {
-            site: AstAtomHandle::New(0),
-            ligands: vec![(AstAtomHandle::Id(AstAtomId(0)), AstStereoLigandKind::Atom)],
-            ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, 0_u32),
+        GraphIrEdit::AddStereoAtom {
+            site: GraphIrAtomHandle::New(0),
+            ligands: vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::Atom)],
+            ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, 0_u32),
         },
-        AstEdit::RemoveStereoAtoms { removes: vec![(
-            AstStereoAtomHandle::Id(AstStereoAtomId(0)),
-            AstAtomHandle::New(0),
-            vec![(AstAtomHandle::Id(AstAtomId(0)), AstStereoLigandKind::ImplicitHydrogen)],
-            AstStereoAtomAst::new(AstStereoKind::Tetrahedral, 1_u32),
+        GraphIrEdit::RemoveStereoAtoms { removes: vec![(
+            GraphIrStereoAtomHandle::Id(GraphIrStereoAtomId(0)),
+            GraphIrAtomHandle::New(0),
+            vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::ImplicitHydrogen)],
+            GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, 1_u32),
         )] },
-        AstEdit::ModifyStereoAtomField {
-            id: AstStereoAtomHandle::New(0),
-            change: AstStereoAtomFieldChange::Configuration {
-                old: AstStereoConfigurationAst::kinded(AstStereoKind::Tetrahedral, 0_u32),
-                new: AstStereoConfigurationAst::kinded(AstStereoKind::Tetrahedral, 1_u32),
+        GraphIrEdit::ModifyStereoAtomField {
+            id: GraphIrStereoAtomHandle::New(0),
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::Tetrahedral, 0_u32),
+                new: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::Tetrahedral, 1_u32),
             },
         },
-        AstEdit::AddStereoBond {
-            site: AstBondHandle::Id(AstBondId(0)),
-            ligands: vec![(AstAtomHandle::New(0), AstStereoLigandKind::LonePair)],
-            ast: AstStereoBondAst::new(AstStereoKind::CisTrans, 0_u32),
+        GraphIrEdit::AddStereoBond {
+            site: GraphIrBondHandle::Id(GraphIrBondId(0)),
+            ligands: vec![(GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::LonePair)],
+            ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, 0_u32),
         },
-        AstEdit::RemoveStereoBonds { removes: vec![(
-            AstStereoBondHandle::New(0),
-            AstBondHandle::Id(AstBondId(0)),
-            vec![(AstAtomHandle::New(0), AstStereoLigandKind::Atom)],
-            AstStereoBondAst::new(AstStereoKind::CisTrans, 1_u32),
+        GraphIrEdit::RemoveStereoBonds { removes: vec![(
+            GraphIrStereoBondHandle::New(0),
+            GraphIrBondHandle::Id(GraphIrBondId(0)),
+            vec![(GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::Atom)],
+            GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, 1_u32),
         )] },
-        AstEdit::ModifyStereoBondField {
-            id: AstStereoBondHandle::Id(AstStereoBondId(0)),
-            change: AstStereoBondFieldChange::Configuration {
-                old: AstStereoConfigurationAst::kinded(AstStereoKind::CisTrans, 0_u32),
-                new: AstStereoConfigurationAst::kinded(AstStereoKind::CisTrans, 1_u32),
+        GraphIrEdit::ModifyStereoBondField {
+            id: GraphIrStereoBondHandle::Id(GraphIrStereoBondId(0)),
+            change: GraphIrStereoBondFieldChange::Configuration {
+                old: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::CisTrans, 0_u32),
+                new: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::CisTrans, 1_u32),
             },
         },
-        AstEdit::ModifyAtomConstraint {
-            id: AstAtomHandle::Id(AstAtomId(0)), old: None, new: None,
+        GraphIrEdit::ModifyAtomConstraint {
+            id: GraphIrAtomHandle::Id(GraphIrAtomId(0)), old: None, new: None,
         },
-        AstEdit::ModifyBondConstraint {
-            id: AstBondHandle::New(0), old: None, new: None,
+        GraphIrEdit::ModifyBondConstraint {
+            id: GraphIrBondHandle::New(0), old: None, new: None,
         },
-        AstEdit::ModifyDativeBondConstraint {
-            id: AstDativeBondHandle::Id(AstDativeBondId(0)), old: None, new: None,
+        GraphIrEdit::ModifyDativeBondConstraint {
+            id: GraphIrDativeBondHandle::Id(GraphIrDativeBondId(0)), old: None, new: None,
         },
-        AstEdit::ModifyAromaticSystemConstraint {
-            id: AstAromaticSystemHandle::New(0), old: None, new: None,
+        GraphIrEdit::ModifyAromaticSystemConstraint {
+            id: GraphIrAromaticSystemHandle::New(0), old: None, new: None,
         },
-        AstEdit::ModifyMulticenterBondConstraint {
-            id: AstMulticenterBondHandle::Id(AstMulticenterBondId(0)), old: None, new: None,
+        GraphIrEdit::ModifyMulticenterBondConstraint {
+            id: GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(0)), old: None, new: None,
         },
-        AstEdit::ModifyNoncovalentBondConstraint {
-            id: AstNoncovalentBondHandle::New(0), old: None, new: None,
+        GraphIrEdit::ModifyNoncovalentBondConstraint {
+            id: GraphIrNoncovalentBondHandle::New(0), old: None, new: None,
         },
-        AstEdit::ModifyStereoAtomConstraint {
-            id: AstStereoAtomHandle::Id(AstStereoAtomId(0)),
-            kind: Some(AstStereoKind::Tetrahedral), old: None, new: None,
+        GraphIrEdit::ModifyStereoAtomConstraint {
+            id: GraphIrStereoAtomHandle::Id(GraphIrStereoAtomId(0)),
+            kind: Some(GraphIrStereoKind::Tetrahedral), old: None, new: None,
         },
-        AstEdit::ModifyStereoBondConstraint {
-            id: AstStereoBondHandle::New(0),
-            kind: Some(AstStereoKind::CisTrans), old: None, new: None,
+        GraphIrEdit::ModifyStereoBondConstraint {
+            id: GraphIrStereoBondHandle::New(0),
+            kind: Some(GraphIrStereoKind::CisTrans), old: None, new: None,
         },
-        AstEdit::AddMoleculeConstraint {
-            constraint: AstConstraintEdit::from(AstConstraint::Molecule(
-                AstMoleculeConstraint::Connected { atoms: None },
+        GraphIrEdit::AddMoleculeConstraint {
+            constraint: GraphIrConstraintEdit::from(GraphIrConstraint::Molecule(
+                GraphIrMoleculeConstraint::Connected { atoms: None },
             )),
         },
-        AstEdit::RemoveMoleculeConstraint {
-            constraint: AstConstraintEdit::from(AstConstraint::Molecule(
-                AstMoleculeConstraint::Connected { atoms: Some(vec![AstAtomId(0)]) },
+        GraphIrEdit::RemoveMoleculeConstraint {
+            constraint: GraphIrConstraintEdit::from(GraphIrConstraint::Molecule(
+                GraphIrMoleculeConstraint::Connected { atoms: Some(vec![GraphIrAtomId(0)]) },
             )),
         },
     ])]
-    fn test_edit_roundtrip(#[case] edits: Vec<AstEdit>) {
+    fn test_edit_roundtrip(#[case] edits: Vec<GraphIrEdit>) {
         Python::attach(|py| {
             for expected in edits {
                 let edit = Edit::from_rust(py, &expected).unwrap();

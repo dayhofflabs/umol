@@ -5,7 +5,7 @@
 //! the molecule — shared bonding electrons are counted on each endpoint.
 
 use thiserror::Error;
-use umol_ast::ast::{AtomAst, MoleculeAst};
+use umol_graph_ir::ir::{AtomAst, MoleculeAst};
 use umol_utils::solution::Solution;
 
 use crate::ops::invariant::{ValenceInvariants, ValenceMismatch};

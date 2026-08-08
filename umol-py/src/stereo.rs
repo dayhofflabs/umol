@@ -11,24 +11,27 @@ use pyo3::types::PyDict;
 // The `BooleanAst` Rust value is still `#[cfg(test)]` (only tests build it directly); its `to_rust`
 // peer is already live.
 #[cfg(test)]
-use umol_ast::ast::BooleanAst as AstBooleanAst;
-use umol_ast::ast::{
-    AsLit, AtomId as AstAtomId, BondId as AstBondId,
-    CisTransConfiguration as AstCisTransConfiguration, CisTransStereo as AstCisTransStereo,
-    CisTransStereoAst as AstCisTransStereoAst, LigandPermutation as AstLigandPermutation,
-    MoleculeAst as AstMoleculeAst, OrientedLigandPermutation as AstOrientedLigandPermutation,
-    StereoAtomAst as AstStereoAtomAst, StereoAtomId as AstStereoAtomId,
-    StereoAtomUpdate as AstStereoAtomUpdate, StereoAtomView as AstStereoAtomView,
-    StereoBondAst as AstStereoBondAst, StereoBondId as AstStereoBondId,
-    StereoBondUpdate as AstStereoBondUpdate, StereoBondView as AstStereoBondView,
-    StereoConfigurationAst as AstStereoConfigurationAst,
-    StereoConfigurationUpdate as AstStereoConfigurationUpdate, StereoCoset as AstStereoCoset,
-    StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
-    StereoLigandKind as AstStereoLigandKind, StereoLigandPair as AstStereoLigandPair,
-    StereoLigandPosition as AstStereoLigandPosition, StereoTerm as AstStereoTerm,
-    Stereogenicity as AstStereogenicity, TetrahedralConfiguration as AstTetrahedralConfiguration,
-    TetrahedralStereo as AstTetrahedralStereo, TetrahedralStereoAst as AstTetrahedralStereoAst,
-    Topicity as AstTopicity,
+use umol_graph_ir::ir::BooleanAst as GraphIrBooleanAst;
+use umol_graph_ir::ir::{
+    AsLit, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
+    CisTransConfiguration as GraphIrCisTransConfiguration, CisTransStereo as GraphIrCisTransStereo,
+    CisTransStereoAst as GraphIrCisTransStereoAst, LigandPermutation as GraphIrLigandPermutation,
+    MoleculeAst as GraphIrMoleculeAst,
+    OrientedLigandPermutation as GraphIrOrientedLigandPermutation,
+    StereoAtomAst as GraphIrStereoAtomAst, StereoAtomId as GraphIrStereoAtomId,
+    StereoAtomUpdate as GraphIrStereoAtomUpdate, StereoAtomView as GraphIrStereoAtomView,
+    StereoBondAst as GraphIrStereoBondAst, StereoBondId as GraphIrStereoBondId,
+    StereoBondUpdate as GraphIrStereoBondUpdate, StereoBondView as GraphIrStereoBondView,
+    StereoConfigurationAst as GraphIrStereoConfigurationAst,
+    StereoConfigurationUpdate as GraphIrStereoConfigurationUpdate,
+    StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
+    StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
+    StereoLigandPair as GraphIrStereoLigandPair,
+    StereoLigandPosition as GraphIrStereoLigandPosition, StereoTerm as GraphIrStereoTerm,
+    Stereogenicity as GraphIrStereogenicity,
+    TetrahedralConfiguration as GraphIrTetrahedralConfiguration,
+    TetrahedralStereo as GraphIrTetrahedralStereo,
+    TetrahedralStereoAst as GraphIrTetrahedralStereoAst, Topicity as GraphIrTopicity,
 };
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
@@ -119,41 +122,41 @@ impl StereoTerm {
 }
 
 impl StereoTerm {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoTerm) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrStereoTerm) -> PyResult<Self> {
         Ok(match ast {
-            AstStereoTerm::Var(boxed) => {
+            GraphIrStereoTerm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
                 StereoTerm::Var(name.clone(), restriction.clone())
             }
-            AstStereoTerm::Lit(index) => StereoTerm::Lit(*index),
-            AstStereoTerm::LitSet(members) => StereoTerm::LitSet(members.clone()),
-            AstStereoTerm::Swap(inner) => {
+            GraphIrStereoTerm::Lit(index) => StereoTerm::Lit(*index),
+            GraphIrStereoTerm::LitSet(members) => StereoTerm::LitSet(members.clone()),
+            GraphIrStereoTerm::Swap(inner) => {
                 StereoTerm::Swap(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
-            AstStereoTerm::Mirror(inner) => {
+            GraphIrStereoTerm::Mirror(inner) => {
                 StereoTerm::Mirror(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
-            AstStereoTerm::Apply(inner, permutation) => StereoTerm::Apply(
+            GraphIrStereoTerm::Apply(inner, permutation) => StereoTerm::Apply(
                 into_py_variant(py, StereoTerm::from_rust(py, inner)?)?,
                 Permutation::from_inner(*permutation),
             ),
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoTerm {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoTerm {
         match self {
             StereoTerm::Var(name, restriction) => {
-                AstStereoTerm::Var(Box::new((name.clone(), restriction.clone())))
+                GraphIrStereoTerm::Var(Box::new((name.clone(), restriction.clone())))
             }
-            StereoTerm::Lit(index) => AstStereoTerm::Lit(*index),
-            StereoTerm::LitSet(members) => AstStereoTerm::LitSet(members.clone()),
+            StereoTerm::Lit(index) => GraphIrStereoTerm::Lit(*index),
+            StereoTerm::LitSet(members) => GraphIrStereoTerm::LitSet(members.clone()),
             StereoTerm::Swap(inner) => {
-                AstStereoTerm::Swap(Box::new(inner.bind(py).borrow().to_rust(py)))
+                GraphIrStereoTerm::Swap(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
             StereoTerm::Mirror(inner) => {
-                AstStereoTerm::Mirror(Box::new(inner.bind(py).borrow().to_rust(py)))
+                GraphIrStereoTerm::Mirror(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
-            StereoTerm::Apply(inner, permutation) => AstStereoTerm::Apply(
+            StereoTerm::Apply(inner, permutation) => GraphIrStereoTerm::Apply(
                 Box::new(inner.bind(py).borrow().to_rust(py)),
                 permutation.inner(),
             ),
@@ -193,24 +196,24 @@ impl StereoCoset {
 }
 
 impl StereoCoset {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoCoset) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrStereoCoset) -> PyResult<Self> {
         Ok(match ast {
-            AstStereoCoset::Undetermined => Self::Undetermined(),
-            AstStereoCoset::Lit(index) => Self::Lit(*index),
-            AstStereoCoset::LitSet(members) => Self::LitSet(members.clone()),
-            AstStereoCoset::Term(inner) => {
+            GraphIrStereoCoset::Undetermined => Self::Undetermined(),
+            GraphIrStereoCoset::Lit(index) => Self::Lit(*index),
+            GraphIrStereoCoset::LitSet(members) => Self::LitSet(members.clone()),
+            GraphIrStereoCoset::Term(inner) => {
                 Self::Term(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoCoset {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoCoset {
         match self {
-            Self::Undetermined() => AstStereoCoset::Undetermined,
-            Self::Lit(index) => AstStereoCoset::Lit(*index),
-            Self::LitSet(members) => AstStereoCoset::LitSet(members.clone()),
+            Self::Undetermined() => GraphIrStereoCoset::Undetermined,
+            Self::Lit(index) => GraphIrStereoCoset::Lit(*index),
+            Self::LitSet(members) => GraphIrStereoCoset::LitSet(members.clone()),
             Self::Term(inner) => {
-                AstStereoCoset::Term(Box::new(inner.bind(py).borrow().to_rust(py)))
+                GraphIrStereoCoset::Term(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
         }
     }
@@ -257,32 +260,32 @@ impl TetrahedralStereoAst {
 
 impl_py_lattice!(
     TetrahedralStereoAst,
-    AstTetrahedralStereoAst,
-    |value: &TetrahedralStereoAst, py: Python<'_>| -> PyResult<AstTetrahedralStereoAst> {
+    GraphIrTetrahedralStereoAst,
+    |value: &TetrahedralStereoAst, py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoAst> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstTetrahedralStereoAst| -> PyResult<TetrahedralStereoAst> {
+    |py: Python<'_>, value: GraphIrTetrahedralStereoAst| -> PyResult<TetrahedralStereoAst> {
         TetrahedralStereoAst::from_rust(py, &value)
     }
 );
 
 impl TetrahedralStereoAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstTetrahedralStereoAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTetrahedralStereoAst) -> PyResult<Self> {
         Ok(match ast {
-            AstTetrahedralStereoAst::Undetermined => Self::Undetermined(),
-            AstTetrahedralStereoAst::NotStereo => Self::NotStereo(),
-            AstTetrahedralStereoAst::Stereo(coset) => {
+            GraphIrTetrahedralStereoAst::Undetermined => Self::Undetermined(),
+            GraphIrTetrahedralStereoAst::NotStereo => Self::NotStereo(),
+            GraphIrTetrahedralStereoAst::Stereo(coset) => {
                 Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstTetrahedralStereoAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTetrahedralStereoAst {
         match self {
-            Self::Undetermined() => AstTetrahedralStereoAst::Undetermined,
-            Self::NotStereo() => AstTetrahedralStereoAst::NotStereo,
+            Self::Undetermined() => GraphIrTetrahedralStereoAst::Undetermined,
+            Self::NotStereo() => GraphIrTetrahedralStereoAst::NotStereo,
             Self::Stereo(coset) => {
-                AstTetrahedralStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
+                GraphIrTetrahedralStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -316,17 +319,17 @@ impl TetrahedralStereo {
 }
 
 impl TetrahedralStereo {
-    pub(crate) fn from_rust(stereo: AstTetrahedralStereo) -> Self {
+    pub(crate) fn from_rust(stereo: GraphIrTetrahedralStereo) -> Self {
         match stereo {
-            AstTetrahedralStereo::NotStereo => Self::NotStereo(),
-            AstTetrahedralStereo::Stereo(coset) => Self::Stereo(coset),
+            GraphIrTetrahedralStereo::NotStereo => Self::NotStereo(),
+            GraphIrTetrahedralStereo::Stereo(coset) => Self::Stereo(coset),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstTetrahedralStereo {
+    pub(crate) fn to_rust(self) -> GraphIrTetrahedralStereo {
         match self {
-            Self::NotStereo() => AstTetrahedralStereo::NotStereo,
-            Self::Stereo(coset) => AstTetrahedralStereo::Stereo(coset),
+            Self::NotStereo() => GraphIrTetrahedralStereo::NotStereo,
+            Self::Stereo(coset) => GraphIrTetrahedralStereo::Stereo(coset),
         }
     }
 }
@@ -341,10 +344,10 @@ pub enum TetrahedralConfiguration {
 }
 
 impl TetrahedralConfiguration {
-    pub(crate) fn to_rust(self) -> AstTetrahedralConfiguration {
+    pub(crate) fn to_rust(self) -> GraphIrTetrahedralConfiguration {
         match self {
-            Self::Ccw => AstTetrahedralConfiguration::Ccw,
-            Self::Cw => AstTetrahedralConfiguration::Cw,
+            Self::Ccw => GraphIrTetrahedralConfiguration::Ccw,
+            Self::Cw => GraphIrTetrahedralConfiguration::Cw,
         }
     }
 }
@@ -384,32 +387,32 @@ impl CisTransStereoAst {
 
 impl_py_lattice!(
     CisTransStereoAst,
-    AstCisTransStereoAst,
-    |value: &CisTransStereoAst, py: Python<'_>| -> PyResult<AstCisTransStereoAst> {
+    GraphIrCisTransStereoAst,
+    |value: &CisTransStereoAst, py: Python<'_>| -> PyResult<GraphIrCisTransStereoAst> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstCisTransStereoAst| -> PyResult<CisTransStereoAst> {
+    |py: Python<'_>, value: GraphIrCisTransStereoAst| -> PyResult<CisTransStereoAst> {
         CisTransStereoAst::from_rust(py, &value)
     }
 );
 
 impl CisTransStereoAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstCisTransStereoAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrCisTransStereoAst) -> PyResult<Self> {
         Ok(match ast {
-            AstCisTransStereoAst::Undetermined => Self::Undetermined(),
-            AstCisTransStereoAst::NotStereo => Self::NotStereo(),
-            AstCisTransStereoAst::Stereo(coset) => {
+            GraphIrCisTransStereoAst::Undetermined => Self::Undetermined(),
+            GraphIrCisTransStereoAst::NotStereo => Self::NotStereo(),
+            GraphIrCisTransStereoAst::Stereo(coset) => {
                 Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstCisTransStereoAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrCisTransStereoAst {
         match self {
-            Self::Undetermined() => AstCisTransStereoAst::Undetermined,
-            Self::NotStereo() => AstCisTransStereoAst::NotStereo,
+            Self::Undetermined() => GraphIrCisTransStereoAst::Undetermined,
+            Self::NotStereo() => GraphIrCisTransStereoAst::NotStereo,
             Self::Stereo(coset) => {
-                AstCisTransStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
+                GraphIrCisTransStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -443,17 +446,17 @@ impl CisTransStereo {
 }
 
 impl CisTransStereo {
-    pub(crate) fn from_rust(stereo: AstCisTransStereo) -> Self {
+    pub(crate) fn from_rust(stereo: GraphIrCisTransStereo) -> Self {
         match stereo {
-            AstCisTransStereo::NotStereo => Self::NotStereo(),
-            AstCisTransStereo::Stereo(coset) => Self::Stereo(coset),
+            GraphIrCisTransStereo::NotStereo => Self::NotStereo(),
+            GraphIrCisTransStereo::Stereo(coset) => Self::Stereo(coset),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstCisTransStereo {
+    pub(crate) fn to_rust(self) -> GraphIrCisTransStereo {
         match self {
-            Self::NotStereo() => AstCisTransStereo::NotStereo,
-            Self::Stereo(coset) => AstCisTransStereo::Stereo(coset),
+            Self::NotStereo() => GraphIrCisTransStereo::NotStereo,
+            Self::Stereo(coset) => GraphIrCisTransStereo::Stereo(coset),
         }
     }
 }
@@ -468,10 +471,10 @@ pub enum CisTransConfiguration {
 }
 
 impl CisTransConfiguration {
-    pub(crate) fn to_rust(self) -> AstCisTransConfiguration {
+    pub(crate) fn to_rust(self) -> GraphIrCisTransConfiguration {
         match self {
-            Self::Z => AstCisTransConfiguration::Z,
-            Self::E => AstCisTransConfiguration::E,
+            Self::Z => GraphIrCisTransConfiguration::Z,
+            Self::E => GraphIrCisTransConfiguration::E,
         }
     }
 }
@@ -486,9 +489,9 @@ pub(crate) enum CisTransStereoLike {
 }
 
 impl CisTransStereoLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstCisTransStereoAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrCisTransStereoAst> {
         Ok(match self {
-            CisTransStereoLike::Flag(false) => AstCisTransStereoAst::NotStereo,
+            CisTransStereoLike::Flag(false) => GraphIrCisTransStereoAst::NotStereo,
             CisTransStereoLike::Flag(true) => return Err(PyValueError::new_err(
                 "cis_trans_stereo = True is not meaningful; use CisTransConfiguration.Z/E or False",
             )),
@@ -512,25 +515,25 @@ pub enum StereoKind {
 }
 
 impl StereoKind {
-    pub(crate) fn from_rust(ast: AstStereoKind) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrStereoKind) -> Self {
         match ast {
-            AstStereoKind::Tetrahedral => Self::Tetrahedral,
-            AstStereoKind::CisTrans => Self::CisTrans,
-            AstStereoKind::Axial => Self::Axial,
-            AstStereoKind::SquarePlanar => Self::SquarePlanar,
-            AstStereoKind::TrigonalBipyramidal => Self::TrigonalBipyramidal,
-            AstStereoKind::Octahedral => Self::Octahedral,
+            GraphIrStereoKind::Tetrahedral => Self::Tetrahedral,
+            GraphIrStereoKind::CisTrans => Self::CisTrans,
+            GraphIrStereoKind::Axial => Self::Axial,
+            GraphIrStereoKind::SquarePlanar => Self::SquarePlanar,
+            GraphIrStereoKind::TrigonalBipyramidal => Self::TrigonalBipyramidal,
+            GraphIrStereoKind::Octahedral => Self::Octahedral,
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstStereoKind {
+    pub(crate) fn to_rust(self) -> GraphIrStereoKind {
         match self {
-            Self::Tetrahedral => AstStereoKind::Tetrahedral,
-            Self::CisTrans => AstStereoKind::CisTrans,
-            Self::Axial => AstStereoKind::Axial,
-            Self::SquarePlanar => AstStereoKind::SquarePlanar,
-            Self::TrigonalBipyramidal => AstStereoKind::TrigonalBipyramidal,
-            Self::Octahedral => AstStereoKind::Octahedral,
+            Self::Tetrahedral => GraphIrStereoKind::Tetrahedral,
+            Self::CisTrans => GraphIrStereoKind::CisTrans,
+            Self::Axial => GraphIrStereoKind::Axial,
+            Self::SquarePlanar => GraphIrStereoKind::SquarePlanar,
+            Self::TrigonalBipyramidal => GraphIrStereoKind::TrigonalBipyramidal,
+            Self::Octahedral => GraphIrStereoKind::Octahedral,
         }
     }
 }
@@ -546,19 +549,19 @@ pub enum StereoLigandKind {
 }
 
 impl StereoLigandKind {
-    pub(crate) fn from_rust(ast: AstStereoLigandKind) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrStereoLigandKind) -> Self {
         match ast {
-            AstStereoLigandKind::Atom => Self::Atom,
-            AstStereoLigandKind::ImplicitHydrogen => Self::ImplicitHydrogen,
-            AstStereoLigandKind::LonePair => Self::LonePair,
+            GraphIrStereoLigandKind::Atom => Self::Atom,
+            GraphIrStereoLigandKind::ImplicitHydrogen => Self::ImplicitHydrogen,
+            GraphIrStereoLigandKind::LonePair => Self::LonePair,
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstStereoLigandKind {
+    pub(crate) fn to_rust(self) -> GraphIrStereoLigandKind {
         match self {
-            Self::Atom => AstStereoLigandKind::Atom,
-            Self::ImplicitHydrogen => AstStereoLigandKind::ImplicitHydrogen,
-            Self::LonePair => AstStereoLigandKind::LonePair,
+            Self::Atom => GraphIrStereoLigandKind::Atom,
+            Self::ImplicitHydrogen => GraphIrStereoLigandKind::ImplicitHydrogen,
+            Self::LonePair => GraphIrStereoLigandKind::LonePair,
         }
     }
 }
@@ -575,19 +578,19 @@ pub enum Topicity {
 }
 
 impl Topicity {
-    pub(crate) fn from_rust(ast: AstTopicity) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrTopicity) -> Self {
         match ast {
-            AstTopicity::Homotopic => Self::Homotopic,
-            AstTopicity::Enantiotopic => Self::Enantiotopic,
-            AstTopicity::Diastereotopic => Self::Diastereotopic,
+            GraphIrTopicity::Homotopic => Self::Homotopic,
+            GraphIrTopicity::Enantiotopic => Self::Enantiotopic,
+            GraphIrTopicity::Diastereotopic => Self::Diastereotopic,
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstTopicity {
+    pub(crate) fn to_rust(self) -> GraphIrTopicity {
         match self {
-            Self::Homotopic => AstTopicity::Homotopic,
-            Self::Enantiotopic => AstTopicity::Enantiotopic,
-            Self::Diastereotopic => AstTopicity::Diastereotopic,
+            Self::Homotopic => GraphIrTopicity::Homotopic,
+            Self::Enantiotopic => GraphIrTopicity::Enantiotopic,
+            Self::Diastereotopic => GraphIrTopicity::Diastereotopic,
         }
     }
 }
@@ -604,19 +607,19 @@ pub enum Stereogenicity {
 }
 
 impl Stereogenicity {
-    pub(crate) fn from_rust(ast: AstStereogenicity) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrStereogenicity) -> Self {
         match ast {
-            AstStereogenicity::Symmetric => Self::Symmetric,
-            AstStereogenicity::Prochiral => Self::Prochiral,
-            AstStereogenicity::Stereogenic => Self::Stereogenic,
+            GraphIrStereogenicity::Symmetric => Self::Symmetric,
+            GraphIrStereogenicity::Prochiral => Self::Prochiral,
+            GraphIrStereogenicity::Stereogenic => Self::Stereogenic,
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstStereogenicity {
+    pub(crate) fn to_rust(self) -> GraphIrStereogenicity {
         match self {
-            Self::Symmetric => AstStereogenicity::Symmetric,
-            Self::Prochiral => AstStereogenicity::Prochiral,
-            Self::Stereogenic => AstStereogenicity::Stereogenic,
+            Self::Symmetric => GraphIrStereogenicity::Symmetric,
+            Self::Prochiral => GraphIrStereogenicity::Prochiral,
+            Self::Stereogenic => GraphIrStereogenicity::Stereogenic,
         }
     }
 }
@@ -650,15 +653,15 @@ impl StereoLigand {
 }
 
 impl StereoLigand {
-    pub(crate) fn from_rust(ast: AstStereoLigand) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrStereoLigand) -> Self {
         StereoLigand {
             atom_id: ast.atom_id.0,
             kind: StereoLigandKind::from_rust(ast.kind),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstStereoLigand {
-        AstStereoLigand::new(AstAtomId(self.atom_id), self.kind.to_rust())
+    pub(crate) fn to_rust(self) -> GraphIrStereoLigand {
+        GraphIrStereoLigand::new(GraphIrAtomId(self.atom_id), self.kind.to_rust())
     }
 }
 
@@ -753,7 +756,7 @@ impl StereoConfigurationUpdate {
 /// Attribute updates for a stereo atom.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
-pub struct StereoAtomUpdate(AstStereoAtomUpdate);
+pub struct StereoAtomUpdate(GraphIrStereoAtomUpdate);
 
 #[pymethods]
 impl StereoAtomUpdate {
@@ -764,7 +767,7 @@ impl StereoAtomUpdate {
         configuration: Option<PyRef<'_, StereoConfigurationUpdate>>,
         constraints: Option<Py<StereoAtomConstraintsAst>>,
     ) -> Self {
-        Self::from_rust(&AstStereoAtomUpdate {
+        Self::from_rust(&GraphIrStereoAtomUpdate {
             configuration: configuration
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
@@ -777,7 +780,7 @@ impl StereoAtomUpdate {
     /// Parse a stereo-atom-update DSL string into a `StereoAtomUpdate`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstStereoAtomUpdate::from_str(s)
+        GraphIrStereoAtomUpdate::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -810,11 +813,11 @@ impl StereoAtomUpdate {
 }
 
 impl StereoAtomUpdate {
-    pub(crate) fn from_rust(update: &AstStereoAtomUpdate) -> Self {
+    pub(crate) fn from_rust(update: &GraphIrStereoAtomUpdate) -> Self {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> AstStereoAtomUpdate {
+    pub(crate) fn to_rust(&self) -> GraphIrStereoAtomUpdate {
         self.0.clone()
     }
 }
@@ -822,7 +825,7 @@ impl StereoAtomUpdate {
 /// Attribute updates for a stereo bond.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
-pub struct StereoBondUpdate(AstStereoBondUpdate);
+pub struct StereoBondUpdate(GraphIrStereoBondUpdate);
 
 #[pymethods]
 impl StereoBondUpdate {
@@ -833,7 +836,7 @@ impl StereoBondUpdate {
         configuration: Option<PyRef<'_, StereoConfigurationUpdate>>,
         constraints: Option<Py<StereoBondConstraintsAst>>,
     ) -> Self {
-        Self::from_rust(&AstStereoBondUpdate {
+        Self::from_rust(&GraphIrStereoBondUpdate {
             configuration: configuration
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
@@ -846,7 +849,7 @@ impl StereoBondUpdate {
     /// Parse a stereo-bond-update DSL string into a `StereoBondUpdate`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstStereoBondUpdate::from_str(s)
+        GraphIrStereoBondUpdate::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -879,11 +882,11 @@ impl StereoBondUpdate {
 }
 
 impl StereoBondUpdate {
-    pub(crate) fn from_rust(update: &AstStereoBondUpdate) -> Self {
+    pub(crate) fn from_rust(update: &GraphIrStereoBondUpdate) -> Self {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> AstStereoBondUpdate {
+    pub(crate) fn to_rust(&self) -> GraphIrStereoBondUpdate {
         self.0.clone()
     }
 }
@@ -891,12 +894,12 @@ impl StereoBondUpdate {
 impl StereoConfigurationUpdate {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        update: &AstStereoConfigurationUpdate,
+        update: &GraphIrStereoConfigurationUpdate,
     ) -> PyResult<Self> {
         Ok(match update {
-            AstStereoConfigurationUpdate::Unchanged => Self::Unchanged(),
-            AstStereoConfigurationUpdate::Undetermined => Self::Undetermined(),
-            AstStereoConfigurationUpdate::Kinded { kind, coset } => Self::Kinded(
+            GraphIrStereoConfigurationUpdate::Unchanged => Self::Unchanged(),
+            GraphIrStereoConfigurationUpdate::Undetermined => Self::Undetermined(),
+            GraphIrStereoConfigurationUpdate::Kinded { kind, coset } => Self::Kinded(
                 StereoKind::from_rust(*kind),
                 coset
                     .as_ref()
@@ -909,11 +912,11 @@ impl StereoConfigurationUpdate {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationUpdate {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationUpdate {
         match self {
-            Self::Unchanged() => AstStereoConfigurationUpdate::Unchanged,
-            Self::Undetermined() => AstStereoConfigurationUpdate::Undetermined,
-            Self::Kinded(kind, coset) => AstStereoConfigurationUpdate::Kinded {
+            Self::Unchanged() => GraphIrStereoConfigurationUpdate::Unchanged,
+            Self::Undetermined() => GraphIrStereoConfigurationUpdate::Undetermined,
+            Self::Kinded(kind, coset) => GraphIrStereoConfigurationUpdate::Kinded {
                 kind: kind.to_rust(),
                 coset: coset
                     .as_ref()
@@ -925,30 +928,30 @@ impl StereoConfigurationUpdate {
 
 impl_py_lattice!(
     StereoConfigurationAst,
-    AstStereoConfigurationAst,
-    |value: &StereoConfigurationAst, py: Python<'_>| -> PyResult<AstStereoConfigurationAst> {
+    GraphIrStereoConfigurationAst,
+    |value: &StereoConfigurationAst, py: Python<'_>| -> PyResult<GraphIrStereoConfigurationAst> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstStereoConfigurationAst| -> PyResult<StereoConfigurationAst> {
+    |py: Python<'_>, value: GraphIrStereoConfigurationAst| -> PyResult<StereoConfigurationAst> {
         StereoConfigurationAst::from_rust(py, &value)
     }
 );
 
 impl StereoConfigurationAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoConfigurationAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrStereoConfigurationAst) -> PyResult<Self> {
         Ok(match ast {
-            AstStereoConfigurationAst::Undetermined => Self::Undetermined(),
-            AstStereoConfigurationAst::Kinded(kind, coset) => Self::Kinded(
+            GraphIrStereoConfigurationAst::Undetermined => Self::Undetermined(),
+            GraphIrStereoConfigurationAst::Kinded(kind, coset) => Self::Kinded(
                 StereoKind::from_rust(*kind),
                 into_py_variant(py, StereoCoset::from_rust(py, coset)?)?,
             ),
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationAst {
         match self {
-            Self::Undetermined() => AstStereoConfigurationAst::Undetermined,
-            Self::Kinded(kind, coset) => AstStereoConfigurationAst::Kinded(
+            Self::Undetermined() => GraphIrStereoConfigurationAst::Undetermined,
+            Self::Kinded(kind, coset) => GraphIrStereoConfigurationAst::Kinded(
                 kind.to_rust(),
                 coset.bind(py).borrow().to_rust(py),
             ),
@@ -968,26 +971,26 @@ pub(crate) enum StereoConfigurationLike {
 }
 
 impl StereoConfigurationLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationAst {
         match self {
             StereoConfigurationLike::Tetrahedral(t) => {
                 let coset = match t.to_rust() {
-                    AstTetrahedralConfiguration::Ccw => 0,
-                    AstTetrahedralConfiguration::Cw => 1,
+                    GraphIrTetrahedralConfiguration::Ccw => 0,
+                    GraphIrTetrahedralConfiguration::Cw => 1,
                 };
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(coset),
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(coset),
                 )
             }
             StereoConfigurationLike::CisTrans(c) => {
                 let coset = match c.to_rust() {
-                    AstCisTransConfiguration::Z => 0,
-                    AstCisTransConfiguration::E => 1,
+                    GraphIrCisTransConfiguration::Z => 0,
+                    GraphIrCisTransConfiguration::E => 1,
                 };
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::CisTrans,
-                    AstStereoCoset::Lit(coset),
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(coset),
                 )
             }
             StereoConfigurationLike::Ast(a) => a.bind(py).borrow().to_rust(py),
@@ -1047,14 +1050,14 @@ impl LigandPermutation {
 }
 
 impl LigandPermutation {
-    pub(crate) fn from_rust(ast: AstLigandPermutation) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrLigandPermutation) -> Self {
         LigandPermutation {
             permutation: Permutation::from_inner(ast.0),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstLigandPermutation {
-        AstLigandPermutation(self.permutation.inner())
+    pub(crate) fn to_rust(self) -> GraphIrLigandPermutation {
+        GraphIrLigandPermutation(self.permutation.inner())
     }
 }
 
@@ -1093,15 +1096,15 @@ impl OrientedLigandPermutation {
 }
 
 impl OrientedLigandPermutation {
-    pub(crate) fn from_rust(ast: AstOrientedLigandPermutation) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrOrientedLigandPermutation) -> Self {
         OrientedLigandPermutation {
             permutation: LigandPermutation::from_rust(ast.permutation),
             orientation: Orientation::from_rust(ast.orientation),
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstOrientedLigandPermutation {
-        AstOrientedLigandPermutation {
+    pub(crate) fn to_rust(self) -> GraphIrOrientedLigandPermutation {
+        GraphIrOrientedLigandPermutation {
             permutation: self.permutation.to_rust(),
             orientation: self.orientation.to_rust(),
         }
@@ -1125,9 +1128,9 @@ impl StereoLigandPair {
     /// Normalizes the pair so the lower position is `first`.
     #[new]
     pub(crate) fn new(a: u32, b: u32) -> Self {
-        StereoLigandPair::from_rust(AstStereoLigandPair::new(
-            AstStereoLigandPosition(a),
-            AstStereoLigandPosition(b),
+        StereoLigandPair::from_rust(GraphIrStereoLigandPair::new(
+            GraphIrStereoLigandPosition(a),
+            GraphIrStereoLigandPosition(b),
         ))
     }
 
@@ -1137,17 +1140,17 @@ impl StereoLigandPair {
 }
 
 impl StereoLigandPair {
-    pub(crate) fn from_rust(ast: AstStereoLigandPair) -> Self {
+    pub(crate) fn from_rust(ast: GraphIrStereoLigandPair) -> Self {
         StereoLigandPair {
             first: ast.first().0,
             second: ast.second().0,
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstStereoLigandPair {
-        AstStereoLigandPair::new(
-            AstStereoLigandPosition(self.first),
-            AstStereoLigandPosition(self.second),
+    pub(crate) fn to_rust(self) -> GraphIrStereoLigandPair {
+        GraphIrStereoLigandPair::new(
+            GraphIrStereoLigandPosition(self.first),
+            GraphIrStereoLigandPosition(self.second),
         )
     }
 }
@@ -1294,12 +1297,12 @@ macro_rules! stereo_value {
 }
 
 stereo_value! {
-    StereoAtomAst, AstStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
+    StereoAtomAst, GraphIrStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
     StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoAtomConstraintsBacking, production,
 }
 
 stereo_value! {
-    StereoBondAst, AstStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
+    StereoBondAst, GraphIrStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
     StereoBondConstraintsLike, StereoBondConstraintsView, StereoBondConstraintsBacking, production,
 }
 
@@ -1322,7 +1325,7 @@ macro_rules! stereo_view {
         impl $view {
             /// Rebuild the transient AST view for this entity, or `IndexError` if the id is
             /// no longer present.
-            fn view<'a>(&self, molecule: &'a AstMoleculeAst) -> PyResult<$ast_view<'a>> {
+            fn view<'a>(&self, molecule: &'a GraphIrMoleculeAst) -> PyResult<$ast_view<'a>> {
                 molecule
                     .$namespace()
                     .get(self.id)
@@ -1442,13 +1445,13 @@ macro_rules! stereo_view {
 }
 
 stereo_view! {
-    StereoAtomView, AstStereoAtomView, AstStereoAtomId, stereo_atoms, stereo_atom_mut,
+    StereoAtomView, GraphIrStereoAtomView, GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut,
     "stereo atom id out of range", StereoAtomConstraintAst, StereoAtomConstraintsView,
     StereoAtomConstraintsBacking, StereoAtomConstraintsLike,
 }
 
 stereo_view! {
-    StereoBondView, AstStereoBondView, AstStereoBondId, stereo_bonds, stereo_bond_mut,
+    StereoBondView, GraphIrStereoBondView, GraphIrStereoBondId, stereo_bonds, stereo_bond_mut,
     "stereo bond id out of range", StereoBondConstraintAst, StereoBondConstraintsView,
     StereoBondConstraintsBacking, StereoBondConstraintsLike,
 }
@@ -1463,7 +1466,7 @@ macro_rules! stereo_views {
     ) => {
         /// Resolve a possibly-negative Python index (negative counts from the end) into an
         /// existing stereo entity id, or `IndexError`.
-        fn $resolve_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<$ast_id> {
+        fn $resolve_index(molecule: &GraphIrMoleculeAst, index: isize) -> PyResult<$ast_id> {
             let count = molecule.$namespace().count();
             let resolved = if index < 0 {
                 index + count as isize
@@ -1539,7 +1542,7 @@ macro_rules! stereo_views {
 
             /// The stereo entity on `site` with exactly `ligands` (order-independent), or `None`.
             fn of(&self, py: Python<'_>, site: u32, ligands: Vec<StereoLigand>) -> Option<$view> {
-                let ligands: Vec<AstStereoLigand> =
+                let ligands: Vec<GraphIrStereoLigand> =
                     ligands.into_iter().map(StereoLigand::to_rust).collect();
                 let molecule = self.owner.bind(py).borrow();
                 molecule
@@ -1598,31 +1601,32 @@ macro_rules! stereo_views {
 }
 
 stereo_views! {
-    StereoAtomViews, StereoAtomView, StereoAtomViewIter, AstStereoAtomId, AstAtomId, stereo_atoms,
+    StereoAtomViews, StereoAtomView, StereoAtomViewIter, GraphIrStereoAtomId, GraphIrAtomId, stereo_atoms,
     stereo_atom_mut, StereoAtomAst, resolve_stereo_atom_index, "stereo atom id out of range",
 }
 
 stereo_views! {
-    StereoBondViews, StereoBondView, StereoBondViewIter, AstStereoBondId, AstBondId, stereo_bonds,
+    StereoBondViews, StereoBondView, StereoBondViewIter, GraphIrStereoBondId, GraphIrBondId, stereo_bonds,
     stereo_bond_mut, StereoBondAst, resolve_stereo_bond_index, "stereo bond id out of range",
 }
 
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AtomAst as AstAtomAst, BondAst as AstBondAst, FluxionalityAst as AstFluxionalityAst,
-        LigandSymmetryAst as AstLigandSymmetryAst, MoleculeEntries,
-        StereoAtomConstraintAst as AstStereoAtomConstraintAst,
-        StereoAtomConstraintKey as AstStereoAtomConstraintKey,
-        StereoAtomConstraintsAst as AstStereoAtomConstraintsAst,
-        StereoBondConstraintAst as AstStereoBondConstraintAst,
-        StereoBondConstraintsAst as AstStereoBondConstraintsAst,
-        StereoLigandPair as AstStereoLigandPair, StereoLigandPosition as AstStereoLigandPosition,
-        StereogenicityAst as AstStereogenicityAst, TopicityAst as AstTopicityAst,
-        TopicityRelationAst as AstTopicityRelationAst,
-    };
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_ir::ir::{
+        AtomAst as GraphIrAtomAst, BondAst as GraphIrBondAst,
+        FluxionalityAst as GraphIrFluxionalityAst, LigandSymmetryAst as GraphIrLigandSymmetryAst,
+        MoleculeEntries, StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
+        StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
+        StereoAtomConstraintsAst as GraphIrStereoAtomConstraintsAst,
+        StereoBondConstraintAst as GraphIrStereoBondConstraintAst,
+        StereoBondConstraintsAst as GraphIrStereoBondConstraintsAst,
+        StereoLigandPair as GraphIrStereoLigandPair,
+        StereoLigandPosition as GraphIrStereoLigandPosition,
+        StereogenicityAst as GraphIrStereogenicityAst, TopicityAst as GraphIrTopicityAst,
+        TopicityRelationAst as GraphIrTopicityRelationAst,
+    };
 
     use super::*;
     use crate::boolean::{BooleanAst, BooleanLike};
@@ -1643,36 +1647,38 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstStereoTerm::Lit(1))]
-    #[case(AstStereoTerm::LitSet(BTreeSet::from([0, 2])))]
-    #[case(AstStereoTerm::Var(Box::new(("x".to_string(), None))))]
-    #[case(AstStereoTerm::Var(Box::new(("y".to_string(), Some(BTreeSet::from([0, 1]))))))]
-    #[case(AstStereoTerm::Swap(Box::new(AstStereoTerm::Lit(0))))]
-    #[case(AstStereoTerm::Mirror(Box::new(AstStereoTerm::Lit(0))))]
-    #[case(AstStereoTerm::Apply(Box::new(AstStereoTerm::Lit(0)), PermPermutation::from_image(&[1, 0, 2, 3])))]
-    fn test_stereo_term_roundtrip(#[case] ast: AstStereoTerm) {
+    #[case(GraphIrStereoTerm::Lit(1))]
+    #[case(GraphIrStereoTerm::LitSet(BTreeSet::from([0, 2])))]
+    #[case(GraphIrStereoTerm::Var(Box::new(("x".to_string(), None))))]
+    #[case(GraphIrStereoTerm::Var(Box::new(("y".to_string(), Some(BTreeSet::from([0, 1]))))))]
+    #[case(GraphIrStereoTerm::Swap(Box::new(GraphIrStereoTerm::Lit(0))))]
+    #[case(GraphIrStereoTerm::Mirror(Box::new(GraphIrStereoTerm::Lit(0))))]
+    #[case(GraphIrStereoTerm::Apply(Box::new(GraphIrStereoTerm::Lit(0)), PermPermutation::from_image(&[1, 0, 2, 3])))]
+    fn test_stereo_term_roundtrip(#[case] ast: GraphIrStereoTerm) {
         Python::attach(|py| {
             assert_eq!(StereoTerm::from_rust(py, &ast).unwrap().to_rust(py), ast);
         });
     }
 
     #[rstest]
-    #[case(AstStereoCoset::Undetermined)]
-    #[case(AstStereoCoset::Lit(1))]
-    #[case(AstStereoCoset::LitSet(BTreeSet::from([0, 1])))]
-    #[case(AstStereoCoset::Term(Box::new(AstStereoTerm::Lit(1))))]
-    fn test_stereo_coset_roundtrip(#[case] ast: AstStereoCoset) {
+    #[case(GraphIrStereoCoset::Undetermined)]
+    #[case(GraphIrStereoCoset::Lit(1))]
+    #[case(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1])))]
+    #[case(GraphIrStereoCoset::Term(Box::new(GraphIrStereoTerm::Lit(1))))]
+    fn test_stereo_coset_roundtrip(#[case] ast: GraphIrStereoCoset) {
         Python::attach(|py| {
             assert_eq!(StereoCoset::from_rust(py, &ast).unwrap().to_rust(py), ast);
         });
     }
 
     #[rstest]
-    #[case(AstTetrahedralStereoAst::Undetermined)]
-    #[case(AstTetrahedralStereoAst::NotStereo)]
-    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCoset::Lit(1)))]
-    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCoset::Term(Box::new(AstStereoTerm::Lit(0)))))]
-    fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: AstTetrahedralStereoAst) {
+    #[case(GraphIrTetrahedralStereoAst::Undetermined)]
+    #[case(GraphIrTetrahedralStereoAst::NotStereo)]
+    #[case(GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::Lit(1)))]
+    #[case(GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::Term(Box::new(
+        GraphIrStereoTerm::Lit(0)
+    ))))]
+    fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: GraphIrTetrahedralStereoAst) {
         Python::attach(|py| {
             assert_eq!(
                 TetrahedralStereoAst::from_rust(py, &ast)
@@ -1685,18 +1691,18 @@ mod tests {
 
     #[rstest]
     #[case(
-        AstTetrahedralStereoAst::NotStereo,
-        Some(AstTetrahedralStereo::NotStereo)
+        GraphIrTetrahedralStereoAst::NotStereo,
+        Some(GraphIrTetrahedralStereo::NotStereo)
     )]
     #[case(
-        AstTetrahedralStereoAst::Stereo(AstStereoCoset::Lit(2)),
-        Some(AstTetrahedralStereo::Stereo(2))
+        GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::Lit(2)),
+        Some(GraphIrTetrahedralStereo::Stereo(2))
     )]
-    #[case(AstTetrahedralStereoAst::Undetermined, None)]
-    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
+    #[case(GraphIrTetrahedralStereoAst::Undetermined, None)]
+    #[case(GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
     fn test_tetrahedral_stereo_ast_as_lit(
-        #[case] ast: AstTetrahedralStereoAst,
-        #[case] expected: Option<AstTetrahedralStereo>,
+        #[case] ast: GraphIrTetrahedralStereoAst,
+        #[case] expected: Option<GraphIrTetrahedralStereo>,
     ) {
         Python::attach(|py| {
             assert_eq!(
@@ -1710,21 +1716,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case(TetrahedralConfiguration::Ccw, AstTetrahedralConfiguration::Ccw)]
-    #[case(TetrahedralConfiguration::Cw, AstTetrahedralConfiguration::Cw)]
+    #[case(TetrahedralConfiguration::Ccw, GraphIrTetrahedralConfiguration::Ccw)]
+    #[case(TetrahedralConfiguration::Cw, GraphIrTetrahedralConfiguration::Cw)]
     fn test_tetrahedral_configuration_to_rust(
         #[case] config: TetrahedralConfiguration,
-        #[case] expected: AstTetrahedralConfiguration,
+        #[case] expected: GraphIrTetrahedralConfiguration,
     ) {
         assert_eq!(config.to_rust(), expected);
     }
 
     #[rstest]
-    #[case(AstCisTransStereoAst::Undetermined)]
-    #[case(AstCisTransStereoAst::NotStereo)]
-    #[case(AstCisTransStereoAst::Stereo(AstStereoCoset::Lit(1)))]
-    #[case(AstCisTransStereoAst::Stereo(AstStereoCoset::Term(Box::new(AstStereoTerm::Lit(0)))))]
-    fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: AstCisTransStereoAst) {
+    #[case(GraphIrCisTransStereoAst::Undetermined)]
+    #[case(GraphIrCisTransStereoAst::NotStereo)]
+    #[case(GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::Lit(1)))]
+    #[case(GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::Term(Box::new(
+        GraphIrStereoTerm::Lit(0)
+    ))))]
+    fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: GraphIrCisTransStereoAst) {
         Python::attach(|py| {
             assert_eq!(
                 CisTransStereoAst::from_rust(py, &ast).unwrap().to_rust(py),
@@ -1734,16 +1742,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstCisTransStereoAst::NotStereo, Some(AstCisTransStereo::NotStereo))]
     #[case(
-        AstCisTransStereoAst::Stereo(AstStereoCoset::Lit(1)),
-        Some(AstCisTransStereo::Stereo(1))
+        GraphIrCisTransStereoAst::NotStereo,
+        Some(GraphIrCisTransStereo::NotStereo)
     )]
-    #[case(AstCisTransStereoAst::Undetermined, None)]
-    #[case(AstCisTransStereoAst::Stereo(AstStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
+    #[case(
+        GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::Lit(1)),
+        Some(GraphIrCisTransStereo::Stereo(1))
+    )]
+    #[case(GraphIrCisTransStereoAst::Undetermined, None)]
+    #[case(GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
     fn test_cis_trans_stereo_ast_as_lit(
-        #[case] ast: AstCisTransStereoAst,
-        #[case] expected: Option<AstCisTransStereo>,
+        #[case] ast: GraphIrCisTransStereoAst,
+        #[case] expected: Option<GraphIrCisTransStereo>,
     ) {
         Python::attach(|py| {
             assert_eq!(
@@ -1757,47 +1768,47 @@ mod tests {
     }
 
     #[rstest]
-    #[case(CisTransConfiguration::Z, AstCisTransConfiguration::Z)]
-    #[case(CisTransConfiguration::E, AstCisTransConfiguration::E)]
+    #[case(CisTransConfiguration::Z, GraphIrCisTransConfiguration::Z)]
+    #[case(CisTransConfiguration::E, GraphIrCisTransConfiguration::E)]
     fn test_cis_trans_configuration_to_rust(
         #[case] config: CisTransConfiguration,
-        #[case] expected: AstCisTransConfiguration,
+        #[case] expected: GraphIrCisTransConfiguration,
     ) {
         assert_eq!(config.to_rust(), expected);
     }
 
     #[rstest]
-    #[case(AstStereoKind::Tetrahedral)]
-    #[case(AstStereoKind::CisTrans)]
-    #[case(AstStereoKind::Axial)]
-    #[case(AstStereoKind::SquarePlanar)]
-    #[case(AstStereoKind::TrigonalBipyramidal)]
-    #[case(AstStereoKind::Octahedral)]
-    fn test_stereo_kind_roundtrip(#[case] ast: AstStereoKind) {
+    #[case(GraphIrStereoKind::Tetrahedral)]
+    #[case(GraphIrStereoKind::CisTrans)]
+    #[case(GraphIrStereoKind::Axial)]
+    #[case(GraphIrStereoKind::SquarePlanar)]
+    #[case(GraphIrStereoKind::TrigonalBipyramidal)]
+    #[case(GraphIrStereoKind::Octahedral)]
+    fn test_stereo_kind_roundtrip(#[case] ast: GraphIrStereoKind) {
         assert_eq!(StereoKind::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(AstStereoLigandKind::Atom)]
-    #[case(AstStereoLigandKind::ImplicitHydrogen)]
-    #[case(AstStereoLigandKind::LonePair)]
-    fn test_stereo_ligand_kind_roundtrip(#[case] ast: AstStereoLigandKind) {
+    #[case(GraphIrStereoLigandKind::Atom)]
+    #[case(GraphIrStereoLigandKind::ImplicitHydrogen)]
+    #[case(GraphIrStereoLigandKind::LonePair)]
+    fn test_stereo_ligand_kind_roundtrip(#[case] ast: GraphIrStereoLigandKind) {
         assert_eq!(StereoLigandKind::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(AstTopicity::Homotopic)]
-    #[case(AstTopicity::Enantiotopic)]
-    #[case(AstTopicity::Diastereotopic)]
-    fn test_topicity_roundtrip(#[case] ast: AstTopicity) {
+    #[case(GraphIrTopicity::Homotopic)]
+    #[case(GraphIrTopicity::Enantiotopic)]
+    #[case(GraphIrTopicity::Diastereotopic)]
+    fn test_topicity_roundtrip(#[case] ast: GraphIrTopicity) {
         assert_eq!(Topicity::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(AstStereogenicity::Symmetric)]
-    #[case(AstStereogenicity::Prochiral)]
-    #[case(AstStereogenicity::Stereogenic)]
-    fn test_stereogenicity_roundtrip(#[case] ast: AstStereogenicity) {
+    #[case(GraphIrStereogenicity::Symmetric)]
+    #[case(GraphIrStereogenicity::Prochiral)]
+    #[case(GraphIrStereogenicity::Stereogenic)]
+    fn test_stereogenicity_roundtrip(#[case] ast: GraphIrStereogenicity) {
         assert_eq!(Stereogenicity::from_rust(ast).to_rust(), ast);
     }
 
@@ -1813,9 +1824,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstStereoLigand::new(AstAtomId(0), AstStereoLigandKind::Atom))]
-    #[case(AstStereoLigand::new(AstAtomId(5), AstStereoLigandKind::LonePair))]
-    fn test_stereo_ligand_roundtrip(#[case] ast: AstStereoLigand) {
+    #[case(GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::Atom))]
+    #[case(GraphIrStereoLigand::new(GraphIrAtomId(5), GraphIrStereoLigandKind::LonePair))]
+    fn test_stereo_ligand_roundtrip(#[case] ast: GraphIrStereoLigand) {
         assert_eq!(StereoLigand::from_rust(ast).to_rust(), ast);
     }
 
@@ -1823,14 +1834,14 @@ mod tests {
     fn test_stereo_configuration_ast_roundtrip() {
         Python::attach(|py| {
             for ast in [
-                AstStereoConfigurationAst::Undetermined,
-                AstStereoConfigurationAst::kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(1),
+                GraphIrStereoConfigurationAst::Undetermined,
+                GraphIrStereoConfigurationAst::kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1),
                 ),
-                AstStereoConfigurationAst::kinded(
-                    AstStereoKind::Octahedral,
-                    AstStereoCoset::Undetermined,
+                GraphIrStereoConfigurationAst::kinded(
+                    GraphIrStereoKind::Octahedral,
+                    GraphIrStereoCoset::Undetermined,
                 ),
             ] {
                 assert_eq!(
@@ -1844,21 +1855,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(AstStereoConfigurationUpdate::Unchanged)]
-    #[case::undetermined(AstStereoConfigurationUpdate::Undetermined)]
-    #[case::kind_only(AstStereoConfigurationUpdate::Kinded {
-        kind: AstStereoKind::Tetrahedral,
+    #[case::unchanged(GraphIrStereoConfigurationUpdate::Unchanged)]
+    #[case::undetermined(GraphIrStereoConfigurationUpdate::Undetermined)]
+    #[case::kind_only(GraphIrStereoConfigurationUpdate::Kinded {
+        kind: GraphIrStereoKind::Tetrahedral,
         coset: None,
     })]
-    #[case::undetermined_coset(AstStereoConfigurationUpdate::Kinded {
-        kind: AstStereoKind::Tetrahedral,
-        coset: Some(AstStereoCoset::Undetermined),
+    #[case::undetermined_coset(GraphIrStereoConfigurationUpdate::Kinded {
+        kind: GraphIrStereoKind::Tetrahedral,
+        coset: Some(GraphIrStereoCoset::Undetermined),
     })]
-    #[case::absolute(AstStereoConfigurationUpdate::Kinded {
-        kind: AstStereoKind::CisTrans,
-        coset: Some(AstStereoCoset::Lit(1)),
+    #[case::absolute(GraphIrStereoConfigurationUpdate::Kinded {
+        kind: GraphIrStereoKind::CisTrans,
+        coset: Some(GraphIrStereoCoset::Lit(1)),
     })]
-    fn test_stereo_configuration_update_roundtrip(#[case] update: AstStereoConfigurationUpdate) {
+    fn test_stereo_configuration_update_roundtrip(
+        #[case] update: GraphIrStereoConfigurationUpdate,
+    ) {
         Python::attach(|py| {
             assert_eq!(
                 StereoConfigurationUpdate::from_rust(py, &update)
@@ -1877,7 +1890,7 @@ mod tests {
             assert_eq!(config.kind(), Some(StereoKind::Tetrahedral));
             assert_eq!(
                 config.coset(py).unwrap().bind(py).borrow().to_rust(py),
-                AstStereoCoset::Lit(1)
+                GraphIrStereoCoset::Lit(1)
             );
             let undetermined = StereoConfigurationAst::Undetermined();
             assert_eq!(undetermined.kind(), None);
@@ -1891,21 +1904,24 @@ mod tests {
             // the Th shorthand → Kinded(Tetrahedral, coset)
             assert_eq!(
                 StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw).to_rust(py),
-                AstStereoConfigurationAst::kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(1)
+                GraphIrStereoConfigurationAst::kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1)
                 )
             );
             // the Ct shorthand → Kinded(CisTrans, coset)
             assert_eq!(
                 StereoConfigurationLike::CisTrans(CisTransConfiguration::E).to_rust(py),
-                AstStereoConfigurationAst::kinded(AstStereoKind::CisTrans, AstStereoCoset::Lit(1))
+                GraphIrStereoConfigurationAst::kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(1)
+                )
             );
             // a StereoConfigurationAst passes through
             let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
             assert_eq!(
                 StereoConfigurationLike::Ast(config).to_rust(py),
-                AstStereoConfigurationAst::Undetermined
+                GraphIrStereoConfigurationAst::Undetermined
             );
         });
     }
@@ -1929,9 +1945,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstLigandPermutation(PermPermutation::identity(4)))]
-    #[case(AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])))]
-    fn test_ligand_permutation_roundtrip(#[case] ast: AstLigandPermutation) {
+    #[case(GraphIrLigandPermutation(PermPermutation::identity(4)))]
+    #[case(GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])))]
+    fn test_ligand_permutation_roundtrip(#[case] ast: GraphIrLigandPermutation) {
         assert_eq!(LigandPermutation::from_rust(ast).to_rust(), ast);
     }
 
@@ -1972,9 +1988,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper })]
-    #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::identity(4)), orientation: PermOrientation::Improper })]
-    fn test_oriented_ligand_permutation_roundtrip(#[case] ast: AstOrientedLigandPermutation) {
+    #[case(GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper })]
+    #[case(GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::identity(4)), orientation: PermOrientation::Improper })]
+    fn test_oriented_ligand_permutation_roundtrip(#[case] ast: GraphIrOrientedLigandPermutation) {
         assert_eq!(OrientedLigandPermutation::from_rust(ast).to_rust(), ast);
     }
 
@@ -1994,9 +2010,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstStereoLigandPair::new(AstStereoLigandPosition(0), AstStereoLigandPosition(3)))]
-    #[case(AstStereoLigandPair::new(AstStereoLigandPosition(2), AstStereoLigandPosition(1)))]
-    fn test_stereo_ligand_pair_roundtrip(#[case] ast: AstStereoLigandPair) {
+    #[case(GraphIrStereoLigandPair::new(
+        GraphIrStereoLigandPosition(0),
+        GraphIrStereoLigandPosition(3)
+    ))]
+    #[case(GraphIrStereoLigandPair::new(
+        GraphIrStereoLigandPosition(2),
+        GraphIrStereoLigandPosition(1)
+    ))]
+    fn test_stereo_ligand_pair_roundtrip(#[case] ast: GraphIrStereoLigandPair) {
         assert_eq!(StereoLigandPair::from_rust(ast).to_rust(), ast);
     }
 
@@ -2018,14 +2040,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstTopicityRelationAst::Undetermined)]
-    #[case(AstTopicityRelationAst::Lit(AstTopicity::Homotopic))]
-    #[case(AstTopicityRelationAst::LitSet(BTreeSet::from([
-        AstTopicity::Homotopic,
-        AstTopicity::Enantiotopic,
+    #[case(GraphIrTopicityRelationAst::Undetermined)]
+    #[case(GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic))]
+    #[case(GraphIrTopicityRelationAst::LitSet(BTreeSet::from([
+        GraphIrTopicity::Homotopic,
+        GraphIrTopicity::Enantiotopic,
     ])))]
-    #[case(AstTopicityRelationAst::NotSet(BTreeSet::from([AstTopicity::Diastereotopic])))]
-    fn test_topicity_relation_ast_roundtrip(#[case] ast: AstTopicityRelationAst) {
+    #[case(GraphIrTopicityRelationAst::NotSet(BTreeSet::from([GraphIrTopicity::Diastereotopic])))]
+    fn test_topicity_relation_ast_roundtrip(#[case] ast: GraphIrTopicityRelationAst) {
         assert_eq!(TopicityRelationAst::from_rust(&ast).to_rust(), ast);
     }
 
@@ -2047,14 +2069,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstStereogenicityAst::Undetermined)]
-    #[case(AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic))]
-    #[case(AstStereogenicityAst::LitSet(BTreeSet::from([
-        AstStereogenicity::Symmetric,
-        AstStereogenicity::Prochiral,
+    #[case(GraphIrStereogenicityAst::Undetermined)]
+    #[case(GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic))]
+    #[case(GraphIrStereogenicityAst::LitSet(BTreeSet::from([
+        GraphIrStereogenicity::Symmetric,
+        GraphIrStereogenicity::Prochiral,
     ])))]
-    #[case(AstStereogenicityAst::NotSet(BTreeSet::from([AstStereogenicity::Stereogenic])))]
-    fn test_stereogenicity_ast_roundtrip(#[case] ast: AstStereogenicityAst) {
+    #[case(GraphIrStereogenicityAst::NotSet(BTreeSet::from([GraphIrStereogenicity::Stereogenic])))]
+    fn test_stereogenicity_ast_roundtrip(#[case] ast: GraphIrStereogenicityAst) {
         assert_eq!(StereogenicityAst::from_rust(&ast).to_rust(), ast);
     }
 
@@ -2069,7 +2091,7 @@ mod tests {
             assert!(value.permutation() == permutation);
             assert_eq!(
                 value.invariant.bind(py).borrow().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
@@ -2115,21 +2137,21 @@ mod tests {
     fn test_ligand_symmetry_ast_roundtrip() {
         Python::attach(|py| {
             for ast in [
-                AstLigandSymmetryAst {
-                    permutation: AstOrientedLigandPermutation {
-                        permutation: AstLigandPermutation(PermPermutation::from_image(&[
+                GraphIrLigandSymmetryAst {
+                    permutation: GraphIrOrientedLigandPermutation {
+                        permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[
                             1, 0, 2, 3,
                         ])),
                         orientation: PermOrientation::Proper,
                     },
-                    invariant: AstBooleanAst::Lit(true),
+                    invariant: GraphIrBooleanAst::Lit(true),
                 },
-                AstLigandSymmetryAst {
-                    permutation: AstOrientedLigandPermutation {
-                        permutation: AstLigandPermutation(PermPermutation::identity(4)),
+                GraphIrLigandSymmetryAst {
+                    permutation: GraphIrOrientedLigandPermutation {
+                        permutation: GraphIrLigandPermutation(PermPermutation::identity(4)),
                         orientation: PermOrientation::Improper,
                     },
-                    invariant: AstBooleanAst::Undetermined,
+                    invariant: GraphIrBooleanAst::Undetermined,
                 },
             ] {
                 assert_eq!(
@@ -2148,7 +2170,7 @@ mod tests {
             assert!(value.permutation() == permutation);
             assert_eq!(
                 value.active.bind(py).borrow().to_rust(),
-                AstBooleanAst::Lit(false)
+                GraphIrBooleanAst::Lit(false)
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
@@ -2189,13 +2211,15 @@ mod tests {
     fn test_fluxionality_ast_roundtrip() {
         Python::attach(|py| {
             for ast in [
-                AstFluxionalityAst {
-                    permutation: AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])),
-                    active: AstBooleanAst::Lit(false),
+                GraphIrFluxionalityAst {
+                    permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[
+                        1, 0, 2, 3,
+                    ])),
+                    active: GraphIrBooleanAst::Lit(false),
                 },
-                AstFluxionalityAst {
-                    permutation: AstLigandPermutation(PermPermutation::identity(4)),
-                    active: AstBooleanAst::Undetermined,
+                GraphIrFluxionalityAst {
+                    permutation: GraphIrLigandPermutation(PermPermutation::identity(4)),
+                    active: GraphIrBooleanAst::Undetermined,
                 },
             ] {
                 assert_eq!(
@@ -2215,7 +2239,7 @@ mod tests {
             assert!(value.pair() == pair);
             assert_eq!(
                 value.relation.bind(py).borrow().to_rust(),
-                AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
+                GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic)
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
@@ -2258,19 +2282,19 @@ mod tests {
     fn test_topicity_ast_roundtrip() {
         Python::attach(|py| {
             for ast in [
-                AstTopicityAst {
-                    pair: AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(2),
+                GraphIrTopicityAst {
+                    pair: GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(2),
                     ),
-                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                    relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic),
                 },
-                AstTopicityAst {
-                    pair: AstStereoLigandPair::new(
-                        AstStereoLigandPosition(1),
-                        AstStereoLigandPosition(3),
+                GraphIrTopicityAst {
+                    pair: GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(1),
+                        GraphIrStereoLigandPosition(3),
                     ),
-                    relation: AstTopicityRelationAst::Undetermined,
+                    relation: GraphIrTopicityRelationAst::Undetermined,
                 },
             ] {
                 assert_eq!(TopicityAst::from_rust(py, &ast).unwrap().to_rust(py), ast);
@@ -2280,11 +2304,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst { permutation: AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: AstBooleanAst::Lit(true) }))]
-    #[case(AstStereoAtomConstraintAst::Fluxionality(AstFluxionalityAst { permutation: AstLigandPermutation(PermPermutation::identity(4)), active: AstBooleanAst::Lit(false) }))]
-    #[case(AstStereoAtomConstraintAst::Topicity(AstTopicityAst { pair: AstStereoLigandPair::new(AstStereoLigandPosition(0), AstStereoLigandPosition(1)), relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic) }))]
-    #[case(AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)))]
-    fn test_stereo_atom_constraint_ast_roundtrip(#[case] ast: AstStereoAtomConstraintAst) {
+    #[case(GraphIrStereoAtomConstraintAst::LigandSymmetry(GraphIrLigandSymmetryAst { permutation: GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: GraphIrBooleanAst::Lit(true) }))]
+    #[case(GraphIrStereoAtomConstraintAst::Fluxionality(GraphIrFluxionalityAst { permutation: GraphIrLigandPermutation(PermPermutation::identity(4)), active: GraphIrBooleanAst::Lit(false) }))]
+    #[case(GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst { pair: GraphIrStereoLigandPair::new(GraphIrStereoLigandPosition(0), GraphIrStereoLigandPosition(1)), relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic) }))]
+    #[case(GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)))]
+    fn test_stereo_atom_constraint_ast_roundtrip(#[case] ast: GraphIrStereoAtomConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
                 StereoAtomConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
@@ -2296,12 +2320,12 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraint_ast_key() {
         Python::attach(|py| {
-            let ast = AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
-                pair: AstStereoLigandPair::new(
-                    AstStereoLigandPosition(0),
-                    AstStereoLigandPosition(1),
+            let ast = GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst {
+                pair: GraphIrStereoLigandPair::new(
+                    GraphIrStereoLigandPosition(0),
+                    GraphIrStereoLigandPosition(1),
                 ),
-                relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic),
             });
             let key = StereoAtomConstraintAst::from_rust(py, &ast)
                 .unwrap()
@@ -2309,9 +2333,9 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 key.to_rust(py),
-                AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
-                    AstStereoLigandPosition(0),
-                    AstStereoLigandPosition(1),
+                GraphIrStereoAtomConstraintKey::Topicity(GraphIrStereoLigandPair::new(
+                    GraphIrStereoLigandPosition(0),
+                    GraphIrStereoLigandPosition(1),
                 ))
             );
         });
@@ -2320,10 +2344,10 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_ast_get() {
         Python::attach(|py| {
-            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let stereogenicity = GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             );
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([stereogenicity.clone()]);
             let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
             assert_eq!(constraints.__len__(), 1);
@@ -2357,8 +2381,8 @@ mod tests {
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2372,8 +2396,8 @@ mod tests {
             let popped = constraints.pop(py, key.clone_ref(py)).unwrap();
             assert_eq!(
                 popped.unwrap().to_rust(py),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic
                 ))
             );
             assert_eq!(constraints.__len__(), 0);
@@ -2384,43 +2408,43 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_ast_accessors() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([
-                AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst {
-                    permutation: AstOrientedLigandPermutation {
-                        permutation: AstLigandPermutation(PermPermutation::from_image(&[
+                GraphIrStereoAtomConstraintAst::LigandSymmetry(GraphIrLigandSymmetryAst {
+                    permutation: GraphIrOrientedLigandPermutation {
+                        permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[
                             1, 0, 2, 3,
                         ])),
                         orientation: PermOrientation::Proper,
                     },
-                    invariant: AstBooleanAst::Lit(true),
+                    invariant: GraphIrBooleanAst::Lit(true),
                 }),
-                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
-                    pair: AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(1),
+                GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst {
+                    pair: GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(1),
                     ),
-                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                    relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic),
                 }),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic,
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic,
                 )),
             ]);
             let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
 
             assert_eq!(
                 constraints.stereogenicity().to_rust(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
             assert_eq!(
                 constraints.topicity(StereoLigandPair::new(0, 1)).to_rust(),
-                AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
+                GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic)
             );
             let ligand_symmetries = constraints.ligand_symmetries(py).unwrap();
             assert_eq!(ligand_symmetries.len(), 1);
             assert_eq!(
                 ligand_symmetries[0].to_rust(py).invariant,
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -2428,22 +2452,22 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_ast_iter() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([
-                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
-                    pair: AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(1),
+                GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst {
+                    pair: GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(1),
                     ),
-                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                    relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic),
                 }),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic,
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic,
                 )),
             ]);
             let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
 
-            let keys: Vec<AstStereoAtomConstraintKey> = constraints
+            let keys: Vec<GraphIrStereoAtomConstraintKey> = constraints
                 .keys(py)
                 .unwrap()
                 .keys
@@ -2452,14 +2476,14 @@ mod tests {
             assert_eq!(
                 keys,
                 vec![
-                    AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(1),
+                    GraphIrStereoAtomConstraintKey::Topicity(GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(1),
                     )),
-                    AstStereoAtomConstraintKey::Stereogenicity,
+                    GraphIrStereoAtomConstraintKey::Stereogenicity,
                 ]
             );
-            let values: Vec<AstStereoAtomConstraintAst> = constraints
+            let values: Vec<GraphIrStereoAtomConstraintAst> = constraints
                 .values(py)
                 .unwrap()
                 .entries
@@ -2478,8 +2502,8 @@ mod tests {
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2511,8 +2535,8 @@ mod tests {
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2520,9 +2544,9 @@ mod tests {
             .unwrap();
             let container = Py::new(py, StereoAtomConstraintsAst::new(py, vec![entry])).unwrap();
             let arg = StereoAtomConstraintsLike::Container(container);
-            let mut expected = AstStereoAtomConstraintsAst::new();
-            expected.extend([AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let mut expected = GraphIrStereoAtomConstraintsAst::new();
+            expected.extend([GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
             assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
@@ -2534,24 +2558,24 @@ mod tests {
     #[rstest]
     fn test_stereo_bond_constraints_ast() {
         Python::attach(|py| {
-            let stereogenicity = AstStereoBondConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let stereogenicity = GraphIrStereoBondConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             );
-            let mut ast_cs = AstStereoBondConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoBondConstraintsAst::new();
             ast_cs.extend([stereogenicity.clone()]);
             let constraints = StereoBondConstraintsAst::from_inner(ast_cs);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.stereogenicity().to_rust(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
 
-            let mut container_ast = AstStereoBondConstraintsAst::new();
+            let mut container_ast = GraphIrStereoBondConstraintsAst::new();
             container_ast.extend([stereogenicity.clone()]);
             let container =
                 Py::new(py, StereoBondConstraintsAst::from_inner(container_ast)).unwrap();
             let arg = StereoBondConstraintsLike::Container(container);
-            let mut expected = AstStereoBondConstraintsAst::new();
+            let mut expected = GraphIrStereoBondConstraintsAst::new();
             expected.extend([stereogenicity]);
             assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
@@ -2562,9 +2586,9 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2575,8 +2599,8 @@ mod tests {
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2585,7 +2609,7 @@ mod tests {
             view.set(py, stereogenicity);
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2593,16 +2617,16 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_view_pop() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
-            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
+            ast_cs.extend([GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2615,8 +2639,8 @@ mod tests {
             let popped = view.pop(py, key).unwrap();
             assert_eq!(
                 popped.unwrap().to_rust(py),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic
                 ))
             );
             assert_eq!(value.borrow(py).inner().constraints.len(), 0);
@@ -2626,16 +2650,16 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_view_getitem() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
-            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
+            ast_cs.extend([GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2649,8 +2673,8 @@ mod tests {
             assert!(view.__contains__(py, present.clone_ref(py)).unwrap());
             assert_eq!(
                 view.__getitem__(py, present).unwrap().to_rust(py),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic
                 ))
             );
             let absent = into_py_variant(
@@ -2668,25 +2692,25 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_view_items() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([
-                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
-                    pair: AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(1),
+                GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst {
+                    pair: GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(1),
                     ),
-                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                    relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic),
                 }),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic,
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic,
                 )),
             ]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2695,7 +2719,7 @@ mod tests {
             let view = StereoAtomConstraintsView {
                 backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
             };
-            let keys: Vec<AstStereoAtomConstraintKey> = view
+            let keys: Vec<GraphIrStereoAtomConstraintKey> = view
                 .keys(py)
                 .unwrap()
                 .keys
@@ -2704,11 +2728,11 @@ mod tests {
             assert_eq!(
                 keys,
                 vec![
-                    AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(1),
+                    GraphIrStereoAtomConstraintKey::Topicity(GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(1),
                     )),
-                    AstStereoAtomConstraintKey::Stereogenicity,
+                    GraphIrStereoAtomConstraintKey::Stereogenicity,
                 ]
             );
             assert_eq!(view.values(py).unwrap().entries.count(), 2);
@@ -2721,9 +2745,9 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2734,8 +2758,8 @@ mod tests {
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2745,7 +2769,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2753,25 +2777,25 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_view_accessors() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([
-                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
-                    pair: AstStereoLigandPair::new(
-                        AstStereoLigandPosition(0),
-                        AstStereoLigandPosition(1),
+                GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst {
+                    pair: GraphIrStereoLigandPair::new(
+                        GraphIrStereoLigandPosition(0),
+                        GraphIrStereoLigandPosition(1),
                     ),
-                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                    relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic),
                 }),
-                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                    AstStereogenicity::Stereogenic,
+                GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                    GraphIrStereogenicity::Stereogenic,
                 )),
             ]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2782,13 +2806,13 @@ mod tests {
             };
             assert_eq!(
                 view.stereogenicity(py).unwrap().to_rust(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
             assert_eq!(
                 view.topicity(py, StereoLigandPair::new(0, 1))
                     .unwrap()
                     .to_rust(),
-                AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
+                GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic)
             );
         });
     }
@@ -2798,9 +2822,9 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2809,8 +2833,8 @@ mod tests {
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2819,7 +2843,7 @@ mod tests {
             view.set(py, stereogenicity);
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2827,16 +2851,16 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_set_constraints_self() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
-            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
+            ast_cs.extend([GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2851,7 +2875,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2859,16 +2883,16 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_constraints_view_update_self() {
         Python::attach(|py| {
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
-            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
+            ast_cs.extend([GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2892,9 +2916,9 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoBondAst::from_inner(AstStereoBondAst::new(
-                    AstStereoKind::CisTrans,
-                    AstStereoCoset::Lit(0),
+                StereoBondAst::from_inner(GraphIrStereoBondAst::new(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2905,8 +2929,8 @@ mod tests {
                 py,
                 StereoBondConstraintAst::from_rust(
                     py,
-                    &AstStereoBondConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoBondConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -2915,7 +2939,7 @@ mod tests {
             view.set(py, stereogenicity);
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2923,15 +2947,15 @@ mod tests {
     #[rstest]
     #[case::ccw(
         StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
-        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0))
+        GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0))
     )]
     #[case::cw(
         StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
-        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(1))
+        GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(1))
     )]
     fn test_stereo_atom_ast_new(
         #[case] configuration: StereoConfigurationLike,
-        #[case] expected: AstStereoAtomAst,
+        #[case] expected: GraphIrStereoAtomAst,
     ) {
         Python::attach(|py| {
             let value = StereoAtomAst::new(py, configuration, None);
@@ -2942,10 +2966,10 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_new_constraints() {
         Python::attach(|py| {
-            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let stereogenicity = GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             );
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([stereogenicity.clone()]);
             let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
             let value = StereoAtomAst::new(
@@ -2953,14 +2977,14 @@ mod tests {
                 StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
                 Some(container),
             );
-            let mut expected_cs = AstStereoAtomConstraintsAst::new();
+            let mut expected_cs = GraphIrStereoAtomConstraintsAst::new();
             expected_cs.extend([stereogenicity]);
             assert_eq!(
                 *value.inner(),
-                AstStereoAtomAst {
-                    configuration: AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0)
+                GraphIrStereoAtomAst {
+                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0)
                     ),
                     constraints: expected_cs,
                 }
@@ -2971,18 +2995,21 @@ mod tests {
     #[rstest]
     #[case::ccw(
         "Th0",
-        AstStereoConfigurationAst::Kinded(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0))
+        GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(0)
+        )
     )]
     #[case::undetermined_coset(
         "Th*",
-        AstStereoConfigurationAst::Kinded(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Undetermined
+        GraphIrStereoConfigurationAst::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Undetermined
         )
     )]
     fn test_stereo_atom_ast_parse(
         #[case] input: &str,
-        #[case] expected: AstStereoConfigurationAst,
+        #[case] expected: GraphIrStereoConfigurationAst,
     ) {
         let value = StereoAtomAst::parse(input).unwrap();
         assert_eq!(value.inner().configuration, expected);
@@ -2995,23 +3022,23 @@ mod tests {
 
     #[rstest]
     #[case::ccw(
-        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+        GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
         "Th0"
     )]
     #[case::square_planar(
-        AstStereoAtomAst::new(AstStereoKind::SquarePlanar, AstStereoCoset::Lit(2)),
+        GraphIrStereoAtomAst::new(GraphIrStereoKind::SquarePlanar, GraphIrStereoCoset::Lit(2)),
         "Sp2"
     )]
-    fn test_stereo_atom_ast_str(#[case] ast: AstStereoAtomAst, #[case] expected: &str) {
+    fn test_stereo_atom_ast_str(#[case] ast: GraphIrStereoAtomAst, #[case] expected: &str) {
         let value = StereoAtomAst::from_inner(ast);
         assert_eq!(value.__str__(), expected);
     }
 
     #[rstest]
     fn test_stereo_atom_ast_repr() {
-        let value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
-            AstStereoKind::Tetrahedral,
-            AstStereoCoset::Lit(0),
+        let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(0),
         ));
         assert_eq!(value.__repr__(), "StereoAtomAst.parse('Th0')");
     }
@@ -3019,15 +3046,15 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_configuration() {
         Python::attach(|py| {
-            let value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ));
             assert_eq!(
                 value.configuration(py).unwrap().to_rust(py),
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0)
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0)
                 )
             );
         });
@@ -3036,9 +3063,9 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_set_configuration() {
         Python::attach(|py| {
-            let mut value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                AstStereoKind::Tetrahedral,
-                AstStereoCoset::Lit(0),
+            let mut value = StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(0),
             ));
             value.set_configuration(
                 py,
@@ -3046,9 +3073,9 @@ mod tests {
             );
             assert_eq!(
                 value.inner().configuration,
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(1)
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1)
                 )
             );
         });
@@ -3059,16 +3086,16 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
-            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let stereogenicity = GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             );
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([stereogenicity.clone()]);
             let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
             StereoAtomAst::set_constraints(
@@ -3077,7 +3104,7 @@ mod tests {
                 StereoAtomConstraintsLike::Container(container),
             )
             .unwrap();
-            let mut expected_cs = AstStereoAtomConstraintsAst::new();
+            let mut expected_cs = GraphIrStereoAtomConstraintsAst::new();
             expected_cs.extend([stereogenicity]);
             assert_eq!(value.borrow(py).inner().constraints, expected_cs);
         });
@@ -3086,15 +3113,15 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_asdict() {
         Python::attach(|py| {
-            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let stereogenicity = GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             );
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([stereogenicity]);
-            let value = StereoAtomAst::from_inner(AstStereoAtomAst {
-                configuration: AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0),
+            let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                configuration: GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
                 ),
                 constraints: ast_cs,
             });
@@ -3104,9 +3131,9 @@ mod tests {
                 py,
                 StereoConfigurationAst::from_rust(
                     py,
-                    &AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                    &GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                 )
                 .unwrap(),
@@ -3128,7 +3155,7 @@ mod tests {
             );
             assert_eq!(
                 *value.inner(),
-                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0))
+                GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
             );
             assert_eq!(value.__str__(), "Ct0");
         });
@@ -3137,38 +3164,41 @@ mod tests {
     #[rstest]
     #[case::z(
         "Ct0",
-        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0))
+        GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
     )]
     #[case::e(
         "Ct1",
-        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(1))
+        GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1))
     )]
-    fn test_stereo_bond_ast_parse(#[case] input: &str, #[case] expected: AstStereoBondAst) {
+    fn test_stereo_bond_ast_parse(#[case] input: &str, #[case] expected: GraphIrStereoBondAst) {
         let value = StereoBondAst::parse(input).unwrap();
         assert_eq!(*value.inner(), expected);
     }
 
     #[rstest]
     fn test_stereo_bond_ast_str() {
-        let value = StereoBondAst::from_inner(AstStereoBondAst::new(
-            AstStereoKind::CisTrans,
-            AstStereoCoset::Lit(1),
+        let value = StereoBondAst::from_inner(GraphIrStereoBondAst::new(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Lit(1),
         ));
         assert_eq!(value.__str__(), "Ct1");
     }
 
     fn stereo_atom_molecule(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AstAtomAst::from_element(ChemElement::C); 5],
+        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C); 5],
             stereo_atoms: vec![(
-                AstAtomId(0),
+                GraphIrAtomId(0),
                 vec![
-                    AstStereoLigand::new(AstAtomId(1), AstStereoLigandKind::Atom),
-                    AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-                    AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
-                    AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 ],
-                AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
+                GraphIrStereoAtomAst::new(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
             )],
             ..Default::default()
         });
@@ -3176,20 +3206,32 @@ mod tests {
     }
 
     fn stereo_bond_molecule(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AstAtomAst::from_element(ChemElement::C); 4],
+        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C); 4],
             bonds: vec![
-                (AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2)),
-                (AstAtomId(0), AstAtomId(2), AstBondAst::from_order(1)),
-                (AstAtomId(1), AstAtomId(3), AstBondAst::from_order(1)),
+                (
+                    GraphIrAtomId(0),
+                    GraphIrAtomId(1),
+                    GraphIrBondAst::from_order(2),
+                ),
+                (
+                    GraphIrAtomId(0),
+                    GraphIrAtomId(2),
+                    GraphIrBondAst::from_order(1),
+                ),
+                (
+                    GraphIrAtomId(1),
+                    GraphIrAtomId(3),
+                    GraphIrBondAst::from_order(1),
+                ),
             ],
             stereo_bonds: vec![(
-                AstBondId(0),
+                GraphIrBondId(0),
                 vec![
-                    AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
-                    AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
                 ],
-                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
+                GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -3201,7 +3243,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             assert_eq!(view.id(), 0);
             assert_eq!(view.__repr__(), "StereoAtomView(id=0)");
@@ -3213,7 +3255,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             assert_eq!(view.site_id(py).unwrap(), 0);
         });
@@ -3224,7 +3266,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             assert_eq!(
                 view.ligands(py)
@@ -3247,7 +3289,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             assert_eq!(view.kind(py).unwrap(), StereoKind::Tetrahedral);
         });
@@ -3258,9 +3300,12 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
-            assert_eq!(view.coset(py).unwrap().to_rust(py), AstStereoCoset::Lit(0));
+            assert_eq!(
+                view.coset(py).unwrap().to_rust(py),
+                GraphIrStereoCoset::Lit(0)
+            );
         });
     }
 
@@ -3269,13 +3314,13 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(0)
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0)
                 )
             );
         });
@@ -3286,7 +3331,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             view.set_configuration(
                 py,
@@ -3294,9 +3339,9 @@ mod tests {
             );
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(1)
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1)
                 )
             );
         });
@@ -3307,14 +3352,14 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             let stereogenicity = into_py_variant(
                 py,
                 StereoAtomConstraintAst::from_rust(
                     py,
-                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-                        AstStereogenicity::Stereogenic,
+                    &GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+                        GraphIrStereogenicity::Stereogenic,
                     )),
                 )
                 .unwrap(),
@@ -3324,7 +3369,7 @@ mod tests {
             // a fresh molecule-backed handle proves the write hit the molecule
             assert_eq!(
                 view.constraints(py).stereogenicity(py).unwrap().to_rust(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -3334,18 +3379,18 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
-            let mut ast_cs = AstStereoAtomConstraintsAst::new();
-            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
+            ast_cs.extend([GraphIrStereoAtomConstraintAst::Stereogenicity(
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
             let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
             view.set_constraints(py, StereoAtomConstraintsLike::Container(container))
                 .unwrap();
             assert_eq!(
                 view.constraints(py).stereogenicity(py).unwrap().to_rust(),
-                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+                GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -3355,7 +3400,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(0),
+                id: GraphIrStereoAtomId(0),
             };
             let dict = view.asdict(py).unwrap();
             let configuration = dict.get_item("configuration").unwrap().unwrap();
@@ -3363,9 +3408,9 @@ mod tests {
                 py,
                 StereoConfigurationAst::from_rust(
                     py,
-                    &AstStereoConfigurationAst::Kinded(
-                        AstStereoKind::Tetrahedral,
-                        AstStereoCoset::Lit(0),
+                    &GraphIrStereoConfigurationAst::Kinded(
+                        GraphIrStereoKind::Tetrahedral,
+                        GraphIrStereoCoset::Lit(0),
                     ),
                 )
                 .unwrap(),
@@ -3388,7 +3433,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
-                id: AstStereoAtomId(5),
+                id: GraphIrStereoAtomId(5),
             };
             assert!(view.site_id(py).is_err());
         });
@@ -3399,13 +3444,16 @@ mod tests {
         Python::attach(|py| {
             let view = StereoBondView {
                 owner: stereo_bond_molecule(py),
-                id: AstStereoBondId(0),
+                id: GraphIrStereoBondId(0),
             };
             assert_eq!(view.id(), 0);
             assert_eq!(view.site_id(py).unwrap(), 0);
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                AstStereoConfigurationAst::Kinded(AstStereoKind::CisTrans, AstStereoCoset::Lit(0))
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0)
+                )
             );
         });
     }
@@ -3452,9 +3500,9 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                StereoAtomAst::from_inner(AstStereoAtomAst::new(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(1),
+                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1),
                 )),
             )
             .unwrap();
@@ -3463,9 +3511,9 @@ mod tests {
             // value replaced
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::Tetrahedral,
-                    AstStereoCoset::Lit(1)
+                GraphIrStereoConfigurationAst::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1)
                 )
             );
             // site topology unchanged

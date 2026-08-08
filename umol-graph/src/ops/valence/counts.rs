@@ -4,15 +4,15 @@
 //! electrons from the nonbonding budget. Literals constrain each step.
 
 use thiserror::Error;
+use umol_chem::element::Element;
+use umol_chem::spin::{SpinState, UnpairedElectrons};
 #[cfg(test)]
-use umol_ast::ast::MoleculeEntries;
-use umol_ast::ast::{
+use umol_graph_ir::ir::MoleculeEntries;
+use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
     AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edits, IsotopeMassAst, Lattice,
     MoleculeAst, TransactionError, UnpairedElectronsAst, ValueAst,
 };
-use umol_chem::element::Element;
-use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_utils::solution::Solution;
 
 use super::ValenceTable;
@@ -435,8 +435,8 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) ->
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{AtomFieldChange, Edit};
-    use umol_ast::{atom_dsl, mol_dsl};
+    use umol_graph_ir::ir::{AtomFieldChange, Edit};
+    use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::valence::ValenceTable;

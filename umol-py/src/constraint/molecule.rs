@@ -1,16 +1,16 @@
-//! Molecule-level constraint payloads matching `umol_ast::ast::constraint`.
+//! Molecule-level constraint payloads matching `umol_graph_ir::ir::constraint`.
 
 use std::vec::IntoIter;
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
-use umol_ast::ast::{
-    AromaticSystemId as AstAromaticSystemId, AtomId as AstAtomId, BondId as AstBondId,
-    Constraint as AstConstraint, Constraints as AstConstraints, DativeBondId as AstDativeBondId,
-    MoleculeConstraint as AstMoleculeConstraint, MulticenterBondId as AstMulticenterBondId,
-    NoncovalentBondId as AstNoncovalentBondId, RelationalConstraint as AstRelationalConstraint,
-    StereoAtomId as AstStereoAtomId, StereoBondId as AstStereoBondId,
-    SubPatternAnchor as AstSubPatternAnchor,
+use umol_graph_ir::ir::{
+    AromaticSystemId as GraphIrAromaticSystemId, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
+    Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
+    DativeBondId as GraphIrDativeBondId, MoleculeConstraint as GraphIrMoleculeConstraint,
+    MulticenterBondId as GraphIrMulticenterBondId, NoncovalentBondId as GraphIrNoncovalentBondId,
+    RelationalConstraint as GraphIrRelationalConstraint, StereoAtomId as GraphIrStereoAtomId,
+    StereoBondId as GraphIrStereoBondId, SubPatternAnchor as GraphIrSubPatternAnchor,
 };
 
 use super::aromatic::AromaticSystemConstraintAst;
@@ -140,126 +140,131 @@ impl Constraint {
 
 impl_py_canonicalize!(
     Constraint,
-    AstConstraint,
-    |value: &Constraint, py: Python<'_>| -> PyResult<AstConstraint> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: AstConstraint| -> PyResult<Constraint> {
+    GraphIrConstraint,
+    |value: &Constraint, py: Python<'_>| -> PyResult<GraphIrConstraint> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: GraphIrConstraint| -> PyResult<Constraint> {
         Constraint::from_rust(py, &value)
     }
 );
 
 impl Constraint {
-    pub(crate) fn from_rust(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, constraint: &GraphIrConstraint) -> PyResult<Self> {
         Ok(match constraint {
-            AstConstraint::Atom(id, child) => Self::Atom(
+            GraphIrConstraint::Atom(id, child) => Self::Atom(
                 id.0,
                 into_py_variant(py, AtomConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::Bond(id, child) => Self::Bond(
+            GraphIrConstraint::Bond(id, child) => Self::Bond(
                 id.0,
                 into_py_variant(py, BondConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::DativeBond(id, child) => Self::DativeBond(
+            GraphIrConstraint::DativeBond(id, child) => Self::DativeBond(
                 id.0,
                 into_py_variant(py, DativeBondConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::AromaticSystem(id, child) => Self::AromaticSystem(
+            GraphIrConstraint::AromaticSystem(id, child) => Self::AromaticSystem(
                 id.0,
                 into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::MulticenterBond(id, child) => Self::MulticenterBond(
+            GraphIrConstraint::MulticenterBond(id, child) => Self::MulticenterBond(
                 id.0,
                 into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::NoncovalentBond(id, child) => Self::NoncovalentBond(
+            GraphIrConstraint::NoncovalentBond(id, child) => Self::NoncovalentBond(
                 id.0,
                 into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::StereoAtom(id, kind, child) => Self::StereoAtom(
+            GraphIrConstraint::StereoAtom(id, kind, child) => Self::StereoAtom(
                 id.0,
                 StereoKind::from_rust(*kind),
                 into_py_variant(py, StereoAtomConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::StereoBond(id, kind, child) => Self::StereoBond(
+            GraphIrConstraint::StereoBond(id, kind, child) => Self::StereoBond(
                 id.0,
                 StereoKind::from_rust(*kind),
                 into_py_variant(py, StereoBondConstraintAst::from_rust(py, child)?)?,
             ),
-            AstConstraint::Relational(child) => Self::Relational(into_py_variant(
+            GraphIrConstraint::Relational(child) => Self::Relational(into_py_variant(
                 py,
                 RelationalConstraint::from_rust(py, child)?,
             )?),
-            AstConstraint::Molecule(child) => Self::Molecule(into_py_variant(
+            GraphIrConstraint::Molecule(child) => Self::Molecule(into_py_variant(
                 py,
                 MoleculeConstraint::from_rust(py, child)?,
             )?),
-            AstConstraint::And(children) => Self::And(
+            GraphIrConstraint::And(children) => Self::And(
                 children
                     .iter()
                     .map(|child| into_py_variant(py, Self::from_rust(py, child)?))
                     .collect::<PyResult<_>>()?,
             ),
-            AstConstraint::Or(children) => Self::Or(
+            GraphIrConstraint::Or(children) => Self::Or(
                 children
                     .iter()
                     .map(|child| into_py_variant(py, Self::from_rust(py, child)?))
                     .collect::<PyResult<_>>()?,
             ),
-            AstConstraint::Not(child) => {
+            GraphIrConstraint::Not(child) => {
                 Self::Not(into_py_variant(py, Self::from_rust(py, child)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstConstraint {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrConstraint {
         match self {
             Self::Atom(id, child) => {
-                AstConstraint::Atom(AstAtomId(*id), child.bind(py).borrow().to_rust(py))
+                GraphIrConstraint::Atom(GraphIrAtomId(*id), child.bind(py).borrow().to_rust(py))
             }
             Self::Bond(id, child) => {
-                AstConstraint::Bond(AstBondId(*id), child.bind(py).borrow().to_rust(py))
+                GraphIrConstraint::Bond(GraphIrBondId(*id), child.bind(py).borrow().to_rust(py))
             }
-            Self::DativeBond(id, child) => {
-                AstConstraint::DativeBond(AstDativeBondId(*id), child.bind(py).borrow().to_rust(py))
-            }
-            Self::AromaticSystem(id, child) => AstConstraint::AromaticSystem(
-                AstAromaticSystemId(*id),
+            Self::DativeBond(id, child) => GraphIrConstraint::DativeBond(
+                GraphIrDativeBondId(*id),
                 child.bind(py).borrow().to_rust(py),
             ),
-            Self::MulticenterBond(id, child) => AstConstraint::MulticenterBond(
-                AstMulticenterBondId(*id),
+            Self::AromaticSystem(id, child) => GraphIrConstraint::AromaticSystem(
+                GraphIrAromaticSystemId(*id),
                 child.bind(py).borrow().to_rust(py),
             ),
-            Self::NoncovalentBond(id, child) => AstConstraint::NoncovalentBond(
-                AstNoncovalentBondId(*id),
+            Self::MulticenterBond(id, child) => GraphIrConstraint::MulticenterBond(
+                GraphIrMulticenterBondId(*id),
                 child.bind(py).borrow().to_rust(py),
             ),
-            Self::StereoAtom(id, kind, child) => AstConstraint::StereoAtom(
-                AstStereoAtomId(*id),
+            Self::NoncovalentBond(id, child) => GraphIrConstraint::NoncovalentBond(
+                GraphIrNoncovalentBondId(*id),
+                child.bind(py).borrow().to_rust(py),
+            ),
+            Self::StereoAtom(id, kind, child) => GraphIrConstraint::StereoAtom(
+                GraphIrStereoAtomId(*id),
                 kind.to_rust(),
                 child.bind(py).borrow().to_rust(py),
             ),
-            Self::StereoBond(id, kind, child) => AstConstraint::StereoBond(
-                AstStereoBondId(*id),
+            Self::StereoBond(id, kind, child) => GraphIrConstraint::StereoBond(
+                GraphIrStereoBondId(*id),
                 kind.to_rust(),
                 child.bind(py).borrow().to_rust(py),
             ),
             Self::Relational(child) => {
-                AstConstraint::Relational(child.bind(py).borrow().to_rust(py))
+                GraphIrConstraint::Relational(child.bind(py).borrow().to_rust(py))
             }
-            Self::Molecule(child) => AstConstraint::Molecule(child.bind(py).borrow().to_rust(py)),
-            Self::And(children) => AstConstraint::And(
+            Self::Molecule(child) => {
+                GraphIrConstraint::Molecule(child.bind(py).borrow().to_rust(py))
+            }
+            Self::And(children) => GraphIrConstraint::And(
                 children
                     .iter()
                     .map(|child| child.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
-            Self::Or(children) => AstConstraint::Or(
+            Self::Or(children) => GraphIrConstraint::Or(
                 children
                     .iter()
                     .map(|child| child.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
-            Self::Not(child) => AstConstraint::Not(Box::new(child.bind(py).borrow().to_rust(py))),
+            Self::Not(child) => {
+                GraphIrConstraint::Not(Box::new(child.bind(py).borrow().to_rust(py)))
+            }
         }
     }
 }
@@ -279,7 +284,7 @@ fn resolve_constraint_index(len: usize, index: isize) -> PyResult<usize> {
 }
 
 /// Build a detached iterator of concrete Python constraint variants.
-fn constraint_iter(py: Python<'_>, constraints: &AstConstraints) -> PyResult<ConstraintIter> {
+fn constraint_iter(py: Python<'_>, constraints: &GraphIrConstraints) -> PyResult<ConstraintIter> {
     let entries = constraints
         .iter()
         .map(|constraint| into_py_variant(py, Constraint::from_rust(py, constraint)?))
@@ -338,13 +343,13 @@ impl ConstraintsUpdate {
 
 /// A resolved update containing no Python references that need to be read.
 pub(crate) enum ResolvedConstraintsUpdate {
-    Overlay(AstConstraints),
-    Entries(Vec<AstConstraint>),
+    Overlay(GraphIrConstraints),
+    Entries(Vec<GraphIrConstraint>),
 }
 
 impl ResolvedConstraintsUpdate {
     /// Append the resolved entries in order, preserving duplicates.
-    pub(crate) fn apply(self, target: &mut AstConstraints) {
+    pub(crate) fn apply(self, target: &mut GraphIrConstraints) {
         match self {
             Self::Overlay(overlay) => {
                 for entry in overlay {
@@ -368,7 +373,7 @@ pub(crate) enum ConstraintsLike {
 }
 
 impl ConstraintsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstConstraints> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrConstraints> {
         match self {
             Self::Container(container) => Ok(container.bind(py).borrow().inner().clone()),
             Self::View(view) => view
@@ -383,14 +388,14 @@ impl ConstraintsLike {
 /// and unhashable.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
-pub struct Constraints(AstConstraints);
+pub struct Constraints(GraphIrConstraints);
 
 #[pymethods]
 impl Constraints {
     /// Build an owned container from constraint entries, preserving order and duplicates.
     #[new]
     fn new(py: Python<'_>, entries: Vec<Py<Constraint>>) -> Self {
-        Self(AstConstraints::from(
+        Self(GraphIrConstraints::from(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py))
@@ -438,26 +443,26 @@ impl Constraints {
 }
 
 impl Constraints {
-    pub(crate) fn inner(&self) -> &AstConstraints {
+    pub(crate) fn inner(&self) -> &GraphIrConstraints {
         &self.0
     }
 
-    pub(crate) fn inner_mut(&mut self) -> &mut AstConstraints {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrConstraints {
         &mut self.0
     }
 
-    pub(crate) fn from_inner(constraints: AstConstraints) -> Self {
+    pub(crate) fn from_inner(constraints: GraphIrConstraints) -> Self {
         Self(constraints)
     }
 }
 
 impl_py_canonicalize!(
     Constraints,
-    AstConstraints,
-    |value: &Constraints, _py: Python<'_>| -> PyResult<AstConstraints> {
+    GraphIrConstraints,
+    |value: &Constraints, _py: Python<'_>| -> PyResult<GraphIrConstraints> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: AstConstraints| -> PyResult<Constraints> {
+    |_py: Python<'_>, value: GraphIrConstraints| -> PyResult<Constraints> {
         Ok(Constraints::from_inner(value))
     }
 );
@@ -477,7 +482,7 @@ impl ConstraintsView {
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&AstConstraints) -> PyResult<R>,
+        f: impl FnOnce(&GraphIrConstraints) -> PyResult<R>,
     ) -> PyResult<R> {
         let molecule = self.owner.bind(py).borrow();
         f(molecule.inner().constraints())
@@ -487,7 +492,7 @@ impl ConstraintsView {
     pub(crate) fn with_mut<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut AstConstraints) -> R,
+        f: impl FnOnce(&mut GraphIrConstraints) -> R,
     ) -> R {
         f(self.owner.borrow_mut(py).inner_mut().constraints_mut())
     }
@@ -507,7 +512,7 @@ impl ConstraintsView {
     }
 
     fn clear(&self, py: Python<'_>) {
-        self.with_mut(py, AstConstraints::clear);
+        self.with_mut(py, GraphIrConstraints::clear);
     }
 
     /// Append another container, live view, or iterable after snapshotting the RHS.
@@ -574,25 +579,28 @@ impl MoleculeConstraint {
 
 impl_py_canonicalize!(
     MoleculeConstraint,
-    AstMoleculeConstraint,
-    |value: &MoleculeConstraint, py: Python<'_>| -> PyResult<AstMoleculeConstraint> {
+    GraphIrMoleculeConstraint,
+    |value: &MoleculeConstraint, py: Python<'_>| -> PyResult<GraphIrMoleculeConstraint> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstMoleculeConstraint| -> PyResult<MoleculeConstraint> {
+    |py: Python<'_>, value: GraphIrMoleculeConstraint| -> PyResult<MoleculeConstraint> {
         MoleculeConstraint::from_rust(py, &value)
     }
 );
 
 impl MoleculeConstraint {
-    pub(crate) fn from_rust(py: Python<'_>, constraint: &AstMoleculeConstraint) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        constraint: &GraphIrMoleculeConstraint,
+    ) -> PyResult<Self> {
         Ok(match constraint {
-            AstMoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum(
+            GraphIrMoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum(
                 atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
                 into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
             ),
-            AstMoleculeConstraint::UnpairedElectronCoupling {
+            GraphIrMoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
                 unpaired_electrons,
             } => Self::UnpairedElectronCoupling {
@@ -604,53 +612,53 @@ impl MoleculeConstraint {
                     UnpairedElectronsAst::from_rust(py, unpaired_electrons)?,
                 )?,
             },
-            AstMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
+            GraphIrMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
                 bonds
                     .as_ref()
                     .map(|bonds| bonds.iter().map(|bond| bond.0).collect()),
                 into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
             ),
-            AstMoleculeConstraint::Connected { atoms } => Self::Connected(
+            GraphIrMoleculeConstraint::Connected { atoms } => Self::Connected(
                 atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
             ),
-            AstMoleculeConstraint::SubPattern { anchor, pattern } => Self::SubPattern(
+            GraphIrMoleculeConstraint::SubPattern { anchor, pattern } => Self::SubPattern(
                 Py::new(py, SubPatternAnchor::from_rust(anchor))?,
                 Py::new(py, MoleculeAst::from_rust((**pattern).clone()))?,
             ),
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMoleculeConstraint {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrMoleculeConstraint {
         match self {
-            Self::ChargeSum(atoms, sum) => AstMoleculeConstraint::ChargeSum {
+            Self::ChargeSum(atoms, sum) => GraphIrMoleculeConstraint::ChargeSum {
                 atoms: atoms
                     .as_ref()
-                    .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
+                    .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
                 sum: sum.bind(py).borrow().to_rust(py),
             },
             Self::UnpairedElectronCoupling {
                 atoms,
                 unpaired_electrons,
-            } => AstMoleculeConstraint::UnpairedElectronCoupling {
+            } => GraphIrMoleculeConstraint::UnpairedElectronCoupling {
                 atoms: atoms
                     .as_ref()
-                    .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
+                    .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
                 unpaired_electrons: unpaired_electrons.bind(py).borrow().to_rust(py),
             },
-            Self::BondOrderSum(bonds, sum) => AstMoleculeConstraint::BondOrderSum {
+            Self::BondOrderSum(bonds, sum) => GraphIrMoleculeConstraint::BondOrderSum {
                 bonds: bonds
                     .as_ref()
-                    .map(|bonds| bonds.iter().copied().map(AstBondId).collect()),
+                    .map(|bonds| bonds.iter().copied().map(GraphIrBondId).collect()),
                 sum: sum.bind(py).borrow().to_rust(py),
             },
-            Self::Connected(atoms) => AstMoleculeConstraint::Connected {
+            Self::Connected(atoms) => GraphIrMoleculeConstraint::Connected {
                 atoms: atoms
                     .as_ref()
-                    .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
+                    .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
             },
-            Self::SubPattern(anchor, pattern) => AstMoleculeConstraint::SubPattern {
+            Self::SubPattern(anchor, pattern) => GraphIrMoleculeConstraint::SubPattern {
                 anchor: anchor.bind(py).borrow().to_rust(),
                 pattern: Box::new(pattern.bind(py).borrow().inner().clone()),
             },
@@ -706,91 +714,91 @@ impl RelationalConstraint {
     /// Convert any relational constraint into its Python value.
     pub(crate) fn from_rust(
         py: Python<'_>,
-        constraint: &AstRelationalConstraint,
+        constraint: &GraphIrRelationalConstraint,
     ) -> PyResult<Self> {
         Ok(match constraint {
-            AstRelationalConstraint::DativeBondDonors { bond, atoms } => {
+            GraphIrRelationalConstraint::DativeBondDonors { bond, atoms } => {
                 Self::DativeBondDonors(bond.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::DativeBondDonor { bond, atom } => {
+            GraphIrRelationalConstraint::DativeBondDonor { bond, atom } => {
                 Self::DativeBondDonor(bond.0, atom.0)
             }
-            AstRelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
+            GraphIrRelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
                 Self::DativeBondContainsAllDonors(bond.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::DativeBondAllDonors { bond, predicate } => {
+            GraphIrRelationalConstraint::DativeBondAllDonors { bond, predicate } => {
                 Self::DativeBondAllDonors(
                     bond.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
+            GraphIrRelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
                 Self::DativeBondAnyDonor(
                     bond.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::DativeBondAcceptor { bond, atom } => {
+            GraphIrRelationalConstraint::DativeBondAcceptor { bond, atom } => {
                 Self::DativeBondAcceptor(bond.0, atom.0)
             }
-            AstRelationalConstraint::DativeBondAcceptorSatisfies { bond, predicate } => {
+            GraphIrRelationalConstraint::DativeBondAcceptorSatisfies { bond, predicate } => {
                 Self::DativeBondAcceptorSatisfies(
                     bond.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::DativeBondParallels { dative, parallel } => {
+            GraphIrRelationalConstraint::DativeBondParallels { dative, parallel } => {
                 Self::DativeBondParallels(dative.0, parallel.0)
             }
-            AstRelationalConstraint::AromaticSystemAtoms { system, atoms } => {
+            GraphIrRelationalConstraint::AromaticSystemAtoms { system, atoms } => {
                 Self::AromaticSystemAtoms(system.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::AromaticSystemContains { system, atom } => {
+            GraphIrRelationalConstraint::AromaticSystemContains { system, atom } => {
                 Self::AromaticSystemContains(system.0, atom.0)
             }
-            AstRelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
+            GraphIrRelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
                 Self::AromaticSystemContainsAll(system.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::AromaticSystemAllAtoms { system, predicate } => {
+            GraphIrRelationalConstraint::AromaticSystemAllAtoms { system, predicate } => {
                 Self::AromaticSystemAllAtoms(
                     system.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
+            GraphIrRelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
                 Self::AromaticSystemAnyAtom(
                     system.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
+            GraphIrRelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
                 Self::MulticenterBondAtoms(bond.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::MulticenterBondContains { bond, atom } => {
+            GraphIrRelationalConstraint::MulticenterBondContains { bond, atom } => {
                 Self::MulticenterBondContains(bond.0, atom.0)
             }
-            AstRelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
+            GraphIrRelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
                 Self::MulticenterBondContainsAll(bond.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::MulticenterBondAllAtoms { bond, predicate } => {
+            GraphIrRelationalConstraint::MulticenterBondAllAtoms { bond, predicate } => {
                 Self::MulticenterBondAllAtoms(
                     bond.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
+            GraphIrRelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
                 Self::MulticenterBondAnyAtom(
                     bond.0,
                     into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
-            AstRelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
+            GraphIrRelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
                 Self::NoncovalentBondEnds(bond.0, [atoms[0].0, atoms[1].0])
             }
-            AstRelationalConstraint::NoncovalentBondContains { bond, atom } => {
+            GraphIrRelationalConstraint::NoncovalentBondContains { bond, atom } => {
                 Self::NoncovalentBondContains(bond.0, atom.0)
             }
-            AstRelationalConstraint::NoncovalentBondEndsSatisfy { bond, predicates } => {
+            GraphIrRelationalConstraint::NoncovalentBondEndsSatisfy { bond, predicates } => {
                 Self::NoncovalentBondEndsSatisfy(
                     bond.0,
                     [
@@ -799,46 +807,46 @@ impl RelationalConstraint {
                     ],
                 )
             }
-            AstRelationalConstraint::StereoAtomSite { stereo_atom, atom } => {
+            GraphIrRelationalConstraint::StereoAtomSite { stereo_atom, atom } => {
                 Self::StereoAtomSite(stereo_atom.0, atom.0)
             }
-            AstRelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
+            GraphIrRelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
                 Self::StereoAtomContains(stereo_atom.0, atom.0)
             }
-            AstRelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
+            GraphIrRelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
                 Self::StereoAtomLigands(stereo_atom.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::StereoAtomAllLigands {
+            GraphIrRelationalConstraint::StereoAtomAllLigands {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAllLigands(
                 stereo_atom.0,
                 into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
-            AstRelationalConstraint::StereoAtomAnyLigand {
+            GraphIrRelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand(
                 stereo_atom.0,
                 into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
-            AstRelationalConstraint::StereoBondSite { stereo_bond, bond } => {
+            GraphIrRelationalConstraint::StereoBondSite { stereo_bond, bond } => {
                 Self::StereoBondSite(stereo_bond.0, bond.0)
             }
-            AstRelationalConstraint::StereoBondContains { stereo_bond, atom } => {
+            GraphIrRelationalConstraint::StereoBondContains { stereo_bond, atom } => {
                 Self::StereoBondContains(stereo_bond.0, atom.0)
             }
-            AstRelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
+            GraphIrRelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
                 Self::StereoBondLigands(stereo_bond.0, atoms.iter().map(|atom| atom.0).collect())
             }
-            AstRelationalConstraint::StereoBondAllLigands {
+            GraphIrRelationalConstraint::StereoBondAllLigands {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAllLigands(
                 stereo_bond.0,
                 into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
-            AstRelationalConstraint::StereoBondAnyLigand {
+            GraphIrRelationalConstraint::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand(
@@ -848,184 +856,190 @@ impl RelationalConstraint {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstRelationalConstraint {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrRelationalConstraint {
         match self {
-            Self::DativeBondDonors(bond, atoms) => AstRelationalConstraint::DativeBondDonors {
-                bond: AstDativeBondId(*bond),
-                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+            Self::DativeBondDonors(bond, atoms) => GraphIrRelationalConstraint::DativeBondDonors {
+                bond: GraphIrDativeBondId(*bond),
+                atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
             },
-            Self::DativeBondDonor(bond, atom) => AstRelationalConstraint::DativeBondDonor {
-                bond: AstDativeBondId(*bond),
-                atom: AstAtomId(*atom),
+            Self::DativeBondDonor(bond, atom) => GraphIrRelationalConstraint::DativeBondDonor {
+                bond: GraphIrDativeBondId(*bond),
+                atom: GraphIrAtomId(*atom),
             },
             Self::DativeBondContainsAllDonors(bond, atoms) => {
-                AstRelationalConstraint::DativeBondContainsAllDonors {
-                    bond: AstDativeBondId(*bond),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::DativeBondContainsAllDonors {
+                    bond: GraphIrDativeBondId(*bond),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::DativeBondAllDonors(bond, predicate) => {
-                AstRelationalConstraint::DativeBondAllDonors {
-                    bond: AstDativeBondId(*bond),
+                GraphIrRelationalConstraint::DativeBondAllDonors {
+                    bond: GraphIrDativeBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::DativeBondAnyDonor(bond, predicate) => {
-                AstRelationalConstraint::DativeBondAnyDonor {
-                    bond: AstDativeBondId(*bond),
+                GraphIrRelationalConstraint::DativeBondAnyDonor {
+                    bond: GraphIrDativeBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::DativeBondAcceptor(bond, atom) => AstRelationalConstraint::DativeBondAcceptor {
-                bond: AstDativeBondId(*bond),
-                atom: AstAtomId(*atom),
-            },
+            Self::DativeBondAcceptor(bond, atom) => {
+                GraphIrRelationalConstraint::DativeBondAcceptor {
+                    bond: GraphIrDativeBondId(*bond),
+                    atom: GraphIrAtomId(*atom),
+                }
+            }
             Self::DativeBondAcceptorSatisfies(bond, predicate) => {
-                AstRelationalConstraint::DativeBondAcceptorSatisfies {
-                    bond: AstDativeBondId(*bond),
+                GraphIrRelationalConstraint::DativeBondAcceptorSatisfies {
+                    bond: GraphIrDativeBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::DativeBondParallels(dative, parallel) => {
-                AstRelationalConstraint::DativeBondParallels {
-                    dative: AstDativeBondId(*dative),
-                    parallel: AstBondId(*parallel),
+                GraphIrRelationalConstraint::DativeBondParallels {
+                    dative: GraphIrDativeBondId(*dative),
+                    parallel: GraphIrBondId(*parallel),
                 }
             }
             Self::AromaticSystemAtoms(system, atoms) => {
-                AstRelationalConstraint::AromaticSystemAtoms {
-                    system: AstAromaticSystemId(*system),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::AromaticSystemAtoms {
+                    system: GraphIrAromaticSystemId(*system),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::AromaticSystemContains(system, atom) => {
-                AstRelationalConstraint::AromaticSystemContains {
-                    system: AstAromaticSystemId(*system),
-                    atom: AstAtomId(*atom),
+                GraphIrRelationalConstraint::AromaticSystemContains {
+                    system: GraphIrAromaticSystemId(*system),
+                    atom: GraphIrAtomId(*atom),
                 }
             }
             Self::AromaticSystemContainsAll(system, atoms) => {
-                AstRelationalConstraint::AromaticSystemContainsAll {
-                    system: AstAromaticSystemId(*system),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::AromaticSystemContainsAll {
+                    system: GraphIrAromaticSystemId(*system),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::AromaticSystemAllAtoms(system, predicate) => {
-                AstRelationalConstraint::AromaticSystemAllAtoms {
-                    system: AstAromaticSystemId(*system),
+                GraphIrRelationalConstraint::AromaticSystemAllAtoms {
+                    system: GraphIrAromaticSystemId(*system),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::AromaticSystemAnyAtom(system, predicate) => {
-                AstRelationalConstraint::AromaticSystemAnyAtom {
-                    system: AstAromaticSystemId(*system),
+                GraphIrRelationalConstraint::AromaticSystemAnyAtom {
+                    system: GraphIrAromaticSystemId(*system),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::MulticenterBondAtoms(bond, atoms) => {
-                AstRelationalConstraint::MulticenterBondAtoms {
-                    bond: AstMulticenterBondId(*bond),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::MulticenterBondAtoms {
+                    bond: GraphIrMulticenterBondId(*bond),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::MulticenterBondContains(bond, atom) => {
-                AstRelationalConstraint::MulticenterBondContains {
-                    bond: AstMulticenterBondId(*bond),
-                    atom: AstAtomId(*atom),
+                GraphIrRelationalConstraint::MulticenterBondContains {
+                    bond: GraphIrMulticenterBondId(*bond),
+                    atom: GraphIrAtomId(*atom),
                 }
             }
             Self::MulticenterBondContainsAll(bond, atoms) => {
-                AstRelationalConstraint::MulticenterBondContainsAll {
-                    bond: AstMulticenterBondId(*bond),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::MulticenterBondContainsAll {
+                    bond: GraphIrMulticenterBondId(*bond),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::MulticenterBondAllAtoms(bond, predicate) => {
-                AstRelationalConstraint::MulticenterBondAllAtoms {
-                    bond: AstMulticenterBondId(*bond),
+                GraphIrRelationalConstraint::MulticenterBondAllAtoms {
+                    bond: GraphIrMulticenterBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::MulticenterBondAnyAtom(bond, predicate) => {
-                AstRelationalConstraint::MulticenterBondAnyAtom {
-                    bond: AstMulticenterBondId(*bond),
+                GraphIrRelationalConstraint::MulticenterBondAnyAtom {
+                    bond: GraphIrMulticenterBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::NoncovalentBondEnds(bond, atoms) => {
-                AstRelationalConstraint::NoncovalentBondEnds {
-                    bond: AstNoncovalentBondId(*bond),
-                    atoms: [AstAtomId(atoms[0]), AstAtomId(atoms[1])],
+                GraphIrRelationalConstraint::NoncovalentBondEnds {
+                    bond: GraphIrNoncovalentBondId(*bond),
+                    atoms: [GraphIrAtomId(atoms[0]), GraphIrAtomId(atoms[1])],
                 }
             }
             Self::NoncovalentBondContains(bond, atom) => {
-                AstRelationalConstraint::NoncovalentBondContains {
-                    bond: AstNoncovalentBondId(*bond),
-                    atom: AstAtomId(*atom),
+                GraphIrRelationalConstraint::NoncovalentBondContains {
+                    bond: GraphIrNoncovalentBondId(*bond),
+                    atom: GraphIrAtomId(*atom),
                 }
             }
             Self::NoncovalentBondEndsSatisfy(bond, predicates) => {
-                AstRelationalConstraint::NoncovalentBondEndsSatisfy {
-                    bond: AstNoncovalentBondId(*bond),
+                GraphIrRelationalConstraint::NoncovalentBondEndsSatisfy {
+                    bond: GraphIrNoncovalentBondId(*bond),
                     predicates: [
                         Box::new(predicates[0].bind(py).borrow().to_rust(py)),
                         Box::new(predicates[1].bind(py).borrow().to_rust(py)),
                     ],
                 }
             }
-            Self::StereoAtomSite(stereo_atom, atom) => AstRelationalConstraint::StereoAtomSite {
-                stereo_atom: AstStereoAtomId(*stereo_atom),
-                atom: AstAtomId(*atom),
-            },
+            Self::StereoAtomSite(stereo_atom, atom) => {
+                GraphIrRelationalConstraint::StereoAtomSite {
+                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
+                    atom: GraphIrAtomId(*atom),
+                }
+            }
             Self::StereoAtomContains(stereo_atom, atom) => {
-                AstRelationalConstraint::StereoAtomContains {
-                    stereo_atom: AstStereoAtomId(*stereo_atom),
-                    atom: AstAtomId(*atom),
+                GraphIrRelationalConstraint::StereoAtomContains {
+                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
+                    atom: GraphIrAtomId(*atom),
                 }
             }
             Self::StereoAtomLigands(stereo_atom, atoms) => {
-                AstRelationalConstraint::StereoAtomLigands {
-                    stereo_atom: AstStereoAtomId(*stereo_atom),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::StereoAtomLigands {
+                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::StereoAtomAllLigands(stereo_atom, predicate) => {
-                AstRelationalConstraint::StereoAtomAllLigands {
-                    stereo_atom: AstStereoAtomId(*stereo_atom),
+                GraphIrRelationalConstraint::StereoAtomAllLigands {
+                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::StereoAtomAnyLigand(stereo_atom, predicate) => {
-                AstRelationalConstraint::StereoAtomAnyLigand {
-                    stereo_atom: AstStereoAtomId(*stereo_atom),
+                GraphIrRelationalConstraint::StereoAtomAnyLigand {
+                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::StereoBondSite(stereo_bond, bond) => AstRelationalConstraint::StereoBondSite {
-                stereo_bond: AstStereoBondId(*stereo_bond),
-                bond: AstBondId(*bond),
-            },
+            Self::StereoBondSite(stereo_bond, bond) => {
+                GraphIrRelationalConstraint::StereoBondSite {
+                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
+                    bond: GraphIrBondId(*bond),
+                }
+            }
             Self::StereoBondContains(stereo_bond, atom) => {
-                AstRelationalConstraint::StereoBondContains {
-                    stereo_bond: AstStereoBondId(*stereo_bond),
-                    atom: AstAtomId(*atom),
+                GraphIrRelationalConstraint::StereoBondContains {
+                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
+                    atom: GraphIrAtomId(*atom),
                 }
             }
             Self::StereoBondLigands(stereo_bond, atoms) => {
-                AstRelationalConstraint::StereoBondLigands {
-                    stereo_bond: AstStereoBondId(*stereo_bond),
-                    atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                GraphIrRelationalConstraint::StereoBondLigands {
+                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
             Self::StereoBondAllLigands(stereo_bond, predicate) => {
-                AstRelationalConstraint::StereoBondAllLigands {
-                    stereo_bond: AstStereoBondId(*stereo_bond),
+                GraphIrRelationalConstraint::StereoBondAllLigands {
+                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::StereoBondAnyLigand(stereo_bond, predicate) => {
-                AstRelationalConstraint::StereoBondAnyLigand {
-                    stereo_bond: AstStereoBondId(*stereo_bond),
+                GraphIrRelationalConstraint::StereoBondAnyLigand {
+                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
@@ -1035,11 +1049,11 @@ impl RelationalConstraint {
 
 impl_py_canonicalize!(
     RelationalConstraint,
-    AstRelationalConstraint,
-    |value: &RelationalConstraint, py: Python<'_>| -> PyResult<AstRelationalConstraint> {
+    GraphIrRelationalConstraint,
+    |value: &RelationalConstraint, py: Python<'_>| -> PyResult<GraphIrRelationalConstraint> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstRelationalConstraint| -> PyResult<RelationalConstraint> {
+    |py: Python<'_>, value: GraphIrRelationalConstraint| -> PyResult<RelationalConstraint> {
         RelationalConstraint::from_rust(py, &value)
     }
 );
@@ -1113,7 +1127,7 @@ impl SubPatternAnchor {
 }
 
 impl SubPatternAnchor {
-    pub(crate) fn from_rust(anchor: &AstSubPatternAnchor) -> Self {
+    pub(crate) fn from_rust(anchor: &GraphIrSubPatternAnchor) -> Self {
         Self {
             atoms: anchor
                 .atoms()
@@ -1158,33 +1172,40 @@ impl SubPatternAnchor {
         }
     }
 
-    pub(crate) fn to_rust(&self) -> AstSubPatternAnchor {
-        let mut anchor = AstSubPatternAnchor::new();
+    pub(crate) fn to_rust(&self) -> GraphIrSubPatternAnchor {
+        let mut anchor = GraphIrSubPatternAnchor::new();
         for &(target, pattern) in &self.atoms {
-            anchor.push_atom(AstAtomId(target), AstAtomId(pattern));
+            anchor.push_atom(GraphIrAtomId(target), GraphIrAtomId(pattern));
         }
         for &(target, pattern) in &self.bonds {
-            anchor.push_bond(AstBondId(target), AstBondId(pattern));
+            anchor.push_bond(GraphIrBondId(target), GraphIrBondId(pattern));
         }
         for &(target, pattern) in &self.dative_bonds {
-            anchor.push_dative_bond(AstDativeBondId(target), AstDativeBondId(pattern));
+            anchor.push_dative_bond(GraphIrDativeBondId(target), GraphIrDativeBondId(pattern));
         }
         for &(target, pattern) in &self.aromatic_systems {
-            anchor.push_aromatic_system(AstAromaticSystemId(target), AstAromaticSystemId(pattern));
+            anchor.push_aromatic_system(
+                GraphIrAromaticSystemId(target),
+                GraphIrAromaticSystemId(pattern),
+            );
         }
         for &(target, pattern) in &self.multicenter_bonds {
-            anchor
-                .push_multicenter_bond(AstMulticenterBondId(target), AstMulticenterBondId(pattern));
+            anchor.push_multicenter_bond(
+                GraphIrMulticenterBondId(target),
+                GraphIrMulticenterBondId(pattern),
+            );
         }
         for &(target, pattern) in &self.noncovalent_bonds {
-            anchor
-                .push_noncovalent_bond(AstNoncovalentBondId(target), AstNoncovalentBondId(pattern));
+            anchor.push_noncovalent_bond(
+                GraphIrNoncovalentBondId(target),
+                GraphIrNoncovalentBondId(pattern),
+            );
         }
         for &(target, pattern) in &self.stereo_atoms {
-            anchor.push_stereo_atom(AstStereoAtomId(target), AstStereoAtomId(pattern));
+            anchor.push_stereo_atom(GraphIrStereoAtomId(target), GraphIrStereoAtomId(pattern));
         }
         for &(target, pattern) in &self.stereo_bonds {
-            anchor.push_stereo_bond(AstStereoBondId(target), AstStereoBondId(pattern));
+            anchor.push_stereo_bond(GraphIrStereoBondId(target), GraphIrStereoBondId(pattern));
         }
         anchor
     }
@@ -1196,16 +1217,18 @@ mod tests {
 
     use pyo3::types::PyDict;
     use rstest::rstest;
-    use umol_ast::ast::{
-        AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
-        AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
-        DativeBondConstraintAst as AstDativeBondConstraintAst, MoleculeAst as AstMoleculeAst,
-        MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
-        StereoAtomConstraintAst as AstStereoAtomConstraintAst,
-        StereoBondConstraintAst as AstStereoBondConstraintAst, StereoKind as AstStereoKind,
-        Stereogenicity as AstStereogenicity, StereogenicityAst as AstStereogenicityAst,
-        UnpairedElectronsAst as AstUnpairedElectronsAst, ValueAst as AstValueAst,
+    use umol_graph_ir::ir::{
+        AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
+        AtomConstraintAst as GraphIrAtomConstraintAst,
+        BondConstraintAst as GraphIrBondConstraintAst,
+        DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
+        MoleculeAst as GraphIrMoleculeAst,
+        MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
+        NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+        StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
+        StereoBondConstraintAst as GraphIrStereoBondConstraintAst, StereoKind as GraphIrStereoKind,
+        Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
     };
 
     use super::*;
@@ -1235,148 +1258,148 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_roundtrip() {
-        let mut anchor = AstSubPatternAnchor::new();
-        anchor.push_atom(AstAtomId(1), AstAtomId(2));
-        anchor.push_bond(AstBondId(3), AstBondId(4));
-        anchor.push_dative_bond(AstDativeBondId(5), AstDativeBondId(6));
-        anchor.push_aromatic_system(AstAromaticSystemId(7), AstAromaticSystemId(8));
-        anchor.push_multicenter_bond(AstMulticenterBondId(9), AstMulticenterBondId(10));
-        anchor.push_noncovalent_bond(AstNoncovalentBondId(11), AstNoncovalentBondId(12));
-        anchor.push_stereo_atom(AstStereoAtomId(13), AstStereoAtomId(14));
-        anchor.push_stereo_bond(AstStereoBondId(15), AstStereoBondId(16));
+        let mut anchor = GraphIrSubPatternAnchor::new();
+        anchor.push_atom(GraphIrAtomId(1), GraphIrAtomId(2));
+        anchor.push_bond(GraphIrBondId(3), GraphIrBondId(4));
+        anchor.push_dative_bond(GraphIrDativeBondId(5), GraphIrDativeBondId(6));
+        anchor.push_aromatic_system(GraphIrAromaticSystemId(7), GraphIrAromaticSystemId(8));
+        anchor.push_multicenter_bond(GraphIrMulticenterBondId(9), GraphIrMulticenterBondId(10));
+        anchor.push_noncovalent_bond(GraphIrNoncovalentBondId(11), GraphIrNoncovalentBondId(12));
+        anchor.push_stereo_atom(GraphIrStereoAtomId(13), GraphIrStereoAtomId(14));
+        anchor.push_stereo_bond(GraphIrStereoBondId(15), GraphIrStereoBondId(16));
 
         assert_eq!(SubPatternAnchor::from_rust(&anchor).to_rust(), anchor);
     }
 
     #[rstest]
-    #[case::donors(AstRelationalConstraint::DativeBondDonors {
-        bond: AstDativeBondId(1),
-        atoms: vec![AstAtomId(2), AstAtomId(3)],
+    #[case::donors(GraphIrRelationalConstraint::DativeBondDonors {
+        bond: GraphIrDativeBondId(1),
+        atoms: vec![GraphIrAtomId(2), GraphIrAtomId(3)],
     })]
-    #[case::donor(AstRelationalConstraint::DativeBondDonor {
-        bond: AstDativeBondId(4),
-        atom: AstAtomId(5),
+    #[case::donor(GraphIrRelationalConstraint::DativeBondDonor {
+        bond: GraphIrDativeBondId(4),
+        atom: GraphIrAtomId(5),
     })]
-    #[case::contains_all_donors(AstRelationalConstraint::DativeBondContainsAllDonors {
-        bond: AstDativeBondId(6),
-        atoms: vec![AstAtomId(7), AstAtomId(8)],
+    #[case::contains_all_donors(GraphIrRelationalConstraint::DativeBondContainsAllDonors {
+        bond: GraphIrDativeBondId(6),
+        atoms: vec![GraphIrAtomId(7), GraphIrAtomId(8)],
     })]
-    #[case::all_donors(AstRelationalConstraint::DativeBondAllDonors {
-        bond: AstDativeBondId(9),
-        predicate: Box::new(AstAtomConstraintAst::degree(2)),
+    #[case::all_donors(GraphIrRelationalConstraint::DativeBondAllDonors {
+        bond: GraphIrDativeBondId(9),
+        predicate: Box::new(GraphIrAtomConstraintAst::degree(2)),
     })]
-    #[case::any_donor(AstRelationalConstraint::DativeBondAnyDonor {
-        bond: AstDativeBondId(10),
-        predicate: Box::new(AstAtomConstraintAst::valence(3)),
+    #[case::any_donor(GraphIrRelationalConstraint::DativeBondAnyDonor {
+        bond: GraphIrDativeBondId(10),
+        predicate: Box::new(GraphIrAtomConstraintAst::valence(3)),
     })]
-    #[case::acceptor(AstRelationalConstraint::DativeBondAcceptor {
-        bond: AstDativeBondId(11),
-        atom: AstAtomId(12),
+    #[case::acceptor(GraphIrRelationalConstraint::DativeBondAcceptor {
+        bond: GraphIrDativeBondId(11),
+        atom: GraphIrAtomId(12),
     })]
-    #[case::acceptor_satisfies(AstRelationalConstraint::DativeBondAcceptorSatisfies {
-        bond: AstDativeBondId(13),
-        predicate: Box::new(AstAtomConstraintAst::total_degree(4)),
+    #[case::acceptor_satisfies(GraphIrRelationalConstraint::DativeBondAcceptorSatisfies {
+        bond: GraphIrDativeBondId(13),
+        predicate: Box::new(GraphIrAtomConstraintAst::total_degree(4)),
     })]
-    #[case::parallels(AstRelationalConstraint::DativeBondParallels {
-        dative: AstDativeBondId(14),
-        parallel: AstBondId(15),
+    #[case::parallels(GraphIrRelationalConstraint::DativeBondParallels {
+        dative: GraphIrDativeBondId(14),
+        parallel: GraphIrBondId(15),
     })]
-    #[case::aromatic_atoms(AstRelationalConstraint::AromaticSystemAtoms {
-        system: AstAromaticSystemId(16),
-        atoms: vec![AstAtomId(17), AstAtomId(18)],
+    #[case::aromatic_atoms(GraphIrRelationalConstraint::AromaticSystemAtoms {
+        system: GraphIrAromaticSystemId(16),
+        atoms: vec![GraphIrAtomId(17), GraphIrAtomId(18)],
     })]
-    #[case::aromatic_contains(AstRelationalConstraint::AromaticSystemContains {
-        system: AstAromaticSystemId(19),
-        atom: AstAtomId(20),
+    #[case::aromatic_contains(GraphIrRelationalConstraint::AromaticSystemContains {
+        system: GraphIrAromaticSystemId(19),
+        atom: GraphIrAtomId(20),
     })]
-    #[case::aromatic_contains_all(AstRelationalConstraint::AromaticSystemContainsAll {
-        system: AstAromaticSystemId(21),
-        atoms: vec![AstAtomId(22), AstAtomId(23)],
+    #[case::aromatic_contains_all(GraphIrRelationalConstraint::AromaticSystemContainsAll {
+        system: GraphIrAromaticSystemId(21),
+        atoms: vec![GraphIrAtomId(22), GraphIrAtomId(23)],
     })]
-    #[case::aromatic_all_atoms(AstRelationalConstraint::AromaticSystemAllAtoms {
-        system: AstAromaticSystemId(24),
-        predicate: Box::new(AstAtomConstraintAst::degree(5)),
+    #[case::aromatic_all_atoms(GraphIrRelationalConstraint::AromaticSystemAllAtoms {
+        system: GraphIrAromaticSystemId(24),
+        predicate: Box::new(GraphIrAtomConstraintAst::degree(5)),
     })]
-    #[case::aromatic_any_atom(AstRelationalConstraint::AromaticSystemAnyAtom {
-        system: AstAromaticSystemId(25),
-        predicate: Box::new(AstAtomConstraintAst::valence(6)),
+    #[case::aromatic_any_atom(GraphIrRelationalConstraint::AromaticSystemAnyAtom {
+        system: GraphIrAromaticSystemId(25),
+        predicate: Box::new(GraphIrAtomConstraintAst::valence(6)),
     })]
-    #[case::multicenter_atoms(AstRelationalConstraint::MulticenterBondAtoms {
-        bond: AstMulticenterBondId(26),
-        atoms: vec![AstAtomId(27), AstAtomId(28)],
+    #[case::multicenter_atoms(GraphIrRelationalConstraint::MulticenterBondAtoms {
+        bond: GraphIrMulticenterBondId(26),
+        atoms: vec![GraphIrAtomId(27), GraphIrAtomId(28)],
     })]
-    #[case::multicenter_contains(AstRelationalConstraint::MulticenterBondContains {
-        bond: AstMulticenterBondId(29),
-        atom: AstAtomId(30),
+    #[case::multicenter_contains(GraphIrRelationalConstraint::MulticenterBondContains {
+        bond: GraphIrMulticenterBondId(29),
+        atom: GraphIrAtomId(30),
     })]
-    #[case::multicenter_contains_all(AstRelationalConstraint::MulticenterBondContainsAll {
-        bond: AstMulticenterBondId(31),
-        atoms: vec![AstAtomId(32), AstAtomId(33)],
+    #[case::multicenter_contains_all(GraphIrRelationalConstraint::MulticenterBondContainsAll {
+        bond: GraphIrMulticenterBondId(31),
+        atoms: vec![GraphIrAtomId(32), GraphIrAtomId(33)],
     })]
-    #[case::multicenter_all_atoms(AstRelationalConstraint::MulticenterBondAllAtoms {
-        bond: AstMulticenterBondId(34),
-        predicate: Box::new(AstAtomConstraintAst::degree(7)),
+    #[case::multicenter_all_atoms(GraphIrRelationalConstraint::MulticenterBondAllAtoms {
+        bond: GraphIrMulticenterBondId(34),
+        predicate: Box::new(GraphIrAtomConstraintAst::degree(7)),
     })]
-    #[case::multicenter_any_atom(AstRelationalConstraint::MulticenterBondAnyAtom {
-        bond: AstMulticenterBondId(35),
-        predicate: Box::new(AstAtomConstraintAst::valence(8)),
+    #[case::multicenter_any_atom(GraphIrRelationalConstraint::MulticenterBondAnyAtom {
+        bond: GraphIrMulticenterBondId(35),
+        predicate: Box::new(GraphIrAtomConstraintAst::valence(8)),
     })]
-    #[case::noncovalent_ends(AstRelationalConstraint::NoncovalentBondEnds {
-        bond: AstNoncovalentBondId(36),
-        atoms: [AstAtomId(37), AstAtomId(38)],
+    #[case::noncovalent_ends(GraphIrRelationalConstraint::NoncovalentBondEnds {
+        bond: GraphIrNoncovalentBondId(36),
+        atoms: [GraphIrAtomId(37), GraphIrAtomId(38)],
     })]
-    #[case::noncovalent_contains(AstRelationalConstraint::NoncovalentBondContains {
-        bond: AstNoncovalentBondId(39),
-        atom: AstAtomId(40),
+    #[case::noncovalent_contains(GraphIrRelationalConstraint::NoncovalentBondContains {
+        bond: GraphIrNoncovalentBondId(39),
+        atom: GraphIrAtomId(40),
     })]
-    #[case::noncovalent_ends_satisfy(AstRelationalConstraint::NoncovalentBondEndsSatisfy {
-        bond: AstNoncovalentBondId(41),
+    #[case::noncovalent_ends_satisfy(GraphIrRelationalConstraint::NoncovalentBondEndsSatisfy {
+        bond: GraphIrNoncovalentBondId(41),
         predicates: [
-            Box::new(AstAtomConstraintAst::degree(9)),
-            Box::new(AstAtomConstraintAst::valence(10)),
+            Box::new(GraphIrAtomConstraintAst::degree(9)),
+            Box::new(GraphIrAtomConstraintAst::valence(10)),
         ],
     })]
-    #[case::stereo_atom_site(AstRelationalConstraint::StereoAtomSite {
-        stereo_atom: AstStereoAtomId(42),
-        atom: AstAtomId(43),
+    #[case::stereo_atom_site(GraphIrRelationalConstraint::StereoAtomSite {
+        stereo_atom: GraphIrStereoAtomId(42),
+        atom: GraphIrAtomId(43),
     })]
-    #[case::stereo_atom_contains(AstRelationalConstraint::StereoAtomContains {
-        stereo_atom: AstStereoAtomId(44),
-        atom: AstAtomId(45),
+    #[case::stereo_atom_contains(GraphIrRelationalConstraint::StereoAtomContains {
+        stereo_atom: GraphIrStereoAtomId(44),
+        atom: GraphIrAtomId(45),
     })]
-    #[case::stereo_atom_ligands(AstRelationalConstraint::StereoAtomLigands {
-        stereo_atom: AstStereoAtomId(46),
-        atoms: vec![AstAtomId(47), AstAtomId(48)],
+    #[case::stereo_atom_ligands(GraphIrRelationalConstraint::StereoAtomLigands {
+        stereo_atom: GraphIrStereoAtomId(46),
+        atoms: vec![GraphIrAtomId(47), GraphIrAtomId(48)],
     })]
-    #[case::stereo_atom_all_ligands(AstRelationalConstraint::StereoAtomAllLigands {
-        stereo_atom: AstStereoAtomId(49),
-        predicate: Box::new(AstAtomConstraintAst::degree(11)),
+    #[case::stereo_atom_all_ligands(GraphIrRelationalConstraint::StereoAtomAllLigands {
+        stereo_atom: GraphIrStereoAtomId(49),
+        predicate: Box::new(GraphIrAtomConstraintAst::degree(11)),
     })]
-    #[case::stereo_atom_any_ligand(AstRelationalConstraint::StereoAtomAnyLigand {
-        stereo_atom: AstStereoAtomId(50),
-        predicate: Box::new(AstAtomConstraintAst::valence(12)),
+    #[case::stereo_atom_any_ligand(GraphIrRelationalConstraint::StereoAtomAnyLigand {
+        stereo_atom: GraphIrStereoAtomId(50),
+        predicate: Box::new(GraphIrAtomConstraintAst::valence(12)),
     })]
-    #[case::stereo_bond_site(AstRelationalConstraint::StereoBondSite {
-        stereo_bond: AstStereoBondId(51),
-        bond: AstBondId(52),
+    #[case::stereo_bond_site(GraphIrRelationalConstraint::StereoBondSite {
+        stereo_bond: GraphIrStereoBondId(51),
+        bond: GraphIrBondId(52),
     })]
-    #[case::stereo_bond_contains(AstRelationalConstraint::StereoBondContains {
-        stereo_bond: AstStereoBondId(53),
-        atom: AstAtomId(54),
+    #[case::stereo_bond_contains(GraphIrRelationalConstraint::StereoBondContains {
+        stereo_bond: GraphIrStereoBondId(53),
+        atom: GraphIrAtomId(54),
     })]
-    #[case::stereo_bond_ligands(AstRelationalConstraint::StereoBondLigands {
-        stereo_bond: AstStereoBondId(55),
-        atoms: vec![AstAtomId(56), AstAtomId(57)],
+    #[case::stereo_bond_ligands(GraphIrRelationalConstraint::StereoBondLigands {
+        stereo_bond: GraphIrStereoBondId(55),
+        atoms: vec![GraphIrAtomId(56), GraphIrAtomId(57)],
     })]
-    #[case::stereo_bond_all_ligands(AstRelationalConstraint::StereoBondAllLigands {
-        stereo_bond: AstStereoBondId(58),
-        predicate: Box::new(AstAtomConstraintAst::degree(13)),
+    #[case::stereo_bond_all_ligands(GraphIrRelationalConstraint::StereoBondAllLigands {
+        stereo_bond: GraphIrStereoBondId(58),
+        predicate: Box::new(GraphIrAtomConstraintAst::degree(13)),
     })]
-    #[case::stereo_bond_any_ligand(AstRelationalConstraint::StereoBondAnyLigand {
-        stereo_bond: AstStereoBondId(59),
-        predicate: Box::new(AstAtomConstraintAst::valence(14)),
+    #[case::stereo_bond_any_ligand(GraphIrRelationalConstraint::StereoBondAnyLigand {
+        stereo_bond: GraphIrStereoBondId(59),
+        predicate: Box::new(GraphIrAtomConstraintAst::valence(14)),
     })]
-    fn test_relational_constraint_roundtrip(#[case] constraint: AstRelationalConstraint) {
+    fn test_relational_constraint_roundtrip(#[case] constraint: GraphIrRelationalConstraint) {
         Python::attach(|py| {
             let value = RelationalConstraint::from_rust(py, &constraint).unwrap();
             assert_eq!(value.to_rust(py), constraint);
@@ -1384,34 +1407,34 @@ mod tests {
     }
 
     #[rstest]
-    #[case::charge_sum_whole(AstMoleculeConstraint::ChargeSum {
+    #[case::charge_sum_whole(GraphIrMoleculeConstraint::ChargeSum {
         atoms: None,
-        sum: AstValueAst::Lit(1),
+        sum: GraphIrValueAst::Lit(1),
     })]
-    #[case::charge_sum_empty_subset(AstMoleculeConstraint::ChargeSum {
+    #[case::charge_sum_empty_subset(GraphIrMoleculeConstraint::ChargeSum {
         atoms: Some(Vec::new()),
-        sum: AstValueAst::Lit(2),
+        sum: GraphIrValueAst::Lit(2),
     })]
-    #[case::unpaired_electron_coupling(AstMoleculeConstraint::UnpairedElectronCoupling {
-        atoms: Some(vec![AstAtomId(3), AstAtomId(4)]),
-        unpaired_electrons: AstUnpairedElectronsAst::from((1, 2)),
+    #[case::unpaired_electron_coupling(GraphIrMoleculeConstraint::UnpairedElectronCoupling {
+        atoms: Some(vec![GraphIrAtomId(3), GraphIrAtomId(4)]),
+        unpaired_electrons: GraphIrUnpairedElectronsAst::from((1, 2)),
     })]
-    #[case::bond_order_sum(AstMoleculeConstraint::BondOrderSum {
-        bonds: Some(vec![AstBondId(5), AstBondId(6)]),
-        sum: AstValueAst::Lit(3),
+    #[case::bond_order_sum(GraphIrMoleculeConstraint::BondOrderSum {
+        bonds: Some(vec![GraphIrBondId(5), GraphIrBondId(6)]),
+        sum: GraphIrValueAst::Lit(3),
     })]
-    #[case::connected(AstMoleculeConstraint::Connected {
+    #[case::connected(GraphIrMoleculeConstraint::Connected {
         atoms: None,
     })]
-    #[case::sub_pattern(AstMoleculeConstraint::SubPattern {
+    #[case::sub_pattern(GraphIrMoleculeConstraint::SubPattern {
         anchor: {
-            let mut anchor = AstSubPatternAnchor::new();
-            anchor.push_atom(AstAtomId(7), AstAtomId(0));
+            let mut anchor = GraphIrSubPatternAnchor::new();
+            anchor.push_atom(GraphIrAtomId(7), GraphIrAtomId(0));
             anchor
         },
-        pattern: Box::new(AstMoleculeAst::new()),
+        pattern: Box::new(GraphIrMoleculeAst::new()),
     })]
-    fn test_molecule_constraint_roundtrip(#[case] constraint: AstMoleculeConstraint) {
+    fn test_molecule_constraint_roundtrip(#[case] constraint: GraphIrMoleculeConstraint) {
         Python::attach(|py| {
             let value = MoleculeConstraint::from_rust(py, &constraint).unwrap();
             assert_eq!(value.to_rust(py), constraint);
@@ -1419,56 +1442,59 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom(AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2),))]
-    #[case::bond(AstConstraint::Bond(AstBondId(3), AstBondConstraintAst::aromatic(true),))]
-    #[case::dative_bond(AstConstraint::DativeBond(
-        AstDativeBondId(4),
-        AstDativeBondConstraintAst::aromatic(false),
+    #[case::atom(GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2),))]
+    #[case::bond(GraphIrConstraint::Bond(
+        GraphIrBondId(3),
+        GraphIrBondConstraintAst::aromatic(true),
     ))]
-    #[case::aromatic_system(AstConstraint::AromaticSystem(
-        AstAromaticSystemId(5),
-        AstAromaticSystemConstraintAst::electron_count(6),
+    #[case::dative_bond(GraphIrConstraint::DativeBond(
+        GraphIrDativeBondId(4),
+        GraphIrDativeBondConstraintAst::aromatic(false),
     ))]
-    #[case::multicenter_bond(AstConstraint::MulticenterBond(
-        AstMulticenterBondId(7),
-        AstMulticenterBondConstraintAst::electron_count(8),
+    #[case::aromatic_system(GraphIrConstraint::AromaticSystem(
+        GraphIrAromaticSystemId(5),
+        GraphIrAromaticSystemConstraintAst::electron_count(6),
     ))]
-    #[case::noncovalent_bond(AstConstraint::NoncovalentBond(
-        AstNoncovalentBondId(9),
-        AstNoncovalentBondConstraintAst::intramolecular(true),
+    #[case::multicenter_bond(GraphIrConstraint::MulticenterBond(
+        GraphIrMulticenterBondId(7),
+        GraphIrMulticenterBondConstraintAst::electron_count(8),
     ))]
-    #[case::stereo_atom(AstConstraint::StereoAtom(
-        AstStereoAtomId(10),
-        AstStereoKind::Tetrahedral,
-        AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-            AstStereogenicity::Stereogenic,
+    #[case::noncovalent_bond(GraphIrConstraint::NoncovalentBond(
+        GraphIrNoncovalentBondId(9),
+        GraphIrNoncovalentBondConstraintAst::intramolecular(true),
+    ))]
+    #[case::stereo_atom(GraphIrConstraint::StereoAtom(
+        GraphIrStereoAtomId(10),
+        GraphIrStereoKind::Tetrahedral,
+        GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+            GraphIrStereogenicity::Stereogenic,
         )),
     ))]
-    #[case::stereo_bond(AstConstraint::StereoBond(
-        AstStereoBondId(11),
-        AstStereoKind::CisTrans,
-        AstStereoBondConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
-            AstStereogenicity::Prochiral,
+    #[case::stereo_bond(GraphIrConstraint::StereoBond(
+        GraphIrStereoBondId(11),
+        GraphIrStereoKind::CisTrans,
+        GraphIrStereoBondConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+            GraphIrStereogenicity::Prochiral,
         )),
     ))]
-    #[case::relational(AstConstraint::Relational(
-        AstRelationalConstraint::DativeBondDonor {
-            bond: AstDativeBondId(12),
-            atom: AstAtomId(13),
+    #[case::relational(GraphIrConstraint::Relational(
+        GraphIrRelationalConstraint::DativeBondDonor {
+            bond: GraphIrDativeBondId(12),
+            atom: GraphIrAtomId(13),
         },
     ))]
-    #[case::molecule(AstConstraint::Molecule(
-        AstMoleculeConstraint::Connected {
-            atoms: Some(vec![AstAtomId(14), AstAtomId(15)]),
+    #[case::molecule(GraphIrConstraint::Molecule(
+        GraphIrMoleculeConstraint::Connected {
+            atoms: Some(vec![GraphIrAtomId(14), GraphIrAtomId(15)]),
         },
     ))]
-    #[case::and(AstConstraint::And(Vec::new()))]
-    #[case::or(AstConstraint::Or(Vec::new()))]
-    #[case::not(AstConstraint::Not(Box::new(AstConstraint::Atom(
-        AstAtomId(16),
-        AstAtomConstraintAst::degree(3),
+    #[case::and(GraphIrConstraint::And(Vec::new()))]
+    #[case::or(GraphIrConstraint::Or(Vec::new()))]
+    #[case::not(GraphIrConstraint::Not(Box::new(GraphIrConstraint::Atom(
+        GraphIrAtomId(16),
+        GraphIrAtomConstraintAst::degree(3),
     ))))]
-    fn test_constraint_roundtrip(#[case] constraint: AstConstraint) {
+    fn test_constraint_roundtrip(#[case] constraint: GraphIrConstraint) {
         Python::attach(|py| {
             let value = Constraint::from_rust(py, &constraint).unwrap();
             assert_eq!(value.to_rust(py), constraint);
@@ -1477,16 +1503,16 @@ mod tests {
 
     #[rstest]
     fn test_constraint_roundtrip_recursive() {
-        let constraint = AstConstraint::And(vec![
-            AstConstraint::Atom(AstAtomId(17), AstAtomConstraintAst::valence(4)),
-            AstConstraint::Or(vec![
-                AstConstraint::Relational(AstRelationalConstraint::DativeBondDonor {
-                    bond: AstDativeBondId(18),
-                    atom: AstAtomId(19),
+        let constraint = GraphIrConstraint::And(vec![
+            GraphIrConstraint::Atom(GraphIrAtomId(17), GraphIrAtomConstraintAst::valence(4)),
+            GraphIrConstraint::Or(vec![
+                GraphIrConstraint::Relational(GraphIrRelationalConstraint::DativeBondDonor {
+                    bond: GraphIrDativeBondId(18),
+                    atom: GraphIrAtomId(19),
                 }),
-                AstConstraint::Not(Box::new(AstConstraint::Molecule(
-                    AstMoleculeConstraint::Connected {
-                        atoms: Some(vec![AstAtomId(20), AstAtomId(21)]),
+                GraphIrConstraint::Not(Box::new(GraphIrConstraint::Molecule(
+                    GraphIrMoleculeConstraint::Connected {
+                        atoms: Some(vec![GraphIrAtomId(20), GraphIrAtomId(21)]),
                     },
                 ))),
             ]),
@@ -1583,13 +1609,14 @@ match node:
 
     #[rstest]
     fn test_constraint_iter() {
-        let first = AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2));
-        let second = AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
-        let mut constraints = AstConstraints::from(vec![first.clone(), second.clone()]);
+        let first = GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2));
+        let second =
+            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
+        let mut constraints = GraphIrConstraints::from(vec![first.clone(), second.clone()]);
 
         Python::attach(|py| {
             let mut iter = constraint_iter(py, &constraints).unwrap();
-            constraints.push(AstConstraint::Or(Vec::new()));
+            constraints.push(GraphIrConstraint::Or(Vec::new()));
 
             let first_mirror = iter.__next__().unwrap();
             assert_eq!(
@@ -1613,9 +1640,9 @@ match node:
 
     #[rstest]
     fn test_constraints_like_to_rust_container() {
-        let expected = AstConstraints::from(vec![
-            AstConstraint::And(Vec::new()),
-            AstConstraint::And(Vec::new()),
+        let expected = GraphIrConstraints::from(vec![
+            GraphIrConstraint::And(Vec::new()),
+            GraphIrConstraint::And(Vec::new()),
         ]);
 
         Python::attach(|py| {
@@ -1628,11 +1655,11 @@ match node:
 
     #[rstest]
     fn test_constraints_like_to_rust_view() {
-        let expected = AstConstraints::from(vec![
-            AstConstraint::Or(Vec::new()),
-            AstConstraint::Or(Vec::new()),
+        let expected = GraphIrConstraints::from(vec![
+            GraphIrConstraint::Or(Vec::new()),
+            GraphIrConstraint::Or(Vec::new()),
         ]);
-        let mut molecule = AstMoleculeAst::new();
+        let mut molecule = GraphIrMoleculeAst::new();
         *molecule.constraints_mut() = expected.clone();
 
         Python::attach(|py| {
@@ -1647,10 +1674,10 @@ match node:
     #[rstest]
     #[case::empty(Vec::new())]
     #[case::populated(vec![
-        AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2)),
-        AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None }),
+        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2)),
+        GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
     ])]
-    fn test_constraints_new(#[case] entries: Vec<AstConstraint>) {
+    fn test_constraints_new(#[case] entries: Vec<GraphIrConstraint>) {
         Python::attach(|py| {
             let values = entries
                 .iter()
@@ -1666,18 +1693,18 @@ match node:
 
     #[rstest]
     #[case::equal(
-        AstConstraints::from(vec![AstConstraint::And(Vec::new())]),
-        AstConstraints::from(vec![AstConstraint::And(Vec::new())]),
+        GraphIrConstraints::from(vec![GraphIrConstraint::And(Vec::new())]),
+        GraphIrConstraints::from(vec![GraphIrConstraint::And(Vec::new())]),
         true,
     )]
     #[case::different(
-        AstConstraints::from(vec![AstConstraint::And(Vec::new())]),
-        AstConstraints::from(vec![AstConstraint::Or(Vec::new())]),
+        GraphIrConstraints::from(vec![GraphIrConstraint::And(Vec::new())]),
+        GraphIrConstraints::from(vec![GraphIrConstraint::Or(Vec::new())]),
         false,
     )]
     fn test_constraints_eq(
-        #[case] left: AstConstraints,
-        #[case] right: AstConstraints,
+        #[case] left: GraphIrConstraints,
+        #[case] right: GraphIrConstraints,
         #[case] expected: bool,
     ) {
         assert_eq!(
@@ -1689,9 +1716,9 @@ match node:
     #[rstest]
     fn test_constraints_repr() {
         Python::attach(|py| {
-            let constraints = Constraints::from_inner(AstConstraints::from(vec![
-                AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2)),
-                AstConstraint::Or(Vec::new()),
+            let constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
+                GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2)),
+                GraphIrConstraint::Or(Vec::new()),
             ]));
 
             assert_eq!(
@@ -1703,10 +1730,11 @@ match node:
 
     #[rstest]
     fn test_constraints_append() {
-        let constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+        let constraint =
+            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
         Python::attach(|py| {
             let mut constraints =
-                Constraints::from_inner(AstConstraints::from(vec![constraint.clone()]));
+                Constraints::from_inner(GraphIrConstraints::from(vec![constraint.clone()]));
             let value =
                 into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
 
@@ -1722,33 +1750,35 @@ match node:
     #[rstest]
     fn test_constraints_clear() {
         let mut constraints =
-            Constraints::from_inner(AstConstraints::from(vec![AstConstraint::And(Vec::new())]));
+            Constraints::from_inner(GraphIrConstraints::from(vec![GraphIrConstraint::And(
+                Vec::new(),
+            )]));
 
         constraints.clear();
 
-        assert_eq!(constraints.inner(), &AstConstraints::new());
+        assert_eq!(constraints.inner(), &GraphIrConstraints::new());
     }
 
     #[rstest]
     fn test_constraints_update() {
-        let initial = AstConstraint::And(Vec::new());
-        let from_container = AstConstraint::Or(Vec::new());
-        let from_view = AstConstraint::Not(Box::new(AstConstraint::And(Vec::new())));
+        let initial = GraphIrConstraint::And(Vec::new());
+        let from_container = GraphIrConstraint::Or(Vec::new());
+        let from_view = GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(Vec::new())));
         let from_entries =
-            AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
 
         Python::attach(|py| {
             let target = Py::new(
                 py,
-                Constraints::from_inner(AstConstraints::from(vec![initial.clone()])),
+                Constraints::from_inner(GraphIrConstraints::from(vec![initial.clone()])),
             )
             .unwrap();
             let container = Py::new(
                 py,
-                Constraints::from_inner(AstConstraints::from(vec![from_container.clone()])),
+                Constraints::from_inner(GraphIrConstraints::from(vec![from_container.clone()])),
             )
             .unwrap();
-            let mut molecule = AstMoleculeAst::new();
+            let mut molecule = GraphIrMoleculeAst::new();
             molecule.constraints_mut().push(from_view.clone());
             let view = Py::new(
                 py,
@@ -1781,12 +1811,12 @@ match node:
 
     #[rstest]
     fn test_constraints_update_self() {
-        let entry = AstConstraint::And(Vec::new());
+        let entry = GraphIrConstraint::And(Vec::new());
 
         Python::attach(|py| {
             let target = Py::new(
                 py,
-                Constraints::from_inner(AstConstraints::from(vec![entry.clone()])),
+                Constraints::from_inner(GraphIrConstraints::from(vec![entry.clone()])),
             )
             .unwrap();
 
@@ -1805,25 +1835,28 @@ match node:
     }
 
     #[rstest]
-    #[case::empty(AstConstraints::new(), 0)]
-    #[case::populated(AstConstraints::from(vec![
-        AstConstraint::And(Vec::new()),
-        AstConstraint::Or(Vec::new()),
+    #[case::empty(GraphIrConstraints::new(), 0)]
+    #[case::populated(GraphIrConstraints::from(vec![
+        GraphIrConstraint::And(Vec::new()),
+        GraphIrConstraint::Or(Vec::new()),
     ]), 2)]
-    fn test_constraints_len(#[case] inner: AstConstraints, #[case] expected: usize) {
+    fn test_constraints_len(#[case] inner: GraphIrConstraints, #[case] expected: usize) {
         assert_eq!(Constraints::from_inner(inner).__len__(), expected);
     }
 
     #[rstest]
-    #[case::positive(0, AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2),))]
-    #[case::negative(-1, AstConstraint::Molecule(
-        AstMoleculeConstraint::Connected { atoms: None },
+    #[case::positive(
+        0,
+        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2),)
+    )]
+    #[case::negative(-1, GraphIrConstraint::Molecule(
+        GraphIrMoleculeConstraint::Connected { atoms: None },
     ))]
-    fn test_constraints_getitem(#[case] index: isize, #[case] expected: AstConstraint) {
+    fn test_constraints_getitem(#[case] index: isize, #[case] expected: GraphIrConstraint) {
         Python::attach(|py| {
-            let constraints = Constraints::from_inner(AstConstraints::from(vec![
-                AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2)),
-                AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None }),
+            let constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
+                GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2)),
+                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
             ]));
             let actual = constraints.__getitem__(py, index).unwrap();
 
@@ -1837,7 +1870,9 @@ match node:
     fn test_constraints_getitem_error(#[case] index: isize) {
         Python::attach(|py| {
             let constraints =
-                Constraints::from_inner(AstConstraints::from(vec![AstConstraint::And(Vec::new())]));
+                Constraints::from_inner(GraphIrConstraints::from(vec![GraphIrConstraint::And(
+                    Vec::new(),
+                )]));
 
             assert_eq!(
                 constraints
@@ -1852,16 +1887,20 @@ match node:
 
     #[rstest]
     fn test_constraints_iter() {
-        let first = AstConstraint::And(Vec::new());
-        let second = AstConstraint::Or(Vec::new());
-        let mut constraints =
-            Constraints::from_inner(AstConstraints::from(vec![first.clone(), second.clone()]));
+        let first = GraphIrConstraint::And(Vec::new());
+        let second = GraphIrConstraint::Or(Vec::new());
+        let mut constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
+            first.clone(),
+            second.clone(),
+        ]));
 
         Python::attach(|py| {
             let mut iter = constraints.__iter__(py).unwrap();
             constraints
                 .inner_mut()
-                .push(AstConstraint::Not(Box::new(AstConstraint::And(Vec::new()))));
+                .push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
+                    Vec::new(),
+                ))));
 
             assert_eq!(
                 iter.__next__().unwrap().bind(py).borrow().to_rust(py),
@@ -1877,10 +1916,10 @@ match node:
 
     #[rstest]
     fn test_constraints_from_inner() {
-        let entries = vec![AstConstraint::Or(Vec::new())];
+        let entries = vec![GraphIrConstraint::Or(Vec::new())];
 
         assert_eq!(
-            Constraints::from_inner(AstConstraints::from(entries.clone()))
+            Constraints::from_inner(GraphIrConstraints::from(entries.clone()))
                 .inner()
                 .as_slice(),
             entries.as_slice()
@@ -1889,13 +1928,13 @@ match node:
 
     #[rstest]
     fn test_constraints_view_repr() {
-        let mut molecule = AstMoleculeAst::new();
+        let mut molecule = GraphIrMoleculeAst::new();
         molecule
             .constraints_mut()
-            .push(AstConstraint::And(Vec::new()));
+            .push(GraphIrConstraint::And(Vec::new()));
         molecule
             .constraints_mut()
-            .push(AstConstraint::Or(Vec::new()));
+            .push(GraphIrConstraint::Or(Vec::new()));
 
         Python::attach(|py| {
             let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
@@ -1907,8 +1946,9 @@ match node:
 
     #[rstest]
     fn test_constraints_view_append() {
-        let constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
-        let mut molecule = AstMoleculeAst::new();
+        let constraint =
+            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
+        let mut molecule = GraphIrMoleculeAst::new();
         molecule.constraints_mut().push(constraint.clone());
 
         Python::attach(|py| {
@@ -1928,10 +1968,10 @@ match node:
 
     #[rstest]
     fn test_constraints_view_clear() {
-        let mut molecule = AstMoleculeAst::new();
+        let mut molecule = GraphIrMoleculeAst::new();
         molecule
             .constraints_mut()
-            .push(AstConstraint::And(Vec::new()));
+            .push(GraphIrConstraint::And(Vec::new()));
 
         Python::attach(|py| {
             let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
@@ -1941,19 +1981,19 @@ match node:
 
             assert_eq!(
                 owner.bind(py).borrow().inner().constraints(),
-                &AstConstraints::new()
+                &GraphIrConstraints::new()
             );
         });
     }
 
     #[rstest]
     fn test_constraints_view_update() {
-        let initial = AstConstraint::And(Vec::new());
-        let from_container = AstConstraint::Or(Vec::new());
-        let from_view = AstConstraint::Not(Box::new(AstConstraint::And(Vec::new())));
+        let initial = GraphIrConstraint::And(Vec::new());
+        let from_container = GraphIrConstraint::Or(Vec::new());
+        let from_view = GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(Vec::new())));
         let from_entries =
-            AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
-        let mut target_molecule = AstMoleculeAst::new();
+            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
+        let mut target_molecule = GraphIrMoleculeAst::new();
         target_molecule.constraints_mut().push(initial.clone());
 
         Python::attach(|py| {
@@ -1961,10 +2001,10 @@ match node:
             let target = ConstraintsView::new(target_owner.clone_ref(py));
             let container = Py::new(
                 py,
-                Constraints::from_inner(AstConstraints::from(vec![from_container.clone()])),
+                Constraints::from_inner(GraphIrConstraints::from(vec![from_container.clone()])),
             )
             .unwrap();
-            let mut source_molecule = AstMoleculeAst::new();
+            let mut source_molecule = GraphIrMoleculeAst::new();
             source_molecule.constraints_mut().push(from_view.clone());
             let source_view = Py::new(
                 py,
@@ -1998,8 +2038,8 @@ match node:
 
     #[rstest]
     fn test_constraints_view_update_self() {
-        let entry = AstConstraint::Or(Vec::new());
-        let mut molecule = AstMoleculeAst::new();
+        let entry = GraphIrConstraint::Or(Vec::new());
+        let mut molecule = GraphIrMoleculeAst::new();
         molecule.constraints_mut().push(entry.clone());
 
         Python::attach(|py| {
@@ -2021,7 +2061,7 @@ match node:
     #[rstest]
     fn test_constraints_view_len() {
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_rust(AstMoleculeAst::new())).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(GraphIrMoleculeAst::new())).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
             assert_eq!(view.__len__(py).unwrap(), 0);
 
@@ -2029,25 +2069,28 @@ match node:
                 .borrow_mut(py)
                 .inner_mut()
                 .constraints_mut()
-                .push(AstConstraint::And(Vec::new()));
+                .push(GraphIrConstraint::And(Vec::new()));
 
             assert_eq!(view.__len__(py).unwrap(), 1);
         });
     }
 
     #[rstest]
-    #[case::positive(0, AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2),))]
-    #[case::negative(-1, AstConstraint::Molecule(
-        AstMoleculeConstraint::Connected { atoms: None },
+    #[case::positive(
+        0,
+        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2),)
+    )]
+    #[case::negative(-1, GraphIrConstraint::Molecule(
+        GraphIrMoleculeConstraint::Connected { atoms: None },
     ))]
-    fn test_constraints_view_getitem(#[case] index: isize, #[case] expected: AstConstraint) {
-        let mut molecule = AstMoleculeAst::new();
-        molecule.constraints_mut().push(AstConstraint::Atom(
-            AstAtomId(1),
-            AstAtomConstraintAst::degree(2),
+    fn test_constraints_view_getitem(#[case] index: isize, #[case] expected: GraphIrConstraint) {
+        let mut molecule = GraphIrMoleculeAst::new();
+        molecule.constraints_mut().push(GraphIrConstraint::Atom(
+            GraphIrAtomId(1),
+            GraphIrAtomConstraintAst::degree(2),
         ));
-        molecule.constraints_mut().push(AstConstraint::Molecule(
-            AstMoleculeConstraint::Connected { atoms: None },
+        molecule.constraints_mut().push(GraphIrConstraint::Molecule(
+            GraphIrMoleculeConstraint::Connected { atoms: None },
         ));
 
         Python::attach(|py| {
@@ -2062,10 +2105,10 @@ match node:
     #[case::positive(1)]
     #[case::negative(-2)]
     fn test_constraints_view_getitem_error(#[case] index: isize) {
-        let mut molecule = AstMoleculeAst::new();
+        let mut molecule = GraphIrMoleculeAst::new();
         molecule
             .constraints_mut()
-            .push(AstConstraint::And(Vec::new()));
+            .push(GraphIrConstraint::And(Vec::new()));
 
         Python::attach(|py| {
             let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
@@ -2080,9 +2123,9 @@ match node:
 
     #[rstest]
     fn test_constraints_view_iter() {
-        let first = AstConstraint::And(Vec::new());
-        let second = AstConstraint::Or(Vec::new());
-        let mut molecule = AstMoleculeAst::new();
+        let first = GraphIrConstraint::And(Vec::new());
+        let second = GraphIrConstraint::Or(Vec::new());
+        let mut molecule = GraphIrMoleculeAst::new();
         molecule.constraints_mut().push(first.clone());
         molecule.constraints_mut().push(second.clone());
 
@@ -2094,7 +2137,9 @@ match node:
                 .borrow_mut(py)
                 .inner_mut()
                 .constraints_mut()
-                .push(AstConstraint::Not(Box::new(AstConstraint::And(Vec::new()))));
+                .push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
+                    Vec::new(),
+                ))));
 
             assert_eq!(
                 iter.__next__().unwrap().bind(py).borrow().to_rust(py),

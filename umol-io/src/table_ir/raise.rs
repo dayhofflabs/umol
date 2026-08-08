@@ -1,4 +1,4 @@
-//! TableIR → `umol_ast::MoleculeAst` raise.
+//! TableIR → `umol_graph_ir::MoleculeAst` raise.
 //!
 //! Implements `TryIntoAst<MoleculeAst> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
@@ -8,13 +8,13 @@ use std::any::Any;
 use std::collections::HashSet;
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_chem::element::Element;
+use umol_graph_ir::ir::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
     MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst, NoncovalentBondAst,
     StereoCoset, TetrahedralStereoAst, TryIntoAst, UnpairedElectronsAst, ValueAst,
 };
-use umol_chem::element::Element;
 use umol_perm::{ClassKey, Permutation};
 use umol_utils::error::UmolError;
 
@@ -394,9 +394,9 @@ fn raise_cis_trans_stereo(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{AtomConstraintsAst, BondId, Entity};
     use umol_chem::element::Element;
     use umol_chem::spin::SpinMultiplicity;
+    use umol_graph_ir::ir::{AtomConstraintsAst, BondId, Entity};
 
     use super::*;
     use crate::ctfile::parse_mol_to_ast;

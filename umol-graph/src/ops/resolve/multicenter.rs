@@ -2,7 +2,7 @@
 //! defaults parallel to `BondsResolver`.
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
     Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, TransactionError,
     UnpairedElectronsAst, ValueAst,
@@ -89,11 +89,11 @@ impl MulticenterBondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
+    use umol_graph_ir::ir::{
         AtomConstraintAst, AtomId, Edit, Edits, MulticenterBondFieldChange, MulticenterBondId,
         MulticenterValenceAst,
     };
-    use umol_ast::mol_dsl;
+    use umol_graph_ir::mol_dsl;
 
     use super::*;
 

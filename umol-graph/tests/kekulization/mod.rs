@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 
 use rstest::rstest;
-use umol_ast::ast::{
-    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
-    ElementAst, IntoAst, UnpairedElectronsAst, ValueAst,
-};
-use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
 use umol_graph::ops::invariant::{ValenceInvariants, ValenceMismatch};
 use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, Transformer};
+use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
+use umol_graph_ir::ir::{
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
+    ElementAst, IntoAst, UnpairedElectronsAst, ValueAst,
+};
 use umol_utils::solution::Solution;
 
 #[derive(Debug, PartialEq, Eq)]

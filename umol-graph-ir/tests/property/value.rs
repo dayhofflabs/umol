@@ -1,5 +1,5 @@
 use proptest::prelude::*;
-use umol_ast::ast::Canonicalize;
+use umol_graph_ir::ir::Canonicalize;
 
 use crate::strategies::*;
 

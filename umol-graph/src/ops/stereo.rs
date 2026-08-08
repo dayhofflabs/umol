@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AsLit, AtomId, BondId, CisTransStereoAst, Lattice, MoleculeAst, StereoAtomAst, StereoAtomId,
     StereoBondAst, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     TetrahedralStereoAst,
@@ -329,9 +329,9 @@ impl StereoPerception {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{StereoAtomId, StereoBondId};
-    use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
+    use umol_graph_ir::ir::{StereoAtomId, StereoBondId};
+    use umol_graph_ir::mol_dsl_ground;
 
     use super::*;
     use crate::ops::model::{ElementScope, StereoKindModel};

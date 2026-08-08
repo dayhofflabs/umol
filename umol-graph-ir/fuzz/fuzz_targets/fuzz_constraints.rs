@@ -1,6 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use umol_ast::dsl::{ConstraintDsl, ConstraintsDsl};
+use umol_graph_ir::dsl::{ConstraintDsl, ConstraintsDsl};
 use umol_edn::{read_string, FromEdn};
 
 fuzz_target!(|data: &str| {

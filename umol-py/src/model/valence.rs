@@ -6,13 +6,13 @@ use std::collections::BTreeMap;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use umol_ast::ast::{ElementAst as AstElementAst, ValueAst as AstValueAst};
 use umol_chem::element::{Element as ChemElement, MAX_ATOMIC_NUMBER};
 use umol_graph::ops::model::ValenceModel as GraphValenceModel;
 use umol_graph::ops::valence::{
     AtomTypeRegistry as GraphAtomTypeRegistry, ValenceEntry as GraphValenceEntry,
     ValenceTable as GraphValenceTable,
 };
+use umol_graph_ir::ir::{ElementAst as GraphIrElementAst, ValueAst as GraphIrValueAst};
 
 use crate::atom::AtomAst;
 use crate::element::Element;
@@ -37,12 +37,12 @@ impl AtomTypeRegistry {
         for (index, atom) in atoms.iter().enumerate() {
             let atom = atom.bind(py).borrow();
             let atom = atom.inner();
-            if !matches!(&atom.element, AstElementAst::Lit(_)) {
+            if !matches!(&atom.element, GraphIrElementAst::Lit(_)) {
                 return Err(PyValueError::new_err(format!(
                     "atom type registry entry {index} must have a literal element"
                 )));
             }
-            let AstValueAst::Lit(charge) = &atom.charge else {
+            let GraphIrValueAst::Lit(charge) = &atom.charge else {
                 return Err(PyValueError::new_err(format!(
                     "atom type registry entry {index} must have a literal charge"
                 )));
@@ -321,8 +321,8 @@ mod tests {
 
     use pyo3::exceptions::PyValueError;
     use rstest::rstest;
-    use umol_ast::ast::AtomAst as AstAtomAst;
     use umol_graph::{registry, valence_table};
+    use umol_graph_ir::ir::AtomAst as GraphIrAtomAst;
 
     use super::*;
 
@@ -338,8 +338,8 @@ mod tests {
     fn test_atom_type_registry_from_atoms() {
         Python::attach(|py| {
             let atoms = vec![
-                "C#c0#v4".parse::<AstAtomAst>().unwrap(),
-                "O#c0#v2".parse::<AstAtomAst>().unwrap(),
+                "C#c0#v4".parse::<GraphIrAtomAst>().unwrap(),
+                "O#c0#v2".parse::<GraphIrAtomAst>().unwrap(),
             ];
             let python_atoms = atoms
                 .iter()
@@ -356,18 +356,21 @@ mod tests {
 
     #[rstest]
     #[case::element(
-        AstAtomAst::default().with_charge(0),
+        GraphIrAtomAst::default().with_charge(0),
         "atom type registry entry 0 must have a literal element"
     )]
     #[case::charge(
-        AstAtomAst::from_element(ChemElement::C),
+        GraphIrAtomAst::from_element(ChemElement::C),
         "atom type registry entry 0 must have a literal charge"
     )]
     #[case::charge_range(
-        AstAtomAst::from_element(ChemElement::C).with_charge(128),
+        GraphIrAtomAst::from_element(ChemElement::C).with_charge(128),
         "atom type registry entry 0 charge 128 is outside -128..=127"
     )]
-    fn test_atom_type_registry_from_atoms_error(#[case] atom: AstAtomAst, #[case] expected: &str) {
+    fn test_atom_type_registry_from_atoms_error(
+        #[case] atom: GraphIrAtomAst,
+        #[case] expected: &str,
+    ) {
         Python::attach(|py| {
             let atom = Py::new(py, AtomAst::from_inner(atom)).unwrap();
             let error = AtomTypeRegistry::from_atoms(py, vec![atom]).unwrap_err();
@@ -435,7 +438,7 @@ mod tests {
     #[case::missing(-1, Vec::new())]
     fn test_atom_type_registry_patterns_for_element_and_charge(
         #[case] charge: i8,
-        #[case] expected: Vec<AstAtomAst>,
+        #[case] expected: Vec<GraphIrAtomAst>,
     ) {
         let registry = AtomTypeRegistry(registry!["C#c0#v4", "C#c+#v3", "O#c0#v2"]);
 

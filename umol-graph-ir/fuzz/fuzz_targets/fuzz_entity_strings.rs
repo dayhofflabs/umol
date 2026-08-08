@@ -1,6 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use umol_ast::dsl::{
+use umol_graph_ir::dsl::{
     parse_aromatic_system, parse_atom, parse_bond, parse_dative_bond, parse_multicenter_bond,
     parse_noncovalent_bond, parse_stereo_atom, parse_stereo_bond, parse_value,
 };

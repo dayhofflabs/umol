@@ -2,10 +2,10 @@
 //! against `AtomAst` patterns keyed by element and (optionally) charge.
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_chem::element::Element;
+use umol_graph_ir::ir::{
     AsLit, AtomAst, AtomHandle, AtomId, Edits, Lattice, MoleculeAst, TransactionError,
 };
-use umol_chem::element::Element;
 use umol_utils::solution::Solution;
 
 use super::compare::compare_valence_preference;
@@ -154,10 +154,10 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{
+    use umol_graph_ir::ir::{
         AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeEntries, ValueAst,
     };
-    use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::valence::AtomTypeRegistry;

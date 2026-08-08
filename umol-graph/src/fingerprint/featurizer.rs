@@ -1,6 +1,6 @@
 //! The featurizer enum: dispatches to a concrete featurizer struct.
 
-use umol_ast::ast::MoleculeAst;
+use umol_graph_ir::ir::MoleculeAst;
 
 use super::ecfp::EcfpFeaturizer;
 use super::feature_set::{CountedFeatureSet, FeatureSet};

@@ -4,7 +4,7 @@
 //! computes counts difference (product minus reactant); `DisjointUnion` side-tags
 //! each feature and unions both sides.
 
-use umol_ast::ast::ReactionAst;
+use umol_graph_ir::ir::ReactionAst;
 
 use super::feature_set::{FeatureSet, SignedFeatureSet};
 use super::featurizer::{Featurizer, FingerprintError};
@@ -64,7 +64,7 @@ pub fn featurize_reaction(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, ReactionAst};
+    use umol_graph_ir::ir::{AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, ReactionAst};
 
     use super::*;
     use crate::fingerprint::{Featurizer, MorganFeaturizer};

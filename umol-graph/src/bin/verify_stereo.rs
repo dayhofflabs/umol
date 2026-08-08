@@ -18,8 +18,8 @@ use std::io::{stdin, Read};
 use std::path::Path;
 use std::{env, fs, process};
 
-use umol_ast::ast::{FromAst, MoleculeAst, TryIntoAst};
-use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
+use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
+use umol_graph_ir::ir::{FromAst, MoleculeAst, TryIntoAst};
 use umol_io::ctfile::parse_mol_bytes_to_ast;
 use umol_io::smiles::Smiles;
 

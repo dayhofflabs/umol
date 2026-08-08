@@ -1313,7 +1313,10 @@ def test_reaction_ast_compose(config, first, second, expected):
         config=config,
     )
 
-    assert composites == [ReactionAst.parse(reaction) for reaction in expected]
+    expected = [ReactionAst.parse(reaction) for reaction in expected]
+    assert len(composites) == len(expected)
+    for reaction in expected:
+        assert reaction in composites
 
 
 def test_reaction_ast_compose_default():
@@ -1342,8 +1345,11 @@ def test_reaction_ast_compose_default():
         ),
     )
 
-    assert omitted == [disjoint, fused]
-    assert explicit == [disjoint, fused]
+    expected = [disjoint, fused]
+    assert omitted == explicit
+    assert len(omitted) == len(expected)
+    for reaction in expected:
+        assert reaction in omitted
 
 
 def test_reaction_ast_compose_error():

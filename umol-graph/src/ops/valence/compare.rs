@@ -7,7 +7,7 @@
 
 use std::cmp::Ordering;
 
-use umol_ast::ast::{AsLit, AtomAst};
+use umol_graph_ir::ir::{AsLit, AtomAst};
 
 /// Prefer higher implicit hydrogens, then lone pairs, then fewer unpaired electrons.
 pub fn compare_valence_preference(a: &AtomAst, b: &AtomAst) -> Ordering {
@@ -44,8 +44,8 @@ pub fn compare_valence_preference(a: &AtomAst, b: &AtomAst) -> Ordering {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_ast::ast::{AtomAst, ElementAst, UnpairedElectronsAst, ValueAst};
     use umol_chem::element::Element;
+    use umol_graph_ir::ir::{AtomAst, ElementAst, UnpairedElectronsAst, ValueAst};
 
     use super::*;
 

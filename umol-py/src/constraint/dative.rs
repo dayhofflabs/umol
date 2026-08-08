@@ -5,11 +5,11 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
-use umol_ast::ast::{
-    DativeBondConstraintAst as AstDativeBondConstraintAst,
-    DativeBondConstraintKey as AstDativeBondConstraintKey,
-    DativeBondConstraintsAst as AstDativeBondConstraintsAst, DativeBondId as AstDativeBondId,
-    RingScope as AstRingScope,
+use umol_graph_ir::ir::{
+    DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
+    DativeBondConstraintKey as GraphIrDativeBondConstraintKey,
+    DativeBondConstraintsAst as GraphIrDativeBondConstraintsAst,
+    DativeBondId as GraphIrDativeBondId, RingScope as GraphIrRingScope,
 };
 
 use super::ring::{RingMembershipAst, RingScope};
@@ -54,20 +54,23 @@ impl DativeBondConstraintKey {
 }
 
 impl DativeBondConstraintKey {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstDativeBondConstraintKey) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        ast: &GraphIrDativeBondConstraintKey,
+    ) -> PyResult<Self> {
         Ok(match ast {
-            AstDativeBondConstraintKey::Aromatic => Self::Aromatic(),
-            AstDativeBondConstraintKey::RingMembership(scope) => {
+            GraphIrDativeBondConstraintKey::Aromatic => Self::Aromatic(),
+            GraphIrDativeBondConstraintKey::RingMembership(scope) => {
                 Self::RingMembership(into_py_variant(py, RingScope::from_rust(scope))?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDativeBondConstraintKey {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondConstraintKey {
         match self {
-            Self::Aromatic() => AstDativeBondConstraintKey::Aromatic,
+            Self::Aromatic() => GraphIrDativeBondConstraintKey::Aromatic,
             Self::RingMembership(scope) => {
-                AstDativeBondConstraintKey::RingMembership(scope.bind(py).borrow().to_rust())
+                GraphIrDativeBondConstraintKey::RingMembership(scope.bind(py).borrow().to_rust())
             }
         }
     }
@@ -108,34 +111,37 @@ impl DativeBondConstraintAst {
 
 impl_py_lattice!(
     DativeBondConstraintAst,
-    AstDativeBondConstraintAst,
-    |value: &DativeBondConstraintAst, py: Python<'_>| -> PyResult<AstDativeBondConstraintAst> {
+    GraphIrDativeBondConstraintAst,
+    |value: &DativeBondConstraintAst, py: Python<'_>| -> PyResult<GraphIrDativeBondConstraintAst> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: AstDativeBondConstraintAst| -> PyResult<DativeBondConstraintAst> {
+    |py: Python<'_>, value: GraphIrDativeBondConstraintAst| -> PyResult<DativeBondConstraintAst> {
         DativeBondConstraintAst::from_rust(py, &value)
     }
 );
 
 impl DativeBondConstraintAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstDativeBondConstraintAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        ast: &GraphIrDativeBondConstraintAst,
+    ) -> PyResult<Self> {
         Ok(match ast {
-            AstDativeBondConstraintAst::Aromatic(b) => {
+            GraphIrDativeBondConstraintAst::Aromatic(b) => {
                 Self::Aromatic(into_py_variant(py, BooleanAst::from_rust(b))?)
             }
-            AstDativeBondConstraintAst::RingMembership(m) => {
+            GraphIrDativeBondConstraintAst::RingMembership(m) => {
                 Self::RingMembership(into_py_variant(py, RingMembershipAst::from_rust(py, m)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDativeBondConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondConstraintAst {
         match self {
             Self::Aromatic(b) => {
-                AstDativeBondConstraintAst::Aromatic(b.bind(py).borrow().to_rust())
+                GraphIrDativeBondConstraintAst::Aromatic(b.bind(py).borrow().to_rust())
             }
             Self::RingMembership(m) => {
-                AstDativeBondConstraintAst::RingMembership(m.bind(py).borrow().to_rust(py))
+                GraphIrDativeBondConstraintAst::RingMembership(m.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -180,14 +186,14 @@ impl DativeBondConstraintsUpdate {
 pub(crate) enum ResolvedDativeBondConstraintsUpdate {
     /// A whole container (from another container or a live view): overlaid via `update`
     /// (last-wins per key; undetermined entries remove).
-    Overlay(AstDativeBondConstraintsAst),
+    Overlay(GraphIrDativeBondConstraintsAst),
     /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
-    Entries(Vec<AstDativeBondConstraintAst>),
+    Entries(Vec<GraphIrDativeBondConstraintAst>),
 }
 
 impl ResolvedDativeBondConstraintsUpdate {
     /// Overlay onto `target` in place. No Python reads.
-    pub(crate) fn apply(self, target: &mut AstDativeBondConstraintsAst) {
+    pub(crate) fn apply(self, target: &mut GraphIrDativeBondConstraintsAst) {
         match self {
             ResolvedDativeBondConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
             ResolvedDativeBondConstraintsUpdate::Entries(entries) => {
@@ -208,7 +214,7 @@ pub(crate) enum DativeBondConstraintsLike {
 }
 
 impl DativeBondConstraintsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstDativeBondConstraintsAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrDativeBondConstraintsAst> {
         match self {
             DativeBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             DativeBondConstraintsLike::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
@@ -220,7 +226,7 @@ impl DativeBondConstraintsLike {
 /// Mutable, hence value-equal but unhashable (matching `DativeBondAst`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct DativeBondConstraintsAst(AstDativeBondConstraintsAst);
+pub struct DativeBondConstraintsAst(GraphIrDativeBondConstraintsAst);
 
 #[pymethods]
 impl DativeBondConstraintsAst {
@@ -228,7 +234,7 @@ impl DativeBondConstraintsAst {
     /// an earlier one, ring memberships accumulate per scope).
     #[new]
     pub(crate) fn new(py: Python<'_>, entries: Vec<Py<DativeBondConstraintAst>>) -> Self {
-        let mut constraints = AstDativeBondConstraintsAst::new();
+        let mut constraints = GraphIrDativeBondConstraintsAst::new();
         constraints.extend(
             entries
                 .into_iter()
@@ -362,7 +368,7 @@ impl DativeBondConstraintsAst {
     #[setter]
     pub(crate) fn set_aromatic(&mut self, py: Python<'_>, value: BooleanLike) {
         self.0
-            .set(AstDativeBondConstraintAst::aromatic(value.to_rust(py)));
+            .set(GraphIrDativeBondConstraintAst::aromatic(value.to_rust(py)));
     }
 
     /// The all-rings membership count, or `None`.
@@ -376,8 +382,8 @@ impl DativeBondConstraintsAst {
 
     #[setter]
     pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueLike) {
-        self.0.set(AstDativeBondConstraintAst::ring_membership(
-            AstRingScope::All,
+        self.0.set(GraphIrDativeBondConstraintAst::ring_membership(
+            GraphIrRingScope::All,
             value.to_rust(py),
         ));
     }
@@ -401,37 +407,37 @@ impl DativeBondConstraintsAst {
 
 impl DativeBondConstraintsAst {
     /// The wrapped AST constraints — read access for dative bond construction.
-    pub(crate) fn inner(&self) -> &AstDativeBondConstraintsAst {
+    pub(crate) fn inner(&self) -> &GraphIrDativeBondConstraintsAst {
         &self.0
     }
 
     /// Mutable access to the wrapped AST constraints — for the value-backed proxy.
-    pub(crate) fn inner_mut(&mut self) -> &mut AstDativeBondConstraintsAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrDativeBondConstraintsAst {
         &mut self.0
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
     /// in-crate construction wraps `DativeBondConstraintsAst(..)` directly.
-    pub(crate) fn from_inner(constraints: AstDativeBondConstraintsAst) -> Self {
+    pub(crate) fn from_inner(constraints: GraphIrDativeBondConstraintsAst) -> Self {
         DativeBondConstraintsAst(constraints)
     }
 }
 
 impl_py_lattice!(
     DativeBondConstraintsAst,
-    AstDativeBondConstraintsAst,
-    |value: &DativeBondConstraintsAst, _py: Python<'_>| -> PyResult<AstDativeBondConstraintsAst> {
-        Ok(value.inner().clone())
-    },
-    |_py: Python<'_>, value: AstDativeBondConstraintsAst| -> PyResult<DativeBondConstraintsAst> {
-        Ok(DativeBondConstraintsAst(value))
-    }
+    GraphIrDativeBondConstraintsAst,
+    |value: &DativeBondConstraintsAst,
+     _py: Python<'_>|
+     -> PyResult<GraphIrDativeBondConstraintsAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>,
+     value: GraphIrDativeBondConstraintsAst|
+     -> PyResult<DativeBondConstraintsAst> { Ok(DativeBondConstraintsAst(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn dative_bond_constraints_iter(
     py: Python<'_>,
-    constraints: &AstDativeBondConstraintsAst,
+    constraints: &GraphIrDativeBondConstraintsAst,
 ) -> PyResult<DativeBondConstraintIter> {
     let entries = constraints
         .iter()
@@ -445,7 +451,7 @@ pub(crate) fn dative_bond_constraints_iter(
 /// Build the key iterator handle from a borrowed container (mapping-style keys).
 pub(crate) fn dative_bond_constraint_keys(
     py: Python<'_>,
-    constraints: &AstDativeBondConstraintsAst,
+    constraints: &GraphIrDativeBondConstraintsAst,
 ) -> PyResult<DativeBondConstraintKeyIter> {
     let keys = constraints
         .iter()
@@ -464,7 +470,7 @@ pub(crate) fn dative_bond_constraint_keys(
 /// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
 pub(crate) fn dative_bond_constraint_items(
     py: Python<'_>,
-    constraints: &AstDativeBondConstraintsAst,
+    constraints: &GraphIrDativeBondConstraintsAst,
 ) -> PyResult<DativeBondConstraintItemsIter> {
     let items = constraints
         .iter()
@@ -488,18 +494,18 @@ pub(crate) fn dative_bond_constraint_items(
 /// all-rings scope, `ring_size_count_<n>` for a specific ring size.
 pub(crate) fn dative_bond_constraints_asdict<'py>(
     py: Python<'py>,
-    constraints: &AstDativeBondConstraintsAst,
+    constraints: &GraphIrDativeBondConstraintsAst,
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for entry in constraints.iter() {
         match entry {
-            AstDativeBondConstraintAst::Aromatic(b) => {
+            GraphIrDativeBondConstraintAst::Aromatic(b) => {
                 dict.set_item("aromatic", BooleanAst::from_rust(b))?
             }
-            AstDativeBondConstraintAst::RingMembership(m) => {
+            GraphIrDativeBondConstraintAst::RingMembership(m) => {
                 let key = match m.scope {
-                    AstRingScope::All => "ring_count".to_string(),
-                    AstRingScope::Size(size) => format!("ring_size_count_{size}"),
+                    GraphIrRingScope::All => "ring_count".to_string(),
+                    GraphIrRingScope::Size(size) => format!("ring_size_count_{size}"),
                 };
                 dict.set_item(key, ValueAst::from_rust(py, &m.count)?)?
             }
@@ -513,7 +519,7 @@ pub(crate) fn dative_bond_constraints_asdict<'py>(
 pub(crate) enum DativeBondConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
-        id: AstDativeBondId,
+        id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondAst>),
 }
@@ -532,7 +538,7 @@ impl DativeBondConstraintsView {
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&AstDativeBondConstraintsAst) -> PyResult<R>,
+        f: impl FnOnce(&GraphIrDativeBondConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
             DativeBondConstraintsBacking::Molecule { owner, id } => {
@@ -555,7 +561,7 @@ impl DativeBondConstraintsView {
     pub(crate) fn with_mut<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut AstDativeBondConstraintsAst) -> R,
+        f: impl FnOnce(&mut GraphIrDativeBondConstraintsAst) -> R,
     ) -> R {
         match &self.backing {
             DativeBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
@@ -571,7 +577,7 @@ impl DativeBondConstraintsView {
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: AstDativeBondConstraintAst) {
+    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrDativeBondConstraintAst) {
         self.with_mut(py, |cs| cs.set(constraint));
     }
 
@@ -579,8 +585,8 @@ impl DativeBondConstraintsView {
     pub(crate) fn remove_ast(
         &self,
         py: Python<'_>,
-        key: AstDativeBondConstraintKey,
-    ) -> Option<AstDativeBondConstraintAst> {
+        key: GraphIrDativeBondConstraintKey,
+    ) -> Option<GraphIrDativeBondConstraintAst> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -724,7 +730,10 @@ impl DativeBondConstraintsView {
 
     #[setter]
     pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) {
-        self.set_ast(py, AstDativeBondConstraintAst::aromatic(value.to_rust(py)));
+        self.set_ast(
+            py,
+            GraphIrDativeBondConstraintAst::aromatic(value.to_rust(py)),
+        );
     }
 
     /// The all-rings membership count, or `None`.
@@ -741,7 +750,10 @@ impl DativeBondConstraintsView {
     pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueLike) {
         self.set_ast(
             py,
-            AstDativeBondConstraintAst::ring_membership(AstRingScope::All, value.to_rust(py)),
+            GraphIrDativeBondConstraintAst::ring_membership(
+                GraphIrRingScope::All,
+                value.to_rust(py),
+            ),
         );
     }
 
@@ -775,7 +787,7 @@ impl DativeBondConstraintsView {
 pub(crate) enum DativeBondRingSizeBacking {
     Molecule {
         owner: Py<MoleculeAst>,
-        id: AstDativeBondId,
+        id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondAst>),
     Value(Py<DativeBondConstraintsAst>),
@@ -795,7 +807,7 @@ impl DativeBondRingSizeCounts {
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&AstDativeBondConstraintsAst) -> PyResult<R>,
+        f: impl FnOnce(&GraphIrDativeBondConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
             DativeBondRingSizeBacking::Molecule { owner, id } => {
@@ -815,7 +827,11 @@ impl DativeBondRingSizeCounts {
     }
 
     /// Mutate the backing constraints in place through `f`.
-    pub(crate) fn write(&self, py: Python<'_>, f: impl FnOnce(&mut AstDativeBondConstraintsAst)) {
+    pub(crate) fn write(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut GraphIrDativeBondConstraintsAst),
+    ) {
         match &self.backing {
             DativeBondRingSizeBacking::Molecule { owner, id } => f(&mut owner
                 .borrow_mut(py)
@@ -861,8 +877,8 @@ impl DativeBondRingSizeCounts {
 
     /// Set the membership count for rings of `size` in place.
     pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueLike) {
-        let constraint = AstDativeBondConstraintAst::ring_membership(
-            AstRingScope::Size(size),
+        let constraint = GraphIrDativeBondConstraintAst::ring_membership(
+            GraphIrRingScope::Size(size),
             count.to_rust(py),
         );
         self.write(py, |cs| cs.set(constraint));
@@ -871,8 +887,8 @@ impl DativeBondRingSizeCounts {
     /// Remove the sized-ring membership for `size` in place.
     pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) {
         self.write(py, |cs| {
-            cs.remove(AstDativeBondConstraintKey::RingMembership(
-                AstRingScope::Size(size),
+            cs.remove(GraphIrDativeBondConstraintKey::RingMembership(
+                GraphIrRingScope::Size(size),
             ));
         });
     }
@@ -881,8 +897,8 @@ impl DativeBondRingSizeCounts {
         self.read(py, |cs| {
             let mut parts = Vec::new();
             for entry in cs.iter() {
-                if let AstDativeBondConstraintAst::RingMembership(m) = entry {
-                    if let AstRingScope::Size(size) = m.scope {
+                if let GraphIrDativeBondConstraintAst::RingMembership(m) = entry {
+                    if let GraphIrRingScope::Size(size) = m.scope {
                         let count = into_py_variant(py, ValueAst::from_rust(py, &m.count)?)?;
                         parts.push(format!(
                             "{size}: {}",
@@ -901,12 +917,12 @@ impl DativeBondRingSizeCounts {
 
 /// The ring sizes with a membership constraint, in kind-sorted order.
 pub(crate) fn ring_sizes(
-    constraints: &AstDativeBondConstraintsAst,
+    constraints: &GraphIrDativeBondConstraintsAst,
 ) -> impl Iterator<Item = u8> + '_ {
     constraints.iter().filter_map(|entry| match entry {
-        AstDativeBondConstraintAst::RingMembership(m) => match m.scope {
-            AstRingScope::Size(size) => Some(size),
-            AstRingScope::All => None,
+        GraphIrDativeBondConstraintAst::RingMembership(m) => match m.scope {
+            GraphIrRingScope::Size(size) => Some(size),
+            GraphIrRingScope::All => None,
         },
         _ => None,
     })

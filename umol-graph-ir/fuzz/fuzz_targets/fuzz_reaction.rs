@@ -1,7 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use umol_ast::ast::{IntoAst, SubstructureMatchAlgorithm, SubstructureMatchConfig};
-use umol_ast::dsl::{ReactionDefaults, ReactionDsl};
+use umol_graph_ir::ir::{IntoAst, SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_ir::dsl::{ReactionDefaults, ReactionDsl};
 use umol_edn::{read_string, FromEdn};
 use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 

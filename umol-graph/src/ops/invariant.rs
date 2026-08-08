@@ -7,13 +7,13 @@
 use std::ops::RangeInclusive;
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_chem::element::Element;
+use umol_chem::spin::{SpinState, UnpairedElectrons};
+use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
     AtomId, ElementAst, Lattice, MoleculeAst, MulticenterValenceAst, UnpairedElectronsAst,
     ValueAst,
 };
-use umol_chem::element::Element;
-use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_utils::solution::Solution;
 
 pub struct ValenceInvariants;
@@ -489,11 +489,11 @@ fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> 
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_ir::ir::{
         AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst, IsotopeMassAst,
         MoleculeAst, MoleculeEntries, UnpairedElectronsAst, ValueAst,
     };
-    use umol_chem::element::Element;
 
     use super::*;
 

@@ -6,9 +6,10 @@ use std::vec::IntoIter;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use umol_ast::ast::{
-    AtomId as AstAtomId, BondAst as AstBondAst, BondConstraintAst as AstBondConstraintAst,
-    BondId as AstBondId, BondUpdate as AstBondUpdate, MoleculeAst as AstMoleculeAst,
+use umol_graph_ir::ir::{
+    AtomId as GraphIrAtomId, BondAst as GraphIrBondAst,
+    BondConstraintAst as GraphIrBondConstraintAst, BondId as GraphIrBondId,
+    BondUpdate as GraphIrBondUpdate, MoleculeAst as GraphIrMoleculeAst,
 };
 
 use crate::constraint::bond::{
@@ -25,7 +26,7 @@ use crate::value::{ValueAst, ValueLike};
 /// Attribute updates for a localized bond.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
-pub struct BondUpdate(AstBondUpdate);
+pub struct BondUpdate(GraphIrBondUpdate);
 
 #[pymethods]
 impl BondUpdate {
@@ -38,7 +39,7 @@ impl BondUpdate {
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
-        Self::from_rust(&AstBondUpdate {
+        Self::from_rust(&GraphIrBondUpdate {
             order: order.map(|value| value.to_rust(py)),
             charge: charge.map(|value| value.to_rust(py)),
             unpaired_electrons: unpaired_electrons
@@ -53,7 +54,9 @@ impl BondUpdate {
     /// Parse a bond-update DSL string into a `BondUpdate`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstBondUpdate::from_str(s).map(Self).map_err(parse_error)
+        GraphIrBondUpdate::from_str(s)
+            .map(Self)
+            .map_err(parse_error)
     }
 
     fn __str__(&self) -> String {
@@ -102,11 +105,11 @@ impl BondUpdate {
 }
 
 impl BondUpdate {
-    pub(crate) fn from_rust(update: &AstBondUpdate) -> Self {
+    pub(crate) fn from_rust(update: &GraphIrBondUpdate) -> Self {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> AstBondUpdate {
+    pub(crate) fn to_rust(&self) -> GraphIrBondUpdate {
         self.0.clone()
     }
 }
@@ -114,7 +117,7 @@ impl BondUpdate {
 /// A bond: order, charge, unpaired electrons, and bond-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct BondAst(AstBondAst);
+pub struct BondAst(GraphIrBondAst);
 
 #[pymethods]
 impl BondAst {
@@ -129,7 +132,7 @@ impl BondAst {
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
-        let mut bond = AstBondAst::new(order.to_rust(py));
+        let mut bond = GraphIrBondAst::new(order.to_rust(py));
         if let Some(charge) = charge {
             bond = bond.with_charge(charge.to_rust(py));
         }
@@ -145,38 +148,40 @@ impl BondAst {
     /// Construct the canonical `:single` bond shape.
     #[staticmethod]
     fn single() -> Self {
-        Self(AstBondAst::from_order(1))
+        Self(GraphIrBondAst::from_order(1))
     }
 
     /// Construct the canonical `:double` bond shape.
     #[staticmethod]
     fn double() -> Self {
-        Self(AstBondAst::from_order(2))
+        Self(GraphIrBondAst::from_order(2))
     }
 
     /// Construct the canonical `:triple` bond shape.
     #[staticmethod]
     fn triple() -> Self {
-        Self(AstBondAst::from_order(3))
+        Self(GraphIrBondAst::from_order(3))
     }
 
     /// Construct the canonical `:quadruple` bond shape.
     #[staticmethod]
     fn quadruple() -> Self {
-        Self(AstBondAst::from_order(4))
+        Self(GraphIrBondAst::from_order(4))
     }
 
     /// Construct the canonical `:aromatic` shape: an order-1 localized bond
     /// carrying the aromatic constraint, not an aromatic bond order.
     #[staticmethod]
     fn aromatic() -> Self {
-        Self(AstBondAst::from_order(1).with_constraint(AstBondConstraintAst::aromatic(true)))
+        Self(
+            GraphIrBondAst::from_order(1).with_constraint(GraphIrBondConstraintAst::aromatic(true)),
+        )
     }
 
     /// Parse a bond-DSL string (e.g. `"2#c-1"`) into a `BondAst`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstBondAst::from_str(s).map(Self).map_err(parse_error)
+        GraphIrBondAst::from_str(s).map(Self).map_err(parse_error)
     }
 
     fn __str__(&self) -> String {
@@ -253,28 +258,30 @@ impl BondAst {
 
 impl BondAst {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &AstBondAst {
+    pub(crate) fn inner(&self) -> &GraphIrBondAst {
         &self.0
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut AstBondAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrBondAst {
         &mut self.0
     }
 
     /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
     /// `inner`).
-    pub(crate) fn from_inner(bond: AstBondAst) -> Self {
+    pub(crate) fn from_inner(bond: GraphIrBondAst) -> Self {
         BondAst(bond)
     }
 }
 
 impl_py_lattice!(
     BondAst,
-    AstBondAst,
-    |value: &BondAst, _py: Python<'_>| -> PyResult<AstBondAst> { Ok(value.inner().clone()) },
-    |_py: Python<'_>, value: AstBondAst| -> PyResult<BondAst> { Ok(BondAst::from_inner(value)) }
+    GraphIrBondAst,
+    |value: &BondAst, _py: Python<'_>| -> PyResult<GraphIrBondAst> { Ok(value.inner().clone()) },
+    |_py: Python<'_>, value: GraphIrBondAst| -> PyResult<BondAst> {
+        Ok(BondAst::from_inner(value))
+    }
 );
 
 /// A view of one bond within a molecule: a handle to the molecule plus the bond's
@@ -282,11 +289,11 @@ impl_py_lattice!(
 #[pyclass]
 pub struct BondView {
     owner: Py<MoleculeAst>,
-    id: AstBondId,
+    id: GraphIrBondId,
 }
 
 impl BondView {
-    fn bond<'a>(&self, molecule: &'a AstMoleculeAst) -> PyResult<&'a AstBondAst> {
+    fn bond<'a>(&self, molecule: &'a GraphIrMoleculeAst) -> PyResult<&'a GraphIrBondAst> {
         molecule
             .bonds()
             .get(self.id)
@@ -415,7 +422,7 @@ impl BondView {
 
 /// Resolve a possibly-negative Python index (negative counts from the end) into an
 /// existing bond id, or `IndexError`.
-fn resolve_bond_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstBondId> {
+fn resolve_bond_index(molecule: &GraphIrMoleculeAst, index: isize) -> PyResult<GraphIrBondId> {
     let count = molecule.bonds().count();
     let resolved = if index < 0 {
         index + count as isize
@@ -425,7 +432,7 @@ fn resolve_bond_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstBo
     if resolved < 0 {
         return Err(PyIndexError::new_err("bond id out of range"));
     }
-    let id = AstBondId(resolved as u32);
+    let id = GraphIrBondId(resolved as u32);
     if molecule.bonds().contains(id) {
         Ok(id)
     } else {
@@ -475,7 +482,7 @@ impl BondViews {
         molecule
             .inner()
             .bonds()
-            .of_id(AstAtomId(first), AstAtomId(second))
+            .of_id(GraphIrAtomId(first), GraphIrAtomId(second))
             .map(|id| BondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -508,7 +515,7 @@ impl BondViews {
 #[pyclass]
 struct BondViewIter {
     owner: Py<MoleculeAst>,
-    ids: IntoIter<AstBondId>,
+    ids: IntoIter<GraphIrBondId>,
 }
 
 #[pymethods]
@@ -528,14 +535,15 @@ impl BondViewIter {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AtomAst as AstAtomAst, BondConstraintAst as AstBondConstraintAst,
-        BondConstraintKey as AstBondConstraintKey, BondConstraintsAst as AstBondConstraintsAst,
-        BooleanAst as AstBooleanAst, CisTransStereoAst as AstCisTransStereoAst,
-        MoleculeEntries as AstMoleculeEntries, RingScope as AstRingScope,
-        StereoCoset as AstStereoCoset, ValueAst as AstValueAst,
-    };
     use umol_chem::element::Element as ChemElement;
+    use umol_graph_ir::ir::{
+        AtomAst as GraphIrAtomAst, BondConstraintAst as GraphIrBondConstraintAst,
+        BondConstraintKey as GraphIrBondConstraintKey,
+        BondConstraintsAst as GraphIrBondConstraintsAst, BooleanAst as GraphIrBooleanAst,
+        CisTransStereoAst as GraphIrCisTransStereoAst, MoleculeEntries as GraphIrMoleculeEntries,
+        RingScope as GraphIrRingScope, StereoCoset as GraphIrStereoCoset,
+        ValueAst as GraphIrValueAst,
+    };
 
     use super::*;
     use crate::boolean::BooleanLike;
@@ -545,12 +553,16 @@ mod tests {
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_entries(AstMoleculeEntries {
+        let molecule = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                AstAtomAst::from_element(ChemElement::C),
-                AstAtomAst::from_element(ChemElement::C),
+                GraphIrAtomAst::from_element(ChemElement::C),
+                GraphIrAtomAst::from_element(ChemElement::C),
             ],
-            bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
+            bonds: vec![(
+                GraphIrAtomId(0),
+                GraphIrAtomId(1),
+                GraphIrBondAst::from_order(2),
+            )],
             ..Default::default()
         });
         Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
@@ -574,10 +586,9 @@ mod tests {
 
     #[rstest]
     fn test_bond_ast_constraints() {
-        let bond = BondAst(
-            AstBondAst::from_order(1)
-                .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
-        );
+        let bond = BondAst(GraphIrBondAst::from_order(1).with_constraint(
+            GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+        ));
         assert_eq!(bond.inner().constraints.len(), 1);
     }
 
@@ -586,10 +597,9 @@ mod tests {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                BondAst::from_inner(
-                    AstBondAst::from_order(1)
-                        .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
-                ),
+                BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                )),
             )
             .unwrap();
             let view = Py::new(
@@ -599,25 +609,27 @@ mod tests {
                 },
             )
             .unwrap();
-            let dst = Py::new(py, BondAst::from_inner(AstBondAst::from_order(2))).unwrap();
+            let dst = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(2))).unwrap();
             BondAst::set_constraints(dst.clone_ref(py), py, BondConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.aromatic(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
 
     #[rstest]
-    #[case(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)))]
-    #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::NotStereo))]
-    #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::Stereo(
-        AstStereoCoset::Lit(1)
-    )))]
-    #[case(AstBondConstraintAst::ring_membership(AstRingScope::All, 2))]
-    #[case(AstBondConstraintAst::ring_membership(AstRingScope::Size(6), 1))]
-    fn test_bond_constraint_ast_roundtrip(#[case] ast: AstBondConstraintAst) {
+    #[case(GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)))]
+    #[case(GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoAst::NotStereo))]
+    #[case(
+        GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoAst::Stereo(
+            GraphIrStereoCoset::Lit(1)
+        ))
+    )]
+    #[case(GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::All, 2))]
+    #[case(GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::Size(6), 1))]
+    fn test_bond_constraint_ast_roundtrip(#[case] ast: GraphIrBondConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
                 BondConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
@@ -633,7 +645,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -642,7 +654,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::ring_membership(AstRingScope::All, 2),
+                    &GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::All, 2),
                 )
                 .unwrap(),
             )
@@ -667,7 +679,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -676,7 +688,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::ring_membership(AstRingScope::All, 2),
+                    &GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::All, 2),
                 )
                 .unwrap(),
             )
@@ -686,29 +698,29 @@ mod tests {
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
                 keys.__next__().unwrap().bind(py).borrow().to_rust(py),
-                AstBondConstraintKey::Aromatic
+                GraphIrBondConstraintKey::Aromatic
             );
             assert_eq!(
                 keys.__next__().unwrap().bind(py).borrow().to_rust(py),
-                AstBondConstraintKey::RingMembership(AstRingScope::All)
+                GraphIrBondConstraintKey::RingMembership(GraphIrRingScope::All)
             );
             assert!(keys.__next__().is_none());
 
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
                 values.__next__().unwrap().bind(py).borrow().to_rust(py),
-                AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))
+                GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true))
             );
 
             let mut items = constraints.items(py).unwrap();
             let (key, value) = items.__next__().unwrap();
             assert_eq!(
                 key.bind(py).borrow().to_rust(py),
-                AstBondConstraintKey::Aromatic
+                GraphIrBondConstraintKey::Aromatic
             );
             assert_eq!(
                 value.bind(py).borrow().to_rust(py),
-                AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))
+                GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true))
             );
         });
     }
@@ -720,7 +732,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -737,7 +749,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -770,20 +782,23 @@ mod tests {
     fn test_bond_constraints_ast_aromatic() {
         Python::attach(|py| {
             let empty = BondConstraintsAst::new(py, vec![]);
-            assert_eq!(empty.aromatic().to_rust(), AstBooleanAst::Undetermined);
+            assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanAst::Undetermined);
             assert!(empty.cis_trans_stereo(py).unwrap().is_none());
             assert!(empty.ring_count(py).unwrap().is_none());
             let aromatic = into_py_variant(
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
             .unwrap();
             let constraints = BondConstraintsAst::new(py, vec![aromatic]);
-            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                constraints.aromatic().to_rust(),
+                GraphIrBooleanAst::Lit(true)
+            );
         });
     }
 
@@ -794,7 +809,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::ring_membership(AstRingScope::Size(6), 1),
+                    &GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::Size(6), 1),
                 )
                 .unwrap(),
             )
@@ -803,7 +818,7 @@ mod tests {
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                AstValueAst::Lit(1)
+                GraphIrValueAst::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
             assert!(constraints
@@ -823,14 +838,17 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
             .unwrap();
             constraints.set(py, aromatic);
             assert_eq!(constraints.__len__(), 1);
-            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                constraints.aromatic().to_rust(),
+                GraphIrBooleanAst::Lit(true)
+            );
         });
     }
 
@@ -841,7 +859,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -855,7 +873,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(BondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -867,9 +885,14 @@ mod tests {
     fn test_bond_constraints_ast_update() {
         Python::attach(|py| {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
-            let mut other = AstBondConstraintsAst::new();
-            other.set(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)));
-            other.set(AstBondConstraintAst::ring_membership(AstRingScope::All, 2));
+            let mut other = GraphIrBondConstraintsAst::new();
+            other.set(GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(
+                true,
+            )));
+            other.set(GraphIrBondConstraintAst::ring_membership(
+                GraphIrRingScope::All,
+                2,
+            ));
             BondConstraintsAst::update(
                 constraints.clone_ref(py),
                 py,
@@ -880,10 +903,10 @@ mod tests {
             .unwrap();
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 2);
-            assert_eq!(c.aromatic().to_rust(), AstBooleanAst::Lit(true));
+            assert_eq!(c.aromatic().to_rust(), GraphIrBooleanAst::Lit(true));
             assert_eq!(
                 c.ring_count(py).unwrap().unwrap().to_rust(py),
-                AstValueAst::Lit(2)
+                GraphIrValueAst::Lit(2)
             );
         });
     }
@@ -896,7 +919,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -905,7 +928,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::ring_membership(AstRingScope::All, 2),
+                    &GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::All, 2),
                 )
                 .unwrap(),
             )
@@ -929,7 +952,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -943,7 +966,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().aromatic().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -956,10 +979,9 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondAst::from_inner(
-                    AstBondAst::from_order(1)
-                        .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
-                ),
+                BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                )),
             )
             .unwrap();
             let own_view = Py::new(
@@ -973,7 +995,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.aromatic(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -986,10 +1008,9 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondAst::from_inner(
-                    AstBondAst::from_order(1)
-                        .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
-                ),
+                BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                )),
             )
             .unwrap();
             let view = BondConstraintsView {
@@ -1005,7 +1026,7 @@ mod tests {
             view.update(py, BondConstraintsUpdate::View(other)).unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.aromatic(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1015,9 +1036,15 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             constraints.set_aromatic(py, BooleanLike::Lit(true));
-            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                constraints.aromatic().to_rust(),
+                GraphIrBooleanAst::Lit(true)
+            );
             constraints.set_aromatic(py, BooleanLike::Lit(false));
-            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(false));
+            assert_eq!(
+                constraints.aromatic().to_rust(),
+                GraphIrBooleanAst::Lit(false)
+            );
         });
     }
 
@@ -1030,7 +1057,10 @@ mod tests {
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::Stereo(coset) => {
-                    assert_eq!(coset.bind(py).borrow().to_rust(py), AstStereoCoset::Lit(1))
+                    assert_eq!(
+                        coset.bind(py).borrow().to_rust(py),
+                        GraphIrStereoCoset::Lit(1)
+                    )
                 }
                 _ => panic!("expected Stereo"),
             }
@@ -1061,7 +1091,7 @@ mod tests {
             constraints.set_ring_count(py, ValueLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
-                AstValueAst::Lit(2)
+                GraphIrValueAst::Lit(2)
             );
         });
     }
@@ -1087,7 +1117,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_set() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            let bond = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1095,7 +1125,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -1114,7 +1144,7 @@ mod tests {
                 .unwrap()
             {
                 BondConstraintAst::Aromatic(b) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
                 }
                 _ => panic!("expected Aromatic(Lit(true))"),
             }
@@ -1126,10 +1156,9 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondAst::from_inner(
-                    AstBondAst::from_order(1)
-                        .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
-                ),
+                BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                )),
             )
             .unwrap();
             let view = BondConstraintsView {
@@ -1143,7 +1172,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(BondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -1157,13 +1186,18 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_update() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            let bond = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
-            let mut other = AstBondConstraintsAst::new();
-            other.set(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)));
-            other.set(AstBondConstraintAst::ring_membership(AstRingScope::All, 2));
+            let mut other = GraphIrBondConstraintsAst::new();
+            other.set(GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(
+                true,
+            )));
+            other.set(GraphIrBondConstraintAst::ring_membership(
+                GraphIrRingScope::All,
+                2,
+            ));
             view.update(
                 py,
                 BondConstraintsUpdate::Container(
@@ -1181,13 +1215,13 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_set_aromatic() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            let bond = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
             assert_eq!(
                 view.aromatic(py).unwrap().to_rust(),
-                AstBooleanAst::Undetermined
+                GraphIrBooleanAst::Undetermined
             );
             view.set_aromatic(py, BooleanLike::Lit(true));
             let fresh = BondConstraintsView {
@@ -1195,7 +1229,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.aromatic(py).unwrap().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1208,7 +1242,7 @@ mod tests {
             proxy.__setitem__(py, 6, ValueLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                AstValueAst::Lit(3)
+                GraphIrValueAst::Lit(3)
             );
             proxy.__delitem__(py, 6);
             assert!(proxy.__getitem__(py, 6).unwrap().is_none());
@@ -1218,7 +1252,7 @@ mod tests {
     #[rstest]
     fn test_bond_ring_size_counts_bond_backed() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            let bond = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1234,7 +1268,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                AstValueAst::Lit(1)
+                GraphIrValueAst::Lit(1)
             );
         });
     }
@@ -1264,10 +1298,10 @@ mod tests {
         Python::attach(|py| {
             let view = BondView {
                 owner: ethene(py),
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
             assert_eq!(view.id(), 0);
-            assert_eq!(view.order(py).unwrap().to_rust(py), AstValueAst::Lit(2));
+            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrValueAst::Lit(2));
         });
     }
 
@@ -1276,7 +1310,7 @@ mod tests {
         Python::attach(|py| {
             let view = BondView {
                 owner: ethene(py),
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
         });
@@ -1288,14 +1322,17 @@ mod tests {
             let owner = ethene(py);
             let view = BondView {
                 owner: owner.clone_ref(py),
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
             view.set_order(py, ValueLike::Lit(1));
             let fresh = BondView {
                 owner,
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
-            assert_eq!(fresh.order(py).unwrap().to_rust(py), AstValueAst::Lit(1));
+            assert_eq!(
+                fresh.order(py).unwrap().to_rust(py),
+                GraphIrValueAst::Lit(1)
+            );
         });
     }
 
@@ -1305,14 +1342,17 @@ mod tests {
             let owner = ethene(py);
             let view = BondView {
                 owner: owner.clone_ref(py),
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
             view.set_charge(py, ValueLike::Lit(-1));
             let fresh = BondView {
                 owner,
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
-            assert_eq!(fresh.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
+            assert_eq!(
+                fresh.charge(py).unwrap().to_rust(py),
+                GraphIrValueAst::Lit(-1)
+            );
         });
     }
 
@@ -1321,10 +1361,10 @@ mod tests {
         Python::attach(|py| {
             let view = BondView {
                 owner: ethene(py),
-                id: AstBondId(0),
+                id: GraphIrBondId(0),
             };
             match view.constraints(py).backing {
-                BondConstraintsBacking::Molecule { id, .. } => assert_eq!(id, AstBondId(0)),
+                BondConstraintsBacking::Molecule { id, .. } => assert_eq!(id, GraphIrBondId(0)),
                 _ => panic!("expected molecule-backed view"),
             }
         });
@@ -1337,14 +1377,14 @@ mod tests {
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner: owner.clone_ref(py),
-                    id: AstBondId(0),
+                    id: GraphIrBondId(0),
                 },
             };
             let aromatic = into_py_variant(
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -1353,13 +1393,13 @@ mod tests {
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner,
-                    id: AstBondId(0),
+                    id: GraphIrBondId(0),
                 },
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.aromatic(py).unwrap().to_rust(),
-                AstBooleanAst::Lit(true)
+                GraphIrBooleanAst::Lit(true)
             );
         });
     }
@@ -1371,7 +1411,7 @@ mod tests {
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner: owner.clone_ref(py),
-                    id: AstBondId(0),
+                    id: GraphIrBondId(0),
                 },
             };
             view.ring_size_count(py)
@@ -1379,7 +1419,7 @@ mod tests {
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner,
-                    id: AstBondId(0),
+                    id: GraphIrBondId(0),
                 },
             };
             assert_eq!(
@@ -1389,7 +1429,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                AstValueAst::Lit(1)
+                GraphIrValueAst::Lit(1)
             );
         });
     }
@@ -1413,11 +1453,11 @@ mod tests {
             let views = BondViews {
                 owner: owner.clone_ref(py),
             };
-            let single = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            let single = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap();
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, endpoints preserved
-            assert_eq!(view.order(py).unwrap().to_rust(py), AstValueAst::Lit(1));
+            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrValueAst::Lit(1));
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
         });
     }
@@ -1426,7 +1466,7 @@ mod tests {
     fn test_bond_views_setitem_error() {
         Python::attach(|py| {
             let views = BondViews { owner: ethene(py) };
-            let single = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            let single = Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap();
             assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
         });
     }
@@ -1435,13 +1475,17 @@ mod tests {
     fn test_bond_views_of() {
         Python::attach(|py| {
             // three carbons, one bond 0–1; atom 2 is isolated
-            let molecule = AstMoleculeAst::from_entries(AstMoleculeEntries {
+            let molecule = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    AstAtomAst::from_element(ChemElement::C),
-                    AstAtomAst::from_element(ChemElement::C),
-                    AstAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomAst::from_element(ChemElement::C),
                 ],
-                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                bonds: vec![(
+                    GraphIrAtomId(0),
+                    GraphIrAtomId(1),
+                    GraphIrBondAst::from_order(1),
+                )],
                 ..Default::default()
             });
             let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();

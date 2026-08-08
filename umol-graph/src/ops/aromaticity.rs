@@ -23,12 +23,12 @@ pub use clar::{ClarAromaticity, ClarError};
 pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
 pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
+use umol_graph_ir::ir::{
     AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomId, AtomView, BondConstraintAst,
     BondId, BooleanAst, ElectronCountsAst, MoleculeAst, RingConfig, RingModel, RingSetKind,
     TransactionError, ValueAst,
 };
-use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::AromaticityModel;
@@ -410,14 +410,14 @@ impl AromaticityPerception {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
+    use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
         AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeEntries,
         UnpairedElectronsAst, ValueAst,
     };
-    use umol_ast::{mol_dsl, mol_dsl_ground};
-    use umol_chem::element::Element;
-    use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
+    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};

@@ -2,13 +2,13 @@
 
 use pyo3::prelude::*;
 #[cfg(test)]
-use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
-use umol_ast::ast::SubstructureMatchConfig as AstSubstructureMatchConfig;
-#[cfg(test)]
 use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
+#[cfg(test)]
+use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
+use umol_graph_ir::ir::SubstructureMatchConfig as GraphIrSubstructureMatchConfig;
 
 use crate::algorithm::{
     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
@@ -89,7 +89,7 @@ impl SubstructureSearchConfig {
         dead_code,
         reason = "Rust-to-Python conversion API for configured substructure search"
     )]
-    pub(crate) fn from_rust(config: AstSubstructureMatchConfig) -> Self {
+    pub(crate) fn from_rust(config: GraphIrSubstructureMatchConfig) -> Self {
         Self {
             match_algorithm: SubstructureMatchAlgorithm::from_rust(config.match_algorithm),
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::from_rust(
@@ -101,8 +101,8 @@ impl SubstructureSearchConfig {
         }
     }
 
-    pub(crate) fn to_rust(self) -> AstSubstructureMatchConfig {
-        AstSubstructureMatchConfig {
+    pub(crate) fn to_rust(self) -> GraphIrSubstructureMatchConfig {
+        GraphIrSubstructureMatchConfig {
             match_algorithm: self.match_algorithm.to_rust(),
             subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
             relevant_cycle_algorithm: self.relevant_cycle_algorithm.to_rust(),
@@ -163,13 +163,13 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        AstSubstructureMatchAlgorithm::GraphAndOverlays,
+        GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
         GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         SubstructureSearchConfig::default()
     )]
     #[case::incidence_arc_match(
-        AstSubstructureMatchAlgorithm::Incidence,
+        GraphIrSubstructureMatchAlgorithm::Incidence,
         GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         SubstructureSearchConfig::new(
@@ -179,13 +179,13 @@ mod tests {
         ),
     )]
     fn test_substructure_search_config_from_rust(
-        #[case] match_algorithm: AstSubstructureMatchAlgorithm,
+        #[case] match_algorithm: GraphIrSubstructureMatchAlgorithm,
         #[case] subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
         #[case] relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm,
         #[case] expected: SubstructureSearchConfig,
     ) {
         assert_eq!(
-            SubstructureSearchConfig::from_rust(AstSubstructureMatchConfig {
+            SubstructureSearchConfig::from_rust(GraphIrSubstructureMatchConfig {
                 match_algorithm,
                 subgraph_isomorphism_algorithm,
                 relevant_cycle_algorithm,
@@ -197,8 +197,8 @@ mod tests {
     #[rstest]
     #[case::graph_vf2_rdkit(
         SubstructureSearchConfig::default(),
-        AstSubstructureMatchConfig {
-            match_algorithm: AstSubstructureMatchAlgorithm::GraphAndOverlays,
+        GraphIrSubstructureMatchConfig {
+            match_algorithm: GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
@@ -209,15 +209,15 @@ mod tests {
             SubgraphIsomorphismAlgorithm::Ullmann(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
         ),
-        AstSubstructureMatchConfig {
-            match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+        GraphIrSubstructureMatchConfig {
+            match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
     )]
     fn test_substructure_search_config_to_rust(
         #[case] config: SubstructureSearchConfig,
-        #[case] expected: AstSubstructureMatchConfig,
+        #[case] expected: GraphIrSubstructureMatchConfig,
     ) {
         assert_eq!(config.to_rust(), expected);
     }

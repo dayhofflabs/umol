@@ -2,14 +2,16 @@
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::{create_exception, PyErr};
-use umol_ast::ast::{Contradiction as AstContradiction, TransactionError as AstTransactionError};
-use umol_ast::dsl::{MetadataError as AstMetadataError, ParseError as AstParseError};
 use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
 use umol_graph::ingest::{
     MoleculeInterpretationError as GraphMoleculeInterpretationError,
     ReactionInterpretationError as GraphReactionInterpretationError,
     ReactionSmilesInputError as GraphReactionSmilesInputError,
     SmilesInputError as GraphSmilesInputError,
+};
+use umol_graph_ir::dsl::{MetadataError as GraphIrMetadataError, ParseError as GraphIrParseError};
+use umol_graph_ir::ir::{
+    Contradiction as GraphIrContradiction, TransactionError as GraphIrTransactionError,
 };
 
 create_exception!(
@@ -61,23 +63,23 @@ create_exception!(
     "Raised when transactional molecule editing or rollback fails."
 );
 
-/// Map an `umol_ast` parse error onto the catchable `umol.ParseError`.
-pub(crate) fn parse_error(error: AstParseError) -> PyErr {
+/// Map an `umol_graph_ir` parse error onto the catchable `umol.ParseError`.
+pub(crate) fn parse_error(error: GraphIrParseError) -> PyErr {
     ParseError::new_err(error.to_string())
 }
 
-/// Map an `umol_ast` contradiction onto the catchable `umol.ContradictionError`.
-pub(crate) fn contradiction_error(error: AstContradiction) -> PyErr {
+/// Map an `umol_graph_ir` contradiction onto the catchable `umol.ContradictionError`.
+pub(crate) fn contradiction_error(error: GraphIrContradiction) -> PyErr {
     ContradictionError::new_err(error.to_string())
 }
 
-/// Map an `umol_ast` metadata error onto the catchable `umol.MetadataError`.
-pub(crate) fn metadata_error(error: AstMetadataError) -> PyErr {
+/// Map an `umol_graph_ir` metadata error onto the catchable `umol.MetadataError`.
+pub(crate) fn metadata_error(error: GraphIrMetadataError) -> PyErr {
     MetadataError::new_err(error.to_string())
 }
 
-/// Map an `umol_ast` transaction failure onto the catchable `umol.TransactionError`.
-pub(crate) fn transaction_error(error: AstTransactionError) -> PyErr {
+/// Map an `umol_graph_ir` transaction failure onto the catchable `umol.TransactionError`.
+pub(crate) fn transaction_error(error: GraphIrTransactionError) -> PyErr {
     TransactionError::new_err(error.to_string())
 }
 
@@ -158,8 +160,6 @@ pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
 mod tests {
     use pyo3::prelude::*;
     use rstest::rstest;
-    use umol_ast::ast::{AtomId, BondId, Entity, EntityKind};
-    use umol_ast::dsl::MetadataError as AstMetadataError;
     use umol_graph::ingest::ingest_smiles;
     use umol_graph::ops::aromaticity::{
         AromaticityContradiction as GraphAromaticityContradiction,
@@ -169,6 +169,8 @@ mod tests {
         ResolveUnderdetermined as GraphResolveUnderdetermined,
         ResolverContradiction as GraphResolverContradiction, ResolverError as GraphResolverError,
     };
+    use umol_graph_ir::dsl::MetadataError as GraphIrMetadataError;
+    use umol_graph_ir::ir::{AtomId, BondId, Entity, EntityKind};
     use umol_io::smiles::ParseError as SmilesParseError;
     use umol_io::table_ir::raise::RaiseError;
 
@@ -177,7 +179,7 @@ mod tests {
     #[rstest]
     fn test_parse_error() {
         Python::attach(|py| {
-            let error = parse_error(AstParseError::ExpectedElement);
+            let error = parse_error(GraphIrParseError::ExpectedElement);
             assert!(error.is_instance_of::<ParseError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
@@ -189,7 +191,7 @@ mod tests {
     #[rstest]
     fn test_contradiction_error() {
         Python::attach(|py| {
-            let error = contradiction_error(AstContradiction);
+            let error = contradiction_error(GraphIrContradiction);
             assert!(error.is_instance_of::<ContradictionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
@@ -200,22 +202,22 @@ mod tests {
 
     #[rstest]
     #[case::duplicate_keyword(
-        AstMetadataError::DuplicateKeyword("site".to_string()),
+        GraphIrMetadataError::DuplicateKeyword("site".to_string()),
         "duplicate keyword: site",
     )]
     #[case::duplicate_atom_alias(
-        AstMetadataError::DuplicateAtomAlias("carbon".to_string()),
+        GraphIrMetadataError::DuplicateAtomAlias("carbon".to_string()),
         "atom DSL already has alias: carbon",
     )]
     #[case::entity_out_of_range(
-        AstMetadataError::EntityOutOfRange(Entity::Atom(AtomId(2))),
+        GraphIrMetadataError::EntityOutOfRange(Entity::Atom(AtomId(2))),
         "metadata entity is out of range: atom 2"
     )]
     #[case::entity_not_added(
-        AstMetadataError::EntityNotAdded(Entity::Bond(BondId(3))),
+        GraphIrMetadataError::EntityNotAdded(Entity::Bond(BondId(3))),
         "metadata entity is not introduced by an add delta: bond 3"
     )]
-    fn test_metadata_error(#[case] input: AstMetadataError, #[case] expected_message: &str) {
+    fn test_metadata_error(#[case] input: GraphIrMetadataError, #[case] expected_message: &str) {
         Python::attach(|py| {
             let error = metadata_error(input);
             assert!(error.is_instance_of::<MetadataError>(py));
@@ -228,7 +230,7 @@ mod tests {
 
     #[rstest]
     #[case::handle_out_of_range(
-        AstTransactionError::HandleOutOfRange {
+        GraphIrTransactionError::HandleOutOfRange {
             kind: EntityKind::Atom,
             index: 3,
             count: 2,
@@ -236,43 +238,48 @@ mod tests {
         "atom handle 3 is out of range for 2 entries",
     )]
     #[case::handle_removed(
-        AstTransactionError::HandleRemoved {
+        GraphIrTransactionError::HandleRemoved {
             kind: EntityKind::Bond,
             index: 1,
         },
         "bond handle 1 refers to a removed entity",
     )]
     #[case::duplicate_removal(
-        AstTransactionError::DuplicateRemoval {
+        GraphIrTransactionError::DuplicateRemoval {
             kind: EntityKind::StereoAtom,
         },
         "duplicate stereo atom in removal batch",
     )]
     #[case::old_state_mismatch(
-        AstTransactionError::OldStateMismatch,
+        GraphIrTransactionError::OldStateMismatch,
         "precondition failed: old state does not match current"
     )]
     #[case::missing_entry(
-        AstTransactionError::MissingEntry,
+        GraphIrTransactionError::MissingEntry,
         "missing constraint entry on remove"
     )]
     #[case::malformed_edit(
-        AstTransactionError::MalformedEdit("AddDativeBond requires at least one participant atom",),
+        GraphIrTransactionError::MalformedEdit(
+            "AddDativeBond requires at least one participant atom",
+        ),
         "malformed edit: AddDativeBond requires at least one participant atom"
     )]
     #[case::rollback_failed(
-        AstTransactionError::RollbackFailed {
-            apply: Box::new(AstTransactionError::MissingEntry),
-            rollback: Box::new(AstTransactionError::RollbackStateMismatch),
+        GraphIrTransactionError::RollbackFailed {
+            apply: Box::new(GraphIrTransactionError::MissingEntry),
+            rollback: Box::new(GraphIrTransactionError::RollbackStateMismatch),
         },
         "rollback failed after apply error: apply=missing constraint entry on remove; \
          rollback=rollback journal does not match editor state",
     )]
     #[case::rollback_state_mismatch(
-        AstTransactionError::RollbackStateMismatch,
+        GraphIrTransactionError::RollbackStateMismatch,
         "rollback journal does not match editor state"
     )]
-    fn test_transaction_error(#[case] input: AstTransactionError, #[case] expected_message: &str) {
+    fn test_transaction_error(
+        #[case] input: GraphIrTransactionError,
+        #[case] expected_message: &str,
+    ) {
         Python::attach(|py| {
             let error = transaction_error(input);
             assert!(error.is_instance_of::<TransactionError>(py));

@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use umol_ast::ast::{
+use umol_graph_ir::ir::{
     AromaticSystemAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
     AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
     BooleanAst, Edits, MoleculeAst,
@@ -310,15 +310,15 @@ impl AromaticityResolver {
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{
-        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, RingConfig, UnpairedElectronsAst,
-        ValueAst,
-    };
-    use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_graph_core::{
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
+    use umol_graph_ir::ir::{
+        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, RingConfig, UnpairedElectronsAst,
+        ValueAst,
+    };
+    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};

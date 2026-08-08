@@ -8,8 +8,8 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::MoleculeCorrespondence;
 use umol_graph_core::Correspondence;
+use umol_graph_ir::ir::MoleculeCorrespondence;
 
 use crate::strategies::*;
 

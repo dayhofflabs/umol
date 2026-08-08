@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::{RingConfig, RingModel, RingSetKind, ValueAst};
+use umol_graph_ir::ir::{RingConfig, RingModel, RingSetKind, ValueAst};
 
 use crate::strategies::*;
 

@@ -4,12 +4,13 @@ use std::str::FromStr;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use umol_ast::ast::{
-    AtomId as AstAtomId, BondId as AstBondId, Canonicalize, Constraint as AstConstraint,
-    ConstraintSpan as AstConstraintSpan, EntitySpan as AstEntitySpan, FromAst, IntoAst,
-    ReactionSpanAst as AstReactionSpanAst, ReactionSpanEntries as AstReactionSpanEntries,
+use umol_graph_ir::dsl::ReactionSpanDsl as GraphIrReactionSpanDsl;
+use umol_graph_ir::ir::{
+    AtomId as GraphIrAtomId, BondId as GraphIrBondId, Canonicalize,
+    Constraint as GraphIrConstraint, ConstraintSpan as GraphIrConstraintSpan,
+    EntitySpan as GraphIrEntitySpan, FromAst, IntoAst, ReactionSpanAst as GraphIrReactionSpanAst,
+    ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
-use umol_ast::dsl::ReactionSpanDsl as AstReactionSpanDsl;
 
 use crate::aromatic::AromaticSystemAst;
 use crate::atom::AtomAst;
@@ -28,25 +29,25 @@ use crate::stereo::{StereoAtomAst, StereoBondAst, StereoLigand};
 
 type SpanPair<T> = (Option<Py<T>>, Option<Py<T>>);
 
-fn entity_span<T: Canonicalize>(lhs: Option<T>, rhs: Option<T>) -> PyResult<AstEntitySpan<T>> {
-    AstEntitySpan::superimpose(lhs, rhs)
+fn entity_span<T: Canonicalize>(lhs: Option<T>, rhs: Option<T>) -> PyResult<GraphIrEntitySpan<T>> {
+    GraphIrEntitySpan::superimpose(lhs, rhs)
         .ok_or_else(|| PyValueError::new_err("reaction span entry is absent from both sides"))
 }
 
 fn constraint_spans(
-    lhs: Option<AstConstraint>,
-    rhs: Option<AstConstraint>,
-) -> PyResult<Vec<AstConstraintSpan>> {
+    lhs: Option<GraphIrConstraint>,
+    rhs: Option<GraphIrConstraint>,
+) -> PyResult<Vec<GraphIrConstraintSpan>> {
     match (lhs, rhs) {
         (Some(lhs), Some(rhs)) if lhs.canonical_eq(&rhs) => {
-            Ok(vec![AstConstraintSpan::Unchanged(lhs)])
+            Ok(vec![GraphIrConstraintSpan::Unchanged(lhs)])
         }
         (Some(lhs), Some(rhs)) => Ok(vec![
-            AstConstraintSpan::Removed(lhs),
-            AstConstraintSpan::Added(rhs),
+            GraphIrConstraintSpan::Removed(lhs),
+            GraphIrConstraintSpan::Added(rhs),
         ]),
-        (Some(lhs), None) => Ok(vec![AstConstraintSpan::Removed(lhs)]),
-        (None, Some(rhs)) => Ok(vec![AstConstraintSpan::Added(rhs)]),
+        (Some(lhs), None) => Ok(vec![GraphIrConstraintSpan::Removed(lhs)]),
+        (None, Some(rhs)) => Ok(vec![GraphIrConstraintSpan::Added(rhs)]),
         (None, None) => Err(PyValueError::new_err(
             "reaction span entry is absent from both sides",
         )),
@@ -56,7 +57,7 @@ fn constraint_spans(
 /// A superimposed reaction span with explicit before/after entity states.
 #[pyclass(eq, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionSpanAst(AstReactionSpanAst);
+pub struct ReactionSpanAst(GraphIrReactionSpanAst);
 
 #[pymethods]
 impl ReactionSpanAst {
@@ -65,7 +66,7 @@ impl ReactionSpanAst {
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let span = AstReactionSpanDsl::from_str(text)
+        let span = GraphIrReactionSpanDsl::from_str(text)
             .map_err(parse_error)?
             .into_ast(&defaults);
         Ok(Self::from_rust(span))
@@ -80,7 +81,7 @@ impl ReactionSpanAst {
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<(Self, MoleculeMetadata)> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let dsl = AstReactionSpanDsl::from_str(text).map_err(parse_error)?;
+        let dsl = GraphIrReactionSpanDsl::from_str(text).map_err(parse_error)?;
         let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
         Ok((Self::from_rust(dsl.into_ast(&defaults)), metadata))
     }
@@ -90,7 +91,7 @@ impl ReactionSpanAst {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        AstReactionSpanDsl::from_ast(&self.0, &defaults).to_string()
+        GraphIrReactionSpanDsl::from_ast(&self.0, &defaults).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -104,10 +105,10 @@ impl ReactionSpanAst {
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let lowered = AstReactionSpanDsl::from_ast(&self.0, &defaults)
+        let lowered = GraphIrReactionSpanDsl::from_ast(&self.0, &defaults)
             .into_parts()
             .0;
-        AstReactionSpanDsl::new(lowered, metadata.to_rust())
+        GraphIrReactionSpanDsl::new(lowered, metadata.to_rust())
             .map(|dsl| dsl.to_string())
             .map_err(metadata_error)
     }
@@ -149,8 +150,8 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(first, second, (lhs, rhs))| {
                 Ok((
-                    AstAtomId(first),
-                    AstAtomId(second),
+                    GraphIrAtomId(first),
+                    GraphIrAtomId(second),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
                         rhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -162,8 +163,8 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(donors, acceptor, (lhs, rhs))| {
                 Ok((
-                    donors.into_iter().map(AstAtomId).collect(),
-                    AstAtomId(acceptor),
+                    donors.into_iter().map(GraphIrAtomId).collect(),
+                    GraphIrAtomId(acceptor),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
                         rhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -175,7 +176,7 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(atoms, (lhs, rhs))| {
                 Ok((
-                    atoms.into_iter().map(AstAtomId).collect(),
+                    atoms.into_iter().map(GraphIrAtomId).collect(),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
                         rhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -187,7 +188,7 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(atoms, (lhs, rhs))| {
                 Ok((
-                    atoms.into_iter().map(AstAtomId).collect(),
+                    atoms.into_iter().map(GraphIrAtomId).collect(),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
                         rhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -199,8 +200,8 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|([first, second], (lhs, rhs))| {
                 Ok((
-                    AstAtomId(first),
-                    AstAtomId(second),
+                    GraphIrAtomId(first),
+                    GraphIrAtomId(second),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
                         rhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -212,7 +213,7 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(site, ligands, (lhs, rhs))| {
                 Ok((
-                    AstAtomId(site),
+                    GraphIrAtomId(site),
                     ligands.into_iter().map(StereoLigand::to_rust).collect(),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -225,7 +226,7 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(site, ligands, (lhs, rhs))| {
                 Ok((
-                    AstBondId(site),
+                    GraphIrBondId(site),
                     ligands.into_iter().map(StereoLigand::to_rust).collect(),
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().inner().clone()),
@@ -242,7 +243,7 @@ impl ReactionSpanAst {
             )?);
         }
 
-        AstReactionSpanAst::try_from_entries(AstReactionSpanEntries {
+        GraphIrReactionSpanAst::try_from_entries(GraphIrReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -279,12 +280,12 @@ impl ReactionSpanAst {
 }
 
 impl ReactionSpanAst {
-    pub(crate) fn from_rust(span: AstReactionSpanAst) -> Self {
+    pub(crate) fn from_rust(span: GraphIrReactionSpanAst) -> Self {
         Self(span)
     }
 
     #[cfg(test)]
-    pub(crate) fn to_rust(&self) -> AstReactionSpanAst {
+    pub(crate) fn to_rust(&self) -> GraphIrReactionSpanAst {
         self.0.clone()
     }
 }
@@ -293,21 +294,25 @@ impl ReactionSpanAst {
 mod tests {
     use pyo3::exceptions::PyValueError;
     use rstest::rstest;
-    use umol_ast::ast::{
-        AromaticSystemAst as AstAromaticSystemAst, AtomAst as AstAtomAst, BondAst as AstBondAst,
-        Constraint as AstConstraint, DativeBondAst as AstDativeBondAst, Entity as AstEntity,
-        MoleculeAst as AstMoleculeAst, MoleculeConstraint as AstMoleculeConstraint,
-        MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeEntries as AstMoleculeEntries,
-        MulticenterBondAst as AstMulticenterBondAst, NoncovalentBondAst as AstNoncovalentBondAst,
-        NoncovalentBondKind as AstNoncovalentBondKind, ReactionAst as AstReactionAst,
-        StereoAtomAst as AstStereoAtomAst, StereoBondAst as AstStereoBondAst,
-        StereoCoset as AstStereoCoset, StereoKind as AstStereoKind,
-        StereoLigand as AstStereoLigand, StereoLigandKind as AstStereoLigandKind,
-        ValueAst as AstValueAst,
-    };
-    use umol_ast::dsl::{AtomDsl as AstAtomDsl, MoleculeMetadata as AstMoleculeMetadata};
     use umol_chem::element::Element as ChemElement;
     use umol_graph_core::Correspondence as GraphCoreCorrespondence;
+    use umol_graph_ir::dsl::{
+        AtomDsl as GraphIrAtomDsl, MoleculeMetadata as GraphIrMoleculeMetadata,
+    };
+    use umol_graph_ir::ir::{
+        AromaticSystemAst as GraphIrAromaticSystemAst, AtomAst as GraphIrAtomAst,
+        BondAst as GraphIrBondAst, Constraint as GraphIrConstraint,
+        DativeBondAst as GraphIrDativeBondAst, Entity as GraphIrEntity,
+        MoleculeAst as GraphIrMoleculeAst, MoleculeConstraint as GraphIrMoleculeConstraint,
+        MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
+        MoleculeEntries as GraphIrMoleculeEntries, MulticenterBondAst as GraphIrMulticenterBondAst,
+        NoncovalentBondAst as GraphIrNoncovalentBondAst,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind, ReactionAst as GraphIrReactionAst,
+        StereoAtomAst as GraphIrStereoAtomAst, StereoBondAst as GraphIrStereoBondAst,
+        StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
+        StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
+        ValueAst as GraphIrValueAst,
+    };
 
     use super::*;
     use crate::convert::into_py_variant;
@@ -317,10 +322,10 @@ mod tests {
     #[case::required(
         r#"{:atoms ["C" {:add "O"}]}"#,
         None,
-        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![
-                AstEntitySpan::Unchanged(AstAtomAst::from_element(ChemElement::C)),
-                AstEntitySpan::Added(AstAtomAst::from_element(ChemElement::O)),
+                GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(ChemElement::C)),
+                GraphIrEntitySpan::Added(GraphIrAtomAst::from_element(ChemElement::O)),
             ],
             ..Default::default()
         })
@@ -328,8 +333,8 @@ mod tests {
     #[case::ground(
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
         Some(MoleculeDefaults::ground()),
-        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
-            atoms: vec![AstEntitySpan::Unchanged(
+        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+            atoms: vec![GraphIrEntitySpan::Unchanged(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
             )],
             ..Default::default()
@@ -338,7 +343,7 @@ mod tests {
     fn test_reaction_span_ast_parse(
         #[case] text: &str,
         #[case] defaults: Option<MoleculeDefaults>,
-        #[case] expected: AstReactionSpanAst,
+        #[case] expected: GraphIrReactionSpanAst,
     ) {
         assert_eq!(
             ReactionSpanAst::parse(text, defaults).unwrap().to_rust(),
@@ -370,29 +375,31 @@ mod tests {
 
         assert_eq!(
             span.to_rust(),
-            AstReactionSpanAst::from_entries(AstReactionSpanEntries {
-                atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+            GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+                atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(
                     ChemElement::C,
                 ))],
                 ..Default::default()
             })
         );
         assert_eq!(
-            metadata.keyword(AstEntity::Atom(AstAtomId(0))),
+            metadata.keyword(GraphIrEntity::Atom(GraphIrAtomId(0))),
             Some("carbon")
         );
         assert_eq!(
             metadata.atom_alias("x"),
-            Some(&AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+            Some(&GraphIrAtomDsl(GraphIrAtomAst::from_element(
+                ChemElement::C
+            )))
         );
     }
 
     #[rstest]
     #[case::required(
-        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![
-                AstEntitySpan::Unchanged(AstAtomAst::from_element(ChemElement::C)),
-                AstEntitySpan::Added(AstAtomAst::from_element(ChemElement::O)),
+                GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(ChemElement::C)),
+                GraphIrEntitySpan::Added(GraphIrAtomAst::from_element(ChemElement::O)),
             ],
             ..Default::default()
         }),
@@ -400,8 +407,8 @@ mod tests {
         r#"{:atoms ["C" {:add "O"}]}"#
     )]
     #[case::ground(
-        AstReactionSpanAst::from_entries(AstReactionSpanEntries {
-            atoms: vec![AstEntitySpan::Unchanged(
+        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+            atoms: vec![GraphIrEntitySpan::Unchanged(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
             )],
             ..Default::default()
@@ -410,7 +417,7 @@ mod tests {
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#
     )]
     fn test_reaction_span_ast_render(
-        #[case] span: AstReactionSpanAst,
+        #[case] span: GraphIrReactionSpanAst,
         #[case] defaults: Option<MoleculeDefaults>,
         #[case] expected: &str,
     ) {
@@ -419,19 +426,23 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_render_with_metadata() {
-        let span =
-            ReactionSpanAst::from_rust(AstReactionSpanAst::from_entries(AstReactionSpanEntries {
-                atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+        let span = ReactionSpanAst::from_rust(GraphIrReactionSpanAst::from_entries(
+            GraphIrReactionSpanEntries {
+                atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(
                     ChemElement::C,
                 ))],
                 ..Default::default()
-            }));
-        let mut metadata = AstMoleculeMetadata::new();
+            },
+        ));
+        let mut metadata = GraphIrMoleculeMetadata::new();
         metadata
-            .set_keyword(AstEntity::Atom(AstAtomId(0)), "carbon")
+            .set_keyword(GraphIrEntity::Atom(GraphIrAtomId(0)), "carbon")
             .unwrap();
         metadata
-            .add_atom_alias("x", AstAtomDsl(AstAtomAst::from_element(ChemElement::C)))
+            .add_atom_alias(
+                "x",
+                GraphIrAtomDsl(GraphIrAtomAst::from_element(ChemElement::C)),
+            )
             .unwrap();
 
         assert_eq!(
@@ -444,17 +455,17 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_render_with_metadata_error() {
         Python::attach(|py| {
-            let span = ReactionSpanAst::from_rust(AstReactionSpanAst::from_entries(
-                AstReactionSpanEntries {
-                    atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+            let span = ReactionSpanAst::from_rust(GraphIrReactionSpanAst::from_entries(
+                GraphIrReactionSpanEntries {
+                    atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(
                         ChemElement::C,
                     ))],
                     ..Default::default()
                 },
             ));
-            let mut metadata = AstMoleculeMetadata::new();
+            let mut metadata = GraphIrMoleculeMetadata::new();
             metadata
-                .set_keyword(AstEntity::Atom(AstAtomId(1)), "outside")
+                .set_keyword(GraphIrEntity::Atom(GraphIrAtomId(1)), "outside")
                 .unwrap();
 
             let error = span
@@ -490,13 +501,14 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_str() {
-        let span =
-            ReactionSpanAst::from_rust(AstReactionSpanAst::from_entries(AstReactionSpanEntries {
-                atoms: vec![AstEntitySpan::Unchanged(AstAtomAst::from_element(
+        let span = ReactionSpanAst::from_rust(GraphIrReactionSpanAst::from_entries(
+            GraphIrReactionSpanEntries {
+                atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(
                     ChemElement::C,
                 ))],
                 ..Default::default()
-            }));
+            },
+        ));
 
         assert_eq!(span.__str__(), span.render(None));
     }
@@ -505,43 +517,49 @@ mod tests {
     fn test_reaction_span_ast_from_entries() {
         Python::attach(|py| {
             let canonical_lhs =
-                AstAtomAst::from_element(ChemElement::C).with_charge(AstValueAst::Lit(1));
-            let canonical_rhs =
-                AstAtomAst::from_element(ChemElement::C).with_charge(AstValueAst::lit_set([1_i64]));
-            let modified_lhs = AstAtomAst::from_element(ChemElement::C);
-            let modified_rhs = AstAtomAst::from_element(ChemElement::N);
-            let removed_atom = AstAtomAst::from_element(ChemElement::O);
-            let added_atom = AstAtomAst::from_element(ChemElement::F);
-            let unchanged_bond = AstBondAst::from_order(1);
-            let dative_lhs = AstDativeBondAst::from_order(1);
-            let dative_rhs = AstDativeBondAst::from_order(2);
-            let added_aromatic = AstAromaticSystemAst::from_electrons(vec![1, 1]);
-            let removed_multicenter = AstMulticenterBondAst::from_electrons(vec![1, 1]);
+                GraphIrAtomAst::from_element(ChemElement::C).with_charge(GraphIrValueAst::Lit(1));
+            let canonical_rhs = GraphIrAtomAst::from_element(ChemElement::C)
+                .with_charge(GraphIrValueAst::lit_set([1_i64]));
+            let modified_lhs = GraphIrAtomAst::from_element(ChemElement::C);
+            let modified_rhs = GraphIrAtomAst::from_element(ChemElement::N);
+            let removed_atom = GraphIrAtomAst::from_element(ChemElement::O);
+            let added_atom = GraphIrAtomAst::from_element(ChemElement::F);
+            let unchanged_bond = GraphIrBondAst::from_order(1);
+            let dative_lhs = GraphIrDativeBondAst::from_order(1);
+            let dative_rhs = GraphIrDativeBondAst::from_order(2);
+            let added_aromatic = GraphIrAromaticSystemAst::from_electrons(vec![1, 1]);
+            let removed_multicenter = GraphIrMulticenterBondAst::from_electrons(vec![1, 1]);
             let unchanged_noncovalent =
-                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond);
-            let stereo_atom_lhs =
-                AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(1));
-            let stereo_atom_rhs =
-                AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(2));
+                GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond);
+            let stereo_atom_lhs = GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(1),
+            );
+            let stereo_atom_rhs = GraphIrStereoAtomAst::new(
+                GraphIrStereoKind::Tetrahedral,
+                GraphIrStereoCoset::Lit(2),
+            );
             let added_stereo_bond =
-                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(1));
-            let ligand = AstStereoLigand::new(AstAtomId(1), AstStereoLigandKind::Atom);
+                GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1));
+            let ligand = GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom);
             let unchanged_constraint =
-                AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
             let modified_constraint_lhs =
-                AstConstraint::Molecule(AstMoleculeConstraint::Connected {
-                    atoms: Some(vec![AstAtomId(0)]),
+                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
+                    atoms: Some(vec![GraphIrAtomId(0)]),
                 });
             let modified_constraint_rhs =
-                AstConstraint::Molecule(AstMoleculeConstraint::Connected {
-                    atoms: Some(vec![AstAtomId(1)]),
+                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
+                    atoms: Some(vec![GraphIrAtomId(1)]),
                 });
-            let removed_constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected {
-                atoms: Some(vec![AstAtomId(2)]),
-            });
-            let added_constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected {
-                atoms: Some(vec![AstAtomId(3)]),
-            });
+            let removed_constraint =
+                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
+                    atoms: Some(vec![GraphIrAtomId(2)]),
+                });
+            let added_constraint =
+                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
+                    atoms: Some(vec![GraphIrAtomId(3)]),
+                });
 
             let span = ReactionSpanAst::from_entries(
                 py,
@@ -705,61 +723,61 @@ mod tests {
 
             assert_eq!(
                 span.to_rust(),
-                AstReactionSpanAst::from_entries(AstReactionSpanEntries {
+                GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
                     atoms: vec![
-                        AstEntitySpan::Unchanged(canonical_lhs),
-                        AstEntitySpan::Modified {
+                        GraphIrEntitySpan::Unchanged(canonical_lhs),
+                        GraphIrEntitySpan::Modified {
                             lhs: modified_lhs,
                             rhs: modified_rhs,
                         },
-                        AstEntitySpan::Removed(removed_atom),
-                        AstEntitySpan::Added(added_atom),
+                        GraphIrEntitySpan::Removed(removed_atom),
+                        GraphIrEntitySpan::Added(added_atom),
                     ],
                     bonds: vec![(
-                        AstAtomId(0),
-                        AstAtomId(1),
-                        AstEntitySpan::Unchanged(unchanged_bond),
+                        GraphIrAtomId(0),
+                        GraphIrAtomId(1),
+                        GraphIrEntitySpan::Unchanged(unchanged_bond),
                     )],
                     dative: vec![(
-                        vec![AstAtomId(1)],
-                        AstAtomId(0),
-                        AstEntitySpan::Modified {
+                        vec![GraphIrAtomId(1)],
+                        GraphIrAtomId(0),
+                        GraphIrEntitySpan::Modified {
                             lhs: dative_lhs,
                             rhs: dative_rhs,
                         },
                     )],
                     aromatic: vec![(
-                        vec![AstAtomId(0), AstAtomId(1)],
-                        AstEntitySpan::Added(added_aromatic),
+                        vec![GraphIrAtomId(0), GraphIrAtomId(1)],
+                        GraphIrEntitySpan::Added(added_aromatic),
                     )],
                     multicenter: vec![(
-                        vec![AstAtomId(0), AstAtomId(1)],
-                        AstEntitySpan::Removed(removed_multicenter),
+                        vec![GraphIrAtomId(0), GraphIrAtomId(1)],
+                        GraphIrEntitySpan::Removed(removed_multicenter),
                     )],
                     noncovalent: vec![(
-                        AstAtomId(0),
-                        AstAtomId(1),
-                        AstEntitySpan::Unchanged(unchanged_noncovalent),
+                        GraphIrAtomId(0),
+                        GraphIrAtomId(1),
+                        GraphIrEntitySpan::Unchanged(unchanged_noncovalent),
                     )],
                     stereo_atoms: vec![(
-                        AstAtomId(0),
+                        GraphIrAtomId(0),
                         vec![ligand],
-                        AstEntitySpan::Modified {
+                        GraphIrEntitySpan::Modified {
                             lhs: stereo_atom_lhs,
                             rhs: stereo_atom_rhs,
                         },
                     )],
                     stereo_bonds: vec![(
-                        AstBondId(0),
+                        GraphIrBondId(0),
                         vec![ligand],
-                        AstEntitySpan::Added(added_stereo_bond),
+                        GraphIrEntitySpan::Added(added_stereo_bond),
                     )],
                     constraints: vec![
-                        AstConstraintSpan::Unchanged(unchanged_constraint),
-                        AstConstraintSpan::Removed(modified_constraint_lhs),
-                        AstConstraintSpan::Added(modified_constraint_rhs),
-                        AstConstraintSpan::Removed(removed_constraint),
-                        AstConstraintSpan::Added(added_constraint),
+                        GraphIrConstraintSpan::Unchanged(unchanged_constraint),
+                        GraphIrConstraintSpan::Removed(modified_constraint_lhs),
+                        GraphIrConstraintSpan::Added(modified_constraint_rhs),
+                        GraphIrConstraintSpan::Removed(removed_constraint),
+                        GraphIrConstraintSpan::Added(added_constraint),
                     ],
                 })
             );
@@ -805,14 +823,14 @@ mod tests {
                 first_on_lhs.then(|| {
                     Py::new(
                         py,
-                        AtomAst::from_inner(AstAtomAst::from_element(ChemElement::C)),
+                        AtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::C)),
                     )
                     .unwrap()
                 }),
                 first_on_rhs.then(|| {
                     Py::new(
                         py,
-                        AtomAst::from_inner(AstAtomAst::from_element(ChemElement::C)),
+                        AtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::C)),
                     )
                     .unwrap()
                 }),
@@ -822,14 +840,14 @@ mod tests {
                     Some(
                         Py::new(
                             py,
-                            AtomAst::from_inner(AstAtomAst::from_element(ChemElement::O)),
+                            AtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::O)),
                         )
                         .unwrap(),
                     ),
                     Some(
                         Py::new(
                             py,
-                            AtomAst::from_inner(AstAtomAst::from_element(ChemElement::O)),
+                            AtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::O)),
                         )
                         .unwrap(),
                     ),
@@ -842,8 +860,14 @@ mod tests {
                     0,
                     1,
                     (
-                        Some(Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap()),
-                        Some(Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap()),
+                        Some(
+                            Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1)))
+                                .unwrap(),
+                        ),
+                        Some(
+                            Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1)))
+                                .unwrap(),
+                        ),
                     ),
                 )],
                 Vec::new(),
@@ -874,12 +898,16 @@ mod tests {
 
         assert_eq!(
             span.lhs().inner(),
-            &AstMoleculeAst::from_entries(AstMoleculeEntries {
+            &GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    AstAtomAst::from_element(ChemElement::C),
-                    AstAtomAst::from_element(ChemElement::O),
+                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomAst::from_element(ChemElement::O),
                 ],
-                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                bonds: vec![(
+                    GraphIrAtomId(0),
+                    GraphIrAtomId(1),
+                    GraphIrBondAst::from_order(1)
+                )],
                 ..Default::default()
             })
         );
@@ -895,12 +923,16 @@ mod tests {
 
         assert_eq!(
             span.rhs().inner(),
-            &AstMoleculeAst::from_entries(AstMoleculeEntries {
+            &GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    AstAtomAst::from_element(ChemElement::C),
-                    AstAtomAst::from_element(ChemElement::N),
+                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomAst::from_element(ChemElement::N),
                 ],
-                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
+                bonds: vec![(
+                    GraphIrAtomId(0),
+                    GraphIrAtomId(1),
+                    GraphIrBondAst::from_order(2)
+                )],
                 ..Default::default()
             })
         );
@@ -913,8 +945,8 @@ mod tests {
                 .parse()
                 .unwrap(),
         );
-        let expected = AstMoleculeCorrespondence::new(
-            GraphCoreCorrespondence::new(vec![(AstAtomId(0), AstAtomId(0))], 2, 2)
+        let expected = GraphIrMoleculeCorrespondence::new(
+            GraphCoreCorrespondence::new(vec![(GraphIrAtomId(0), GraphIrAtomId(0))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             GraphCoreCorrespondence::new(Vec::new(), 1, 1)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -938,11 +970,11 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_to_reaction() {
         Python::attach(|py| {
-            let span: AstReactionSpanAst =
+            let span: GraphIrReactionSpanAst =
                 r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
                     .parse()
                     .unwrap();
-            let expected: AstReactionAst = span.to_reaction();
+            let expected: GraphIrReactionAst = span.to_reaction();
 
             assert_eq!(
                 ReactionSpanAst::from_rust(span)

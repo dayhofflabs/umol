@@ -24,13 +24,13 @@ pub use stereo::{
     StereoValidatorError,
 };
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_core::{
+    ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
+use umol_graph_ir::ir::{
     AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidateConfig,
     ConstraintValidator, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
-};
-use umol_graph_core::{
-    ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_utils::solution::Solution;
 pub use valence::{
@@ -258,7 +258,13 @@ fn verdict(any_undetermined: bool) -> Solution<(), ValidatorContradiction> {
 mod tests {
     use proptest::prelude::*;
     use rstest::rstest;
-    use umol_ast::ast::{
+    use umol_chem::element::Element;
+    use umol_chem::error::SpinStateError;
+    use umol_chem::spin::SpinMultiplicity;
+    use umol_graph_core::{
+        AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
+    };
+    use umol_graph_ir::ir::{
         AtomAst, AtomConstraintAst, AtomId, Constraint, DativeBondId, ElementAst, Entity,
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
         MoleculeConstraintContradiction, MoleculeEntries, RelationalConstraint,
@@ -266,13 +272,7 @@ mod tests {
         StereoAtomConstraintAst, StereoAtomId, StereoBondConstraintAst, StereoBondId, StereoKind,
         StereogenicityAst, UnpairedElectronsAst, ValueAst,
     };
-    use umol_ast::{mol_dsl, mol_dsl_ground};
-    use umol_chem::element::Element;
-    use umol_chem::error::SpinStateError;
-    use umol_chem::spin::SpinMultiplicity;
-    use umol_graph_core::{
-        AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
-    };
+    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::aromaticity::AromaticityInconsistency;

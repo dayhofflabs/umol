@@ -14,15 +14,15 @@ use std::fs::read_to_string;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use umol_ast::ast::{
-    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
-};
 use umol_graph::fingerprint::{
     featurize_reaction, EcfpFeaturizer, Featurizer, MorganFeaturizer, PatternFingerprinter,
     ReactionCombinator, SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
+use umol_graph_ir::ir::{
+    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
+};
 use walkdir::WalkDir;
 
 /// Circular fingerprint radius (ECFP4 / Morgan radius 2).

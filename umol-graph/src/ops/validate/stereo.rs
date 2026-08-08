@@ -1,13 +1,13 @@
 //! Stereo validator.
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_core::AutomorphismAlgorithm;
+use umol_graph_ir::ir::{
     AsLit, AtomId, BondId, BooleanAst, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig,
     Lattice, LigandSymmetryAst, MoleculeAst, StereoAtomId, StereoBondId, StereoKind,
     StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityAst, Topicity, TopicityAst,
     TopicityRelationAst,
 };
-use umol_graph_core::AutomorphismAlgorithm;
 use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
 
@@ -354,12 +354,12 @@ impl StereoConformanceValidator {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
+    use umol_graph_ir::ir::{
         LigandPermutation, OrientedLigandPermutation, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereoConfigurationAst, StereoKind, StereoLigandPosition,
         StereogenicityAst,
     };
-    use umol_ast::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_ground;
     use umol_perm::{Orientation, Permutation};
 
     use super::*;

@@ -16,13 +16,13 @@
 use std::collections::HashSet;
 
 use thiserror::Error;
-use umol_ast::ast::{
+use umol_graph_core::{
+    BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NonBipartiteGraphError,
+};
+use umol_graph_ir::ir::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
     ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, ValueAst,
-};
-use umol_graph_core::{
-    BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NonBipartiteGraphError,
 };
 use umol_utils::solution::Solution;
 
@@ -547,10 +547,10 @@ impl Kekulizer {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{AromaticSystemId, AtomId, MoleculeAst};
-    use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::error::SpinStateError;
     use umol_chem::spin::SpinMultiplicity;
+    use umol_graph_ir::ir::{AromaticSystemId, AtomId, MoleculeAst};
+    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
 
