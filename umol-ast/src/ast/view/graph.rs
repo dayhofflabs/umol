@@ -1,5 +1,7 @@
 //! Graph view: typed adapter over the underlying `Graph`.
 
+use std::ops::ControlFlow;
+
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
     BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
@@ -70,16 +72,51 @@ impl<'a> GraphView<'a> {
             .shortest_cycle_through_node(NodeId::from(atom), alg)
     }
 
+    /// Visits each simple cycle's atoms until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`]. The slice borrows visit state and is only
+    /// valid for the duration of the call.
+    pub fn visit_simple_cycles<B>(
+        &self,
+        max_size: usize,
+        alg: SimpleCycleEnumerationAlgorithm,
+        mut visitor: impl FnMut(&[AtomId]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        let mut scratch: Vec<AtomId> = Vec::new();
+        self.graph.visit_simple_cycles(max_size, alg, |cycle| {
+            scratch.clear();
+            scratch.extend(cycle.nodes().iter().copied().map(AtomId::from));
+            visitor(&scratch)
+        })
+    }
+
     pub fn enumerate_simple_cycles(
         &self,
         max_size: usize,
         alg: SimpleCycleEnumerationAlgorithm,
     ) -> Vec<Vec<AtomId>> {
-        self.graph
-            .enumerate_simple_cycles(max_size, alg)
-            .into_iter()
-            .map(|cycle| cycle.nodes().iter().copied().map(AtomId::from).collect())
-            .collect()
+        let mut cycles = Vec::new();
+        let _: ControlFlow<()> = self.visit_simple_cycles(max_size, alg, |cycle| {
+            cycles.push(cycle.to_vec());
+            ControlFlow::Continue(())
+        });
+        cycles
+    }
+
+    /// Visits each relevant cycle's atoms until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`]. The slice borrows visit state and is only
+    /// valid for the duration of the call.
+    pub fn visit_relevant_cycles<B>(
+        &self,
+        max_size: usize,
+        alg: RelevantCycleEnumerationAlgorithm,
+        mut visitor: impl FnMut(&[AtomId]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        let mut scratch: Vec<AtomId> = Vec::new();
+        self.graph.visit_relevant_cycles(max_size, alg, |cycle| {
+            scratch.clear();
+            scratch.extend(cycle.nodes().iter().copied().map(AtomId::from));
+            visitor(&scratch)
+        })
     }
 
     pub fn enumerate_relevant_cycles(
@@ -87,11 +124,12 @@ impl<'a> GraphView<'a> {
         max_size: usize,
         alg: RelevantCycleEnumerationAlgorithm,
     ) -> Vec<Vec<AtomId>> {
-        self.graph
-            .enumerate_relevant_cycles(max_size, alg)
-            .into_iter()
-            .map(|cycle| cycle.nodes().iter().copied().map(AtomId::from).collect())
-            .collect()
+        let mut cycles = Vec::new();
+        let _: ControlFlow<()> = self.visit_relevant_cycles(max_size, alg, |cycle| {
+            cycles.push(cycle.to_vec());
+            ControlFlow::Continue(())
+        });
+        cycles
     }
 
     pub fn maximum_independent_set(&self, alg: MaximumIndependentSetAlgorithm) -> Vec<AtomId> {
@@ -145,26 +183,50 @@ impl<'a> GraphView<'a> {
         self.graph.perfect_matching(&nodes, alg).map(BondMatching)
     }
 
+    /// Visits every perfect matching until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`].
+    pub fn visit_perfect_matchings<B>(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+        mut visitor: impl FnMut(BondMatching) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        self.graph
+            .visit_perfect_matchings(alg, |matching| visitor(BondMatching(matching)))
+    }
+
     pub fn enumerate_perfect_matchings(
         &self,
         alg: MatchingEnumerationAlgorithm,
     ) -> Vec<BondMatching> {
+        let mut matchings = Vec::new();
+        let _: ControlFlow<()> = self.visit_perfect_matchings(alg, |matching| {
+            matchings.push(matching);
+            ControlFlow::Continue(())
+        });
+        matchings
+    }
+
+    /// Visits every maximum matching until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`].
+    pub fn visit_maximum_matchings<B>(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+        mut visitor: impl FnMut(BondMatching) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         self.graph
-            .enumerate_perfect_matchings(alg)
-            .into_iter()
-            .map(BondMatching)
-            .collect()
+            .visit_maximum_matchings(alg, |matching| visitor(BondMatching(matching)))
     }
 
     pub fn enumerate_maximum_matchings(
         &self,
         alg: MatchingEnumerationAlgorithm,
     ) -> Vec<BondMatching> {
-        self.graph
-            .enumerate_maximum_matchings(alg)
-            .into_iter()
-            .map(BondMatching)
-            .collect()
+        let mut matchings = Vec::new();
+        let _: ControlFlow<()> = self.visit_maximum_matchings(alg, |matching| {
+            matchings.push(matching);
+            ControlFlow::Continue(())
+        });
+        matchings
     }
 
     pub fn automorphisms<C: Ord + Copy>(
@@ -178,9 +240,41 @@ impl<'a> GraphView<'a> {
         )
     }
 
+    /// Visits each occurrence of `query` within `self` (the host) as a
+    /// query→host `AtomId` embedding (query atom index → host atom) until
+    /// traversal completes or the visitor returns [`ControlFlow::Break`]. The
+    /// slice borrows visit state and is only valid for the duration of the
+    /// call. `atom_match`/`bond_match` receive `(query, host)` — i.e.
+    /// `(pattern, target)`, matching the `pattern.matches(target)` convention.
+    pub fn visit_subgraph_isomorphisms<B>(
+        &self,
+        query: &GraphView<'_>,
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+        mut visitor: impl FnMut(&[AtomId]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        let mut scratch: Vec<AtomId> = Vec::new();
+        self.graph.visit_subgraph_isomorphisms(
+            query.graph,
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+            |embedding| {
+                scratch.clear();
+                scratch.extend(embedding.iter().copied().map(AtomId::from));
+                visitor(&scratch)
+            },
+        )
+    }
+
     /// Occurrences of `query` within `self` (the host), one query→host `AtomId`
-    /// vector per occurrence. `atom_match`/`bond_match` receive `(query, host)` —
-    /// i.e. `(pattern, target)`, matching the `pattern.matches(target)` convention.
+    /// vector per occurrence, collected from
+    /// [`visit_subgraph_isomorphisms`](Self::visit_subgraph_isomorphisms).
     pub fn enumerate_subgraph_isomorphisms(
         &self,
         query: &GraphView<'_>,
@@ -188,29 +282,48 @@ impl<'a> GraphView<'a> {
         bond_match: &mut impl FnMut(BondId, BondId) -> bool,
         alg: SubgraphIsomorphismAlgorithm,
     ) -> Vec<Vec<AtomId>> {
-        self.graph
-            .enumerate_subgraph_isomorphisms(
-                query.graph,
-                &mut |query_node, host_node| {
-                    atom_match(AtomId::from(query_node), AtomId::from(host_node))
-                },
-                &mut |query_edge, host_edge| {
-                    bond_match(BondId::from(query_edge), BondId::from(host_edge))
-                },
-                alg,
-            )
-            .into_iter()
-            .map(|c| {
-                c.matched_pairs()
-                    .iter()
-                    .map(|&(_, host)| AtomId::from(host))
-                    .collect()
-            })
-            .collect()
+        let mut occurrences = Vec::new();
+        let _: ControlFlow<()> =
+            self.visit_subgraph_isomorphisms(query, atom_match, bond_match, alg, |embedding| {
+                occurrences.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            });
+        occurrences
+    }
+
+    /// Like [`visit_subgraph_isomorphisms`](Self::visit_subgraph_isomorphisms) with query atom
+    /// `anchor.0` pinned to host atom `anchor.1`. Closures receive `(query, host)`.
+    pub fn visit_subgraph_isomorphisms_at<B>(
+        &self,
+        query: &GraphView<'_>,
+        anchor: (AtomId, AtomId),
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+        mut visitor: impl FnMut(&[AtomId]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        let mut scratch: Vec<AtomId> = Vec::new();
+        self.graph.visit_subgraph_isomorphisms_at(
+            query.graph,
+            (NodeId::from(anchor.0), NodeId::from(anchor.1)),
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+            |embedding| {
+                scratch.clear();
+                scratch.extend(embedding.iter().copied().map(AtomId::from));
+                visitor(&scratch)
+            },
+        )
     }
 
     /// Like [`enumerate_subgraph_isomorphisms`](Self::enumerate_subgraph_isomorphisms) with query atom
-    /// `anchor.0` pinned to host atom `anchor.1`. Closures receive `(query, host)`.
+    /// `anchor.0` pinned to host atom `anchor.1`, collected from
+    /// [`visit_subgraph_isomorphisms_at`](Self::visit_subgraph_isomorphisms_at).
     pub fn enumerate_subgraph_isomorphisms_at(
         &self,
         query: &GraphView<'_>,
@@ -219,26 +332,19 @@ impl<'a> GraphView<'a> {
         bond_match: &mut impl FnMut(BondId, BondId) -> bool,
         alg: SubgraphIsomorphismAlgorithm,
     ) -> Vec<Vec<AtomId>> {
-        self.graph
-            .enumerate_subgraph_isomorphisms_at(
-                query.graph,
-                (NodeId::from(anchor.0), NodeId::from(anchor.1)),
-                &mut |query_node, host_node| {
-                    atom_match(AtomId::from(query_node), AtomId::from(host_node))
-                },
-                &mut |query_edge, host_edge| {
-                    bond_match(BondId::from(query_edge), BondId::from(host_edge))
-                },
-                alg,
-            )
-            .into_iter()
-            .map(|c| {
-                c.matched_pairs()
-                    .iter()
-                    .map(|&(_, host)| AtomId::from(host))
-                    .collect()
-            })
-            .collect()
+        let mut occurrences = Vec::new();
+        let _: ControlFlow<()> = self.visit_subgraph_isomorphisms_at(
+            query,
+            anchor,
+            atom_match,
+            bond_match,
+            alg,
+            |embedding| {
+                occurrences.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
+        );
+        occurrences
     }
 }
 

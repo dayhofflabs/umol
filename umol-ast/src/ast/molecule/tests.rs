@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 use pretty_assertions::assert_eq;
@@ -1569,6 +1570,38 @@ fn test_molecule_ast_shortest_cycle_through_atom(
     ]],
 )]
 #[case::hexagon_cutoff(ring(6), 5, vec![])]
+fn test_graph_view_visit_simple_cycles(
+    #[case] ast: MoleculeAst,
+    #[case] max_size: usize,
+    #[case] expected: Vec<Vec<AtomId>>,
+) {
+    let mut cycles: Vec<Vec<AtomId>> = Vec::new();
+    let flow: ControlFlow<()> = ast.graph().visit_simple_cycles(
+        max_size,
+        SimpleCycleEnumerationAlgorithm::ReadTarjan,
+        |cycle| {
+            cycles.push(cycle.to_vec());
+            ControlFlow::Continue(())
+        },
+    );
+    assert_eq!(flow, ControlFlow::Continue(()));
+    assert_eq!(cycles, expected);
+}
+
+#[rstest]
+#[case::hexagon(
+    ring(6),
+    6,
+    vec![vec![
+        AtomId(0),
+        AtomId(1),
+        AtomId(2),
+        AtomId(3),
+        AtomId(4),
+        AtomId(5),
+    ]],
+)]
+#[case::hexagon_cutoff(ring(6), 5, vec![])]
 #[case::chain(chain(5), 10, vec![])]
 #[case::empty(MoleculeAst::default(), 10, vec![])]
 fn test_graph_view_enumerate_simple_cycles(
@@ -1581,6 +1614,38 @@ fn test_graph_view_enumerate_simple_cycles(
             .enumerate_simple_cycles(max_size, SimpleCycleEnumerationAlgorithm::ReadTarjan),
         expected
     );
+}
+
+#[rstest]
+#[case::hexagon(
+    ring(6),
+    6,
+    vec![vec![
+        AtomId(0),
+        AtomId(1),
+        AtomId(2),
+        AtomId(3),
+        AtomId(4),
+        AtomId(5),
+    ]],
+)]
+#[case::hexagon_cutoff(ring(6), 5, vec![])]
+fn test_graph_view_visit_relevant_cycles(
+    #[case] ast: MoleculeAst,
+    #[case] max_size: usize,
+    #[case] expected: Vec<Vec<AtomId>>,
+) {
+    let mut cycles: Vec<Vec<AtomId>> = Vec::new();
+    let flow: ControlFlow<()> = ast.graph().visit_relevant_cycles(
+        max_size,
+        RelevantCycleEnumerationAlgorithm::Vismara,
+        |cycle| {
+            cycles.push(cycle.to_vec());
+            ControlFlow::Continue(())
+        },
+    );
+    assert_eq!(flow, ControlFlow::Continue(()));
+    assert_eq!(cycles, expected);
 }
 
 #[rstest]
@@ -1711,6 +1776,33 @@ fn test_graph_view_bipartite_maximum_matching_or_general(
 }
 
 #[rstest]
+#[case::ring_6(
+    ring(6),
+    vec![
+        vec![BondId(0), BondId(2), BondId(4)],
+        vec![BondId(1), BondId(3), BondId(5)],
+    ],
+)]
+fn test_graph_view_visit_perfect_matchings(
+    #[case] ast: MoleculeAst,
+    #[case] expected: Vec<Vec<BondId>>,
+) {
+    let mut matchings: Vec<Vec<BondId>> = Vec::new();
+    let flow: ControlFlow<()> = ast.graph().visit_perfect_matchings(
+        MatchingEnumerationAlgorithm::BranchAndBound,
+        |matching| {
+            let mut bonds: Vec<BondId> = matching.bonds().collect();
+            bonds.sort_unstable();
+            matchings.push(bonds);
+            ControlFlow::Continue(())
+        },
+    );
+    assert_eq!(flow, ControlFlow::Continue(()));
+    matchings.sort_unstable();
+    assert_eq!(matchings, expected);
+}
+
+#[rstest]
 #[case::ring_6(ring(6), 2)]
 fn test_molecule_ast_enumerate_perfect_matchings(
     #[case] ast: MoleculeAst,
@@ -1746,6 +1838,42 @@ fn test_atom_automorphism_same_orbit() {
 }
 
 #[rstest]
+fn test_graph_view_visit_subgraph_isomorphisms() {
+    let target = ring(6);
+    let query = chain(2);
+    let mut matches: Vec<Vec<AtomId>> = Vec::new();
+    let flow: ControlFlow<()> = target.graph().visit_subgraph_isomorphisms(
+        &query.graph(),
+        &mut |_, _| true,
+        &mut |_, _| true,
+        SubgraphIsomorphismAlgorithm::Vf2,
+        |embedding| {
+            matches.push(embedding.to_vec());
+            ControlFlow::Continue(())
+        },
+    );
+    assert_eq!(flow, ControlFlow::Continue(()));
+    matches.sort_unstable();
+    assert_eq!(
+        matches,
+        vec![
+            vec![AtomId(0), AtomId(1)],
+            vec![AtomId(0), AtomId(5)],
+            vec![AtomId(1), AtomId(0)],
+            vec![AtomId(1), AtomId(2)],
+            vec![AtomId(2), AtomId(1)],
+            vec![AtomId(2), AtomId(3)],
+            vec![AtomId(3), AtomId(2)],
+            vec![AtomId(3), AtomId(4)],
+            vec![AtomId(4), AtomId(3)],
+            vec![AtomId(4), AtomId(5)],
+            vec![AtomId(5), AtomId(0)],
+            vec![AtomId(5), AtomId(4)],
+        ]
+    );
+}
+
+#[rstest]
 fn test_molecule_ast_enumerate_subgraph_isomorphisms() {
     let target = ring(6);
     let query = chain(2);
@@ -1772,6 +1900,30 @@ fn test_molecule_ast_enumerate_subgraph_isomorphisms() {
             vec![AtomId(5), AtomId(0)],
             vec![AtomId(5), AtomId(4)],
         ]
+    );
+}
+
+#[rstest]
+fn test_graph_view_visit_subgraph_isomorphisms_at() {
+    let target = ring(6);
+    let query = chain(2);
+    let mut matches: Vec<Vec<AtomId>> = Vec::new();
+    let flow: ControlFlow<()> = target.graph().visit_subgraph_isomorphisms_at(
+        &query.graph(),
+        (AtomId(0), AtomId(0)),
+        &mut |_, _| true,
+        &mut |_, _| true,
+        SubgraphIsomorphismAlgorithm::Vf2,
+        |embedding| {
+            matches.push(embedding.to_vec());
+            ControlFlow::Continue(())
+        },
+    );
+    assert_eq!(flow, ControlFlow::Continue(()));
+    matches.sort_unstable();
+    assert_eq!(
+        matches,
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(0), AtomId(5)]]
     );
 }
 
@@ -2468,6 +2620,33 @@ fn test_multicenter_bond_views_of_id(
     #[case] expected: Option<MulticenterBondId>,
 ) {
     assert_eq!(ast.multicenter_bonds().of_id(atoms), expected);
+}
+
+#[rstest]
+#[case::ring_4(
+    ring(4),
+    vec![
+        vec![BondId(0), BondId(2)],
+        vec![BondId(1), BondId(3)],
+    ],
+)]
+fn test_graph_view_visit_maximum_matchings(
+    #[case] ast: MoleculeAst,
+    #[case] expected: Vec<Vec<BondId>>,
+) {
+    let mut matchings: Vec<Vec<BondId>> = Vec::new();
+    let flow: ControlFlow<()> = ast.graph().visit_maximum_matchings(
+        MatchingEnumerationAlgorithm::BranchAndBound,
+        |matching| {
+            let mut bonds: Vec<BondId> = matching.bonds().collect();
+            bonds.sort_unstable();
+            matchings.push(bonds);
+            ControlFlow::Continue(())
+        },
+    );
+    assert_eq!(flow, ControlFlow::Continue(()));
+    matchings.sort_unstable();
+    assert_eq!(matchings, expected);
 }
 
 #[rstest]

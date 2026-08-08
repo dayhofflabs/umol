@@ -208,7 +208,7 @@ existence check in constraint validation, by `ReactionAst::apply` before its
 lazy derivation loop, by every Python `substructure_matches` call, and per
 template in the pattern fingerprint.
 
-### S0 — renames (breaking)
+### S0 — renames (breaking) **Done**
 
 - S0a: subgraph isomorphism ×2 plus `GraphView` mirrors; callers:
   substructure search (2 sites), `GraphView` (2), tests, benches.
@@ -217,7 +217,7 @@ template in the pattern fingerprint.
 - S0c: components ×2 plus `GraphView` mirrors; callers: constraint validation
   (2 sites), HMO aromaticity, tests, benches.
 
-### S1 — subgraph-isomorphism streaming core (green)
+### S1 — subgraph-isomorphism streaming core (green) **Done**
 
 - S1a: convert the six per-selector searches to `ControlFlow` emitters over
   `&[usize]` embeddings, replacing the leaf pushes; internal only. Ullmann
@@ -232,7 +232,7 @@ template in the pattern fingerprint.
 - S1c: benches gain time-to-first-result (`Break` after one) and count-only
   peak-storage rows beside the existing totals. [dep: S1b]
 
-### S2 — substructure streaming (green)
+### S2 — substructure streaming (green) **Done**
 
 - S2a: both substructure strategies drive the visitor internally with overlay
   verification inside the callback; public behavior unchanged. [dep: S1b]

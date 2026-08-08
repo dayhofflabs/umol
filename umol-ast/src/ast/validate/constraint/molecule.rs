@@ -1,6 +1,7 @@
 //! Molecule-scope aggregate and connectivity constraint evaluation.
 
 use std::collections::BTreeSet;
+use std::ops::ControlFlow;
 
 use thiserror::Error;
 use umol_graph_core::ConnectedComponentsAlgorithm;
@@ -68,16 +69,22 @@ impl MoleculeConstraintValidator {
             MoleculeConstraint::SubPattern { anchor, pattern } => {
                 validate_anchor(ast, pattern, anchor)?;
                 pattern
-                    .substructure_matches(
+                    .visit_substructure_matches(
                         ast,
                         SubstructureMatchConfig {
                             match_algorithm: config.substructure_match_algorithm,
                             subgraph_isomorphism_algorithm: config.subgraph_isomorphism_algorithm,
                             relevant_cycle_algorithm: config.relevant_cycle_algorithm,
                         },
+                        |correspondence| {
+                            if anchor_matches(anchor, &correspondence) {
+                                ControlFlow::Break(())
+                            } else {
+                                ControlFlow::Continue(())
+                            }
+                        },
                     )
-                    .iter()
-                    .any(|correspondence| anchor_matches(anchor, correspondence))
+                    .is_break()
             }
         };
 
