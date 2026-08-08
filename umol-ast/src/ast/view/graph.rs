@@ -30,7 +30,10 @@ impl<'a> GraphView<'a> {
         self.graph.degree(NodeId::from(atom))
     }
 
-    pub fn enumerate_connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
+    pub fn enumerate_connected_components(
+        &self,
+        alg: ConnectedComponentsAlgorithm,
+    ) -> Vec<Vec<AtomId>> {
         self.graph
             .enumerate_connected_components(alg)
             .into_iter()
@@ -38,7 +41,10 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
-    pub fn enumerate_biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
+    pub fn enumerate_biconnected_components(
+        &self,
+        alg: BiconnectedComponentsAlgorithm,
+    ) -> Vec<Vec<AtomId>> {
         self.graph
             .enumerate_biconnected_components(alg)
             .into_iter()

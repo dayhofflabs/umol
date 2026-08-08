@@ -8,9 +8,10 @@
 //! connectivity.
 
 use std::borrow::Cow;
+use std::ops::ControlFlow;
 
 use umol_graph_core::{
-    Correspondence, NodeId, ParticipantPosition, RelationData, RelevantCycleEnumerationAlgorithm,
+    Correspondence, ParticipantPosition, RelationData, RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
 
@@ -56,28 +57,51 @@ pub struct SubstructureMatchConfig {
 }
 
 impl MoleculeAst {
-    /// Occurrences of `self` (the pattern) within `host`, one injective pattern→host
-    /// [`MoleculeCorrespondence`] per occurrence. Pattern predicates are evaluated as
-    /// `pattern.matches(host)` against the host atom/bond augmented with its derived topological
-    /// constraints.
+    /// Visits each occurrence of `self` (the pattern) within `host` as an injective
+    /// pattern→host [`MoleculeCorrespondence`] until traversal completes or the
+    /// visitor returns [`ControlFlow::Break`]. Pattern predicates are evaluated as
+    /// `pattern.matches(host)` against the host atom/bond augmented with its derived
+    /// topological constraints. Traversal is deterministic for a fixed
+    /// representation, but its order is not a canonical ordering contract.
+    pub fn visit_substructure_matches<B, F>(
+        &self,
+        host: &MoleculeAst,
+        config: SubstructureMatchConfig,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        F: FnMut(MoleculeCorrespondence) -> ControlFlow<B>,
+    {
+        match config.match_algorithm {
+            SubstructureMatchAlgorithm::GraphAndOverlays => self
+                .visit_substructure_matches_graph_and_overlays(
+                    host,
+                    config.subgraph_isomorphism_algorithm,
+                    config.relevant_cycle_algorithm,
+                    &mut visitor,
+                ),
+            SubstructureMatchAlgorithm::Incidence => self.visit_substructure_matches_incidence(
+                host,
+                config.subgraph_isomorphism_algorithm,
+                config.relevant_cycle_algorithm,
+                &mut visitor,
+            ),
+        }
+    }
+
+    /// Occurrences of `self` (the pattern) within `host`, collected from
+    /// [`MoleculeAst::visit_substructure_matches`].
     pub fn substructure_matches(
         &self,
         host: &MoleculeAst,
         config: SubstructureMatchConfig,
     ) -> Vec<MoleculeCorrespondence> {
-        match config.match_algorithm {
-            SubstructureMatchAlgorithm::GraphAndOverlays => self
-                .substructure_matches_graph_and_overlays(
-                    host,
-                    config.subgraph_isomorphism_algorithm,
-                    config.relevant_cycle_algorithm,
-                ),
-            SubstructureMatchAlgorithm::Incidence => self.substructure_matches_incidence(
-                host,
-                config.subgraph_isomorphism_algorithm,
-                config.relevant_cycle_algorithm,
-            ),
-        }
+        let mut occurrences = Vec::new();
+        let _: ControlFlow<()> = self.visit_substructure_matches(host, config, |correspondence| {
+            occurrences.push(correspondence);
+            ControlFlow::Continue(())
+        });
+        occurrences
     }
 
     /// Host atom/bond match-targets: each stored entity with the topological constraints requested
@@ -191,50 +215,53 @@ impl MoleculeAst {
         (host_atoms, host_bonds)
     }
 
-    fn substructure_matches_graph_and_overlays(
+    fn visit_substructure_matches_graph_and_overlays<B>(
         &self,
         host: &MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
-    ) -> Vec<MoleculeCorrespondence> {
+        visitor: &mut impl FnMut(MoleculeCorrespondence) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         let pattern = self;
         if pattern.atoms().count() > host.atoms().count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
 
-        host.raw_graph()
-            .enumerate_subgraph_isomorphisms(
-                pattern.raw_graph(),
-                &mut |query_node, host_node| {
-                    pattern
-                        .atom(AtomId::from(query_node))
-                        .ast
-                        .matches(&host_atoms[host_node.index()])
-                },
-                &mut |query_edge, host_edge| {
-                    pattern
-                        .bond(BondId::from(query_edge))
-                        .ast
-                        .matches(&host_bonds[host_edge.index()])
-                },
-                subiso,
-            )
-            .into_iter()
-            .filter_map(|nodes| {
+        host.raw_graph().visit_subgraph_isomorphisms(
+            pattern.raw_graph(),
+            &mut |query_node, host_node| {
+                pattern
+                    .atom(AtomId::from(query_node))
+                    .ast
+                    .matches(&host_atoms[host_node.index()])
+            },
+            &mut |query_edge, host_edge| {
+                pattern
+                    .bond(BondId::from(query_edge))
+                    .ast
+                    .matches(&host_bonds[host_edge.index()])
+            },
+            subiso,
+            |embedding| {
                 let atoms = Correspondence::new(
-                    nodes
-                        .matched_pairs()
+                    embedding
                         .iter()
-                        .map(|&(left, right)| (AtomId::from(left), AtomId::from(right)))
+                        .enumerate()
+                        .map(|(pattern_atom, &host_node)| {
+                            (AtomId(pattern_atom as u32), AtomId::from(host_node))
+                        })
                         .collect(),
-                    nodes.left_count(),
-                    nodes.right_count(),
+                    embedding.len(),
+                    host.atoms().count(),
                 )
                 .expect("subgraph match preserves atom correspondence invariants");
-                pattern.verify_overlays(host, atoms)
-            })
-            .collect()
+                match pattern.verify_overlays(host, atoms) {
+                    Some(correspondence) => visitor(correspondence),
+                    None => ControlFlow::Continue(()),
+                }
+            },
+        )
     }
 
     /// Match on the incidence (Levi) graph: relations become pseudonodes wired to
@@ -243,15 +270,16 @@ impl MoleculeAst {
     /// degrades on. The Levi subiso supplies only the atom correspondence; the same
     /// exact `verify_overlays` then filters and builds the embedding, so this returns
     /// the identical match set as `GraphAndOverlays`.
-    fn substructure_matches_incidence(
+    fn visit_substructure_matches_incidence<B>(
         &self,
         host: &MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
-    ) -> Vec<MoleculeCorrespondence> {
+        visitor: &mut impl FnMut(MoleculeCorrespondence) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         let pattern = self;
         if pattern.atoms().count() > host.atoms().count() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let selection = IncidenceNodeSelection::constitution();
         let pattern_levi = pattern.incidence_graph(selection);
@@ -259,45 +287,41 @@ impl MoleculeAst {
         let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
         let atom_count = pattern.atoms().count();
 
-        host_levi
-            .graph()
-            .enumerate_subgraph_isomorphisms(
-                pattern_levi.graph(),
-                // Atoms/bonds carry their predicates; overlay pseudonodes match by
-                // kind only (the exact AST/participation check is `verify_overlays`).
-                &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
-                    (Entity::Atom(pa), Entity::Atom(ha)) => {
-                        pattern.atom(pa).ast.matches(&host_atoms[ha.index()])
-                    }
-                    (Entity::Bond(pb), Entity::Bond(hb)) => {
-                        pattern.bond(pb).ast.matches(&host_bonds[hb.index()])
-                    }
-                    (pe, he) => pe.kind() == he.kind(),
-                },
-                &mut |_, _| true,
-                subiso,
-            )
-            .into_iter()
-            .filter_map(|levi_match| {
+        host_levi.graph().visit_subgraph_isomorphisms(
+            pattern_levi.graph(),
+            // Atoms/bonds carry their predicates; overlay pseudonodes match by
+            // kind only (the exact AST/participation check is `verify_overlays`).
+            &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
+                (Entity::Atom(pa), Entity::Atom(ha)) => {
+                    pattern.atom(pa).ast.matches(&host_atoms[ha.index()])
+                }
+                (Entity::Bond(pb), Entity::Bond(hb)) => {
+                    pattern.bond(pb).ast.matches(&host_bonds[hb.index()])
+                }
+                (pe, he) => pe.kind() == he.kind(),
+            },
+            &mut |_, _| true,
+            subiso,
+            |embedding| {
                 let atoms = Correspondence::new(
-                    (0..atom_count as u32)
-                        .map(|a| {
-                            let host_node = levi_match
-                                .right_of(NodeId(a))
-                                .expect("a pattern atom node is matched");
-                            match host_levi.entity(host_node) {
-                                Entity::Atom(id) => (AtomId(a), id),
-                                _ => unreachable!("a pattern atom node maps to a host atom node"),
-                            }
+                    embedding[..atom_count]
+                        .iter()
+                        .enumerate()
+                        .map(|(a, &host_node)| match host_levi.entity(host_node) {
+                            Entity::Atom(id) => (AtomId(a as u32), id),
+                            _ => unreachable!("a pattern atom node maps to a host atom node"),
                         })
                         .collect(),
                     pattern.atoms().count(),
                     host.atoms().count(),
                 )
                 .expect("correspondence producer preserves partial-bijection invariants");
-                pattern.verify_overlays(host, atoms)
-            })
-            .collect()
+                match pattern.verify_overlays(host, atoms) {
+                    Some(correspondence) => visitor(correspondence),
+                    None => ControlFlow::Continue(()),
+                }
+            },
+        )
     }
 
     /// Post-verify a skeleton occurrence's overlays against the atom correspondence, returning the
@@ -475,6 +499,8 @@ fn overlay_matches<D: Lattice + RelationData>(
 
 #[cfg(test)]
 mod tests {
+    use std::ops::ControlFlow;
+
     use rstest::rstest;
     use umol_graph_core::SubgraphIsomorphismAlgorithm::{
         ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
@@ -502,6 +528,93 @@ mod tests {
     ];
 
     const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
+
+    #[rstest]
+    #[case::skeleton(
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
+    )]
+    #[case::noncovalent(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]] :noncovalent-bonds [{:atoms [0 2] :type "Hbd"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#),
+        vec![vec![AtomId(0), AtomId(2)], vec![AtomId(2), AtomId(0)]]
+    )]
+    #[case::no_match(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"]]}"#),
+        vec![]
+    )]
+    fn test_molecule_ast_visit_substructure_matches(
+        #[case] host: MoleculeAst,
+        #[case] pattern: MoleculeAst,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let config = SubstructureMatchConfig {
+                    match_algorithm: strategy,
+                    subgraph_isomorphism_algorithm: subiso,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                };
+                let mut occurrences: Vec<Vec<AtomId>> = Vec::new();
+                let flow: ControlFlow<()> =
+                    pattern.visit_substructure_matches(&host, config, |correspondence| {
+                        occurrences.push(
+                            correspondence
+                                .atoms()
+                                .matched_pairs()
+                                .iter()
+                                .map(|&(_, host)| host)
+                                .collect(),
+                        );
+                        ControlFlow::Continue(())
+                    });
+                assert_eq!(flow, ControlFlow::Continue(()), "{strategy:?}/{subiso:?}");
+                occurrences.sort();
+                assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::skeleton(
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
+    )]
+    fn test_molecule_ast_visit_substructure_matches_termination(
+        #[case] host: MoleculeAst,
+        #[case] pattern: MoleculeAst,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let config = SubstructureMatchConfig {
+                    match_algorithm: strategy,
+                    subgraph_isomorphism_algorithm: subiso,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                };
+                let first = pattern.visit_substructure_matches(&host, config, |correspondence| {
+                    ControlFlow::Break(
+                        correspondence
+                            .atoms()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, host)| host)
+                            .collect::<Vec<_>>(),
+                    )
+                });
+                let ControlFlow::Break(atoms) = first else {
+                    panic!("expected Break on first occurrence: {strategy:?}/{subiso:?}");
+                };
+                assert!(
+                    expected.contains(&atoms),
+                    "{strategy:?}/{subiso:?}: invalid occurrence {atoms:?}"
+                );
+            }
+        }
+    }
 
     #[rstest]
     #[case::skeleton(

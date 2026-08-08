@@ -1502,7 +1502,10 @@ fn test_molecule_ast_degree(
 #[case::single(chain(3), 1)]
 #[case::two(two_components(), 2)]
 #[case::empty(MoleculeAst::default(), 0)]
-fn test_molecule_ast_enumerate_connected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
+fn test_molecule_ast_enumerate_connected_components(
+    #[case] ast: MoleculeAst,
+    #[case] expected: usize,
+) {
     let cc = ast
         .graph()
         .enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs);
@@ -1512,7 +1515,10 @@ fn test_molecule_ast_enumerate_connected_components(#[case] ast: MoleculeAst, #[
 #[rstest]
 #[case::ring_6(ring(6), 1)]
 #[case::chain(chain(5), 0)]
-fn test_molecule_ast_enumerate_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
+fn test_molecule_ast_enumerate_biconnected_components(
+    #[case] ast: MoleculeAst,
+    #[case] expected: usize,
+) {
     let bcc = ast
         .graph()
         .enumerate_biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
