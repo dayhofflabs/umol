@@ -11,7 +11,10 @@ pub enum ConnectedComponentsAlgorithm {
 }
 
 impl Graph {
-    pub fn enumerate_connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
+    pub fn enumerate_connected_components(
+        &self,
+        alg: ConnectedComponentsAlgorithm,
+    ) -> Vec<Vec<NodeId>> {
         match alg {
             ConnectedComponentsAlgorithm::Bfs => self.connected_components_bfs(),
         }

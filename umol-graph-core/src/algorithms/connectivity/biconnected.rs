@@ -15,7 +15,10 @@ pub enum BiconnectedComponentsAlgorithm {
 }
 
 impl Graph {
-    pub fn enumerate_biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
+    pub fn enumerate_biconnected_components(
+        &self,
+        alg: BiconnectedComponentsAlgorithm,
+    ) -> Vec<Vec<NodeId>> {
         match alg {
             BiconnectedComponentsAlgorithm::Tarjan => self.biconnected_components_tarjan(),
         }

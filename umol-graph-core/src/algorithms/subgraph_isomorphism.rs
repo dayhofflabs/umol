@@ -13,6 +13,7 @@
 
 use std::cmp::Reverse;
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 
 use crate::correspondence::Correspondence;
 use crate::graph::{EdgeId, Graph, NodeId};
@@ -146,8 +147,12 @@ impl Graph {
         }
 
         let mut state = Vf2State::new(query, self);
-        state.search(node_match, edge_match);
-        state.results
+        let mut results = Vec::new();
+        let _: ControlFlow<()> = state.search(node_match, edge_match, &mut |embedding| {
+            results.push(embedding.to_vec());
+            ControlFlow::Continue(())
+        });
+        results
     }
 
     // Cordella et al. 2004 "A (sub)graph isomorphism algorithm for matching large graphs".
@@ -173,8 +178,12 @@ impl Graph {
 
         let mut state = Vf2State::new(query, self);
         state.seed_anchor(anchor);
-        state.search(node_match, edge_match);
-        state.results
+        let mut results = Vec::new();
+        let _: ControlFlow<()> = state.search(node_match, edge_match, &mut |embedding| {
+            results.push(embedding.to_vec());
+            ControlFlow::Continue(())
+        });
+        results
     }
 
     // Ullmann 1976 "An algorithm for subgraph isomorphism": candidate matrix
@@ -197,7 +206,7 @@ impl Graph {
         let mut results = Vec::new();
         let mut mapping = vec![usize::MAX; query.node_count()];
         let mut used = vec![false; self.node_count()];
-        ullmann_search(
+        let _: ControlFlow<()> = ullmann_search(
             query,
             self,
             0,
@@ -205,7 +214,10 @@ impl Graph {
             &mut mapping,
             &mut used,
             edge_match,
-            &mut results,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -245,7 +257,7 @@ impl Graph {
         let mut results = Vec::new();
         let mut mapping = vec![usize::MAX; query.node_count()];
         let mut used = vec![false; n2];
-        ullmann_search(
+        let _: ControlFlow<()> = ullmann_search(
             query,
             self,
             0,
@@ -253,7 +265,10 @@ impl Graph {
             &mut mapping,
             &mut used,
             edge_match,
-            &mut results,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -278,7 +293,8 @@ impl Graph {
         let mut results = Vec::new();
         let mut mapping = vec![0usize; order.len()];
         let mut used = vec![false; self.node_count()];
-        ri_search(
+        let mut by_query = vec![0usize; order.len()];
+        let _: ControlFlow<()> = ri_search(
             self,
             &order,
             &parents,
@@ -288,7 +304,11 @@ impl Graph {
             None,
             node_match,
             edge_match,
-            &mut results,
+            &mut by_query,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -314,7 +334,8 @@ impl Graph {
         let mut results = Vec::new();
         let mut mapping = vec![0usize; order.len()];
         let mut used = vec![false; self.node_count()];
-        ri_search(
+        let mut by_query = vec![0usize; order.len()];
+        let _: ControlFlow<()> = ri_search(
             self,
             &order,
             &parents,
@@ -324,7 +345,11 @@ impl Graph {
             Some(anchor.1.index()),
             node_match,
             edge_match,
-            &mut results,
+            &mut by_query,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -355,14 +380,19 @@ impl Graph {
         let mut results = Vec::new();
         let mut assigned = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
-        arcmatch_search(
+        let mut scratch = vec![0usize; query.node_count()];
+        let _: ControlFlow<()> = arcmatch_search(
             query,
             &order,
             &domains,
             0,
             &mut assigned,
             &mut used,
-            &mut results,
+            &mut scratch,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -408,14 +438,19 @@ impl Graph {
         let mut results = Vec::new();
         let mut assigned = vec![None; query.node_count()];
         let mut used = vec![false; n2];
-        arcmatch_search(
+        let mut scratch = vec![0usize; query.node_count()];
+        let _: ControlFlow<()> = arcmatch_search(
             query,
             &order,
             &domains,
             0,
             &mut assigned,
             &mut used,
-            &mut results,
+            &mut scratch,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -438,14 +473,19 @@ impl Graph {
         let mut mapping = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
         let mut results = Vec::new();
-        vf2rdkit_search(
+        let mut scratch = vec![0usize; query.node_count()];
+        let _: ControlFlow<()> = vf2rdkit_search(
             query,
             self,
             &mut mapping,
             &mut used,
             node_match,
             edge_match,
-            &mut results,
+            &mut scratch,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -471,14 +511,19 @@ impl Graph {
         mapping[anchor.0.index()] = Some(anchor.1.index());
         used[anchor.1.index()] = true;
         let mut results = Vec::new();
-        vf2rdkit_search(
+        let mut scratch = vec![0usize; query.node_count()];
+        let _: ControlFlow<()> = vf2rdkit_search(
             query,
             self,
             &mut mapping,
             &mut used,
             node_match,
             edge_match,
-            &mut results,
+            &mut scratch,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -505,7 +550,8 @@ impl Graph {
         let mut mapping = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
         let mut results = Vec::new();
-        rk_search(
+        let mut scratch = vec![0usize; query.node_count()];
+        let _: ControlFlow<()> = rk_search(
             self,
             &bond_order,
             &isolated,
@@ -514,7 +560,11 @@ impl Graph {
             &mut used,
             node_match,
             edge_match,
-            &mut results,
+            &mut scratch,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -544,7 +594,8 @@ impl Graph {
         mapping[anchor.0.index()] = Some(anchor.1.index());
         used[anchor.1.index()] = true;
         let mut results = Vec::new();
-        rk_search(
+        let mut scratch = vec![0usize; query.node_count()];
+        let _: ControlFlow<()> = rk_search(
             self,
             &bond_order,
             &isolated,
@@ -553,7 +604,11 @@ impl Graph {
             &mut used,
             node_match,
             edge_match,
-            &mut results,
+            &mut scratch,
+            &mut |embedding| {
+                results.push(embedding.to_vec());
+                ControlFlow::Continue(())
+            },
         );
         results
     }
@@ -578,7 +633,8 @@ mod vf2 {
         terminal_query: Vec<u32>,
         terminal_target: Vec<u32>,
         depth: u32,
-        pub(super) results: Vec<Vec<usize>>,
+        // Reused per emitted embedding; assembled from `mapping` at each leaf.
+        scratch: Vec<usize>,
     }
 
     impl<'g> Vf2State<'g> {
@@ -591,7 +647,7 @@ mod vf2 {
                 terminal_query: vec![0; query.node_count()],
                 terminal_target: vec![0; target.node_count()],
                 depth: 0,
-                results: Vec::new(),
+                scratch: Vec::with_capacity(query.node_count()),
             }
         }
 
@@ -619,15 +675,17 @@ mod vf2 {
             }
         }
 
-        pub(super) fn search(
+        pub(super) fn search<B>(
             &mut self,
             node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
             edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        ) {
+            emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+        ) -> ControlFlow<B> {
             if self.depth as usize == self.query.node_count() {
-                let assignment = self.mapping.iter().map(|m| m.unwrap() as usize).collect();
-                self.results.push(assignment);
-                return;
+                self.scratch.clear();
+                self.scratch
+                    .extend(self.mapping.iter().map(|m| m.unwrap() as usize));
+                return emit(&self.scratch);
             }
 
             let q_idx = self.next_query_node();
@@ -672,7 +730,7 @@ mod vf2 {
                     }
                 }
 
-                self.search(node_match, edge_match);
+                let result = self.search(node_match, edge_match, emit);
 
                 self.depth -= 1;
                 self.mapping[q_idx] = None;
@@ -683,7 +741,11 @@ mod vf2 {
                 for ni in restore_t {
                     self.terminal_target[ni] = 0;
                 }
+                if let ControlFlow::Break(value) = result {
+                    return ControlFlow::Break(value);
+                }
             }
+            ControlFlow::Continue(())
         }
 
         /// Smallest unmapped query node, preferring terminal nodes.
@@ -838,7 +900,7 @@ mod ullmann {
     /// index order (`depth` = next query node); each complete injective,
     /// edge-consistent mapping is recorded.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn ullmann_search(
+    pub(super) fn ullmann_search<B>(
         query: &Graph,
         target: &Graph,
         depth: usize,
@@ -846,13 +908,12 @@ mod ullmann {
         mapping: &mut Vec<usize>,
         used: &mut [bool],
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         let n1 = query.node_count();
         let n2 = target.node_count();
         if depth == n1 {
-            results.push(mapping.clone());
-            return;
+            return emit(mapping);
         }
         let i = depth;
         for j in 0..n2 {
@@ -889,7 +950,7 @@ mod ullmann {
             if future_ok {
                 mapping[i] = j;
                 used[j] = true;
-                ullmann_search(
+                let result = ullmann_search(
                     query,
                     target,
                     depth + 1,
@@ -897,12 +958,16 @@ mod ullmann {
                     mapping,
                     used,
                     edge_match,
-                    results,
+                    emit,
                 );
                 mapping[i] = usize::MAX;
                 used[j] = false;
+                if let ControlFlow::Break(value) = result {
+                    return ControlFlow::Break(value);
+                }
             }
         }
+        ControlFlow::Continue(())
     }
 }
 
@@ -994,7 +1059,7 @@ mod ri {
     /// target-neighbors of an already-mapped ordered neighbor's image (all targets at
     /// a component root); edges to every ordered neighbor must match.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn ri_search(
+    pub(super) fn ri_search<B>(
         target: &Graph,
         order: &[usize],
         parents: &[Vec<(usize, EdgeId)>],
@@ -1004,17 +1069,17 @@ mod ri {
         forced_root: Option<usize>,
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        // Order-position mapping reindexed to query order; reused per emission.
+        by_query: &mut [usize],
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         let n1 = order.len();
         let n2 = target.node_count();
         if depth == n1 {
-            let mut by_query = vec![0usize; n1];
             for (p, &u) in order.iter().enumerate() {
                 by_query[u] = mapping[p];
             }
-            results.push(by_query);
-            return;
+            return emit(by_query);
         }
         let u = order[depth];
         let candidates: Vec<usize> = match parents[depth].first() {
@@ -1044,7 +1109,7 @@ mod ri {
             }
             mapping[depth] = v;
             used[v] = true;
-            ri_search(
+            let result = ri_search(
                 target,
                 order,
                 parents,
@@ -1054,10 +1119,15 @@ mod ri {
                 forced_root,
                 node_match,
                 edge_match,
-                results,
+                by_query,
+                emit,
             );
             used[v] = false;
+            if let ControlFlow::Break(value) = result {
+                return ControlFlow::Break(value);
+            }
         }
+        ControlFlow::Continue(())
     }
 }
 
@@ -1511,23 +1581,23 @@ mod arc_match {
     /// edge domain, and keeps those consistent with every placed neighbor. A query
     /// vertex with no placed neighbor (a component root) is seeded from its vertex
     /// domain. `assigned` is indexed by query vertex.
-    pub(super) fn arcmatch_search(
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn arcmatch_search<B>(
         query: &Graph,
         order: &[usize],
         domains: &ArcMatchDomains,
         depth: usize,
         assigned: &mut [Option<usize>],
         used: &mut [bool],
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        // `assigned` flattened to query order; reused per emission.
+        scratch: &mut [usize],
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if depth == order.len() {
-            results.push(
-                assigned
-                    .iter()
-                    .map(|t| t.expect("complete match"))
-                    .collect(),
-            );
-            return;
+            for (q, t) in assigned.iter().enumerate() {
+                scratch[q] = t.expect("complete match");
+            }
+            return emit(scratch);
         }
         let q = order[depth];
         let n2 = domains.n2;
@@ -1543,12 +1613,24 @@ mod arc_match {
                 if domains.vertex[q * n2 + t] && !used[t] {
                     assigned[q] = Some(t);
                     used[t] = true;
-                    arcmatch_search(query, order, domains, depth + 1, assigned, used, results);
+                    let result = arcmatch_search(
+                        query,
+                        order,
+                        domains,
+                        depth + 1,
+                        assigned,
+                        used,
+                        scratch,
+                        emit,
+                    );
                     used[t] = false;
                     assigned[q] = None;
+                    if let ControlFlow::Break(value) = result {
+                        return ControlFlow::Break(value);
+                    }
                 }
             }
-            return;
+            return ControlFlow::Continue(());
         }
 
         let s = *parents
@@ -1568,10 +1650,23 @@ mod arc_match {
             }
             assigned[q] = Some(v_t);
             used[v_t] = true;
-            arcmatch_search(query, order, domains, depth + 1, assigned, used, results);
+            let result = arcmatch_search(
+                query,
+                order,
+                domains,
+                depth + 1,
+                assigned,
+                used,
+                scratch,
+                emit,
+            );
             used[v_t] = false;
             assigned[q] = None;
+            if let ControlFlow::Break(value) = result {
+                return ControlFlow::Break(value);
+            }
         }
+        ControlFlow::Continue(())
     }
 }
 
@@ -1615,18 +1710,23 @@ mod vf2_rdkit {
     /// `Vf2Rdkit` recursive search: candidates come from a mapped neighbor's image
     /// adjacency (else all atoms for a root), filtered by degree bound, node match, and
     /// edge consistency with every already-mapped query neighbor.
-    pub(super) fn vf2rdkit_search(
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn vf2rdkit_search<B>(
         query: &Graph,
         target: &Graph,
         mapping: &mut [Option<usize>],
         used: &mut [bool],
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        // `mapping` flattened to query order; reused per emission.
+        scratch: &mut [usize],
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         let Some(q) = vf2rdkit_next(query, mapping) else {
-            results.push(mapping.iter().map(|m| m.expect("complete")).collect());
-            return;
+            for (qi, m) in mapping.iter().enumerate() {
+                scratch[qi] = m.expect("complete");
+            }
+            return emit(scratch);
         };
         let q_degree = query.neighbors(NodeId(q as u32)).len();
         let parent = query
@@ -1662,12 +1762,16 @@ mod vf2_rdkit {
             }
             mapping[q] = Some(t);
             used[t] = true;
-            vf2rdkit_search(
-                query, target, mapping, used, node_match, edge_match, results,
+            let result = vf2rdkit_search(
+                query, target, mapping, used, node_match, edge_match, scratch, emit,
             );
             used[t] = false;
             mapping[q] = None;
+            if let ControlFlow::Break(value) = result {
+                return ControlFlow::Break(value);
+            }
         }
+        ControlFlow::Continue(())
     }
 }
 
@@ -1722,7 +1826,7 @@ mod ray_kirsch {
     /// (both endpoints mapped), extends an unmapped endpoint along the mapped one's mol
     /// adjacency, or seeds a component root.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn rk_search(
+    pub(super) fn rk_search<B>(
         target: &Graph,
         bond_order: &[(usize, usize, EdgeId)],
         isolated: &[usize],
@@ -1731,18 +1835,20 @@ mod ray_kirsch {
         used: &mut [bool],
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        scratch: &mut [usize],
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if i == bond_order.len() {
-            rk_finish(target, isolated, 0, mapping, used, node_match, results);
-            return;
+            return rk_finish(
+                target, isolated, 0, mapping, used, node_match, scratch, emit,
+            );
         }
         let (qb, qe, qedge) = bond_order[i];
         match (mapping[qb], mapping[qe]) {
             (Some(mb), Some(me)) => {
                 if let Some(te) = target.find_edge(NodeId(mb as u32), NodeId(me as u32)) {
                     if edge_match(qedge, te) {
-                        rk_search(
+                        return rk_search(
                             target,
                             bond_order,
                             isolated,
@@ -1751,23 +1857,21 @@ mod ray_kirsch {
                             used,
                             node_match,
                             edge_match,
-                            results,
+                            scratch,
+                            emit,
                         );
                     }
                 }
+                ControlFlow::Continue(())
             }
-            (Some(mb), None) => {
-                rk_extend(
-                    target, bond_order, isolated, i, qe, mb, qedge, mapping, used, node_match,
-                    edge_match, results,
-                );
-            }
-            (None, Some(me)) => {
-                rk_extend(
-                    target, bond_order, isolated, i, qb, me, qedge, mapping, used, node_match,
-                    edge_match, results,
-                );
-            }
+            (Some(mb), None) => rk_extend(
+                target, bond_order, isolated, i, qe, mb, qedge, mapping, used, node_match,
+                edge_match, scratch, emit,
+            ),
+            (None, Some(me)) => rk_extend(
+                target, bond_order, isolated, i, qb, me, qedge, mapping, used, node_match,
+                edge_match, scratch, emit,
+            ),
             (None, None) => {
                 for atom in 0..target.node_count() {
                     if used[atom] || !node_match(NodeId(qb as u32), NodeId(atom as u32)) {
@@ -1775,13 +1879,17 @@ mod ray_kirsch {
                     }
                     mapping[qb] = Some(atom);
                     used[atom] = true;
-                    rk_search(
+                    let result = rk_search(
                         target, bond_order, isolated, i, mapping, used, node_match, edge_match,
-                        results,
+                        scratch, emit,
                     );
                     used[atom] = false;
                     mapping[qb] = None;
+                    if let ControlFlow::Break(value) = result {
+                        return ControlFlow::Break(value);
+                    }
                 }
+                ControlFlow::Continue(())
             }
         }
     }
@@ -1789,7 +1897,7 @@ mod ray_kirsch {
     /// Map the unmapped query endpoint `q_free` of bond `i` to an unused mol neighbor of
     /// the mapped endpoint's image `m_anchor`, then continue with the next bond.
     #[allow(clippy::too_many_arguments)]
-    fn rk_extend(
+    fn rk_extend<B>(
         target: &Graph,
         bond_order: &[(usize, usize, EdgeId)],
         isolated: &[usize],
@@ -1801,8 +1909,9 @@ mod ray_kirsch {
         used: &mut [bool],
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        scratch: &mut [usize],
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         for k in 0..target.neighbors(NodeId(m_anchor as u32)).len() {
             let nb = target.neighbors(NodeId(m_anchor as u32))[k];
             let t = nb.node.index();
@@ -1814,7 +1923,7 @@ mod ray_kirsch {
             }
             mapping[q_free] = Some(t);
             used[t] = true;
-            rk_search(
+            let result = rk_search(
                 target,
                 bond_order,
                 isolated,
@@ -1823,32 +1932,49 @@ mod ray_kirsch {
                 used,
                 node_match,
                 edge_match,
-                results,
+                scratch,
+                emit,
             );
             used[t] = false;
             mapping[q_free] = None;
+            if let ControlFlow::Break(value) = result {
+                return ControlFlow::Break(value);
+            }
         }
+        ControlFlow::Continue(())
     }
 
     /// Map degree-0 query atoms (skipping any already pinned, e.g. an anchor) over the
     /// remaining unused mol atoms, recording each complete assignment.
-    fn rk_finish(
+    #[allow(clippy::too_many_arguments)]
+    fn rk_finish<B>(
         target: &Graph,
         isolated: &[usize],
         k: usize,
         mapping: &mut [Option<usize>],
         used: &mut [bool],
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
-        results: &mut Vec<Vec<usize>>,
-    ) {
+        scratch: &mut [usize],
+        emit: &mut impl FnMut(&[usize]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if k == isolated.len() {
-            results.push(mapping.iter().map(|m| m.expect("complete")).collect());
-            return;
+            for (qi, m) in mapping.iter().enumerate() {
+                scratch[qi] = m.expect("complete");
+            }
+            return emit(scratch);
         }
         let q = isolated[k];
         if mapping[q].is_some() {
-            rk_finish(target, isolated, k + 1, mapping, used, node_match, results);
-            return;
+            return rk_finish(
+                target,
+                isolated,
+                k + 1,
+                mapping,
+                used,
+                node_match,
+                scratch,
+                emit,
+            );
         }
         for t in 0..target.node_count() {
             if used[t] || !node_match(NodeId(q as u32), NodeId(t as u32)) {
@@ -1856,10 +1982,23 @@ mod ray_kirsch {
             }
             mapping[q] = Some(t);
             used[t] = true;
-            rk_finish(target, isolated, k + 1, mapping, used, node_match, results);
+            let result = rk_finish(
+                target,
+                isolated,
+                k + 1,
+                mapping,
+                used,
+                node_match,
+                scratch,
+                emit,
+            );
             used[t] = false;
             mapping[q] = None;
+            if let ControlFlow::Break(value) = result {
+                return ControlFlow::Break(value);
+            }
         }
+        ControlFlow::Continue(())
     }
 }
 
@@ -2015,7 +2154,13 @@ mod tests {
             RayKirsch,
         ] {
             let mut r: Vec<Vec<usize>> = target
-                .enumerate_subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg)
+                .enumerate_subgraph_isomorphisms_at(
+                    &query,
+                    anchor,
+                    &mut node_match,
+                    &mut edge_match,
+                    alg,
+                )
                 .iter()
                 .map(|c| {
                     c.matched_pairs()
