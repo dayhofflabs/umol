@@ -2213,7 +2213,7 @@ mod tests {
         vec![8, 9, 4, 3, 6, 7], vec![9, 4, 3, 6, 7, 8], vec![9, 8, 7, 6, 3, 4]])]
     #[case::node_filter(Graph::new(3, &[]), Graph::new(1, &[]), only_q0_t1, any_edge, vec![vec![1]])]
     #[case::edge_filter(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(2, &[[0, 1]]), any_node, only_tedge1, vec![vec![1, 2], vec![2, 1]])]
-    fn test_enumerate_subgraph_isomorphisms(
+    fn test_graph_enumerate_subgraph_isomorphisms(
         #[case] target: Graph,
         #[case] query: Graph,
         #[case] mut node_match: fn(NodeId, NodeId) -> bool,
@@ -2297,7 +2297,7 @@ mod tests {
     #[case::node_filter(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), exclude_t0, any_edge, vec![vec![1, 2]])]
     #[case::node_filter_rejects_anchor(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), reject_q0_t1, any_edge, vec![])]
     #[case::edge_filter(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), Graph::new(2, &[[0, 1]]), (NodeId(0), NodeId(1)), any_node, only_tedge1, vec![vec![1, 2]])]
-    fn test_enumerate_subgraph_isomorphisms_at(
+    fn test_graph_enumerate_subgraph_isomorphisms_at(
         #[case] target: Graph,
         #[case] query: Graph,
         #[case] anchor: (NodeId, NodeId),
@@ -2343,7 +2343,7 @@ mod tests {
     #[case(2)]
     #[case(3)]
     #[case(6)]
-    fn test_subgraph_isomorphisms_arcmatch_path_length(#[case] path_length: usize) {
+    fn test_graph_enumerate_subgraph_isomorphisms_arcmatch_path_length(#[case] path_length: usize) {
         let graph = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let mut node_match = any_node;
         let mut edge_match = any_edge;

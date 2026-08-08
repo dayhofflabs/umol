@@ -138,7 +138,7 @@ fn visited(
 
 proptest! {
     #[test]
-    fn test_enumerate_subgraph_isomorphisms_cross_validation(
+    fn test_graph_enumerate_subgraph_isomorphisms_cross_validation(
         query in labeled_graph(4, 2, 2),
         target in labeled_graph(6, 2, 2),
     ) {
@@ -154,7 +154,7 @@ proptest! {
     }
 
     #[test]
-    fn test_enumerate_subgraph_isomorphisms_cross_validation_planted(
+    fn test_graph_enumerate_subgraph_isomorphisms_cross_validation_planted(
         (target, nodes) in labeled_graph(6, 2, 2).prop_flat_map(|t| {
             let cap = t.graph.node_count().min(4);
             let n = t.graph.node_count();
@@ -175,7 +175,7 @@ proptest! {
     }
 
     #[test]
-    fn test_visit_subgraph_isomorphisms_agreement(
+    fn test_graph_visit_subgraph_isomorphisms_agreement(
         query in labeled_graph(4, 2, 2),
         target in labeled_graph(6, 2, 2),
     ) {
@@ -190,7 +190,7 @@ proptest! {
     }
 
     #[test]
-    fn test_visit_subgraph_isomorphisms_at_agreement(
+    fn test_graph_visit_subgraph_isomorphisms_at_agreement(
         query in labeled_graph(3, 2, 2),
         target in labeled_graph(5, 2, 2),
     ) {
