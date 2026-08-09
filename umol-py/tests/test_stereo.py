@@ -4,7 +4,7 @@ from umol import (
     AtomAst,
     CisTransConfiguration,
     CisTransStereo,
-    CisTransStereoAst,
+    CisTransStereoForm,
     Element,
     MoleculeAst,
     ParseError,
@@ -17,7 +17,7 @@ from umol import (
     StereoBondConstraintAst,
     StereoBondConstraintsAst,
     StereoBondUpdate,
-    StereoConfigurationAst,
+    StereoConfigurationForm,
     StereoConfigurationUpdate,
     StereoCoset,
     StereoKind,
@@ -28,7 +28,7 @@ from umol import (
     StereogenicityAst,
     TetrahedralConfiguration,
     TetrahedralStereo,
-    TetrahedralStereoAst,
+    TetrahedralStereoForm,
 )
 
 
@@ -273,22 +273,22 @@ def test_stereocosetast_term():
 
 
 def test_tetrahedralstereoast_stereo():
-    assert TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)) == TetrahedralStereoAst.Stereo(
+    assert TetrahedralStereoForm.Stereo(StereoCoset.Lit(1)) == TetrahedralStereoForm.Stereo(
         StereoCoset.Lit(1)
     )
 
 
 def test_tetrahedralstereoast_not_stereo():
-    assert TetrahedralStereoAst.NotStereo() == TetrahedralStereoAst.NotStereo()
+    assert TetrahedralStereoForm.NotStereo() == TetrahedralStereoForm.NotStereo()
 
 
 def test_tetrahedralstereoast_as_lit():
-    assert TetrahedralStereoAst.NotStereo().as_lit() == TetrahedralStereo.NotStereo()
-    assert TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)).as_lit() == (
+    assert TetrahedralStereoForm.NotStereo().as_lit() == TetrahedralStereo.NotStereo()
+    assert TetrahedralStereoForm.Stereo(StereoCoset.Lit(1)).as_lit() == (
         TetrahedralStereo.Stereo(1)
     )
-    assert TetrahedralStereoAst.Undetermined().as_lit() is None
-    assert TetrahedralStereoAst.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
+    assert TetrahedralStereoForm.Undetermined().as_lit() is None
+    assert TetrahedralStereoForm.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
 
 
 def test_stereocosetast_eq_hash_repr():
@@ -307,31 +307,31 @@ def test_stereoterm_eq_repr():
 
 
 def test_tetrahedralstereoast_stereo_repr():
-    assert repr(TetrahedralStereoAst.Stereo(StereoCoset.Lit(1))) == (
-        "TetrahedralStereoAst.Stereo(StereoCoset.Lit(1))"
+    assert repr(TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))) == (
+        "TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))"
     )
 
 
 def test_cistransstereoast_stereo():
-    assert CisTransStereoAst.Stereo(StereoCoset.Lit(1)) == CisTransStereoAst.Stereo(
+    assert CisTransStereoForm.Stereo(StereoCoset.Lit(1)) == CisTransStereoForm.Stereo(
         StereoCoset.Lit(1)
     )
 
 
 def test_cistransstereoast_not_stereo():
-    assert CisTransStereoAst.NotStereo() == CisTransStereoAst.NotStereo()
+    assert CisTransStereoForm.NotStereo() == CisTransStereoForm.NotStereo()
 
 
 def test_cistransstereoast_as_lit():
-    assert CisTransStereoAst.NotStereo().as_lit() == CisTransStereo.NotStereo()
-    assert CisTransStereoAst.Stereo(StereoCoset.Lit(0)).as_lit() == CisTransStereo.Stereo(0)
-    assert CisTransStereoAst.Undetermined().as_lit() is None
-    assert CisTransStereoAst.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
+    assert CisTransStereoForm.NotStereo().as_lit() == CisTransStereo.NotStereo()
+    assert CisTransStereoForm.Stereo(StereoCoset.Lit(0)).as_lit() == CisTransStereo.Stereo(0)
+    assert CisTransStereoForm.Undetermined().as_lit() is None
+    assert CisTransStereoForm.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
 
 
 def test_cistransstereoast_stereo_repr():
-    assert repr(CisTransStereoAst.Stereo(StereoCoset.Lit(1))) == (
-        "CisTransStereoAst.Stereo(StereoCoset.Lit(1))"
+    assert repr(CisTransStereoForm.Stereo(StereoCoset.Lit(1))) == (
+        "CisTransStereoForm.Stereo(StereoCoset.Lit(1))"
     )
 
 
@@ -360,7 +360,7 @@ def stereo_atom_molecule():
 def test_stereoatomast_new():
     atom = StereoAtomAst(TetrahedralConfiguration.Ccw)
     assert str(atom) == "Th0"
-    assert atom.configuration == StereoConfigurationAst.Kinded(
+    assert atom.configuration == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert len(atom.constraints) == 0
@@ -399,7 +399,7 @@ def test_stereoatomast_asdict():
     atom = StereoAtomAst(TetrahedralConfiguration.Ccw)
     d = atom.asdict()
     assert set(d.keys()) == {"configuration", "constraints"}
-    assert d["configuration"] == StereoConfigurationAst.Kinded(
+    assert d["configuration"] == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert d["constraints"] == []
@@ -408,7 +408,7 @@ def test_stereoatomast_asdict():
 def test_stereobondast_parse_roundtrip():
     bond = StereoBondAst.parse("Ct0")
     assert str(bond) == "Ct0"
-    assert bond.configuration == StereoConfigurationAst.Kinded(
+    assert bond.configuration == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(0)
     )
 
@@ -422,7 +422,7 @@ def test_molecule_stereo_atoms_from_entries():
     assert view.ligands == [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)]
     assert view.kind == StereoKind.Tetrahedral
     assert view.coset == StereoCoset.Lit(0)
-    assert view.configuration == StereoConfigurationAst.Kinded(
+    assert view.configuration == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
 

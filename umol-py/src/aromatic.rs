@@ -14,12 +14,12 @@ use umol_graph_ir::ir::{
 };
 
 use crate::convert::hash_rust;
-use crate::electrons::{ElectronCountsAst, ElectronCountsLike};
+use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{NumLike, ValueAst};
+use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
+use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for an aromatic system.
 #[pyclass(frozen, skip_from_py_object)]
@@ -74,16 +74,16 @@ impl AromaticSystemUpdate {
     }
 
     #[getter]
-    fn electrons(&self) -> Option<ElectronCountsAst> {
-        self.0.electrons.as_ref().map(ElectronCountsAst::from_rust)
+    fn electrons(&self) -> Option<ElectronCountsForm> {
+        self.0.electrons.as_ref().map(ElectronCountsForm::from_rust)
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .charge
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
@@ -119,14 +119,14 @@ pub struct AromaticSystemAst(GraphIrAromaticSystemForm);
 #[pymethods]
 impl AromaticSystemAst {
     /// Construct from an electron-count vector — a `list[int]` or an
-    /// `ElectronCountsAst` — optionally setting fields.
+    /// `ElectronCountsForm` — optionally setting fields.
     #[new]
     #[pyo3(signature = (electrons, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
         electrons: ElectronCountsLike,
         charge: Option<NumLike>,
-        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
         let mut system = GraphIrAromaticSystemForm::new(electrons.to_rust(py));
@@ -160,8 +160,8 @@ impl AromaticSystemAst {
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
-    fn electrons(&self) -> ElectronCountsAst {
-        ElectronCountsAst::from_rust(&self.0.electrons)
+    fn electrons(&self) -> ElectronCountsForm {
+        ElectronCountsForm::from_rust(&self.0.electrons)
     }
 
     #[setter]
@@ -170,8 +170,8 @@ impl AromaticSystemAst {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.charge)
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.charge)
     }
 
     #[setter]
@@ -180,12 +180,12 @@ impl AromaticSystemAst {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
-        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
+        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.0.unpaired_electrons = value.to_rust(py);
     }
 
@@ -302,9 +302,9 @@ impl AromaticSystemView {
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
-    fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsAst> {
+    fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsForm> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(ElectronCountsAst::from_rust(
+        Ok(ElectronCountsForm::from_rust(
             &self.aromatic_system(molecule.inner())?.ast.electrons,
         ))
     }
@@ -320,9 +320,9 @@ impl AromaticSystemView {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.aromatic_system(molecule.inner())?.ast.charge)
+        NumForm::from_rust(py, &self.aromatic_system(molecule.inner())?.ast.charge)
     }
 
     #[setter]
@@ -336,9 +336,9 @@ impl AromaticSystemView {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.bind(py).borrow();
-        UnpairedElectronsAst::from_rust(
+        UnpairedElectronsForm::from_rust(
             py,
             &self
                 .aromatic_system(molecule.inner())?
@@ -348,7 +348,7 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -392,11 +392,14 @@ impl AromaticSystemView {
         let molecule = self.owner.bind(py).borrow();
         let system = self.aromatic_system(molecule.inner())?.ast;
         let dict = PyDict::new(py);
-        dict.set_item("electrons", ElectronCountsAst::from_rust(&system.electrons))?;
-        dict.set_item("charge", ValueAst::from_rust(py, &system.charge)?)?;
+        dict.set_item(
+            "electrons",
+            ElectronCountsForm::from_rust(&system.electrons),
+        )?;
+        dict.set_item("charge", NumForm::from_rust(py, &system.charge)?)?;
         dict.set_item(
             "unpaired_electrons",
-            UnpairedElectronsAst::from_rust(py, &system.unpaired_electrons)?,
+            UnpairedElectronsForm::from_rust(py, &system.unpaired_electrons)?,
         )?;
         dict.set_item(
             "constraints",
@@ -593,10 +596,10 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_new() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
+            let unpaired_electrons_form = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+                UnpairedElectronsForm::from_rust(py, &unpaired_electrons_form).unwrap(),
             )
             .unwrap();
             let system = AromaticSystemAst::new(
@@ -611,7 +614,7 @@ mod tests {
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
             assert_eq!(system.inner().charge, GraphIrNumForm::Lit(-2));
-            assert_eq!(system.inner().unpaired_electrons, unpaired_electrons_ast);
+            assert_eq!(system.inner().unpaired_electrons, unpaired_electrons_form);
         });
     }
 
@@ -697,10 +700,10 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
+            let unpaired_electrons_form = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+                UnpairedElectronsForm::from_rust(py, &unpaired_electrons_form).unwrap(),
             )
             .unwrap();
             let mut system =
@@ -710,7 +713,7 @@ mod tests {
             system.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
             assert_eq!(
                 system.unpaired_electrons(py).unwrap().to_rust(py),
-                unpaired_electrons_ast
+                unpaired_electrons_form
             );
         });
     }
@@ -763,7 +766,7 @@ mod tests {
             let dict = system.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
-            let expected = into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1])).unwrap();
+            let expected = into_py_variant(py, ElectronCountsForm::Lit(vec![1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("unpaired_electrons").unwrap());
@@ -832,10 +835,10 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_view_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
+            let unpaired_electrons_form = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+                UnpairedElectronsForm::from_rust(py, &unpaired_electrons_form).unwrap(),
             )
             .unwrap();
             let owner = benzene(py);
@@ -850,7 +853,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.unpaired_electrons(py).unwrap().to_rust(py),
-                unpaired_electrons_ast
+                unpaired_electrons_form
             );
         });
     }
@@ -923,7 +926,7 @@ mod tests {
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
             let expected =
-                into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])).unwrap();
+                into_py_variant(py, ElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("unpaired_electrons").unwrap());
@@ -1120,7 +1123,7 @@ mod tests {
             let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "AromaticSystemConstraintsAst([AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))])"
+                "AromaticSystemConstraintsAst([AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))])"
             );
         });
     }
@@ -1525,11 +1528,9 @@ mod tests {
             let dict = constraints.asdict(py).unwrap();
             assert_eq!(dict.len(), 1);
             let value = dict.get_item("electron_count").unwrap().unwrap();
-            let expected = into_py_variant(
-                py,
-                ValueAst::from_rust(py, &GraphIrNumForm::Lit(6)).unwrap(),
-            )
-            .unwrap();
+            let expected =
+                into_py_variant(py, NumForm::from_rust(py, &GraphIrNumForm::Lit(6)).unwrap())
+                    .unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
         });
     }

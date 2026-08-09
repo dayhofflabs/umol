@@ -7,7 +7,7 @@ use umol_graph_ir::ir::{
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::value::{NumLike, ValueAst};
+use crate::value::{NumForm, NumLike};
 
 #[pyclass]
 pub enum RingScope {
@@ -55,7 +55,7 @@ pub struct RingMembershipAst {
     #[pyo3(get)]
     scope: Py<RingScope>,
     #[pyo3(get)]
-    count: Py<ValueAst>,
+    count: Py<NumForm>,
 }
 
 #[pymethods]
@@ -100,7 +100,7 @@ impl RingMembershipAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrRingMembershipForm) -> PyResult<Self> {
         Ok(Self {
             scope: into_py_variant(py, RingScope::from_rust(&ast.scope))?,
-            count: into_py_variant(py, ValueAst::from_rust(py, &ast.count)?)?,
+            count: into_py_variant(py, NumForm::from_rust(py, &ast.count)?)?,
         })
     }
 

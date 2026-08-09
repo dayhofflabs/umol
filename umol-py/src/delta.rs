@@ -30,7 +30,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::aromatic::AromaticSystemAst;
-use crate::atom::{AtomAst, ElementAst, IsotopeMassAst};
+use crate::atom::{AtomAst, ElementForm, IsotopeMassForm};
 use crate::bond::BondAst;
 use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
@@ -42,15 +42,15 @@ use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
-use crate::electrons::ElectronCountsAst;
+use crate::electrons::ElectronCountsForm;
 use crate::lattice::impl_py_canonicalize;
 use crate::multicenter::MulticenterBondAst;
-use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
-use crate::spin::UnpairedElectronsAst;
+use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindForm};
+use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
-    Permutation, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind, StereoLigand,
+    Permutation, StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind, StereoLigand,
 };
-use crate::value::ValueAst;
+use crate::value::NumForm;
 
 /// Render a named old/new complex-enum variant using the child objects' reprs.
 fn field_change_repr(obj: &Bound<'_, PyAny>, type_name: &str, variant: &str) -> PyResult<String> {
@@ -123,67 +123,67 @@ macro_rules! field_change {
 field_change! {
     /// An atom attribute change carrying the field's old and new AST values.
     AtomFieldChange {
-        Element(ElementAst),
-        IsotopeMass(IsotopeMassAst),
-        Charge(ValueAst),
-        ImplicitHydrogens(ValueAst),
-        LonePairs(ValueAst),
-        UnpairedElectrons(UnpairedElectronsAst),
+        Element(ElementForm),
+        IsotopeMass(IsotopeMassForm),
+        Charge(NumForm),
+        ImplicitHydrogens(NumForm),
+        LonePairs(NumForm),
+        UnpairedElectrons(UnpairedElectronsForm),
     }
 }
 
 field_change! {
     /// A covalent-bond attribute change carrying the field's old and new AST values.
     BondFieldChange {
-        Order(ValueAst),
-        Charge(ValueAst),
-        UnpairedElectrons(UnpairedElectronsAst),
+        Order(NumForm),
+        Charge(NumForm),
+        UnpairedElectrons(UnpairedElectronsForm),
     }
 }
 
 field_change! {
     /// A dative-bond attribute change carrying the field's old and new AST values.
     DativeBondFieldChange {
-        Order(ValueAst),
+        Order(NumForm),
     }
 }
 
 field_change! {
     /// An aromatic-system attribute change carrying the field's old and new AST values.
     AromaticSystemFieldChange {
-        Electrons(ElectronCountsAst),
-        Charge(ValueAst),
-        UnpairedElectrons(UnpairedElectronsAst),
+        Electrons(ElectronCountsForm),
+        Charge(NumForm),
+        UnpairedElectrons(UnpairedElectronsForm),
     }
 }
 
 field_change! {
     /// A multicenter-bond attribute change carrying the field's old and new AST values.
     MulticenterBondFieldChange {
-        Electrons(ElectronCountsAst),
-        Charge(ValueAst),
-        UnpairedElectrons(UnpairedElectronsAst),
+        Electrons(ElectronCountsForm),
+        Charge(NumForm),
+        UnpairedElectrons(UnpairedElectronsForm),
     }
 }
 
 field_change! {
     /// A noncovalent-bond kind change carrying the field's old and new AST values.
     NoncovalentBondFieldChange {
-        Kind(NoncovalentBondKindAst),
+        Kind(NoncovalentBondKindForm),
     }
 }
 
 field_change! {
     /// A stereo-atom configuration change carrying the field's old and new AST values.
     StereoAtomFieldChange {
-        Configuration(StereoConfigurationAst),
+        Configuration(StereoConfigurationForm),
     }
 }
 
 field_change! {
     /// A stereo-bond configuration change carrying the field's old and new AST values.
     StereoBondFieldChange {
-        Configuration(StereoConfigurationAst),
+        Configuration(StereoConfigurationForm),
     }
 }
 
@@ -191,28 +191,28 @@ impl AtomFieldChange {
     pub(crate) fn from_rust(py: Python<'_>, change: &GraphIrAtomFieldChange) -> PyResult<Self> {
         Ok(match change {
             GraphIrAtomFieldChange::Element { old, new } => Self::Element {
-                old: into_py_variant(py, ElementAst::from_rust(old))?,
-                new: into_py_variant(py, ElementAst::from_rust(new))?,
+                old: into_py_variant(py, ElementForm::from_rust(old))?,
+                new: into_py_variant(py, ElementForm::from_rust(new))?,
             },
             GraphIrAtomFieldChange::IsotopeMass { old, new } => Self::IsotopeMass {
-                old: into_py_variant(py, IsotopeMassAst::from_rust(old))?,
-                new: into_py_variant(py, IsotopeMassAst::from_rust(new))?,
+                old: into_py_variant(py, IsotopeMassForm::from_rust(old))?,
+                new: into_py_variant(py, IsotopeMassForm::from_rust(new))?,
             },
             GraphIrAtomFieldChange::Charge { old, new } => Self::Charge {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrAtomFieldChange::ImplicitHydrogens { old, new } => Self::ImplicitHydrogens {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrAtomFieldChange::LonePairs { old, new } => Self::LonePairs {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrAtomFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
-                old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
-                new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
+                old: Py::new(py, UnpairedElectronsForm::from_rust(py, old)?)?,
+                new: Py::new(py, UnpairedElectronsForm::from_rust(py, new)?)?,
             },
         })
     }
@@ -251,16 +251,16 @@ impl BondFieldChange {
     pub(crate) fn from_rust(py: Python<'_>, change: &GraphIrBondFieldChange) -> PyResult<Self> {
         Ok(match change {
             GraphIrBondFieldChange::Order { old, new } => Self::Order {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrBondFieldChange::Charge { old, new } => Self::Charge {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrBondFieldChange::UnpairedElectrons { old, new } => Self::UnpairedElectrons {
-                old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
-                new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
+                old: Py::new(py, UnpairedElectronsForm::from_rust(py, old)?)?,
+                new: Py::new(py, UnpairedElectronsForm::from_rust(py, new)?)?,
             },
         })
     }
@@ -290,8 +290,8 @@ impl DativeBondFieldChange {
     ) -> PyResult<Self> {
         Ok(match change {
             GraphIrDativeBondFieldChange::Order { old, new } => Self::Order {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
         })
     }
@@ -313,17 +313,17 @@ impl AromaticSystemFieldChange {
     ) -> PyResult<Self> {
         Ok(match change {
             GraphIrAromaticSystemFieldChange::Electrons { old, new } => Self::Electrons {
-                old: into_py_variant(py, ElectronCountsAst::from_rust(old))?,
-                new: into_py_variant(py, ElectronCountsAst::from_rust(new))?,
+                old: into_py_variant(py, ElectronCountsForm::from_rust(old))?,
+                new: into_py_variant(py, ElectronCountsForm::from_rust(new))?,
             },
             GraphIrAromaticSystemFieldChange::Charge { old, new } => Self::Charge {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrAromaticSystemFieldChange::UnpairedElectrons { old, new } => {
                 Self::UnpairedElectrons {
-                    old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
-                    new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
+                    old: Py::new(py, UnpairedElectronsForm::from_rust(py, old)?)?,
+                    new: Py::new(py, UnpairedElectronsForm::from_rust(py, new)?)?,
                 }
             }
         })
@@ -356,17 +356,17 @@ impl MulticenterBondFieldChange {
     ) -> PyResult<Self> {
         Ok(match change {
             GraphIrMulticenterBondFieldChange::Electrons { old, new } => Self::Electrons {
-                old: into_py_variant(py, ElectronCountsAst::from_rust(old))?,
-                new: into_py_variant(py, ElectronCountsAst::from_rust(new))?,
+                old: into_py_variant(py, ElectronCountsForm::from_rust(old))?,
+                new: into_py_variant(py, ElectronCountsForm::from_rust(new))?,
             },
             GraphIrMulticenterBondFieldChange::Charge { old, new } => Self::Charge {
-                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, NumForm::from_rust(py, new)?)?,
             },
             GraphIrMulticenterBondFieldChange::UnpairedElectrons { old, new } => {
                 Self::UnpairedElectrons {
-                    old: Py::new(py, UnpairedElectronsAst::from_rust(py, old)?)?,
-                    new: Py::new(py, UnpairedElectronsAst::from_rust(py, new)?)?,
+                    old: Py::new(py, UnpairedElectronsForm::from_rust(py, old)?)?,
+                    new: Py::new(py, UnpairedElectronsForm::from_rust(py, new)?)?,
                 }
             }
         })
@@ -399,8 +399,8 @@ impl NoncovalentBondFieldChange {
     ) -> PyResult<Self> {
         Ok(match change {
             GraphIrNoncovalentBondFieldChange::Kind { old, new } => Self::Kind {
-                old: into_py_variant(py, NoncovalentBondKindAst::from_rust(old))?,
-                new: into_py_variant(py, NoncovalentBondKindAst::from_rust(new))?,
+                old: into_py_variant(py, NoncovalentBondKindForm::from_rust(old))?,
+                new: into_py_variant(py, NoncovalentBondKindForm::from_rust(new))?,
             },
         })
     }
@@ -422,8 +422,8 @@ impl StereoAtomFieldChange {
     ) -> PyResult<Self> {
         Ok(match change {
             GraphIrStereoAtomFieldChange::Configuration { old, new } => Self::Configuration {
-                old: into_py_variant(py, StereoConfigurationAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, StereoConfigurationAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, StereoConfigurationForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, StereoConfigurationForm::from_rust(py, new)?)?,
             },
         })
     }
@@ -445,8 +445,8 @@ impl StereoBondFieldChange {
     ) -> PyResult<Self> {
         Ok(match change {
             GraphIrStereoBondFieldChange::Configuration { old, new } => Self::Configuration {
-                old: into_py_variant(py, StereoConfigurationAst::from_rust(py, old)?)?,
-                new: into_py_variant(py, StereoConfigurationAst::from_rust(py, new)?)?,
+                old: into_py_variant(py, StereoConfigurationForm::from_rust(py, old)?)?,
+                new: into_py_variant(py, StereoConfigurationForm::from_rust(py, new)?)?,
             },
         })
     }
@@ -2307,45 +2307,45 @@ mod tests {
             old: GraphIrElementForm::Lit(ChemElement::C),
             new: GraphIrElementForm::Lit(ChemElement::N),
         },
-        "ElementAst.Lit(Element('C'))",
-        "ElementAst.Lit(Element('N'))",
-        "AtomFieldChange.Element(old=ElementAst.Lit(Element('C')), new=ElementAst.Lit(Element('N')))"
+        "ElementForm.Lit(Element('C'))",
+        "ElementForm.Lit(Element('N'))",
+        "AtomFieldChange.Element(old=ElementForm.Lit(Element('C')), new=ElementForm.Lit(Element('N')))"
     )]
     #[case::isotope_mass(
         GraphIrAtomFieldChange::IsotopeMass {
             old: GraphIrIsotopeMassForm::Lit(12),
             new: GraphIrIsotopeMassForm::Lit(13),
         },
-        "IsotopeMassAst.Lit(12)",
-        "IsotopeMassAst.Lit(13)",
-        "AtomFieldChange.IsotopeMass(old=IsotopeMassAst.Lit(12), new=IsotopeMassAst.Lit(13))"
+        "IsotopeMassForm.Lit(12)",
+        "IsotopeMassForm.Lit(13)",
+        "AtomFieldChange.IsotopeMass(old=IsotopeMassForm.Lit(12), new=IsotopeMassForm.Lit(13))"
     )]
     #[case::charge(
         GraphIrAtomFieldChange::Charge {
             old: GraphIrNumForm::Lit(0),
             new: GraphIrNumForm::Lit(-1),
         },
-        "ValueAst.Lit(0)",
-        "ValueAst.Lit(-1)",
-        "AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))"
+        "NumForm.Lit(0)",
+        "NumForm.Lit(-1)",
+        "AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1))"
     )]
     #[case::implicit_hydrogens(
         GraphIrAtomFieldChange::ImplicitHydrogens {
             old: GraphIrNumForm::Lit(3),
             new: GraphIrNumForm::Lit(2),
         },
-        "ValueAst.Lit(3)",
-        "ValueAst.Lit(2)",
-        "AtomFieldChange.ImplicitHydrogens(old=ValueAst.Lit(3), new=ValueAst.Lit(2))"
+        "NumForm.Lit(3)",
+        "NumForm.Lit(2)",
+        "AtomFieldChange.ImplicitHydrogens(old=NumForm.Lit(3), new=NumForm.Lit(2))"
     )]
     #[case::lone_pairs(
         GraphIrAtomFieldChange::LonePairs {
             old: GraphIrNumForm::Lit(1),
             new: GraphIrNumForm::Lit(2),
         },
-        "ValueAst.Lit(1)",
-        "ValueAst.Lit(2)",
-        "AtomFieldChange.LonePairs(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
+        "NumForm.Lit(1)",
+        "NumForm.Lit(2)",
+        "AtomFieldChange.LonePairs(old=NumForm.Lit(1), new=NumForm.Lit(2))"
     )]
     #[case::unpaired_electrons(
         GraphIrAtomFieldChange::UnpairedElectrons {
@@ -2358,9 +2358,9 @@ mod tests {
                 multiplicity: GraphIrNumForm::Lit(2),
             },
         },
-        "UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1))",
-        "UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2))",
-        "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), ValueAst.Lit(2)))"
+        "UnpairedElectronsForm(NumForm.Lit(0), NumForm.Lit(1))",
+        "UnpairedElectronsForm(NumForm.Lit(1), NumForm.Lit(2))",
+        "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsForm(NumForm.Lit(0), NumForm.Lit(1)), new=UnpairedElectronsForm(NumForm.Lit(1), NumForm.Lit(2)))"
     )]
     fn test_atom_field_change_repr(
         #[case] change: GraphIrAtomFieldChange,
@@ -2787,9 +2787,9 @@ mod tests {
                 GraphIrStereoCoset::Undetermined,
             ),
         },
-        "StereoConfigurationAst.Undetermined()",
-        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
-        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()))",
+        "StereoConfigurationForm.Undetermined()",
+        "StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
+        "StereoAtomFieldChange.Configuration(old=StereoConfigurationForm.Undetermined(), new=StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()))",
     )]
     #[case::coset_resolved(
         GraphIrStereoAtomFieldChange::Configuration {
@@ -2802,9 +2802,9 @@ mod tests {
                 GraphIrStereoCoset::Lit(1),
             ),
         },
-        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
-        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1))",
-        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)))",
+        "StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
+        "StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1))",
+        "StereoAtomFieldChange.Configuration(old=StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()), new=StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)))",
     )]
     fn test_stereo_atom_field_change_repr(
         #[case] change: GraphIrStereoAtomFieldChange,
@@ -2957,9 +2957,9 @@ mod tests {
                 GraphIrStereoCoset::Undetermined,
             ),
         },
-        "StereoConfigurationAst.Undetermined()",
-        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
-        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()))",
+        "StereoConfigurationForm.Undetermined()",
+        "StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
+        "StereoBondFieldChange.Configuration(old=StereoConfigurationForm.Undetermined(), new=StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()))",
     )]
     #[case::coset_resolved(
         GraphIrStereoBondFieldChange::Configuration {
@@ -2972,9 +2972,9 @@ mod tests {
                 GraphIrStereoCoset::Lit(1),
             ),
         },
-        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
-        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1))",
-        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1)))",
+        "StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
+        "StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1))",
+        "StereoBondFieldChange.Configuration(old=StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()), new=StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1)))",
     )]
     fn test_stereo_bond_field_change_repr(
         #[case] change: GraphIrStereoBondFieldChange,
@@ -3137,7 +3137,7 @@ mod tests {
                 new: GraphIrNumForm::Lit(-1),
             },
         },
-        "AtomDelta.ModifyField(id=3, change=AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+        "AtomDelta.ModifyField(id=3, change=AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1)))",
     )]
     #[case::modify_constraint(
         GraphIrAtomDelta::ModifyConstraint {
@@ -3145,7 +3145,7 @@ mod tests {
             old: None,
             new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
         },
-        "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
+        "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(NumForm.Lit(4)))",
     )]
     fn test_atom_delta_repr(#[case] delta: GraphIrAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -3310,7 +3310,7 @@ mod tests {
                 new: GraphIrNumForm::Lit(2),
             },
         },
-        "BondDelta.ModifyField(id=2, change=BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+        "BondDelta.ModifyField(id=2, change=BondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2)))",
     )]
     #[case::modify_constraint(
         GraphIrBondDelta::ModifyConstraint {
@@ -3318,7 +3318,7 @@ mod tests {
             old: None,
             new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         },
-        "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+        "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
     )]
     fn test_bond_delta_repr(#[case] delta: GraphIrBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -3496,7 +3496,7 @@ mod tests {
                 new: GraphIrNumForm::Lit(2),
             },
         },
-        "DativeBondDelta.ModifyField(id=1, change=DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+        "DativeBondDelta.ModifyField(id=1, change=DativeBondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2)))",
     )]
     #[case::modify_constraint(
         GraphIrDativeBondDelta::ModifyConstraint {
@@ -3504,7 +3504,7 @@ mod tests {
             old: None,
             new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         },
-        "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+        "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
     )]
     fn test_dative_bond_delta_repr(#[case] delta: GraphIrDativeBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -3679,7 +3679,7 @@ mod tests {
                 new: GraphIrNumForm::Lit(-1),
             },
         },
-        "AromaticSystemDelta.ModifyField(id=2, change=AromaticSystemFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+        "AromaticSystemDelta.ModifyField(id=2, change=AromaticSystemFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1)))",
     )]
     #[case::modify_constraint(
         GraphIrAromaticSystemDelta::ModifyConstraint {
@@ -3687,7 +3687,7 @@ mod tests {
             old: None,
             new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         },
-        "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+        "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)))",
     )]
     fn test_aromatic_system_delta_repr(
         #[case] delta: GraphIrAromaticSystemDelta,
@@ -3863,7 +3863,7 @@ mod tests {
                 new: GraphIrNumForm::Lit(-1),
             },
         },
-        "MulticenterBondDelta.ModifyField(id=3, change=MulticenterBondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+        "MulticenterBondDelta.ModifyField(id=3, change=MulticenterBondFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1)))",
     )]
     #[case::modify_constraint(
         GraphIrMulticenterBondDelta::ModifyConstraint {
@@ -3871,7 +3871,7 @@ mod tests {
             old: None,
             new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         },
-        "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+        "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)))",
     )]
     fn test_multicenter_bond_delta_repr(
         #[case] delta: GraphIrMulticenterBondDelta,
@@ -4047,7 +4047,7 @@ mod tests {
                 new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
             },
         },
-        "NoncovalentBondDelta.ModifyField(id=4, change=NoncovalentBondFieldChange.Kind(old=NoncovalentBondKindAst.Undetermined(), new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)))",
+        "NoncovalentBondDelta.ModifyField(id=4, change=NoncovalentBondFieldChange.Kind(old=NoncovalentBondKindForm.Undetermined(), new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)))",
     )]
     #[case::modify_constraint(
         GraphIrNoncovalentBondDelta::ModifyConstraint {
@@ -4055,7 +4055,7 @@ mod tests {
             old: None,
             new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
         },
-        "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)))",
+        "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True)))",
     )]
     fn test_noncovalent_bond_delta_repr(
         #[case] delta: GraphIrNoncovalentBondDelta,
@@ -4310,7 +4310,7 @@ mod tests {
                 ),
             },
         },
-        "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
+        "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationForm.Undetermined(), new=StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
     )]
     #[case::modify_constraint(
         GraphIrStereoAtomDelta::ModifyConstraint {
@@ -4629,7 +4629,7 @@ mod tests {
                 ),
             },
         },
-        "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
+        "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationForm.Undetermined(), new=StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
     )]
     #[case::modify_constraint(
         GraphIrStereoBondDelta::ModifyConstraint {
@@ -4830,14 +4830,14 @@ mod tests {
             GraphIrAtomId(3),
             GraphIrAtomConstraintForm::degree(2),
         )),
-        "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2))))",
+        "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2))))",
     )]
     #[case::remove_recursive(
         GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
             GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintForm::valence(4)),
             GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
         ])),
-        "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
+        "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(NumForm.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
     )]
     fn test_constraint_delta_repr(#[case] delta: GraphIrConstraintDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -5011,7 +5011,7 @@ mod tests {
             GraphIrAtomId(3),
             GraphIrAtomConstraintForm::degree(2),
         ))),
-        "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))"
+        "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))"
     )]
     fn test_delta_repr(#[case] delta: GraphIrDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -5191,7 +5191,7 @@ mod tests {
                 GraphIrAtomConstraintForm::degree(2),
             ))),
         ],
-        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))])",
+        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))])",
     )]
     fn test_deltas_repr(#[case] entries: Vec<GraphIrDelta>, #[case] expected: &str) {
         Python::attach(|py| {

@@ -68,13 +68,13 @@ impl NoncovalentBondKind {
 /// A noncovalent bond's interaction kind: undetermined, or a concrete
 /// `NoncovalentBondKind`. Corresponds to the Rust `NoncovalentBondKindForm`.
 #[pyclass]
-pub enum NoncovalentBondKindAst {
+pub enum NoncovalentBondKindForm {
     Undetermined(),
     Lit(NoncovalentBondKind),
 }
 
 #[pymethods]
-impl NoncovalentBondKindAst {
+impl NoncovalentBondKindForm {
     /// The concrete interaction kind, or `None` when undetermined.
     fn as_lit(&self) -> Option<NoncovalentBondKind> {
         self.to_rust().as_lit().map(NoncovalentBondKind::from_rust)
@@ -90,12 +90,12 @@ impl NoncovalentBondKindAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            NoncovalentBondKindAst::Undetermined() => ("Undetermined", 0),
-            NoncovalentBondKindAst::Lit(_) => ("Lit", 1),
+            NoncovalentBondKindForm::Undetermined() => ("Undetermined", 0),
+            NoncovalentBondKindForm::Lit(_) => ("Lit", 1),
         };
         variant_repr(
             slf.bind(py).as_any(),
-            "NoncovalentBondKindAst",
+            "NoncovalentBondKindForm",
             variant,
             arity,
         )
@@ -103,17 +103,17 @@ impl NoncovalentBondKindAst {
 }
 
 impl_py_lattice!(
-    NoncovalentBondKindAst,
+    NoncovalentBondKindForm,
     GraphIrNoncovalentBondKindForm,
-    |value: &NoncovalentBondKindAst, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondKindForm> {
-        Ok(value.to_rust())
-    },
-    |_py: Python<'_>, value: GraphIrNoncovalentBondKindForm| -> PyResult<NoncovalentBondKindAst> {
-        Ok(NoncovalentBondKindAst::from_rust(&value))
+    |value: &NoncovalentBondKindForm,
+     _py: Python<'_>|
+     -> PyResult<GraphIrNoncovalentBondKindForm> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: GraphIrNoncovalentBondKindForm| -> PyResult<NoncovalentBondKindForm> {
+        Ok(NoncovalentBondKindForm::from_rust(&value))
     }
 );
 
-impl NoncovalentBondKindAst {
+impl NoncovalentBondKindForm {
     pub(crate) fn from_rust(ast: &GraphIrNoncovalentBondKindForm) -> Self {
         match ast {
             GraphIrNoncovalentBondKindForm::Undetermined => Self::Undetermined(),
@@ -130,12 +130,12 @@ impl NoncovalentBondKindAst {
 }
 
 /// Setter coercion for a noncovalent `kind` field: a bare `NoncovalentBondKind` →
-/// `Lit`, or a `NoncovalentBondKindAst` passthrough (matching the `Undetermined |
+/// `Lit`, or a `NoncovalentBondKindForm` passthrough (matching the `Undetermined |
 /// Lit` structure).
 #[derive(FromPyObject)]
 pub(crate) enum NoncovalentBondKindLike {
     Kind(NoncovalentBondKind),
-    Ast(Py<NoncovalentBondKindAst>),
+    Ast(Py<NoncovalentBondKindForm>),
 }
 
 impl NoncovalentBondKindLike {
@@ -194,8 +194,8 @@ impl NoncovalentBondUpdate {
     }
 
     #[getter]
-    fn kind(&self) -> Option<NoncovalentBondKindAst> {
-        self.0.kind.as_ref().map(NoncovalentBondKindAst::from_rust)
+    fn kind(&self) -> Option<NoncovalentBondKindForm> {
+        self.0.kind.as_ref().map(NoncovalentBondKindForm::from_rust)
     }
 
     #[getter]
@@ -226,7 +226,7 @@ pub struct NoncovalentBondAst(GraphIrNoncovalentBondForm);
 #[pymethods]
 impl NoncovalentBondAst {
     /// Construct from an interaction kind — a `NoncovalentBondKind` or a
-    /// `NoncovalentBondKindAst` — optionally setting constraints.
+    /// `NoncovalentBondKindForm` — optionally setting constraints.
     #[new]
     #[pyo3(signature = (kind, *, constraints=None))]
     fn new(
@@ -259,8 +259,8 @@ impl NoncovalentBondAst {
 
     /// The interaction kind.
     #[getter]
-    fn kind(&self) -> NoncovalentBondKindAst {
-        NoncovalentBondKindAst::from_rust(&self.0.kind)
+    fn kind(&self) -> NoncovalentBondKindForm {
+        NoncovalentBondKindForm::from_rust(&self.0.kind)
     }
 
     #[setter]
@@ -377,9 +377,9 @@ impl NoncovalentBondView {
 
     /// The interaction kind.
     #[getter]
-    fn kind(&self, py: Python<'_>) -> PyResult<NoncovalentBondKindAst> {
+    fn kind(&self, py: Python<'_>) -> PyResult<NoncovalentBondKindForm> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(NoncovalentBondKindAst::from_rust(
+        Ok(NoncovalentBondKindForm::from_rust(
             &self.noncovalent_bond(molecule.inner())?.ast.kind,
         ))
     }
@@ -429,7 +429,7 @@ impl NoncovalentBondView {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.noncovalent_bond(molecule.inner())?.ast;
         let dict = PyDict::new(py);
-        dict.set_item("kind", NoncovalentBondKindAst::from_rust(&bond.kind))?;
+        dict.set_item("kind", NoncovalentBondKindForm::from_rust(&bond.kind))?;
         dict.set_item(
             "constraints",
             noncovalent_bond_constraints_asdict(py, &bond.constraints)?,
@@ -595,7 +595,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::boolean::{BooleanAst, BooleanLike};
+    use crate::boolean::{BooleanForm, BooleanLike};
     use crate::convert::into_py_variant;
 
     #[rstest]
@@ -603,7 +603,7 @@ mod tests {
     #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond))]
     #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::VanDerWaals))]
     fn test_noncovalent_bond_kind_ast_roundtrip(#[case] ast: GraphIrNoncovalentBondKindForm) {
-        assert_eq!(NoncovalentBondKindAst::from_rust(&ast).to_rust(), ast);
+        assert_eq!(NoncovalentBondKindForm::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -616,7 +616,7 @@ mod tests {
         #[case] ast: GraphIrNoncovalentBondKindForm,
         #[case] expected: Option<NoncovalentBondKind>,
     ) {
-        assert_eq!(NoncovalentBondKindAst::from_rust(&ast).as_lit(), expected);
+        assert_eq!(NoncovalentBondKindForm::from_rust(&ast).as_lit(), expected);
     }
 
     #[rstest]
@@ -634,8 +634,9 @@ mod tests {
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::HydrogenBond).to_rust(py),
                 GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
-            // a NoncovalentBondKindAst passes through
-            let ast = Py::new(py, NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)).unwrap();
+            // a NoncovalentBondKindForm passes through
+            let ast =
+                Py::new(py, NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)).unwrap();
             assert_eq!(
                 NoncovalentBondKindLike::Ast(ast).to_rust(py),
                 GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
@@ -722,7 +723,7 @@ mod tests {
                 NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "NoncovalentBondConstraintsAst([NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))])"
+                "NoncovalentBondConstraintsAst([NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))])"
             );
         });
     }
@@ -925,7 +926,7 @@ mod tests {
                 NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
             let dict = constraints.asdict(py).unwrap();
             let value = dict.get_item("intramolecular").unwrap().unwrap();
-            let expected = into_py_variant(py, BooleanAst::Lit(true)).unwrap();
+            let expected = into_py_variant(py, BooleanForm::Lit(true)).unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
         });
     }
@@ -1123,7 +1124,7 @@ mod tests {
             let kind = dict.get_item("kind").unwrap().unwrap();
             let expected_kind = into_py_variant(
                 py,
-                NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             )
             .unwrap();
             assert!(kind.eq(expected_kind.bind(py)).unwrap());
@@ -1428,7 +1429,7 @@ mod tests {
             let kind = dict.get_item("kind").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             )
             .unwrap();
             assert!(kind.eq(expected.bind(py)).unwrap());

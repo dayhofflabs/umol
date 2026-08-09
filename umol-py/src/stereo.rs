@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-// The `BooleanAst` Rust value is still `#[cfg(test)]` (only tests build it directly); its `to_rust`
+// The `BooleanForm` Rust value is still `#[cfg(test)]` (only tests build it directly); its `to_rust`
 // peer is already live.
 #[cfg(test)]
 use umol_graph_ir::ir::BooleanForm as GraphIrBooleanForm;
@@ -221,14 +221,14 @@ impl StereoCoset {
 /// Tetrahedral atom stereo: undetermined, explicitly not stereogenic, or a
 /// stereo coset.
 #[pyclass]
-pub enum TetrahedralStereoAst {
+pub enum TetrahedralStereoForm {
     Undetermined(),
     NotStereo(),
     Stereo(Py<StereoCoset>),
 }
 
 #[pymethods]
-impl TetrahedralStereoAst {
+impl TetrahedralStereoForm {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -239,13 +239,13 @@ impl TetrahedralStereoAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            TetrahedralStereoAst::Undetermined() => ("Undetermined", 0),
-            TetrahedralStereoAst::NotStereo() => ("NotStereo", 0),
-            TetrahedralStereoAst::Stereo(_) => ("Stereo", 1),
+            TetrahedralStereoForm::Undetermined() => ("Undetermined", 0),
+            TetrahedralStereoForm::NotStereo() => ("NotStereo", 0),
+            TetrahedralStereoForm::Stereo(_) => ("Stereo", 1),
         };
         variant_repr(
             slf.bind(py).as_any(),
-            "TetrahedralStereoAst",
+            "TetrahedralStereoForm",
             variant,
             arity,
         )
@@ -258,17 +258,17 @@ impl TetrahedralStereoAst {
 }
 
 impl_py_lattice!(
-    TetrahedralStereoAst,
+    TetrahedralStereoForm,
     GraphIrTetrahedralStereoForm,
-    |value: &TetrahedralStereoAst, py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoForm> {
+    |value: &TetrahedralStereoForm, py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrTetrahedralStereoForm| -> PyResult<TetrahedralStereoAst> {
-        TetrahedralStereoAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrTetrahedralStereoForm| -> PyResult<TetrahedralStereoForm> {
+        TetrahedralStereoForm::from_rust(py, &value)
     }
 );
 
-impl TetrahedralStereoAst {
+impl TetrahedralStereoForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTetrahedralStereoForm) -> PyResult<Self> {
         Ok(match ast {
             GraphIrTetrahedralStereoForm::Undetermined => Self::Undetermined(),
@@ -353,14 +353,14 @@ impl TetrahedralConfiguration {
 
 /// Cis/trans bond stereo: undetermined, explicitly not stereogenic, or a stereo coset.
 #[pyclass]
-pub enum CisTransStereoAst {
+pub enum CisTransStereoForm {
     Undetermined(),
     NotStereo(),
     Stereo(Py<StereoCoset>),
 }
 
 #[pymethods]
-impl CisTransStereoAst {
+impl CisTransStereoForm {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -371,11 +371,11 @@ impl CisTransStereoAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            CisTransStereoAst::Undetermined() => ("Undetermined", 0),
-            CisTransStereoAst::NotStereo() => ("NotStereo", 0),
-            CisTransStereoAst::Stereo(_) => ("Stereo", 1),
+            CisTransStereoForm::Undetermined() => ("Undetermined", 0),
+            CisTransStereoForm::NotStereo() => ("NotStereo", 0),
+            CisTransStereoForm::Stereo(_) => ("Stereo", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "CisTransStereoAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "CisTransStereoForm", variant, arity)
     }
 
     /// The exact absence or stereo-coset value, or `None` when this expression is not ground.
@@ -385,17 +385,17 @@ impl CisTransStereoAst {
 }
 
 impl_py_lattice!(
-    CisTransStereoAst,
+    CisTransStereoForm,
     GraphIrCisTransStereoForm,
-    |value: &CisTransStereoAst, py: Python<'_>| -> PyResult<GraphIrCisTransStereoForm> {
+    |value: &CisTransStereoForm, py: Python<'_>| -> PyResult<GraphIrCisTransStereoForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrCisTransStereoForm| -> PyResult<CisTransStereoAst> {
-        CisTransStereoAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrCisTransStereoForm| -> PyResult<CisTransStereoForm> {
+        CisTransStereoForm::from_rust(py, &value)
     }
 );
 
-impl CisTransStereoAst {
+impl CisTransStereoForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrCisTransStereoForm) -> PyResult<Self> {
         Ok(match ast {
             GraphIrCisTransStereoForm::Undetermined => Self::Undetermined(),
@@ -479,12 +479,12 @@ impl CisTransConfiguration {
 }
 
 /// Setter coercion for `cis_trans_stereo`: `False` → not stereogenic, a
-/// `CisTransConfiguration` (`Z`/`E`) → that coset, or a `CisTransStereoAst` passthrough.
+/// `CisTransConfiguration` (`Z`/`E`) → that coset, or a `CisTransStereoForm` passthrough.
 #[derive(FromPyObject)]
 pub(crate) enum CisTransStereoLike {
     Flag(bool),
     Config(CisTransConfiguration),
-    Ast(Py<CisTransStereoAst>),
+    Ast(Py<CisTransStereoForm>),
 }
 
 impl CisTransStereoLike {
@@ -669,13 +669,13 @@ impl StereoLigand {
 /// Rust `StereoConfigurationForm`; `Undetermined` and `Kinded(Tetrahedral, Undetermined)` are
 /// distinct.
 #[pyclass]
-pub enum StereoConfigurationAst {
+pub enum StereoConfigurationForm {
     Undetermined(),
     Kinded(StereoKind, Py<StereoCoset>),
 }
 
 #[pymethods]
-impl StereoConfigurationAst {
+impl StereoConfigurationForm {
     /// The coordination-geometry kind, or `None` when undetermined.
     #[getter]
     fn kind(&self) -> Option<StereoKind> {
@@ -704,12 +704,12 @@ impl StereoConfigurationAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            StereoConfigurationAst::Undetermined() => ("Undetermined", 0),
-            StereoConfigurationAst::Kinded(_, _) => ("Kinded", 2),
+            StereoConfigurationForm::Undetermined() => ("Undetermined", 0),
+            StereoConfigurationForm::Kinded(_, _) => ("Kinded", 2),
         };
         variant_repr(
             slf.bind(py).as_any(),
-            "StereoConfigurationAst",
+            "StereoConfigurationForm",
             variant,
             arity,
         )
@@ -926,17 +926,17 @@ impl StereoConfigurationUpdate {
 }
 
 impl_py_lattice!(
-    StereoConfigurationAst,
+    StereoConfigurationForm,
     GraphIrStereoConfigurationForm,
-    |value: &StereoConfigurationAst, py: Python<'_>| -> PyResult<GraphIrStereoConfigurationForm> {
+    |value: &StereoConfigurationForm, py: Python<'_>| -> PyResult<GraphIrStereoConfigurationForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrStereoConfigurationForm| -> PyResult<StereoConfigurationAst> {
-        StereoConfigurationAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrStereoConfigurationForm| -> PyResult<StereoConfigurationForm> {
+        StereoConfigurationForm::from_rust(py, &value)
     }
 );
 
-impl StereoConfigurationAst {
+impl StereoConfigurationForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &GraphIrStereoConfigurationForm,
@@ -963,13 +963,13 @@ impl StereoConfigurationAst {
 
 /// Setter coercion for a stereo `configuration` field: the `TetrahedralConfiguration`
 /// (`Ccw`/`Cw`) or `CisTransConfiguration` (`Z`/`E`) per-kind coset shorthand, or a
-/// `StereoConfigurationAst`
+/// `StereoConfigurationForm`
 /// passthrough. Axial/square-planar/etc. have no shorthand — use the full `Kinded` form.
 #[derive(FromPyObject)]
 pub(crate) enum StereoConfigurationLike {
     Tetrahedral(TetrahedralConfiguration),
     CisTrans(CisTransConfiguration),
-    Ast(Py<StereoConfigurationAst>),
+    Ast(Py<StereoConfigurationForm>),
 }
 
 impl StereoConfigurationLike {
@@ -1194,7 +1194,7 @@ macro_rules! stereo_value {
         #[pymethods]
         impl $value {
             /// Construct from a stereo configuration — a `TetrahedralStereo` / `CisTransStereo`
-            /// per-kind shorthand or a `StereoConfigurationAst` — optionally setting constraints.
+            /// per-kind shorthand or a `StereoConfigurationForm` — optionally setting constraints.
             #[new]
             #[pyo3(signature = (configuration, *, constraints=None))]
             fn new(
@@ -1227,8 +1227,8 @@ macro_rules! stereo_value {
 
             /// The stereo configuration (geometry + coset).
             #[getter]
-            fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationAst> {
-                StereoConfigurationAst::from_rust(py, &self.0.configuration)
+            fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationForm> {
+                StereoConfigurationForm::from_rust(py, &self.0.configuration)
             }
 
             #[setter]
@@ -1381,9 +1381,9 @@ macro_rules! stereo_view {
 
             /// The stereo configuration (geometry + coset).
             #[getter]
-            fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationAst> {
+            fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationForm> {
                 let molecule = self.owner.bind(py).borrow();
-                StereoConfigurationAst::from_rust(
+                StereoConfigurationForm::from_rust(
                     py,
                     &self.view(molecule.inner())?.ast.configuration,
                 )
@@ -1432,7 +1432,7 @@ macro_rules! stereo_view {
                 let dict = PyDict::new(py);
                 dict.set_item(
                     "configuration",
-                    StereoConfigurationAst::from_rust(py, &ast.configuration)?,
+                    StereoConfigurationForm::from_rust(py, &ast.configuration)?,
                 )?;
                 let constraints = ast
                     .constraints
@@ -1632,7 +1632,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::boolean::{BooleanAst, BooleanLike};
+    use crate::boolean::{BooleanForm, BooleanLike};
 
     #[rstest]
     #[case(vec![0, 1, 2, 3])]
@@ -1686,7 +1686,7 @@ mod tests {
     fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: GraphIrTetrahedralStereoForm) {
         Python::attach(|py| {
             assert_eq!(
-                TetrahedralStereoAst::from_rust(py, &ast)
+                TetrahedralStereoForm::from_rust(py, &ast)
                     .unwrap()
                     .to_rust(py),
                 ast
@@ -1711,7 +1711,7 @@ mod tests {
     ) {
         Python::attach(|py| {
             assert_eq!(
-                TetrahedralStereoAst::from_rust(py, &ast)
+                TetrahedralStereoForm::from_rust(py, &ast)
                     .unwrap()
                     .as_lit(py)
                     .map(TetrahedralStereo::to_rust),
@@ -1740,7 +1740,7 @@ mod tests {
     fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: GraphIrCisTransStereoForm) {
         Python::attach(|py| {
             assert_eq!(
-                CisTransStereoAst::from_rust(py, &ast).unwrap().to_rust(py),
+                CisTransStereoForm::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
@@ -1763,7 +1763,7 @@ mod tests {
     ) {
         Python::attach(|py| {
             assert_eq!(
-                CisTransStereoAst::from_rust(py, &ast)
+                CisTransStereoForm::from_rust(py, &ast)
                     .unwrap()
                     .as_lit(py)
                     .map(CisTransStereo::to_rust),
@@ -1850,7 +1850,7 @@ mod tests {
                 ),
             ] {
                 assert_eq!(
-                    StereoConfigurationAst::from_rust(py, &ast)
+                    StereoConfigurationForm::from_rust(py, &ast)
                         .unwrap()
                         .to_rust(py),
                     ast
@@ -1891,13 +1891,13 @@ mod tests {
     fn test_stereo_configuration_ast_kind_coset() {
         Python::attach(|py| {
             let coset = into_py_variant(py, StereoCoset::Lit(1)).unwrap();
-            let config = StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, coset);
+            let config = StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, coset);
             assert_eq!(config.kind(), Some(StereoKind::Tetrahedral));
             assert_eq!(
                 config.coset(py).unwrap().bind(py).borrow().to_rust(py),
                 GraphIrStereoCoset::Lit(1)
             );
-            let undetermined = StereoConfigurationAst::Undetermined();
+            let undetermined = StereoConfigurationForm::Undetermined();
             assert_eq!(undetermined.kind(), None);
             assert!(undetermined.coset(py).is_none());
         });
@@ -1922,8 +1922,8 @@ mod tests {
                     GraphIrStereoCoset::Lit(1)
                 )
             );
-            // a StereoConfigurationAst passes through
-            let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
+            // a StereoConfigurationForm passes through
+            let config = Py::new(py, StereoConfigurationForm::Undetermined()).unwrap();
             assert_eq!(
                 StereoConfigurationLike::Ast(config).to_rust(py),
                 GraphIrStereoConfigurationForm::Undetermined
@@ -2100,7 +2100,7 @@ mod tests {
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
-                "LigandSymmetryAst(OrientedLigandPermutation(permutation=LigandPermutation([1, 0, 2, 3]), orientation=Orientation.Proper), BooleanAst.Lit(True))"
+                "LigandSymmetryAst(OrientedLigandPermutation(permutation=LigandPermutation([1, 0, 2, 3]), orientation=Orientation.Proper), BooleanForm.Lit(True))"
             );
         });
     }
@@ -2118,19 +2118,19 @@ mod tests {
             );
             let wildcard = LigandSymmetryAst {
                 permutation,
-                invariant: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
+                invariant: into_py_variant(py, BooleanForm::Undetermined()).unwrap(),
             };
             let invariant_true = LigandSymmetryAst {
                 permutation,
-                invariant: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                invariant: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
             };
             let invariant_false = LigandSymmetryAst {
                 permutation,
-                invariant: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
+                invariant: into_py_variant(py, BooleanForm::Lit(false)).unwrap(),
             };
             let other = LigandSymmetryAst {
                 permutation: other_permutation,
-                invariant: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                invariant: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
             };
             assert!(wildcard.matches(py, &invariant_true).unwrap());
             assert!(!invariant_true.matches(py, &invariant_false).unwrap());
@@ -2179,7 +2179,7 @@ mod tests {
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
-                "FluxionalityAst(LigandPermutation([1, 0, 2, 3]), BooleanAst.Lit(False))"
+                "FluxionalityAst(LigandPermutation([1, 0, 2, 3]), BooleanForm.Lit(False))"
             );
         });
     }
@@ -2192,19 +2192,19 @@ mod tests {
                 LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]).unwrap());
             let wildcard = FluxionalityAst {
                 permutation,
-                active: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
+                active: into_py_variant(py, BooleanForm::Undetermined()).unwrap(),
             };
             let active_true = FluxionalityAst {
                 permutation,
-                active: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                active: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
             };
             let active_false = FluxionalityAst {
                 permutation,
-                active: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
+                active: into_py_variant(py, BooleanForm::Lit(false)).unwrap(),
             };
             let other = FluxionalityAst {
                 permutation: other_permutation,
-                active: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                active: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
             };
             assert!(wildcard.matches(py, &active_true).unwrap());
             assert!(!active_true.matches(py, &active_false).unwrap());
@@ -3134,7 +3134,7 @@ mod tests {
             let configuration = dict.get_item("configuration").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                StereoConfigurationAst::from_rust(
+                StereoConfigurationForm::from_rust(
                     py,
                     &GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
@@ -3411,7 +3411,7 @@ mod tests {
             let configuration = dict.get_item("configuration").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                StereoConfigurationAst::from_rust(
+                StereoConfigurationForm::from_rust(
                     py,
                     &GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,

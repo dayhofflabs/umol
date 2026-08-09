@@ -24,7 +24,7 @@ use crate::convert::hash_rust;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{NumLike, ValueAst};
+use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for a dative bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -73,11 +73,11 @@ impl DativeBondUpdate {
     }
 
     #[getter]
-    fn order(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn order(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .order
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
@@ -104,7 +104,7 @@ pub struct DativeBondAst(GraphIrDativeBondForm);
 
 #[pymethods]
 impl DativeBondAst {
-    /// Construct from an order — an `int` or a `ValueAst` expression — optionally
+    /// Construct from an order — an `int` or a `NumForm` expression — optionally
     /// setting constraints.
     #[new]
     #[pyo3(signature = (order, *, constraints=None))]
@@ -137,8 +137,8 @@ impl DativeBondAst {
     }
 
     #[getter]
-    fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.order)
+    fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.order)
     }
 
     #[setter]
@@ -275,9 +275,9 @@ impl DativeBondView {
     }
 
     #[getter]
-    fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.dative_bond(molecule.inner())?.ast.order)
+        NumForm::from_rust(py, &self.dative_bond(molecule.inner())?.ast.order)
     }
 
     #[setter]
@@ -321,7 +321,7 @@ impl DativeBondView {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.dative_bond(molecule.inner())?.ast;
         let dict = PyDict::new(py);
-        dict.set_item("order", ValueAst::from_rust(py, &bond.order)?)?;
+        dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item(
             "constraints",
             dative_bond_constraints_asdict(py, &bond.constraints)?,

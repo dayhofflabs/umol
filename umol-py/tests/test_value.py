@@ -1,4 +1,4 @@
-from umol import MemOp, RelOp, ValueAst, PredExpr, ArithExpr
+from umol import MemOp, RelOp, NumForm, PredExpr, ArithExpr
 
 
 def test_relop_eq():
@@ -76,43 +76,43 @@ def test_pred_expr_recursive_not():
 
 
 def test_valueast_lit():
-    assert ValueAst.Lit(0)._0 == 0
+    assert NumForm.Lit(0)._0 == 0
 
 
 def test_valueast_undetermined_match():
-    assert ValueAst.Undetermined() == ValueAst.Undetermined()
+    assert NumForm.Undetermined() == NumForm.Undetermined()
 
 
 def test_valueast_litset():
-    assert ValueAst.LitSet({1, 2, 3})._0 == {1, 2, 3}
+    assert NumForm.LitSet({1, 2, 3})._0 == {1, 2, 3}
 
 
 def test_valueast_arith_expr():
-    assert ValueAst.ArithExpr(ArithExpr.Var("h"))._0 == ArithExpr.Var("h")
+    assert NumForm.ArithExpr(ArithExpr.Var("h"))._0 == ArithExpr.Var("h")
 
 
 def test_valueast_pred_expr():
     pred = PredExpr.Rel(ArithExpr.Var("h"), RelOp.Le, ArithExpr.Lit(3))
-    assert ValueAst.PredExpr(pred)._0 == pred
+    assert NumForm.PredExpr(pred)._0 == pred
 
 
 def test_valueast_eq():
-    assert ValueAst.Lit(1) == ValueAst.Lit(1)
-    assert ValueAst.Lit(1) != ValueAst.Lit(2)
-    assert ValueAst.Lit(1) != 5
+    assert NumForm.Lit(1) == NumForm.Lit(1)
+    assert NumForm.Lit(1) != NumForm.Lit(2)
+    assert NumForm.Lit(1) != 5
 
 
 def test_valueast_hash():
-    assert len({ValueAst.Lit(1), ValueAst.Lit(1)}) == 1
-    d = {ValueAst.Lit(1): "a"}
-    assert d[ValueAst.Lit(1)] == "a"
+    assert len({NumForm.Lit(1), NumForm.Lit(1)}) == 1
+    d = {NumForm.Lit(1): "a"}
+    assert d[NumForm.Lit(1)] == "a"
 
 
 def test_valueast_repr():
-    assert repr(ValueAst.Lit(1)) == "ValueAst.Lit(1)"
-    assert repr(ValueAst.Undetermined()) == "ValueAst.Undetermined()"
-    x = ValueAst.ArithExpr(ArithExpr.Var("h"))
-    assert eval(repr(x), {"ValueAst": ValueAst, "ArithExpr": ArithExpr}) == x
+    assert repr(NumForm.Lit(1)) == "NumForm.Lit(1)"
+    assert repr(NumForm.Undetermined()) == "NumForm.Undetermined()"
+    x = NumForm.ArithExpr(ArithExpr.Var("h"))
+    assert eval(repr(x), {"NumForm": NumForm, "ArithExpr": ArithExpr}) == x
 
 
 def test_arith_expr_eq_repr():

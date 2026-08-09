@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
     NoncovalentBondId as GraphIrNoncovalentBondId,
 };
 
-use crate::boolean::{BooleanAst, BooleanLike};
+use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -66,7 +66,7 @@ impl NoncovalentBondConstraintKey {
 /// value; `Undetermined` when unspecified).
 #[pyclass]
 pub enum NoncovalentBondConstraintAst {
-    Intramolecular(Py<BooleanAst>),
+    Intramolecular(Py<BooleanForm>),
 }
 
 #[pymethods]
@@ -118,7 +118,7 @@ impl NoncovalentBondConstraintAst {
     ) -> PyResult<Self> {
         Ok(match ast {
             GraphIrNoncovalentBondConstraintForm::Intramolecular(b) => {
-                Self::Intramolecular(into_py_variant(py, BooleanAst::from_rust(b))?)
+                Self::Intramolecular(into_py_variant(py, BooleanForm::from_rust(b))?)
             }
         })
     }
@@ -345,8 +345,8 @@ impl NoncovalentBondConstraintsAst {
     /// Whether the bond is intramolecular; `Undetermined` when no `Intramolecular`
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
-    pub(crate) fn intramolecular(&self) -> BooleanAst {
-        BooleanAst::from_rust(&self.0.intramolecular())
+    pub(crate) fn intramolecular(&self) -> BooleanForm {
+        BooleanForm::from_rust(&self.0.intramolecular())
     }
 
     #[setter]
@@ -455,7 +455,7 @@ pub(crate) fn noncovalent_bond_constraints_asdict<'py>(
     for entry in constraints.iter() {
         match entry {
             GraphIrNoncovalentBondConstraintForm::Intramolecular(b) => {
-                dict.set_item("intramolecular", BooleanAst::from_rust(b))?
+                dict.set_item("intramolecular", BooleanForm::from_rust(b))?
             }
         }
     }
@@ -752,8 +752,8 @@ impl NoncovalentBondConstraintsView {
     /// Whether the bond is intramolecular; `Undetermined` when no `Intramolecular`
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
-    pub(crate) fn intramolecular(&self, py: Python<'_>) -> PyResult<BooleanAst> {
-        self.read(py, |cs| Ok(BooleanAst::from_rust(&cs.intramolecular())))
+    pub(crate) fn intramolecular(&self, py: Python<'_>) -> PyResult<BooleanForm> {
+        self.read(py, |cs| Ok(BooleanForm::from_rust(&cs.intramolecular())))
     }
 
     #[setter]

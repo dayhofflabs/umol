@@ -2,7 +2,7 @@ import pytest
 
 from umol import (
     AtomAst,
-    BooleanAst,
+    BooleanForm,
     Element,
     MoleculeAst,
     NoncovalentBondAst,
@@ -10,7 +10,7 @@ from umol import (
     NoncovalentBondConstraintKey,
     NoncovalentBondConstraintsAst,
     NoncovalentBondKind,
-    NoncovalentBondKindAst,
+    NoncovalentBondKindForm,
     NoncovalentBondUpdate,
     ParseError,
 )
@@ -23,20 +23,20 @@ from umol import (
         (
             NoncovalentBondUpdate(kind=NoncovalentBondKind.Ionic),
             (
-                NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic),
+                NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic),
                 NoncovalentBondConstraintsAst([]),
             ),
         ),
         (
-            NoncovalentBondUpdate(kind=NoncovalentBondKindAst.Undetermined()),
-            (NoncovalentBondKindAst.Undetermined(), NoncovalentBondConstraintsAst([])),
+            NoncovalentBondUpdate(kind=NoncovalentBondKindForm.Undetermined()),
+            (NoncovalentBondKindForm.Undetermined(), NoncovalentBondConstraintsAst([])),
         ),
         (
             NoncovalentBondUpdate(
                 constraints=NoncovalentBondConstraintsAst(
                     [
                         NoncovalentBondConstraintAst.Intramolecular(
-                            BooleanAst.Undetermined()
+                            BooleanForm.Undetermined()
                         )
                     ]
                 )
@@ -46,7 +46,7 @@ from umol import (
                 NoncovalentBondConstraintsAst(
                     [
                         NoncovalentBondConstraintAst.Intramolecular(
-                            BooleanAst.Undetermined()
+                            BooleanForm.Undetermined()
                         )
                     ]
                 ),
@@ -101,15 +101,15 @@ def test_noncovalentbondkind_members():
 
 
 def test_noncovalentbondkindast_as_lit():
-    assert NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic).as_lit() == (
+    assert NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic).as_lit() == (
         NoncovalentBondKind.Ionic
     )
-    assert NoncovalentBondKindAst.Undetermined().as_lit() is None
+    assert NoncovalentBondKindForm.Undetermined().as_lit() is None
 
 
 def test_noncovalentbondast_new():
     bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
-    assert bond.kind == NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)
+    assert bond.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
     assert len(bond.constraints) == 0
 
 
@@ -117,16 +117,16 @@ def test_noncovalentbondast_new_constraints_kwarg():
     bond = NoncovalentBondAst(
         NoncovalentBondKind.HalogenBond,
         constraints=NoncovalentBondConstraintsAst(
-            [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))]
+            [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))]
         ),
     )
-    assert bond.constraints.intramolecular == BooleanAst.Lit(True)
+    assert bond.constraints.intramolecular == BooleanForm.Lit(True)
 
 
 def test_noncovalentbondast_kind_setter():
     bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
     bond.kind = NoncovalentBondKind.Ionic
-    assert bond.kind == NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic)
+    assert bond.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic)
 
 
 @pytest.mark.parametrize("dsl", ["Hbd", "Hbd#I", "Hbd#I!", "*"])
@@ -145,16 +145,16 @@ def test_noncovalentbondast_asdict():
     bond = NoncovalentBondAst.parse("Hbd#I")
     d = bond.asdict()
     assert set(d.keys()) == {"kind", "constraints"}
-    assert d["kind"] == NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)
-    assert d["constraints"] == {"intramolecular": BooleanAst.Lit(True)}
+    assert d["kind"] == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
+    assert d["constraints"] == {"intramolecular": BooleanForm.Lit(True)}
 
 
 def test_noncovalentbondast_set_constraints():
     bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
     bond.constraints = NoncovalentBondConstraintsAst(
-        [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False))]
+        [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(False))]
     )
-    assert bond.constraints.intramolecular == BooleanAst.Lit(False)
+    assert bond.constraints.intramolecular == BooleanForm.Lit(False)
 
 
 def test_noncovalentbondast_constraints_self_assign():
@@ -163,23 +163,23 @@ def test_noncovalentbondast_constraints_self_assign():
     bond.constraints.intramolecular = True
     bond.constraints = bond.constraints
     bond.constraints.update(bond.constraints)
-    assert bond.constraints.intramolecular == BooleanAst.Lit(True)
+    assert bond.constraints.intramolecular == BooleanForm.Lit(True)
 
 
 def test_noncovalentbondconstraints_intramolecular():
     constraints = NoncovalentBondConstraintsAst([])
-    assert constraints.intramolecular == BooleanAst.Undetermined()
+    assert constraints.intramolecular == BooleanForm.Undetermined()
     constraints.intramolecular = True
-    assert constraints.intramolecular == BooleanAst.Lit(True)
+    assert constraints.intramolecular == BooleanForm.Lit(True)
 
 
 def test_noncovalentbondconstraints_mapping_ops():
     constraints = NoncovalentBondConstraintsAst([])
-    constraints.set(NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)))
+    constraints.set(NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True)))
     assert len(constraints) == 1
     assert NoncovalentBondConstraintKey.Intramolecular() in constraints
     assert constraints[NoncovalentBondConstraintKey.Intramolecular()] == (
-        NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))
+        NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))
     )
     assert [key for key in constraints] == [NoncovalentBondConstraintKey.Intramolecular()]
     del constraints[NoncovalentBondConstraintKey.Intramolecular()]
@@ -206,16 +206,16 @@ def test_noncovalentbondconstraintkey_intramolecular():
 
 def test_noncovalentbondconstraints_asdict():
     constraints = NoncovalentBondConstraintsAst(
-        [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True))]
+        [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))]
     )
-    assert constraints.asdict() == {"intramolecular": BooleanAst.Lit(True)}
+    assert constraints.asdict() == {"intramolecular": BooleanForm.Lit(True)}
 
 
 def test_noncovalentbondview_fields():
     view = hbond_molecule().noncovalent_bonds[0]
     assert view.id == 0
     assert view.atom_ids == (0, 1)
-    assert view.kind == NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)
+    assert view.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
     assert repr(view) == "NoncovalentBondView(id=0)"
 
 
@@ -223,7 +223,7 @@ def test_noncovalentbondview_set_kind():
     mol = hbond_molecule()
     mol.noncovalent_bonds[0].kind = NoncovalentBondKind.Ionic
     # a fresh view re-reads the molecule, proving the write landed on it
-    assert mol.noncovalent_bonds[0].kind == NoncovalentBondKindAst.Lit(
+    assert mol.noncovalent_bonds[0].kind == NoncovalentBondKindForm.Lit(
         NoncovalentBondKind.Ionic
     )
 
@@ -232,21 +232,21 @@ def test_noncovalentbondview_asdict():
     view = hbond_molecule().noncovalent_bonds[0]
     d = view.asdict()
     assert set(d.keys()) == {"kind", "constraints"}
-    assert d["kind"] == NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)
+    assert d["kind"] == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
 
 
 def test_noncovalentbondview_constraints_write_through():
     mol = hbond_molecule()
     mol.noncovalent_bonds[0].constraints.intramolecular = True
-    assert mol.noncovalent_bonds[0].constraints.intramolecular == BooleanAst.Lit(True)
+    assert mol.noncovalent_bonds[0].constraints.intramolecular == BooleanForm.Lit(True)
 
 
 def test_noncovalentbondview_set_constraints():
     mol = hbond_molecule()
     mol.noncovalent_bonds[0].constraints = NoncovalentBondConstraintsAst(
-        [NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(False))]
+        [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(False))]
     )
-    assert mol.noncovalent_bonds[0].constraints.intramolecular == BooleanAst.Lit(False)
+    assert mol.noncovalent_bonds[0].constraints.intramolecular == BooleanForm.Lit(False)
 
 
 def test_noncovalentbondviews_len_getitem():
@@ -265,7 +265,7 @@ def test_noncovalentbondviews_setitem():
     mol.noncovalent_bonds[0] = NoncovalentBondAst(NoncovalentBondKind.Ionic)
     view = mol.noncovalent_bonds[0]
     # value replaced, endpoints preserved
-    assert view.kind == NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic)
+    assert view.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic)
     assert view.atom_ids == (0, 1)
 
 

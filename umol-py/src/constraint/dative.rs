@@ -13,12 +13,12 @@ use umol_graph_ir::ir::{
 };
 
 use super::ring::{RingMembershipAst, RingScope};
-use crate::boolean::{BooleanAst, BooleanLike};
+use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{NumLike, ValueAst};
+use crate::value::{NumForm, NumLike};
 
 /// The key (identity) of a dative bond constraint, for keyed lookup. The
 /// ring-membership key carries its ring scope; all other keys are the bare
@@ -80,7 +80,7 @@ impl DativeBondConstraintKey {
 /// single dative bond.
 #[pyclass]
 pub enum DativeBondConstraintAst {
-    Aromatic(Py<BooleanAst>),
+    Aromatic(Py<BooleanForm>),
     RingMembership(Py<RingMembershipAst>),
 }
 
@@ -127,7 +127,7 @@ impl DativeBondConstraintAst {
     ) -> PyResult<Self> {
         Ok(match ast {
             GraphIrDativeBondConstraintForm::Aromatic(b) => {
-                Self::Aromatic(into_py_variant(py, BooleanAst::from_rust(b))?)
+                Self::Aromatic(into_py_variant(py, BooleanForm::from_rust(b))?)
             }
             GraphIrDativeBondConstraintForm::RingMembership(m) => {
                 Self::RingMembership(into_py_variant(py, RingMembershipAst::from_rust(py, m)?)?)
@@ -361,8 +361,8 @@ impl DativeBondConstraintsAst {
     /// The aromatic value; `Undetermined` when no `Aromatic` constraint is present
     /// (matching the non-optional Rust accessor).
     #[getter]
-    pub(crate) fn aromatic(&self) -> BooleanAst {
-        BooleanAst::from_rust(&self.0.aromatic())
+    pub(crate) fn aromatic(&self) -> BooleanForm {
+        BooleanForm::from_rust(&self.0.aromatic())
     }
 
     #[setter]
@@ -373,10 +373,10 @@ impl DativeBondConstraintsAst {
 
     /// The all-rings membership count, or `None`.
     #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .ring_count()
-            .map(|v| ValueAst::from_rust(py, v))
+            .map(|v| NumForm::from_rust(py, v))
             .transpose()
     }
 
@@ -500,14 +500,14 @@ pub(crate) fn dative_bond_constraints_asdict<'py>(
     for entry in constraints.iter() {
         match entry {
             GraphIrDativeBondConstraintForm::Aromatic(b) => {
-                dict.set_item("aromatic", BooleanAst::from_rust(b))?
+                dict.set_item("aromatic", BooleanForm::from_rust(b))?
             }
             GraphIrDativeBondConstraintForm::RingMembership(m) => {
                 let key = match m.scope {
                     GraphIrRingScope::All => "ring_count".to_string(),
                     GraphIrRingScope::Size(size) => format!("ring_size_count_{size}"),
                 };
-                dict.set_item(key, ValueAst::from_rust(py, &m.count)?)?
+                dict.set_item(key, NumForm::from_rust(py, &m.count)?)?
             }
         }
     }
@@ -724,8 +724,8 @@ impl DativeBondConstraintsView {
     /// The aromatic value; `Undetermined` when no `Aromatic` constraint is present
     /// (matching the non-optional Rust accessor).
     #[getter]
-    pub(crate) fn aromatic(&self, py: Python<'_>) -> PyResult<BooleanAst> {
-        self.read(py, |cs| Ok(BooleanAst::from_rust(&cs.aromatic())))
+    pub(crate) fn aromatic(&self, py: Python<'_>) -> PyResult<BooleanForm> {
+        self.read(py, |cs| Ok(BooleanForm::from_rust(&cs.aromatic())))
     }
 
     #[setter]
@@ -738,10 +738,10 @@ impl DativeBondConstraintsView {
 
     /// The all-rings membership count, or `None`.
     #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.read(py, |cs| {
             cs.ring_count()
-                .map(|v| ValueAst::from_rust(py, v))
+                .map(|v| NumForm::from_rust(py, v))
                 .transpose()
         })
     }
@@ -850,10 +850,10 @@ impl DativeBondRingSizeCounts {
 #[pymethods]
 impl DativeBondRingSizeCounts {
     /// The membership count for rings of `size`, or `None`.
-    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<ValueAst>> {
+    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<NumForm>> {
         self.read(py, |cs| {
             cs.ring_size_count(size)
-                .map(|v| ValueAst::from_rust(py, v))
+                .map(|v| NumForm::from_rust(py, v))
                 .transpose()
         })
     }
@@ -899,7 +899,7 @@ impl DativeBondRingSizeCounts {
             for entry in cs.iter() {
                 if let GraphIrDativeBondConstraintForm::RingMembership(m) = entry {
                     if let GraphIrRingScope::Size(size) = m.scope {
-                        let count = into_py_variant(py, ValueAst::from_rust(py, &m.count)?)?;
+                        let count = into_py_variant(py, NumForm::from_rust(py, &m.count)?)?;
                         parts.push(format!(
                             "{size}: {}",
                             count.bind(py).as_any().repr()?.extract::<String>()?

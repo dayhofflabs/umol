@@ -12,9 +12,9 @@ use crate::{
         SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
     aromatic::{AromaticSystemAst, AromaticSystemUpdate, AromaticSystemView, AromaticSystemViews},
-    atom::{AtomAst, AtomUpdate, AtomView, AtomViews, ElementAst, IsotopeMass, IsotopeMassAst},
+    atom::{AtomAst, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
     bond::{BondAst, BondUpdate, BondView, BondViews},
-    boolean::BooleanAst,
+    boolean::BooleanForm,
     constraint::{
         aromatic::{
             AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsAst,
@@ -64,7 +64,7 @@ use crate::{
         StereoBondFieldChange,
     },
     edit::{ConstraintEdit, Edit, Edits, New},
-    electrons::ElectronCountsAst,
+    electrons::ElectronCountsForm,
     element::Element,
     error::{
         ContradictionError, InvalidStructureError, MetadataError, ModelConversionError, ParseError,
@@ -92,7 +92,7 @@ use crate::{
         MulticenterBondAst, MulticenterBondUpdate, MulticenterBondView, MulticenterBondViews,
     },
     noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate,
+        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
         NoncovalentBondView, NoncovalentBondViews,
     },
     reaction::{
@@ -106,18 +106,18 @@ use crate::{
     },
     ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
-    spin::{SpinState, UnpairedElectrons, UnpairedElectronsAst, UnpairedElectronsUpdate},
+    spin::{SpinState, UnpairedElectrons, UnpairedElectronsForm, UnpairedElectronsUpdate},
     stereo::{
-        CisTransConfiguration, CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
+        CisTransConfiguration, CisTransStereo, CisTransStereoForm, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomAst, StereoAtomUpdate, StereoAtomView,
         StereoAtomViews, StereoBondAst, StereoBondUpdate, StereoBondView, StereoBondViews,
-        StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand,
+        StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand,
         StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity, TetrahedralConfiguration,
-        TetrahedralStereo, TetrahedralStereoAst, Topicity,
+        TetrahedralStereo, TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, Transaction},
-    value::{ArithExpr, MemOp, PredExpr, RelOp, ValueAst},
+    value::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
 };
 
 #[cfg(feature = "graph")]
@@ -310,13 +310,13 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MemOp>()?;
         module.add_class::<ArithExpr>()?;
         module.add_class::<PredExpr>()?;
-        module.add_class::<ValueAst>()?;
-        module.add_class::<ElementAst>()?;
+        module.add_class::<NumForm>()?;
+        module.add_class::<ElementForm>()?;
         module.add_class::<IsotopeMass>()?;
-        module.add_class::<IsotopeMassAst>()?;
+        module.add_class::<IsotopeMassForm>()?;
         module.add_class::<UnpairedElectrons>()?;
         module.add_class::<SpinState>()?;
-        module.add_class::<UnpairedElectronsAst>()?;
+        module.add_class::<UnpairedElectronsForm>()?;
         module.add_class::<UnpairedElectronsUpdate>()?;
         module.add_class::<AtomAst>()?;
         module.add_class::<AtomUpdate>()?;
@@ -351,7 +351,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<DativeBondRingSizeCounts>()?;
         module.add_class::<DativeBondView>()?;
         module.add_class::<DativeBondViews>()?;
-        module.add_class::<ElectronCountsAst>()?;
+        module.add_class::<ElectronCountsForm>()?;
         module.add_class::<AromaticSystemAst>()?;
         module.add_class::<AromaticSystemUpdate>()?;
         module.add_class::<AromaticSystemConstraintAst>()?;
@@ -369,7 +369,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MulticenterBondView>()?;
         module.add_class::<MulticenterBondViews>()?;
         module.add_class::<NoncovalentBondKind>()?;
-        module.add_class::<NoncovalentBondKindAst>()?;
+        module.add_class::<NoncovalentBondKindForm>()?;
         module.add_class::<NoncovalentBondAst>()?;
         module.add_class::<NoncovalentBondUpdate>()?;
         module.add_class::<NoncovalentBondConstraintAst>()?;
@@ -378,14 +378,14 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<NoncovalentBondConstraintsView>()?;
         module.add_class::<NoncovalentBondView>()?;
         module.add_class::<NoncovalentBondViews>()?;
-        module.add_class::<BooleanAst>()?;
+        module.add_class::<BooleanForm>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
         module.add_class::<StereoCoset>()?;
-        module.add_class::<TetrahedralStereoAst>()?;
+        module.add_class::<TetrahedralStereoForm>()?;
         module.add_class::<TetrahedralStereo>()?;
         module.add_class::<TetrahedralConfiguration>()?;
-        module.add_class::<CisTransStereoAst>()?;
+        module.add_class::<CisTransStereoForm>()?;
         module.add_class::<CisTransStereo>()?;
         module.add_class::<CisTransConfiguration>()?;
         module.add_class::<StereoKind>()?;
@@ -393,7 +393,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoLigand>()?;
         module.add_class::<Topicity>()?;
         module.add_class::<Stereogenicity>()?;
-        module.add_class::<StereoConfigurationAst>()?;
+        module.add_class::<StereoConfigurationForm>()?;
         module.add_class::<StereoConfigurationUpdate>()?;
         module.add_class::<Orientation>()?;
         module.add_class::<LigandPermutation>()?;

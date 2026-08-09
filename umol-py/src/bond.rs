@@ -20,8 +20,8 @@ use crate::convert::hash_rust;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{NumLike, ValueAst};
+use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
+use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for a localized bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -76,20 +76,20 @@ impl BondUpdate {
     }
 
     #[getter]
-    fn order(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn order(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .order
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .charge
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
@@ -121,7 +121,7 @@ pub struct BondAst(GraphIrBondForm);
 
 #[pymethods]
 impl BondAst {
-    /// Construct from an order — an `int` or a `ValueAst` expression — optionally
+    /// Construct from an order — an `int` or a `NumForm` expression — optionally
     /// setting fields.
     #[new]
     #[pyo3(signature = (order, *, charge=None, unpaired_electrons=None, constraints=None))]
@@ -129,7 +129,7 @@ impl BondAst {
         py: Python<'_>,
         order: NumLike,
         charge: Option<NumLike>,
-        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
         let mut bond = GraphIrBondForm::new(order.to_rust(py));
@@ -194,8 +194,8 @@ impl BondAst {
     }
 
     #[getter]
-    fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.order)
+    fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.order)
     }
 
     #[setter]
@@ -204,8 +204,8 @@ impl BondAst {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.charge)
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.charge)
     }
 
     #[setter]
@@ -214,12 +214,12 @@ impl BondAst {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
-        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
+        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.0.unpaired_electrons = value.to_rust(py);
     }
 
@@ -329,9 +329,9 @@ impl BondView {
     }
 
     #[getter]
-    fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.bond(molecule.inner())?.order)
+        NumForm::from_rust(py, &self.bond(molecule.inner())?.order)
     }
 
     #[setter]
@@ -345,9 +345,9 @@ impl BondView {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.bond(molecule.inner())?.charge)
+        NumForm::from_rust(py, &self.bond(molecule.inner())?.charge)
     }
 
     #[setter]
@@ -361,13 +361,13 @@ impl BondView {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.bind(py).borrow();
-        UnpairedElectronsAst::from_rust(py, &self.bond(molecule.inner())?.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.bond(molecule.inner())?.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -407,11 +407,11 @@ impl BondView {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.bond(molecule.inner())?;
         let dict = PyDict::new(py);
-        dict.set_item("order", ValueAst::from_rust(py, &bond.order)?)?;
-        dict.set_item("charge", ValueAst::from_rust(py, &bond.charge)?)?;
+        dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
+        dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
         dict.set_item(
             "unpaired_electrons",
-            UnpairedElectronsAst::from_rust(py, &bond.unpaired_electrons)?,
+            UnpairedElectronsForm::from_rust(py, &bond.unpaired_electrons)?,
         )?;
         dict.set_item(
             "constraints",
@@ -550,7 +550,7 @@ mod tests {
     use crate::boolean::BooleanLike;
     use crate::constraint::bond::{BondConstraintAst, BondConstraintKey, BondConstraintsUpdate};
     use crate::convert::into_py_variant;
-    use crate::stereo::{CisTransConfiguration, CisTransStereoAst, CisTransStereoLike};
+    use crate::stereo::{CisTransConfiguration, CisTransStereoForm, CisTransStereoLike};
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
@@ -1057,7 +1057,7 @@ mod tests {
                 .set_cis_trans_stereo(py, CisTransStereoLike::Config(CisTransConfiguration::E))
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
-                CisTransStereoAst::Stereo(coset) => {
+                CisTransStereoForm::Stereo(coset) => {
                     assert_eq!(
                         coset.bind(py).borrow().to_rust(py),
                         GraphIrStereoCoset::Lit(1)
@@ -1069,7 +1069,7 @@ mod tests {
                 .set_cis_trans_stereo(py, CisTransStereoLike::Flag(false))
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
-                CisTransStereoAst::NotStereo() => {}
+                CisTransStereoForm::NotStereo() => {}
                 _ => panic!("expected NotStereo"),
             }
         });

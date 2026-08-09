@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
 
 use crate::convert::{hash_rust, into_py_variant};
 use crate::lattice::impl_py_lattice;
-use crate::value::{NumLike, ValueAst};
+use crate::value::{NumForm, NumLike};
 
 /// Exact unpaired-electron count and spin multiplicity without physical validation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -107,18 +107,18 @@ impl SpinState {
 
 /// Unpaired-electron count and multiplicity as independent value fields.
 #[pyclass]
-pub struct UnpairedElectronsAst {
+pub struct UnpairedElectronsForm {
     #[pyo3(get)]
-    count: Py<ValueAst>,
+    count: Py<NumForm>,
     #[pyo3(get)]
-    multiplicity: Py<ValueAst>,
+    multiplicity: Py<NumForm>,
 }
 
 #[pymethods]
-impl UnpairedElectronsAst {
+impl UnpairedElectronsForm {
     #[new]
     fn new(py: Python<'_>, count: NumLike, multiplicity: NumLike) -> PyResult<Self> {
-        Ok(UnpairedElectronsAst {
+        Ok(UnpairedElectronsForm {
             count: count.to_py(py)?,
             multiplicity: multiplicity.to_py(py)?,
         })
@@ -139,7 +139,7 @@ impl UnpairedElectronsAst {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "UnpairedElectronsAst({}, {})",
+            "UnpairedElectronsForm({}, {})",
             self.count.bind(py).as_any().repr()?.extract::<String>()?,
             self.multiplicity
                 .bind(py)
@@ -150,14 +150,14 @@ impl UnpairedElectronsAst {
     }
 }
 
-impl UnpairedElectronsAst {
+impl UnpairedElectronsForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &GraphIrUnpairedElectronsForm,
-    ) -> PyResult<UnpairedElectronsAst> {
-        Ok(UnpairedElectronsAst {
-            count: into_py_variant(py, ValueAst::from_rust(py, &ast.count)?)?,
-            multiplicity: into_py_variant(py, ValueAst::from_rust(py, &ast.multiplicity)?)?,
+    ) -> PyResult<UnpairedElectronsForm> {
+        Ok(UnpairedElectronsForm {
+            count: into_py_variant(py, NumForm::from_rust(py, &ast.count)?)?,
+            multiplicity: into_py_variant(py, NumForm::from_rust(py, &ast.multiplicity)?)?,
         })
     }
 
@@ -170,24 +170,24 @@ impl UnpairedElectronsAst {
 }
 
 impl_py_lattice!(
-    UnpairedElectronsAst,
+    UnpairedElectronsForm,
     GraphIrUnpairedElectronsForm,
-    |value: &UnpairedElectronsAst, py: Python<'_>| -> PyResult<GraphIrUnpairedElectronsForm> {
+    |value: &UnpairedElectronsForm, py: Python<'_>| -> PyResult<GraphIrUnpairedElectronsForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrUnpairedElectronsForm| -> PyResult<UnpairedElectronsAst> {
-        UnpairedElectronsAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrUnpairedElectronsForm| -> PyResult<UnpairedElectronsForm> {
+        UnpairedElectronsForm::from_rust(py, &value)
     }
 );
 
 /// Independent updates to the unpaired-electron count and multiplicity.
 ///
-/// `None` leaves a component unchanged. A `ValueAst`, including
-/// `ValueAst.Undetermined()`, sets that component exactly.
+/// `None` leaves a component unchanged. A `NumForm`, including
+/// `NumForm.Undetermined()`, sets that component exactly.
 #[pyclass]
 pub struct UnpairedElectronsUpdate {
-    count: Option<Py<ValueAst>>,
-    multiplicity: Option<Py<ValueAst>>,
+    count: Option<Py<NumForm>>,
+    multiplicity: Option<Py<NumForm>>,
 }
 
 #[pymethods]
@@ -209,12 +209,12 @@ impl UnpairedElectronsUpdate {
     }
 
     #[getter]
-    fn count(&self, py: Python<'_>) -> Option<Py<ValueAst>> {
+    fn count(&self, py: Python<'_>) -> Option<Py<NumForm>> {
         self.count.as_ref().map(|value| value.clone_ref(py))
     }
 
     #[getter]
-    fn multiplicity(&self, py: Python<'_>) -> Option<Py<ValueAst>> {
+    fn multiplicity(&self, py: Python<'_>) -> Option<Py<NumForm>> {
         self.multiplicity.as_ref().map(|value| value.clone_ref(py))
     }
 
@@ -251,14 +251,14 @@ impl UnpairedElectronsUpdate {
                 .count
                 .as_ref()
                 .map(|value| {
-                    ValueAst::from_rust(py, value).and_then(|value| into_py_variant(py, value))
+                    NumForm::from_rust(py, value).and_then(|value| into_py_variant(py, value))
                 })
                 .transpose()?,
             multiplicity: update
                 .multiplicity
                 .as_ref()
                 .map(|value| {
-                    ValueAst::from_rust(py, value).and_then(|value| into_py_variant(py, value))
+                    NumForm::from_rust(py, value).and_then(|value| into_py_variant(py, value))
                 })
                 .transpose()?,
         })
@@ -345,7 +345,7 @@ mod tests {
         #[case] expected: Option<ChemUnpairedElectrons>,
     ) {
         Python::attach(|py| {
-            let ast = UnpairedElectronsAst::from_rust(py, &ast).unwrap();
+            let ast = UnpairedElectronsForm::from_rust(py, &ast).unwrap();
             assert_eq!(ast.as_lit(py).map(UnpairedElectrons::to_rust), expected);
         });
     }
@@ -366,7 +366,7 @@ mod tests {
     fn test_unpaired_electrons_ast_roundtrip(#[case] ast: GraphIrUnpairedElectronsForm) {
         Python::attach(|py| {
             assert_eq!(
-                UnpairedElectronsAst::from_rust(py, &ast)
+                UnpairedElectronsForm::from_rust(py, &ast)
                     .unwrap()
                     .to_rust(py),
                 ast

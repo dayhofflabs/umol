@@ -24,12 +24,12 @@ use crate::constraint::multicenter::{
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsUpdate,
 };
 use crate::convert::hash_rust;
-use crate::electrons::{ElectronCountsAst, ElectronCountsLike};
+use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{NumLike, ValueAst};
+use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
+use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for a multicenter bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -84,16 +84,16 @@ impl MulticenterBondUpdate {
     }
 
     #[getter]
-    fn electrons(&self) -> Option<ElectronCountsAst> {
-        self.0.electrons.as_ref().map(ElectronCountsAst::from_rust)
+    fn electrons(&self) -> Option<ElectronCountsForm> {
+        self.0.electrons.as_ref().map(ElectronCountsForm::from_rust)
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .charge
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
@@ -129,14 +129,14 @@ pub struct MulticenterBondAst(GraphIrMulticenterBondForm);
 #[pymethods]
 impl MulticenterBondAst {
     /// Construct from an electron-count vector — a `list[int]` or an
-    /// `ElectronCountsAst` — optionally setting fields.
+    /// `ElectronCountsForm` — optionally setting fields.
     #[new]
     #[pyo3(signature = (electrons, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
         electrons: ElectronCountsLike,
         charge: Option<NumLike>,
-        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
         let mut bond = GraphIrMulticenterBondForm::new(electrons.to_rust(py));
@@ -170,8 +170,8 @@ impl MulticenterBondAst {
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
-    fn electrons(&self) -> ElectronCountsAst {
-        ElectronCountsAst::from_rust(&self.0.electrons)
+    fn electrons(&self) -> ElectronCountsForm {
+        ElectronCountsForm::from_rust(&self.0.electrons)
     }
 
     #[setter]
@@ -180,8 +180,8 @@ impl MulticenterBondAst {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.charge)
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.charge)
     }
 
     #[setter]
@@ -190,12 +190,12 @@ impl MulticenterBondAst {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
-        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
+        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.0.unpaired_electrons = value.to_rust(py);
     }
 
@@ -312,9 +312,9 @@ impl MulticenterBondView {
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
-    fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsAst> {
+    fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsForm> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(ElectronCountsAst::from_rust(
+        Ok(ElectronCountsForm::from_rust(
             &self.multicenter_bond(molecule.inner())?.ast.electrons,
         ))
     }
@@ -330,9 +330,9 @@ impl MulticenterBondView {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.multicenter_bond(molecule.inner())?.ast.charge)
+        NumForm::from_rust(py, &self.multicenter_bond(molecule.inner())?.ast.charge)
     }
 
     #[setter]
@@ -346,9 +346,9 @@ impl MulticenterBondView {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.bind(py).borrow();
-        UnpairedElectronsAst::from_rust(
+        UnpairedElectronsForm::from_rust(
             py,
             &self
                 .multicenter_bond(molecule.inner())?
@@ -358,7 +358,7 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -402,11 +402,11 @@ impl MulticenterBondView {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.multicenter_bond(molecule.inner())?.ast;
         let dict = PyDict::new(py);
-        dict.set_item("electrons", ElectronCountsAst::from_rust(&bond.electrons))?;
-        dict.set_item("charge", ValueAst::from_rust(py, &bond.charge)?)?;
+        dict.set_item("electrons", ElectronCountsForm::from_rust(&bond.electrons))?;
+        dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
         dict.set_item(
             "unpaired_electrons",
-            UnpairedElectronsAst::from_rust(py, &bond.unpaired_electrons)?,
+            UnpairedElectronsForm::from_rust(py, &bond.unpaired_electrons)?,
         )?;
         dict.set_item(
             "constraints",
@@ -594,10 +594,10 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_ast_new() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
+            let unpaired_electrons_form = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+                UnpairedElectronsForm::from_rust(py, &unpaired_electrons_form).unwrap(),
             )
             .unwrap();
             let bond = MulticenterBondAst::new(
@@ -612,7 +612,7 @@ mod tests {
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
             assert_eq!(bond.inner().charge, GraphIrNumForm::Lit(-2));
-            assert_eq!(bond.inner().unpaired_electrons, unpaired_electrons_ast);
+            assert_eq!(bond.inner().unpaired_electrons, unpaired_electrons_form);
         });
     }
 
@@ -699,10 +699,10 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_ast_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
+            let unpaired_electrons_form = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+                UnpairedElectronsForm::from_rust(py, &unpaired_electrons_form).unwrap(),
             )
             .unwrap();
             let mut bond =
@@ -712,7 +712,7 @@ mod tests {
             bond.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
             assert_eq!(
                 bond.unpaired_electrons(py).unwrap().to_rust(py),
-                unpaired_electrons_ast
+                unpaired_electrons_form
             );
         });
     }
@@ -765,7 +765,7 @@ mod tests {
             let dict = bond.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
-            let expected = into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1])).unwrap();
+            let expected = into_py_variant(py, ElectronCountsForm::Lit(vec![1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("unpaired_electrons").unwrap());
@@ -834,10 +834,10 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_view_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
+            let unpaired_electrons_form = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
+                UnpairedElectronsForm::from_rust(py, &unpaired_electrons_form).unwrap(),
             )
             .unwrap();
             let owner = three_center_bond(py);
@@ -852,7 +852,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.unpaired_electrons(py).unwrap().to_rust(py),
-                unpaired_electrons_ast
+                unpaired_electrons_form
             );
         });
     }
@@ -924,7 +924,7 @@ mod tests {
             let dict = view.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
-            let expected = into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1])).unwrap();
+            let expected = into_py_variant(py, ElectronCountsForm::Lit(vec![1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("unpaired_electrons").unwrap());
@@ -1131,7 +1131,7 @@ mod tests {
             let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "MulticenterBondConstraintsAst([MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))])"
+                "MulticenterBondConstraintsAst([MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))])"
             );
         });
     }
@@ -1527,11 +1527,9 @@ mod tests {
             let dict = constraints.asdict(py).unwrap();
             assert_eq!(dict.len(), 1);
             let value = dict.get_item("electron_count").unwrap().unwrap();
-            let expected = into_py_variant(
-                py,
-                ValueAst::from_rust(py, &GraphIrNumForm::Lit(6)).unwrap(),
-            )
-            .unwrap();
+            let expected =
+                into_py_variant(py, NumForm::from_rust(py, &GraphIrNumForm::Lit(6)).unwrap())
+                    .unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
         });
     }

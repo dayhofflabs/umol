@@ -19,7 +19,7 @@ use umol_graph_ir::ir::{
     TopicityForm as GraphIrTopicityForm, TopicityRelationForm as GraphIrTopicityRelationForm,
 };
 
-use crate::boolean::{BooleanAst, BooleanLike};
+use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -220,7 +220,7 @@ impl StereogenicityAst {
 #[pyclass]
 pub struct LigandSymmetryAst {
     pub(crate) permutation: OrientedLigandPermutation,
-    pub(crate) invariant: Py<BooleanAst>,
+    pub(crate) invariant: Py<BooleanForm>,
 }
 
 #[pymethods]
@@ -233,7 +233,7 @@ impl LigandSymmetryAst {
     ) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation,
-            invariant: into_py_variant(py, BooleanAst::from_rust(&invariant.to_rust(py)))?,
+            invariant: into_py_variant(py, BooleanForm::from_rust(&invariant.to_rust(py)))?,
         })
     }
 
@@ -243,7 +243,7 @@ impl LigandSymmetryAst {
     }
 
     #[getter]
-    pub(crate) fn invariant(&self, py: Python<'_>) -> Py<BooleanAst> {
+    pub(crate) fn invariant(&self, py: Python<'_>) -> Py<BooleanForm> {
         self.invariant.clone_ref(py)
     }
 
@@ -283,7 +283,7 @@ impl LigandSymmetryAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrLigandSymmetryForm) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation: OrientedLigandPermutation::from_rust(ast.permutation),
-            invariant: into_py_variant(py, BooleanAst::from_rust(&ast.invariant))?,
+            invariant: into_py_variant(py, BooleanForm::from_rust(&ast.invariant))?,
         })
     }
 
@@ -300,7 +300,7 @@ impl LigandSymmetryAst {
 #[pyclass]
 pub struct FluxionalityAst {
     pub(crate) permutation: LigandPermutation,
-    pub(crate) active: Py<BooleanAst>,
+    pub(crate) active: Py<BooleanForm>,
 }
 
 #[pymethods]
@@ -313,7 +313,7 @@ impl FluxionalityAst {
     ) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation,
-            active: into_py_variant(py, BooleanAst::from_rust(&active.to_rust(py)))?,
+            active: into_py_variant(py, BooleanForm::from_rust(&active.to_rust(py)))?,
         })
     }
 
@@ -323,7 +323,7 @@ impl FluxionalityAst {
     }
 
     #[getter]
-    pub(crate) fn active(&self, py: Python<'_>) -> Py<BooleanAst> {
+    pub(crate) fn active(&self, py: Python<'_>) -> Py<BooleanForm> {
         self.active.clone_ref(py)
     }
 
@@ -359,7 +359,7 @@ impl FluxionalityAst {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrFluxionalityForm) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation: LigandPermutation::from_rust(ast.permutation),
-            active: into_py_variant(py, BooleanAst::from_rust(&ast.active))?,
+            active: into_py_variant(py, BooleanForm::from_rust(&ast.active))?,
         })
     }
 

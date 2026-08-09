@@ -12,13 +12,13 @@ use crate::lattice::impl_py_lattice;
 /// A per-member-atom electron-count vector: undetermined, or a concrete list of
 /// counts positionally aligned to the owning entity's atoms.
 #[pyclass]
-pub enum ElectronCountsAst {
+pub enum ElectronCountsForm {
     Undetermined(),
     Lit(Vec<i64>),
 }
 
 #[pymethods]
-impl ElectronCountsAst {
+impl ElectronCountsForm {
     /// The concrete count vector, or `None` when undetermined.
     fn as_lit(&self) -> Option<Vec<i64>> {
         self.to_rust().as_lit()
@@ -34,14 +34,14 @@ impl ElectronCountsAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            ElectronCountsAst::Undetermined() => ("Undetermined", 0),
-            ElectronCountsAst::Lit(_) => ("Lit", 1),
+            ElectronCountsForm::Undetermined() => ("Undetermined", 0),
+            ElectronCountsForm::Lit(_) => ("Lit", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "ElectronCountsAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "ElectronCountsForm", variant, arity)
     }
 }
 
-impl ElectronCountsAst {
+impl ElectronCountsForm {
     pub(crate) fn from_rust(ast: &GraphIrElectronCountsForm) -> Self {
         match ast {
             GraphIrElectronCountsForm::Undetermined => Self::Undetermined(),
@@ -58,21 +58,21 @@ impl ElectronCountsAst {
 }
 
 impl_py_lattice!(
-    ElectronCountsAst,
+    ElectronCountsForm,
     GraphIrElectronCountsForm,
-    |value: &ElectronCountsAst, _py: Python<'_>| -> PyResult<GraphIrElectronCountsForm> {
+    |value: &ElectronCountsForm, _py: Python<'_>| -> PyResult<GraphIrElectronCountsForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrElectronCountsForm| -> PyResult<ElectronCountsAst> {
-        Ok(ElectronCountsAst::from_rust(&value))
+    |_py: Python<'_>, value: GraphIrElectronCountsForm| -> PyResult<ElectronCountsForm> {
+        Ok(ElectronCountsForm::from_rust(&value))
     }
 );
 
 /// Setter coercion for an electron-counts field: a Python `list[int]` → `Lit`, or an
-/// `ElectronCountsAst` passthrough (matching `impl From<Vec<i64>>`).
+/// `ElectronCountsForm` passthrough (matching `impl From<Vec<i64>>`).
 #[derive(FromPyObject)]
 pub(crate) enum ElectronCountsLike {
-    Ast(Py<ElectronCountsAst>),
+    Ast(Py<ElectronCountsForm>),
     Lit(Vec<i64>),
 }
 
@@ -96,7 +96,7 @@ mod tests {
     #[case(GraphIrElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1]))]
     #[case(GraphIrElectronCountsForm::Lit(vec![]))]
     fn test_electron_counts_ast_roundtrip(#[case] ast: GraphIrElectronCountsForm) {
-        assert_eq!(ElectronCountsAst::from_rust(&ast).to_rust(), ast);
+        assert_eq!(ElectronCountsForm::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -106,7 +106,7 @@ mod tests {
         #[case] ast: GraphIrElectronCountsForm,
         #[case] expected: Option<Vec<i64>>,
     ) {
-        assert_eq!(ElectronCountsAst::from_rust(&ast).as_lit(), expected);
+        assert_eq!(ElectronCountsForm::from_rust(&ast).as_lit(), expected);
     }
 
     #[rstest]
@@ -117,8 +117,8 @@ mod tests {
                 ElectronCountsLike::Lit(vec![1, 0, 1]).to_rust(py),
                 GraphIrElectronCountsForm::Lit(vec![1, 0, 1])
             );
-            // an ElectronCountsAst passes through
-            let ast = Py::new(py, ElectronCountsAst::Lit(vec![2, 2])).unwrap();
+            // an ElectronCountsForm passes through
+            let ast = Py::new(py, ElectronCountsForm::Lit(vec![2, 2])).unwrap();
             assert_eq!(
                 ElectronCountsLike::Ast(ast).to_rust(py),
                 GraphIrElectronCountsForm::Lit(vec![2, 2])

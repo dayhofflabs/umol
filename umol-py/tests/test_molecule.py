@@ -18,9 +18,9 @@ from umol import (
     ContradictionError,
     Correspondence,
     DativeBondAst,
-    ElectronCountsAst,
+    ElectronCountsForm,
     Element,
-    ElementAst,
+    ElementForm,
     ElementScope,
     Entity,
     MaximumIndependentSetAlgorithm,
@@ -56,7 +56,7 @@ from umol import (
     ValenceEntry,
     ValenceModel,
     ValenceTable,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -368,15 +368,15 @@ def test_molecule_ast_from_smiles_io_config(io_config):
     molecule = MoleculeAst.from_smiles("[se]1cccc1", io_config=io_config)
 
     assert [atom.element for atom in molecule.atoms] == [
-        ElementAst.Lit(Element("Se")),
-        *[ElementAst.Lit(Element("C")) for _ in range(4)],
+        ElementForm.Lit(Element("Se")),
+        *[ElementForm.Lit(Element("C")) for _ in range(4)],
     ]
     assert [(bond.atom_ids, bond.order) for bond in molecule.bonds] == [
-        ((0, 4), ValueAst.Lit(1)),
-        ((0, 1), ValueAst.Lit(1)),
-        ((1, 2), ValueAst.Lit(1)),
-        ((2, 3), ValueAst.Lit(1)),
-        ((3, 4), ValueAst.Lit(1)),
+        ((0, 4), NumForm.Lit(1)),
+        ((0, 1), NumForm.Lit(1)),
+        ((1, 2), NumForm.Lit(1)),
+        ((2, 3), NumForm.Lit(1)),
+        ((3, 4), NumForm.Lit(1)),
     ]
     assert [
         (system.atom_ids, system.electrons, system.charge)
@@ -384,8 +384,8 @@ def test_molecule_ast_from_smiles_io_config(io_config):
     ] == [
         (
             (0, 1, 2, 3, 4),
-            ElectronCountsAst.Lit([2, 1, 1, 1, 1]),
-            ValueAst.Lit(0),
+            ElectronCountsForm.Lit([2, 1, 1, 1, 1]),
+            NumForm.Lit(0),
         )
     ]
 
@@ -452,9 +452,9 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
         ),
     )
 
-    assert [atom.implicit_hydrogens for atom in molecule.atoms] == [ValueAst.Lit(1)] * 6
+    assert [atom.implicit_hydrogens for atom in molecule.atoms] == [NumForm.Lit(1)] * 6
     assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
-        AromaticValenceAst.Aromatic(ValueAst.Lit(1))
+        AromaticValenceAst.Aromatic(NumForm.Lit(1))
     ] * 6
     assert list(molecule.aromatic_systems) == []
 
@@ -542,10 +542,10 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
     )
 
     assert [atom.implicit_hydrogens for atom in molecule.atoms] == [
-        ValueAst.Lit(3),
-        ValueAst.Lit(1),
-        ValueAst.Lit(2),
-        ValueAst.Lit(1),
+        NumForm.Lit(3),
+        NumForm.Lit(1),
+        NumForm.Lit(2),
+        NumForm.Lit(1),
     ]
     assert [atom.constraints.tetrahedral_stereo for atom in molecule.atoms] == [
         None
@@ -581,14 +581,14 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
                 stereo=StereoResolveConfig(),
             ),
             (
-                [ValueAst.Lit(1), ValueAst.Lit(0), ValueAst.Lit(0)],
+                [NumForm.Lit(1), NumForm.Lit(0), NumForm.Lit(0)],
                 [
-                    AromaticValenceAst.Aromatic(ValueAst.Lit(0)),
-                    AromaticValenceAst.Aromatic(ValueAst.Lit(1)),
-                    AromaticValenceAst.Aromatic(ValueAst.Lit(1)),
+                    AromaticValenceAst.Aromatic(NumForm.Lit(0)),
+                    AromaticValenceAst.Aromatic(NumForm.Lit(1)),
+                    AromaticValenceAst.Aromatic(NumForm.Lit(1)),
                 ],
                 [None] * 3,
-                [((0, 1, 2), ValueAst.Lit(0))],
+                [((0, 1, 2), NumForm.Lit(0))],
                 [],
             ),
         ),
@@ -601,10 +601,10 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
                 stereo=StereoResolveConfig(),
             ),
             (
-                [ValueAst.Lit(0)] * 6,
+                [NumForm.Lit(0)] * 6,
                 [None] * 6,
                 [None] * 6,
-                [((0, 1, 2, 3, 4, 5), ValueAst.Lit(0))],
+                [((0, 1, 2, 3, 4, 5), NumForm.Lit(0))],
                 [],
             ),
         ),
@@ -615,7 +615,7 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
                 stereo=StereoResolveConfig(reset_stereo_constraints=True),
             ),
             (
-                [ValueAst.Lit(0)] * 4,
+                [NumForm.Lit(0)] * 4,
                 [AromaticValenceAst.NotAromatic()] * 4,
                 [None] * 4,
                 [],

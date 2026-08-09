@@ -23,9 +23,9 @@ use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::lattice::impl_py_canonicalize;
 use crate::molecule::MoleculeAst;
-use crate::spin::UnpairedElectronsAst;
+use crate::spin::UnpairedElectronsForm;
 use crate::stereo::StereoKind;
-use crate::value::ValueAst;
+use crate::value::NumForm;
 
 /// Entity correspondences anchoring a subpattern match. Each collection holds
 /// `(target, pattern)` integer-id pairs for one molecule entity family.
@@ -82,13 +82,13 @@ pub enum RelationalConstraint {
 /// A molecule-scope predicate over values, connectivity, or a nested pattern.
 #[pyclass]
 pub enum MoleculeConstraint {
-    ChargeSum(Option<Vec<u32>>, Py<ValueAst>),
+    ChargeSum(Option<Vec<u32>>, Py<NumForm>),
     #[pyo3(constructor = (atoms, unpaired_electrons))]
     UnpairedElectronCoupling {
         atoms: Option<Vec<u32>>,
-        unpaired_electrons: Py<UnpairedElectronsAst>,
+        unpaired_electrons: Py<UnpairedElectronsForm>,
     },
-    BondOrderSum(Option<Vec<u32>>, Py<ValueAst>),
+    BondOrderSum(Option<Vec<u32>>, Py<NumForm>),
     Connected(Option<Vec<u32>>),
     SubPattern(Py<SubPatternAnchor>, Py<MoleculeAst>),
 }
@@ -598,7 +598,7 @@ impl MoleculeConstraint {
                 atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-                into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
+                into_py_variant(py, NumForm::from_rust(py, sum)?)?,
             ),
             GraphIrMoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
@@ -609,14 +609,14 @@ impl MoleculeConstraint {
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
                 unpaired_electrons: Py::new(
                     py,
-                    UnpairedElectronsAst::from_rust(py, unpaired_electrons)?,
+                    UnpairedElectronsForm::from_rust(py, unpaired_electrons)?,
                 )?,
             },
             GraphIrMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
                 bonds
                     .as_ref()
                     .map(|bonds| bonds.iter().map(|bond| bond.0).collect()),
-                into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
+                into_py_variant(py, NumForm::from_rust(py, sum)?)?,
             ),
             GraphIrMoleculeConstraint::Connected { atoms } => Self::Connected(
                 atoms
@@ -1534,7 +1534,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "Constraint.And([Constraint.Atom(17, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
+                "Constraint.And([Constraint.Atom(17, AtomConstraintAst.Valence(NumForm.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
             );
 
             let children = value.bind(py).as_any().getattr("_0").unwrap();
@@ -1723,7 +1723,7 @@ match node:
 
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "Constraints([Constraint.Atom(1, AtomConstraintAst.Degree(ValueAst.Lit(2))), Constraint.Or([])])"
+                "Constraints([Constraint.Atom(1, AtomConstraintAst.Degree(NumForm.Lit(2))), Constraint.Or([])])"
             );
         });
     }

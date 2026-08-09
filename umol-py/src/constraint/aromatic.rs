@@ -16,7 +16,7 @@ use crate::aromatic::AromaticSystemAst;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{NumLike, ValueAst};
+use crate::value::{NumForm, NumLike};
 
 /// The key (identity) of an aromatic-system constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).
@@ -66,7 +66,7 @@ impl AromaticSystemConstraintKey {
 /// system (cross-checked against `sum(AromaticSystemAst::electrons)`).
 #[pyclass]
 pub enum AromaticSystemConstraintAst {
-    ElectronCount(Py<ValueAst>),
+    ElectronCount(Py<NumForm>),
 }
 
 #[pymethods]
@@ -118,7 +118,7 @@ impl AromaticSystemConstraintAst {
     ) -> PyResult<Self> {
         Ok(match ast {
             GraphIrAromaticSystemConstraintForm::ElectronCount(v) => {
-                Self::ElectronCount(into_py_variant(py, ValueAst::from_rust(py, v)?)?)
+                Self::ElectronCount(into_py_variant(py, NumForm::from_rust(py, v)?)?)
             }
         })
     }
@@ -362,8 +362,8 @@ impl AromaticSystemConstraintsAst {
     /// The asserted total π-electron count; `Undetermined` when no `ElectronCount`
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
-    pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.electron_count())
+    pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.electron_count())
     }
 
     #[setter]
@@ -471,7 +471,7 @@ pub(crate) fn aromatic_system_constraints_asdict<'py>(
     for entry in constraints.iter() {
         match entry {
             GraphIrAromaticSystemConstraintForm::ElectronCount(v) => {
-                dict.set_item("electron_count", ValueAst::from_rust(py, v)?)?
+                dict.set_item("electron_count", NumForm::from_rust(py, v)?)?
             }
         }
     }
@@ -688,8 +688,8 @@ impl AromaticSystemConstraintsView {
     /// The asserted total π-electron count; `Undetermined` when no `ElectronCount`
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
-    pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        self.read(py, |cs| ValueAst::from_rust(py, &cs.electron_count()))
+    pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, &cs.electron_count()))
     }
 
     #[setter]

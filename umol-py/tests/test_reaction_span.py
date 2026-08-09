@@ -16,7 +16,7 @@ from umol import (
     ParseError,
     ReactionAst,
     ReactionSpanAst,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -92,8 +92,8 @@ def test_reaction_span_ast_render_with_metadata_error():
 
 
 def test_reaction_span_ast_from_entries():
-    lhs = AtomAst(Element("C"), charge=ValueAst.Lit(1))
-    rhs = AtomAst(Element("C"), charge=ValueAst.LitSet({1}))
+    lhs = AtomAst(Element("C"), charge=NumForm.Lit(1))
+    rhs = AtomAst(Element("C"), charge=NumForm.LitSet({1}))
 
     span = ReactionSpanAst.from_entries([(lhs, rhs)])
 
@@ -184,8 +184,8 @@ def test_reaction_ast_to_reaction_span_error():
                     BondDelta.ModifyField(
                         id=0,
                         change=BondFieldChange.Order(
-                            old=ValueAst.Lit(2),
-                            new=ValueAst.Lit(3),
+                            old=NumForm.Lit(2),
+                            new=NumForm.Lit(3),
                         ),
                     )
                 )

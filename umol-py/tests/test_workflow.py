@@ -41,7 +41,7 @@ from umol import (
     SubstructureSearchConfig,
     TransactionError,
     UnderdeterminedError,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -89,18 +89,18 @@ def test_resolved_smiles_workflow():
     )
 
     assert [atom.charge for atom in molecule.atoms] == [
-        ValueAst.Lit(1),
-        ValueAst.Lit(0),
-        ValueAst.Lit(0),
+        NumForm.Lit(1),
+        NumForm.Lit(0),
+        NumForm.Lit(0),
     ]
     assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
-        AromaticValenceAst.Aromatic(ValueAst.Lit(0)),
-        AromaticValenceAst.Aromatic(ValueAst.Lit(1)),
-        AromaticValenceAst.Aromatic(ValueAst.Lit(1)),
+        AromaticValenceAst.Aromatic(NumForm.Lit(0)),
+        AromaticValenceAst.Aromatic(NumForm.Lit(1)),
+        AromaticValenceAst.Aromatic(NumForm.Lit(1)),
     ]
     assert [
         (system.atom_ids, system.charge) for system in molecule.aromatic_systems
-    ] == [((0, 1, 2), ValueAst.Lit(0))]
+    ] == [((0, 1, 2), NumForm.Lit(0))]
     assert list(molecule.stereo_atoms) == []
     assert molecule == independent
     assert io_config == SmilesIoConfig.lenient()
@@ -116,7 +116,7 @@ def test_resolved_smiles_workflow():
 
     molecule.atoms[0].charge = 3
 
-    assert independent.atoms[0].charge == ValueAst.Lit(1)
+    assert independent.atoms[0].charge == NumForm.Lit(1)
 
     with pytest.raises(ParseError, match="^Invalid token at position 2$"):
         MoleculeAst.from_smiles(
@@ -174,8 +174,8 @@ def test_molecule_editing_workflow():
         Edit.ModifyAtomField(
             id=7,
             change=AtomFieldChange.Charge(
-                old=ValueAst.Lit(0),
-                new=ValueAst.Lit(1),
+                old=NumForm.Lit(0),
+                new=NumForm.Lit(1),
             ),
         )
     )

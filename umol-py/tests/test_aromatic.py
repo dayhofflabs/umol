@@ -7,13 +7,13 @@ from umol import (
     AromaticSystemConstraintsAst,
     AromaticSystemUpdate,
     AtomAst,
-    ElectronCountsAst,
+    ElectronCountsForm,
     Element,
     MoleculeAst,
     ParseError,
-    UnpairedElectronsAst,
+    UnpairedElectronsForm,
     UnpairedElectronsUpdate,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -30,15 +30,15 @@ from umol import (
                 charge=-1,
                 unpaired_electrons=UnpairedElectronsUpdate(count=2),
                 constraints=AromaticSystemConstraintsAst(
-                    [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+                    [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
                 ),
             ),
             (
-                ElectronCountsAst.Lit([1, 1, 1]),
-                ValueAst.Lit(-1),
+                ElectronCountsForm.Lit([1, 1, 1]),
+                NumForm.Lit(-1),
                 UnpairedElectronsUpdate(count=2),
                 AromaticSystemConstraintsAst(
-                    [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+                    [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
                 ),
             ),
         ),
@@ -48,7 +48,7 @@ from umol import (
                 constraints=AromaticSystemConstraintsAst(
                     [
                         AromaticSystemConstraintAst.ElectronCount(
-                            ValueAst.Undetermined()
+                            NumForm.Undetermined()
                         )
                     ]
                 ),
@@ -60,7 +60,7 @@ from umol import (
                 AromaticSystemConstraintsAst(
                     [
                         AromaticSystemConstraintAst.ElectronCount(
-                            ValueAst.Undetermined()
+                            NumForm.Undetermined()
                         )
                     ]
                 ),
@@ -108,8 +108,8 @@ def benzene():
 
 def test_aromaticsystemast_new():
     system = AromaticSystemAst([1, 1, 1])
-    assert system.electrons == ElectronCountsAst.Lit([1, 1, 1])
-    assert system.charge == ValueAst.Undetermined()
+    assert system.electrons == ElectronCountsForm.Lit([1, 1, 1])
+    assert system.charge == NumForm.Undetermined()
     assert len(system.constraints) == 0
 
 
@@ -117,39 +117,39 @@ def test_aromaticsystemast_new_kwargs():
     system = AromaticSystemAst(
         [1, 1, 1],
         charge=-1,
-        unpaired_electrons=UnpairedElectronsAst(0, 1),
+        unpaired_electrons=UnpairedElectronsForm(0, 1),
     )
-    assert system.charge == ValueAst.Lit(-1)
-    assert system.unpaired_electrons == UnpairedElectronsAst(0, 1)
+    assert system.charge == NumForm.Lit(-1)
+    assert system.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 def test_aromaticsystemast_constraints_kwarg():
     system = AromaticSystemAst(
         [1, 1, 1],
         constraints=AromaticSystemConstraintsAst(
-            [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
         ),
     )
     assert len(system.constraints) == 1
-    assert system.constraints.electron_count == ValueAst.Lit(6)
+    assert system.constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemast_electrons_setter():
     system = AromaticSystemAst([1, 1, 1])
     system.electrons = [2, 2]
-    assert system.electrons == ElectronCountsAst.Lit([2, 2])
+    assert system.electrons == ElectronCountsForm.Lit([2, 2])
 
 
 def test_aromaticsystemast_charge_setter():
     system = AromaticSystemAst([1, 1, 1])
     system.charge = -1
-    assert system.charge == ValueAst.Lit(-1)
+    assert system.charge == NumForm.Lit(-1)
 
 
 def test_aromaticsystemast_unpaired_electrons_setter():
     system = AromaticSystemAst([1, 1, 1])
-    system.unpaired_electrons = UnpairedElectronsAst(0, 1)
-    assert system.unpaired_electrons == UnpairedElectronsAst(0, 1)
+    system.unpaired_electrons = UnpairedElectronsForm(0, 1)
+    assert system.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
@@ -168,7 +168,7 @@ def test_aromaticsystemast_asdict():
     system = AromaticSystemAst(
         [1, 1, 1],
         constraints=AromaticSystemConstraintsAst(
-            [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
         ),
     )
     d = system.asdict()
@@ -178,32 +178,32 @@ def test_aromaticsystemast_asdict():
         "unpaired_electrons",
         "constraints",
     }
-    assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1])
-    assert d["constraints"]["electron_count"] == ValueAst.Lit(6)
+    assert d["electrons"] == ElectronCountsForm.Lit([1, 1, 1])
+    assert d["constraints"]["electron_count"] == NumForm.Lit(6)
 
 
 def test_aromaticsystemast_set_constraints():
     system = AromaticSystemAst([1, 1, 1])
     system.constraints = AromaticSystemConstraintsAst(
-        [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+        [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
-    assert system.constraints.electron_count == ValueAst.Lit(6)
+    assert system.constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemconstraints_electron_count():
     constraints = AromaticSystemConstraintsAst([])
-    assert constraints.electron_count == ValueAst.Undetermined()
+    assert constraints.electron_count == NumForm.Undetermined()
     constraints.electron_count = 6
-    assert constraints.electron_count == ValueAst.Lit(6)
+    assert constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemconstraints_mapping_ops():
     constraints = AromaticSystemConstraintsAst([])
-    constraints.set(AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))
+    constraints.set(AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)))
     assert len(constraints) == 1
     assert AromaticSystemConstraintKey.ElectronCount() in constraints
     assert constraints[AromaticSystemConstraintKey.ElectronCount()] == (
-        AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
+        AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
     )
     assert [key for key in constraints] == [AromaticSystemConstraintKey.ElectronCount()]
     del constraints[AromaticSystemConstraintKey.ElectronCount()]
@@ -230,18 +230,18 @@ def test_aromaticsystemconstraintkey_electron_count():
 
 def test_aromaticsystemconstraints_asdict():
     constraints = AromaticSystemConstraintsAst(
-        [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+        [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
     d = constraints.asdict()
     assert set(d.keys()) == {"electron_count"}
-    assert d["electron_count"] == ValueAst.Lit(6)
+    assert d["electron_count"] == NumForm.Lit(6)
 
 
 def test_aromaticsystemview_fields():
     view = benzene().aromatic_systems[0]
     assert view.id == 0
     assert view.atom_ids == (0, 1, 2, 3, 4, 5)
-    assert view.electrons == ElectronCountsAst.Lit([1, 1, 1, 1, 1, 1])
+    assert view.electrons == ElectronCountsForm.Lit([1, 1, 1, 1, 1, 1])
     assert repr(view) == "AromaticSystemView(id=0)"
 
 
@@ -249,19 +249,19 @@ def test_aromaticsystemview_set_electrons():
     mol = benzene()
     mol.aromatic_systems[0].electrons = [2, 2, 2, 2, 2, 2]
     # a fresh view re-reads the molecule, proving the write landed on it
-    assert mol.aromatic_systems[0].electrons == ElectronCountsAst.Lit([2, 2, 2, 2, 2, 2])
+    assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
 
 
 def test_aromaticsystemview_set_charge():
     mol = benzene()
     mol.aromatic_systems[0].charge = -1
-    assert mol.aromatic_systems[0].charge == ValueAst.Lit(-1)
+    assert mol.aromatic_systems[0].charge == NumForm.Lit(-1)
 
 
 def test_aromaticsystemview_set_unpaired_electrons():
     mol = benzene()
-    mol.aromatic_systems[0].unpaired_electrons = UnpairedElectronsAst(0, 1)
-    assert mol.aromatic_systems[0].unpaired_electrons == UnpairedElectronsAst(0, 1)
+    mol.aromatic_systems[0].unpaired_electrons = UnpairedElectronsForm(0, 1)
+    assert mol.aromatic_systems[0].unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 def test_aromaticsystemview_asdict():
@@ -273,31 +273,31 @@ def test_aromaticsystemview_asdict():
         "unpaired_electrons",
         "constraints",
     }
-    assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1, 1, 1, 1])
+    assert d["electrons"] == ElectronCountsForm.Lit([1, 1, 1, 1, 1, 1])
 
 
 def test_aromaticsystemview_constraints_write_through():
     mol = benzene()
     mol.aromatic_systems[0].constraints.set(
-        AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
+        AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
     )
     constraints = mol.aromatic_systems[0].constraints
     assert len(constraints) == 1
-    assert constraints.electron_count == ValueAst.Lit(6)
+    assert constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemview_constraints_electron_count_property():
     mol = benzene()
     mol.aromatic_systems[0].constraints.electron_count = 6
-    assert mol.aromatic_systems[0].constraints.electron_count == ValueAst.Lit(6)
+    assert mol.aromatic_systems[0].constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemview_set_constraints():
     mol = benzene()
     mol.aromatic_systems[0].constraints = AromaticSystemConstraintsAst(
-        [AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))]
+        [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
-    assert mol.aromatic_systems[0].constraints.electron_count == ValueAst.Lit(6)
+    assert mol.aromatic_systems[0].constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemviews_len_getitem():
@@ -316,7 +316,7 @@ def test_aromaticsystemviews_setitem():
     mol.aromatic_systems[0] = AromaticSystemAst([2, 2, 2, 2, 2, 2])
     view = mol.aromatic_systems[0]
     # value replaced, members preserved
-    assert view.electrons == ElectronCountsAst.Lit([2, 2, 2, 2, 2, 2])
+    assert view.electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
     assert view.atom_ids == (0, 1, 2, 3, 4, 5)
 
 

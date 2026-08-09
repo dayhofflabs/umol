@@ -3,9 +3,9 @@ import pytest
 from umol import (
     SpinState,
     UnpairedElectrons,
-    UnpairedElectronsAst,
+    UnpairedElectronsForm,
     UnpairedElectronsUpdate,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -113,22 +113,22 @@ def test_spin_state_assignment_error(attribute):
     ("ast", "expected"),
     [
         pytest.param(
-            UnpairedElectronsAst(2, 3),
+            UnpairedElectronsForm(2, 3),
             UnpairedElectrons(2, 3),
             id="complete",
         ),
         pytest.param(
-            UnpairedElectronsAst(2, 2),
+            UnpairedElectronsForm(2, 2),
             UnpairedElectrons(2, 2),
             id="physics_invalid",
         ),
         pytest.param(
-            UnpairedElectronsAst(ValueAst.Undetermined(), 3),
+            UnpairedElectronsForm(NumForm.Undetermined(), 3),
             None,
             id="count_partial",
         ),
         pytest.param(
-            UnpairedElectronsAst(2, ValueAst.Undetermined()),
+            UnpairedElectronsForm(2, NumForm.Undetermined()),
             None,
             id="multiplicity_partial",
         ),
@@ -142,13 +142,13 @@ def test_unpaired_electrons_ast_as_lit(ast, expected):
     ("count", "multiplicity", "expected_count", "expected_multiplicity"),
     [
         pytest.param(None, None, None, None, id="empty"),
-        pytest.param(2, None, ValueAst.Lit(2), None, id="single"),
-        pytest.param(2, 3, ValueAst.Lit(2), ValueAst.Lit(3), id="both"),
+        pytest.param(2, None, NumForm.Lit(2), None, id="single"),
+        pytest.param(2, 3, NumForm.Lit(2), NumForm.Lit(3), id="both"),
         pytest.param(
-            ValueAst.Undetermined(),
-            ValueAst.Undetermined(),
-            ValueAst.Undetermined(),
-            ValueAst.Undetermined(),
+            NumForm.Undetermined(),
+            NumForm.Undetermined(),
+            NumForm.Undetermined(),
+            NumForm.Undetermined(),
             id="explicit_undetermined",
         ),
     ],

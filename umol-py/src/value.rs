@@ -269,7 +269,7 @@ impl PredExpr {
 /// Integer-valued atom/bond field: the undetermined wildcard, a literal, a literal
 /// set, a range, an arithmetic expression, or a predicate expression.
 #[pyclass]
-pub enum ValueAst {
+pub enum NumForm {
     Undetermined(),
     Lit(i64),
     LitSet(BTreeSet<i64>),
@@ -280,7 +280,7 @@ pub enum ValueAst {
 }
 
 #[pymethods]
-impl ValueAst {
+impl NumForm {
     /// The concrete integer this resolves to, or `None` when it is not a bare
     /// literal (undetermined, a set, a range, or an expression).
     fn as_lit(&self, py: Python<'_>) -> Option<i64> {
@@ -297,46 +297,46 @@ impl ValueAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            ValueAst::Undetermined() => ("Undetermined", 0),
-            ValueAst::Lit(_) => ("Lit", 1),
-            ValueAst::LitSet(_) => ("LitSet", 1),
-            ValueAst::RangeFrom(_) => ("RangeFrom", 1),
-            ValueAst::RangeTo(_) => ("RangeTo", 1),
-            ValueAst::ArithExpr(_) => ("ArithExpr", 1),
-            ValueAst::PredExpr(_) => ("PredExpr", 1),
+            NumForm::Undetermined() => ("Undetermined", 0),
+            NumForm::Lit(_) => ("Lit", 1),
+            NumForm::LitSet(_) => ("LitSet", 1),
+            NumForm::RangeFrom(_) => ("RangeFrom", 1),
+            NumForm::RangeTo(_) => ("RangeTo", 1),
+            NumForm::ArithExpr(_) => ("ArithExpr", 1),
+            NumForm::PredExpr(_) => ("PredExpr", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "ValueAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "NumForm", variant, arity)
     }
 }
 
-impl ValueAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrNumForm) -> PyResult<ValueAst> {
+impl NumForm {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrNumForm) -> PyResult<NumForm> {
         Ok(match ast {
-            GraphIrNumForm::Undetermined => ValueAst::Undetermined(),
-            GraphIrNumForm::Lit(n) => ValueAst::Lit(*n),
-            GraphIrNumForm::LitSet(members) => ValueAst::LitSet((**members).clone()),
-            GraphIrNumForm::RangeFrom(n) => ValueAst::RangeFrom(*n),
-            GraphIrNumForm::RangeTo(n) => ValueAst::RangeTo(*n),
+            GraphIrNumForm::Undetermined => NumForm::Undetermined(),
+            GraphIrNumForm::Lit(n) => NumForm::Lit(*n),
+            GraphIrNumForm::LitSet(members) => NumForm::LitSet((**members).clone()),
+            GraphIrNumForm::RangeFrom(n) => NumForm::RangeFrom(*n),
+            GraphIrNumForm::RangeTo(n) => NumForm::RangeTo(*n),
             GraphIrNumForm::ArithExpr(t) => {
-                ValueAst::ArithExpr(into_py_variant(py, ArithExpr::from_rust(py, t)?)?)
+                NumForm::ArithExpr(into_py_variant(py, ArithExpr::from_rust(py, t)?)?)
             }
             GraphIrNumForm::PredExpr(p) => {
-                ValueAst::PredExpr(into_py_variant(py, PredExpr::from_rust(py, p)?)?)
+                NumForm::PredExpr(into_py_variant(py, PredExpr::from_rust(py, p)?)?)
             }
         })
     }
 
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNumForm {
         match self {
-            ValueAst::Undetermined() => GraphIrNumForm::Undetermined,
-            ValueAst::Lit(n) => GraphIrNumForm::Lit(*n),
-            ValueAst::LitSet(members) => GraphIrNumForm::LitSet(Box::new(members.clone())),
-            ValueAst::RangeFrom(n) => GraphIrNumForm::RangeFrom(*n),
-            ValueAst::RangeTo(n) => GraphIrNumForm::RangeTo(*n),
-            ValueAst::ArithExpr(t) => {
+            NumForm::Undetermined() => GraphIrNumForm::Undetermined,
+            NumForm::Lit(n) => GraphIrNumForm::Lit(*n),
+            NumForm::LitSet(members) => GraphIrNumForm::LitSet(Box::new(members.clone())),
+            NumForm::RangeFrom(n) => GraphIrNumForm::RangeFrom(*n),
+            NumForm::RangeTo(n) => GraphIrNumForm::RangeTo(*n),
+            NumForm::ArithExpr(t) => {
                 GraphIrNumForm::ArithExpr(Box::new(t.bind(py).borrow().to_rust(py)))
             }
-            ValueAst::PredExpr(p) => {
+            NumForm::PredExpr(p) => {
                 GraphIrNumForm::PredExpr(Box::new(p.bind(py).borrow().to_rust(py)))
             }
         }
@@ -344,21 +344,19 @@ impl ValueAst {
 }
 
 impl_py_lattice!(
-    ValueAst,
+    NumForm,
     GraphIrNumForm,
-    |value: &ValueAst, py: Python<'_>| -> PyResult<GraphIrNumForm> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrNumForm| -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &value)
-    }
+    |value: &NumForm, py: Python<'_>| -> PyResult<GraphIrNumForm> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: GraphIrNumForm| -> PyResult<NumForm> { NumForm::from_rust(py, &value) }
 );
 
-/// A Python `ValueAst` or `int` (→ `NumForm::Lit`), matching `impl Into<NumForm>`
+/// A Python `NumForm` or `int` (→ `NumForm::Lit`), matching `impl Into<NumForm>`
 /// on the Rust builders. The `*Like` convention for binding coercion inputs (`*Input`
 /// is the DSL side); shared by the atom fields, unpaired-electron components, and
 /// ring-membership count.
 #[derive(FromPyObject)]
 pub enum NumLike {
-    Ast(Py<ValueAst>),
+    Ast(Py<NumForm>),
     Lit(i64),
 }
 
@@ -371,24 +369,24 @@ impl NumLike {
         }
     }
 
-    /// Coerce to a `Py<ValueAst>` (for value structs that store the value field).
-    pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<ValueAst>> {
+    /// Coerce to a `Py<NumForm>` (for value structs that store the value field).
+    pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<NumForm>> {
         match self {
             NumLike::Ast(value) => Ok(value.clone_ref(py)),
-            NumLike::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
+            NumLike::Lit(number) => into_py_variant(py, NumForm::Lit(*number)),
         }
     }
 }
 
 /// `IntoPyObject` for `&NumLike` so it can be a complex-enum field: constructors
-/// (`AromaticValenceAst.Aromatic(1)`) coerce `int | ValueAst` in, and the field
-/// reads back as a `ValueAst`.
+/// (`AromaticValenceAst.Aromatic(1)`) coerce `int | NumForm` in, and the field
+/// reads back as a `NumForm`.
 impl<'py> IntoPyObject<'py> for &NumLike {
-    type Target = ValueAst;
-    type Output = Bound<'py, ValueAst>;
+    type Target = NumForm;
+    type Output = Bound<'py, NumForm>;
     type Error = PyErr;
 
-    fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, ValueAst>> {
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, NumForm>> {
         Ok(self.to_py(py)?.into_bound(py))
     }
 }
@@ -466,7 +464,7 @@ mod tests {
     ))))]
     fn test_value_ast_roundtrip(#[case] ast: GraphIrNumForm) {
         Python::attach(|py| {
-            let value = ValueAst::from_rust(py, &ast).unwrap();
+            let value = NumForm::from_rust(py, &ast).unwrap();
             assert_eq!(value.to_rust(py), ast);
         });
     }
@@ -479,7 +477,7 @@ mod tests {
     #[case(GraphIrNumForm::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
     fn test_value_ast_as_lit(#[case] ast: GraphIrNumForm, #[case] expected: Option<i64>) {
         Python::attach(|py| {
-            assert_eq!(ValueAst::from_rust(py, &ast).unwrap().as_lit(py), expected);
+            assert_eq!(NumForm::from_rust(py, &ast).unwrap().as_lit(py), expected);
         });
     }
 }

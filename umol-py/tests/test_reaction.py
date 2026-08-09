@@ -42,7 +42,7 @@ from umol import (
     ValenceEntry,
     ValenceModel,
     ValenceTable,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -243,7 +243,7 @@ def test_reactionast_constructor_snapshot():
     lhs.atoms[0].charge = 1
     deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("N")))))
 
-    assert reaction.lhs.atoms[0].charge == ValueAst.Undetermined()
+    assert reaction.lhs.atoms[0].charge == NumForm.Undetermined()
     assert reaction.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
     )
@@ -264,7 +264,7 @@ def test_reactionast_components():
 
     assert reaction.lhs is lhs
     assert reaction.deltas is deltas
-    assert reaction.lhs.atoms[0].charge == ValueAst.Lit(-1)
+    assert reaction.lhs.atoms[0].charge == NumForm.Lit(-1)
     assert reaction.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
     )
@@ -280,7 +280,7 @@ def test_reactionast_component_replacement():
     lhs.atoms[0].charge = 1
     deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("N")))))
 
-    assert reaction.lhs.atoms[0].charge == ValueAst.Undetermined()
+    assert reaction.lhs.atoms[0].charge == NumForm.Undetermined()
     assert reaction.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
     )
@@ -723,12 +723,12 @@ def test_reactionast_from_sides_snapshot():
     reaction.lhs.atoms[0].charge = 2
     reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("F")))))
 
-    assert reaction.lhs.atoms[0].charge == ValueAst.Lit(2)
+    assert reaction.lhs.atoms[0].charge == NumForm.Lit(2)
     assert reaction.deltas[-1] == Delta.Atom(
         AtomDelta.Add(id=3, ast=AtomAst(Element("F")))
     )
-    assert lhs.atoms[0].charge == ValueAst.Lit(1)
-    assert rhs.atoms[0].charge == ValueAst.Lit(-1)
+    assert lhs.atoms[0].charge == NumForm.Lit(1)
+    assert rhs.atoms[0].charge == NumForm.Lit(-1)
 
 
 def test_reactionast_from_sides_error():
@@ -1071,7 +1071,7 @@ def test_reactionast_canonicalize():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(1)
                         ),
                     )
                 ),
@@ -1079,7 +1079,7 @@ def test_reactionast_canonicalize():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                            old=NumForm.Lit(1), new=NumForm.Lit(2)
                         ),
                     )
                 ),
@@ -1096,7 +1096,7 @@ def test_reactionast_canonicalize():
                 AtomDelta.ModifyField(
                     id=0,
                     change=AtomFieldChange.Charge(
-                        old=ValueAst.Lit(0), new=ValueAst.Lit(2)
+                        old=NumForm.Lit(0), new=NumForm.Lit(2)
                     ),
                 )
             )
@@ -1109,7 +1109,7 @@ def test_reactionast_canonicalize():
 
     canonical.lhs.atoms[0].charge = 3
     canonical.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O")))))
-    assert canonical.lhs.atoms[0].charge == ValueAst.Lit(3)
+    assert canonical.lhs.atoms[0].charge == NumForm.Lit(3)
     assert len(canonical.deltas) == 2
 
 
@@ -1122,7 +1122,7 @@ def test_reactionast_canonicalize_error():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(1)
                         ),
                     )
                 ),
@@ -1130,7 +1130,7 @@ def test_reactionast_canonicalize_error():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(2), new=ValueAst.Lit(3)
+                            old=NumForm.Lit(2), new=NumForm.Lit(3)
                         ),
                     )
                 ),
@@ -1154,7 +1154,7 @@ def test_reactionast_canonical_eq():
                     AtomDelta.ModifyField(
                         id=1,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(-1)
                         ),
                     )
                 ),
@@ -1162,7 +1162,7 @@ def test_reactionast_canonical_eq():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(1)
                         ),
                     )
                 ),
@@ -1177,7 +1177,7 @@ def test_reactionast_canonical_eq():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(1)
                         ),
                     )
                 ),
@@ -1185,7 +1185,7 @@ def test_reactionast_canonical_eq():
                     AtomDelta.ModifyField(
                         id=1,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(-1)
                         ),
                     )
                 ),
@@ -1200,7 +1200,7 @@ def test_reactionast_canonical_eq():
                     AtomDelta.ModifyField(
                         id=0,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(-1)
                         ),
                     )
                 ),
@@ -1208,7 +1208,7 @@ def test_reactionast_canonical_eq():
                     AtomDelta.ModifyField(
                         id=1,
                         change=AtomFieldChange.Charge(
-                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            old=NumForm.Lit(0), new=NumForm.Lit(1)
                         ),
                     )
                 ),
@@ -1242,7 +1242,7 @@ def test_reactionast_reverse():
     reversed_reaction.deltas.append(
         Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("F"))))
     )
-    assert reversed_reaction.lhs.atoms[0].charge == ValueAst.Lit(1)
+    assert reversed_reaction.lhs.atoms[0].charge == NumForm.Lit(1)
     assert len(reversed_reaction.deltas) == 3
 
 
@@ -1395,7 +1395,7 @@ def test_reaction_ast_compose_snapshot():
             Delta.Atom(AtomDelta.Add(id=8, ast=AtomAst(Element("Cl"))))
         )
 
-        assert composite.lhs.atoms[0].charge == ValueAst.Lit(7)
+        assert composite.lhs.atoms[0].charge == NumForm.Lit(7)
         assert composite.deltas[-1] == Delta.Atom(
             AtomDelta.Add(id=8, ast=AtomAst(Element("Cl")))
         )
@@ -1762,7 +1762,7 @@ def test_reactionast_workflow():
 
     assert composites[0].lhs is composite_lhs
     assert composites[0].deltas is composite_deltas
-    assert composites[0].lhs.atoms[5].charge == ValueAst.Lit(2)
+    assert composites[0].lhs.atoms[5].charge == NumForm.Lit(2)
     assert composites[0].deltas[-1] == Delta.Atom(
         AtomDelta.Add(id=6, ast=AtomAst(Element("O")))
     )

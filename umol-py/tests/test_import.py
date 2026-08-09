@@ -50,11 +50,11 @@ PUBLIC_EXPORTS = frozenset(
     BondRingSizeCounts
     BondView
     BondViews
-    BooleanAst
+    BooleanForm
     ChemistryModel
     CisTransConfiguration
     CisTransStereo
-    CisTransStereoAst
+    CisTransStereoForm
     CommonSubgraphEnumerationAlgorithm
     ConnectedComponentsAlgorithm
     Constraint
@@ -80,11 +80,11 @@ PUBLIC_EXPORTS = frozenset(
     Deltas
     E
     EcfpHashScheme
-    ElectronCountsAst
+    ElectronCountsForm
     Edit
     Edits
     Element
-    ElementAst
+    ElementForm
     ElementScope
     Entity
     FluxionalityAst
@@ -92,7 +92,7 @@ PUBLIC_EXPORTS = frozenset(
     HashedFingerprintConfig
     InvalidStructureError
     IsotopeMass
-    IsotopeMassAst
+    IsotopeMassForm
     LigandPermutation
     LigandSymmetryAst
     MaximumIndependentSetAlgorithm
@@ -126,7 +126,7 @@ PUBLIC_EXPORTS = frozenset(
     NoncovalentBondDelta
     NoncovalentBondFieldChange
     NoncovalentBondKind
-    NoncovalentBondKindAst
+    NoncovalentBondKindForm
     NoncovalentBondUpdate
     NoncovalentBondView
     NoncovalentBondViews
@@ -180,7 +180,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoBondFieldChange
     StereoBondView
     StereoBondViews
-    StereoConfigurationAst
+    StereoConfigurationForm
     StereoConfigurationUpdate
     StereoCoset
     StereoFailurePolicy
@@ -204,20 +204,20 @@ PUBLIC_EXPORTS = frozenset(
     SubstructureSearchConfig
     TetrahedralConfiguration
     TetrahedralStereo
-    TetrahedralStereoAst
+    TetrahedralStereoForm
     Topicity
     TopicityAst
     TopicityRelationAst
     Transaction
     TransactionError
     UnpairedElectrons
-    UnpairedElectronsAst
+    UnpairedElectronsForm
     UnpairedElectronsUpdate
     UnderdeterminedError
     ValenceEntry
     ValenceModel
     ValenceTable
-    ValueAst
+    NumForm
     PredExpr
     ArithExpr
     WlHashScheme

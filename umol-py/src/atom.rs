@@ -24,13 +24,13 @@ use crate::element::Element;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{MemOp, NumLike, ValueAst};
+use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
+use crate::value::{MemOp, NumForm, NumLike};
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable with an optional membership restriction.
 #[pyclass]
-pub enum ElementAst {
+pub enum ElementForm {
     Undetermined(),
     Lit(Element),
     LitSet(BTreeSet<Element>),
@@ -39,7 +39,7 @@ pub enum ElementAst {
 }
 
 #[pymethods]
-impl ElementAst {
+impl ElementForm {
     /// The single element this resolves to, or `None` when it is not a bare
     /// literal (undetermined, a set, a complement, or a variable).
     fn as_lit(&self) -> Option<Element> {
@@ -56,39 +56,39 @@ impl ElementAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            ElementAst::Undetermined() => ("Undetermined", 0),
-            ElementAst::Lit(_) => ("Lit", 1),
-            ElementAst::LitSet(_) => ("LitSet", 1),
-            ElementAst::NotSet(_) => ("NotSet", 1),
-            ElementAst::Var(_, _) => ("Var", 2),
+            ElementForm::Undetermined() => ("Undetermined", 0),
+            ElementForm::Lit(_) => ("Lit", 1),
+            ElementForm::LitSet(_) => ("LitSet", 1),
+            ElementForm::NotSet(_) => ("NotSet", 1),
+            ElementForm::Var(_, _) => ("Var", 2),
         };
-        variant_repr(slf.bind(py).as_any(), "ElementAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "ElementForm", variant, arity)
     }
 }
 
 impl_py_lattice!(
-    ElementAst,
+    ElementForm,
     GraphIrElementForm,
-    |value: &ElementAst, _py: Python<'_>| -> PyResult<GraphIrElementForm> { Ok(value.to_rust()) },
-    |_py: Python<'_>, value: GraphIrElementForm| -> PyResult<ElementAst> {
-        Ok(ElementAst::from_rust(&value))
+    |value: &ElementForm, _py: Python<'_>| -> PyResult<GraphIrElementForm> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: GraphIrElementForm| -> PyResult<ElementForm> {
+        Ok(ElementForm::from_rust(&value))
     }
 );
 
-impl ElementAst {
-    pub(crate) fn from_rust(ast: &GraphIrElementForm) -> ElementAst {
+impl ElementForm {
+    pub(crate) fn from_rust(ast: &GraphIrElementForm) -> ElementForm {
         match ast {
-            GraphIrElementForm::Undetermined => ElementAst::Undetermined(),
-            GraphIrElementForm::Lit(e) => ElementAst::Lit(Element::from(*e)),
+            GraphIrElementForm::Undetermined => ElementForm::Undetermined(),
+            GraphIrElementForm::Lit(e) => ElementForm::Lit(Element::from(*e)),
             GraphIrElementForm::LitSet(members) => {
-                ElementAst::LitSet(members.iter().copied().map(Element::from).collect())
+                ElementForm::LitSet(members.iter().copied().map(Element::from).collect())
             }
             GraphIrElementForm::NotSet(members) => {
-                ElementAst::NotSet(members.iter().copied().map(Element::from).collect())
+                ElementForm::NotSet(members.iter().copied().map(Element::from).collect())
             }
             GraphIrElementForm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
-                ElementAst::Var(
+                ElementForm::Var(
                     name.clone(),
                     restriction.as_ref().map(|(op, members)| {
                         (
@@ -103,15 +103,15 @@ impl ElementAst {
 
     pub(crate) fn to_rust(&self) -> GraphIrElementForm {
         match self {
-            ElementAst::Undetermined() => GraphIrElementForm::Undetermined,
-            ElementAst::Lit(e) => GraphIrElementForm::Lit(ChemElement::from(e)),
-            ElementAst::LitSet(members) => GraphIrElementForm::LitSet(Box::new(
+            ElementForm::Undetermined() => GraphIrElementForm::Undetermined,
+            ElementForm::Lit(e) => GraphIrElementForm::Lit(ChemElement::from(e)),
+            ElementForm::LitSet(members) => GraphIrElementForm::LitSet(Box::new(
                 members.iter().map(ChemElement::from).collect(),
             )),
-            ElementAst::NotSet(members) => GraphIrElementForm::NotSet(Box::new(
+            ElementForm::NotSet(members) => GraphIrElementForm::NotSet(Box::new(
                 members.iter().map(ChemElement::from).collect(),
             )),
-            ElementAst::Var(name, restriction) => GraphIrElementForm::Var(Box::new((
+            ElementForm::Var(name, restriction) => GraphIrElementForm::Var(Box::new((
                 name.clone(),
                 restriction.as_ref().map(|(op, members)| {
                     (
@@ -170,7 +170,7 @@ impl IsotopeMass {
 /// Isotope-mass expression: undetermined, the natural isotopic mixture, a single
 /// mass number, a finite mass set, or a variable with an optional mass-set restriction.
 #[pyclass]
-pub enum IsotopeMassAst {
+pub enum IsotopeMassForm {
     Undetermined(),
     Natural(),
     Lit(u32),
@@ -179,7 +179,7 @@ pub enum IsotopeMassAst {
 }
 
 #[pymethods]
-impl IsotopeMassAst {
+impl IsotopeMassForm {
     /// The exact isotope-mass value, or `None` when this expression is not ground.
     fn as_lit(&self) -> Option<IsotopeMass> {
         self.to_rust().as_lit().map(IsotopeMass::from_rust)
@@ -195,39 +195,39 @@ impl IsotopeMassAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            IsotopeMassAst::Undetermined() => ("Undetermined", 0),
-            IsotopeMassAst::Natural() => ("Natural", 0),
-            IsotopeMassAst::Lit(_) => ("Lit", 1),
-            IsotopeMassAst::LitSet(_) => ("LitSet", 1),
-            IsotopeMassAst::Var(_, _) => ("Var", 2),
+            IsotopeMassForm::Undetermined() => ("Undetermined", 0),
+            IsotopeMassForm::Natural() => ("Natural", 0),
+            IsotopeMassForm::Lit(_) => ("Lit", 1),
+            IsotopeMassForm::LitSet(_) => ("LitSet", 1),
+            IsotopeMassForm::Var(_, _) => ("Var", 2),
         };
-        variant_repr(slf.bind(py).as_any(), "IsotopeMassAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "IsotopeMassForm", variant, arity)
     }
 }
 
-impl IsotopeMassAst {
-    pub(crate) fn from_rust(ast: &GraphIrIsotopeMassForm) -> IsotopeMassAst {
+impl IsotopeMassForm {
+    pub(crate) fn from_rust(ast: &GraphIrIsotopeMassForm) -> IsotopeMassForm {
         match ast {
-            GraphIrIsotopeMassForm::Undetermined => IsotopeMassAst::Undetermined(),
-            GraphIrIsotopeMassForm::Natural => IsotopeMassAst::Natural(),
-            GraphIrIsotopeMassForm::Lit(mass) => IsotopeMassAst::Lit(*mass),
-            GraphIrIsotopeMassForm::LitSet(masses) => IsotopeMassAst::LitSet((**masses).clone()),
+            GraphIrIsotopeMassForm::Undetermined => IsotopeMassForm::Undetermined(),
+            GraphIrIsotopeMassForm::Natural => IsotopeMassForm::Natural(),
+            GraphIrIsotopeMassForm::Lit(mass) => IsotopeMassForm::Lit(*mass),
+            GraphIrIsotopeMassForm::LitSet(masses) => IsotopeMassForm::LitSet((**masses).clone()),
             GraphIrIsotopeMassForm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
-                IsotopeMassAst::Var(name.clone(), restriction.clone())
+                IsotopeMassForm::Var(name.clone(), restriction.clone())
             }
         }
     }
 
     pub(crate) fn to_rust(&self) -> GraphIrIsotopeMassForm {
         match self {
-            IsotopeMassAst::Undetermined() => GraphIrIsotopeMassForm::Undetermined,
-            IsotopeMassAst::Natural() => GraphIrIsotopeMassForm::Natural,
-            IsotopeMassAst::Lit(mass) => GraphIrIsotopeMassForm::Lit(*mass),
-            IsotopeMassAst::LitSet(masses) => {
+            IsotopeMassForm::Undetermined() => GraphIrIsotopeMassForm::Undetermined,
+            IsotopeMassForm::Natural() => GraphIrIsotopeMassForm::Natural,
+            IsotopeMassForm::Lit(mass) => GraphIrIsotopeMassForm::Lit(*mass),
+            IsotopeMassForm::LitSet(masses) => {
                 GraphIrIsotopeMassForm::LitSet(Box::new(masses.clone()))
             }
-            IsotopeMassAst::Var(name, restriction) => {
+            IsotopeMassForm::Var(name, restriction) => {
                 GraphIrIsotopeMassForm::Var(Box::new((name.clone(), restriction.clone())))
             }
         }
@@ -235,13 +235,13 @@ impl IsotopeMassAst {
 }
 
 impl_py_lattice!(
-    IsotopeMassAst,
+    IsotopeMassForm,
     GraphIrIsotopeMassForm,
-    |value: &IsotopeMassAst, _py: Python<'_>| -> PyResult<GraphIrIsotopeMassForm> {
+    |value: &IsotopeMassForm, _py: Python<'_>| -> PyResult<GraphIrIsotopeMassForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrIsotopeMassForm| -> PyResult<IsotopeMassAst> {
-        Ok(IsotopeMassAst::from_rust(&value))
+    |_py: Python<'_>, value: GraphIrIsotopeMassForm| -> PyResult<IsotopeMassForm> {
+        Ok(IsotopeMassForm::from_rust(&value))
     }
 );
 
@@ -306,39 +306,39 @@ impl AtomUpdate {
     }
 
     #[getter]
-    fn element(&self) -> Option<ElementAst> {
-        self.0.element.as_ref().map(ElementAst::from_rust)
+    fn element(&self) -> Option<ElementForm> {
+        self.0.element.as_ref().map(ElementForm::from_rust)
     }
 
     #[getter]
-    fn isotope_mass(&self) -> Option<IsotopeMassAst> {
-        self.0.isotope_mass.as_ref().map(IsotopeMassAst::from_rust)
+    fn isotope_mass(&self) -> Option<IsotopeMassForm> {
+        self.0.isotope_mass.as_ref().map(IsotopeMassForm::from_rust)
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn charge(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .charge
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
     #[getter]
-    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .implicit_hydrogens
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
     #[getter]
-    fn lone_pairs(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+    fn lone_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
         self.0
             .lone_pairs
             .as_ref()
-            .map(|value| ValueAst::from_rust(py, value))
+            .map(|value| NumForm::from_rust(py, value))
             .transpose()
     }
 
@@ -371,7 +371,7 @@ pub struct AtomAst(GraphIrAtomForm);
 
 #[pymethods]
 impl AtomAst {
-    /// Construct from an element — a single `Element` or an `ElementAst` expression —
+    /// Construct from an element — a single `Element` or an `ElementForm` expression —
     /// optionally setting fields.
     #[new]
     #[allow(clippy::too_many_arguments)]
@@ -383,7 +383,7 @@ impl AtomAst {
         charge: Option<NumLike>,
         implicit_hydrogens: Option<NumLike>,
         lone_pairs: Option<NumLike>,
-        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
+        unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
         let atom = GraphIrAtomForm::new(element.to_rust(py));
@@ -414,8 +414,8 @@ impl AtomAst {
     }
 
     #[getter]
-    fn element(&self) -> ElementAst {
-        ElementAst::from_rust(&self.0.element)
+    fn element(&self) -> ElementForm {
+        ElementForm::from_rust(&self.0.element)
     }
 
     #[setter]
@@ -424,8 +424,8 @@ impl AtomAst {
     }
 
     #[getter]
-    fn isotope_mass(&self) -> IsotopeMassAst {
-        IsotopeMassAst::from_rust(&self.0.isotope_mass)
+    fn isotope_mass(&self) -> IsotopeMassForm {
+        IsotopeMassForm::from_rust(&self.0.isotope_mass)
     }
 
     #[setter]
@@ -434,8 +434,8 @@ impl AtomAst {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.charge)
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.charge)
     }
 
     #[setter]
@@ -444,8 +444,8 @@ impl AtomAst {
     }
 
     #[getter]
-    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.implicit_hydrogens)
+    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.implicit_hydrogens)
     }
 
     #[setter]
@@ -454,8 +454,8 @@ impl AtomAst {
     }
 
     #[getter]
-    fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_rust(py, &self.0.lone_pairs)
+    fn lone_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, &self.0.lone_pairs)
     }
 
     #[setter]
@@ -464,12 +464,12 @@ impl AtomAst {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
-        UnpairedElectronsAst::from_rust(py, &self.0.unpaired_electrons)
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
+        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.0.unpaired_electrons = value.to_rust(py);
     }
 
@@ -524,10 +524,10 @@ impl_py_lattice!(
 /// a PyO3 `FromPyObject` union tried in order; variants are `Ast` = the `*Ast`
 /// wrapper, `Lit` = the literal, corresponding to `impl Into<..>` on the Rust builders.
 ///
-/// `ElementLike` accepts a concrete `Element` or an `ElementAst`.
+/// `ElementLike` accepts a concrete `Element` or an `ElementForm`.
 #[derive(FromPyObject)]
 enum ElementLike {
-    Ast(Py<ElementAst>),
+    Ast(Py<ElementForm>),
     Lit(Element),
 }
 
@@ -540,10 +540,10 @@ impl ElementLike {
     }
 }
 
-/// An `IsotopeMassAst` or a Python `int` (→ `IsotopeMassAst::Lit`, a mass number).
+/// An `IsotopeMassForm` or a Python `int` (→ `IsotopeMassForm::Lit`, a mass number).
 #[derive(FromPyObject)]
 enum IsotopeMassLike {
-    Ast(Py<IsotopeMassAst>),
+    Ast(Py<IsotopeMassForm>),
     Lit(u32),
 }
 
@@ -564,7 +564,7 @@ fn apply_fields(
     charge: Option<NumLike>,
     implicit_hydrogens: Option<NumLike>,
     lone_pairs: Option<NumLike>,
-    unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
+    unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
     constraints: Option<Py<AtomConstraintsAst>>,
 ) -> GraphIrAtomForm {
     if let Some(isotope_mass) = isotope_mass {
@@ -637,9 +637,11 @@ impl AtomView {
     }
 
     #[getter]
-    fn element(&self, py: Python<'_>) -> PyResult<ElementAst> {
+    fn element(&self, py: Python<'_>) -> PyResult<ElementForm> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(ElementAst::from_rust(&self.atom(molecule.inner())?.element))
+        Ok(ElementForm::from_rust(
+            &self.atom(molecule.inner())?.element,
+        ))
     }
 
     #[setter]
@@ -653,9 +655,9 @@ impl AtomView {
     }
 
     #[getter]
-    fn isotope_mass(&self, py: Python<'_>) -> PyResult<IsotopeMassAst> {
+    fn isotope_mass(&self, py: Python<'_>) -> PyResult<IsotopeMassForm> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(IsotopeMassAst::from_rust(
+        Ok(IsotopeMassForm::from_rust(
             &self.atom(molecule.inner())?.isotope_mass,
         ))
     }
@@ -671,9 +673,9 @@ impl AtomView {
     }
 
     #[getter]
-    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.atom(molecule.inner())?.charge)
+        NumForm::from_rust(py, &self.atom(molecule.inner())?.charge)
     }
 
     #[setter]
@@ -687,9 +689,9 @@ impl AtomView {
     }
 
     #[getter]
-    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.atom(molecule.inner())?.implicit_hydrogens)
+        NumForm::from_rust(py, &self.atom(molecule.inner())?.implicit_hydrogens)
     }
 
     #[setter]
@@ -703,9 +705,9 @@ impl AtomView {
     }
 
     #[getter]
-    fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
+    fn lone_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_rust(py, &self.atom(molecule.inner())?.lone_pairs)
+        NumForm::from_rust(py, &self.atom(molecule.inner())?.lone_pairs)
     }
 
     #[setter]
@@ -719,13 +721,13 @@ impl AtomView {
     }
 
     #[getter]
-    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsAst> {
+    fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.bind(py).borrow();
-        UnpairedElectronsAst::from_rust(py, &self.atom(molecule.inner())?.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.atom(molecule.inner())?.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsAst>) {
+    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -765,20 +767,20 @@ impl AtomView {
         let molecule = self.owner.bind(py).borrow();
         let atom = self.atom(molecule.inner())?;
         let dict = PyDict::new(py);
-        dict.set_item("element", ElementAst::from_rust(&atom.element))?;
+        dict.set_item("element", ElementForm::from_rust(&atom.element))?;
         dict.set_item(
             "isotope_mass",
-            IsotopeMassAst::from_rust(&atom.isotope_mass),
+            IsotopeMassForm::from_rust(&atom.isotope_mass),
         )?;
-        dict.set_item("charge", ValueAst::from_rust(py, &atom.charge)?)?;
+        dict.set_item("charge", NumForm::from_rust(py, &atom.charge)?)?;
         dict.set_item(
             "implicit_hydrogens",
-            ValueAst::from_rust(py, &atom.implicit_hydrogens)?,
+            NumForm::from_rust(py, &atom.implicit_hydrogens)?,
         )?;
-        dict.set_item("lone_pairs", ValueAst::from_rust(py, &atom.lone_pairs)?)?;
+        dict.set_item("lone_pairs", NumForm::from_rust(py, &atom.lone_pairs)?)?;
         dict.set_item(
             "unpaired_electrons",
-            UnpairedElectronsAst::from_rust(py, &atom.unpaired_electrons)?,
+            UnpairedElectronsForm::from_rust(py, &atom.unpaired_electrons)?,
         )?;
         dict.set_item(
             "constraints",
@@ -907,7 +909,7 @@ mod tests {
         AtomConstraintsUpdate, TetrahedralStereoLike,
     };
     use crate::convert::into_py_variant;
-    use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
+    use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoForm};
 
     #[rstest]
     #[case(GraphIrElementForm::Undetermined)]
@@ -920,7 +922,7 @@ mod tests {
         Some((GraphIrMemOp::In, BTreeSet::from([ChemElement::C, ChemElement::N]))),
     ))))]
     fn test_element_ast_roundtrip(#[case] ast: GraphIrElementForm) {
-        assert_eq!(ElementAst::from_rust(&ast).to_rust(), ast);
+        assert_eq!(ElementForm::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -931,7 +933,7 @@ mod tests {
         #[case] ast: GraphIrElementForm,
         #[case] expected: Option<ChemElement>,
     ) {
-        let got = ElementAst::from_rust(&ast)
+        let got = ElementForm::from_rust(&ast)
             .as_lit()
             .map(|e| ChemElement::from(&e));
         assert_eq!(got, expected);
@@ -948,7 +950,7 @@ mod tests {
         Some(BTreeSet::from([12, 13])),
     ))))]
     fn test_isotope_mass_ast_roundtrip(#[case] ast: GraphIrIsotopeMassForm) {
-        assert_eq!(IsotopeMassAst::from_rust(&ast).to_rust(), ast);
+        assert_eq!(IsotopeMassForm::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -963,7 +965,7 @@ mod tests {
         #[case] expected: Option<GraphIrIsotopeMass>,
     ) {
         assert_eq!(
-            IsotopeMassAst::from_rust(&ast)
+            IsotopeMassForm::from_rust(&ast)
                 .as_lit()
                 .map(IsotopeMass::to_rust),
             expected
@@ -990,7 +992,7 @@ mod tests {
             };
             assert_eq!(view.id(), 1);
             match view.element(py).unwrap() {
-                ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::O),
+                ElementForm::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::O),
                 _ => panic!("expected Lit"),
             }
         });
@@ -1010,7 +1012,7 @@ mod tests {
                 id: GraphIrAtomId(0),
             };
             match fresh.charge(py).unwrap() {
-                ValueAst::Lit(n) => assert_eq!(n, -1),
+                NumForm::Lit(n) => assert_eq!(n, -1),
                 _ => panic!("expected Lit"),
             }
         });
@@ -1030,7 +1032,7 @@ mod tests {
                 id: GraphIrAtomId(0),
             };
             match fresh.element(py).unwrap() {
-                ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
+                ElementForm::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
                 _ => panic!("expected Lit"),
             }
         });
@@ -1050,7 +1052,7 @@ mod tests {
                 id: GraphIrAtomId(0),
             };
             match fresh.isotope_mass(py).unwrap() {
-                IsotopeMassAst::Lit(mass) => assert_eq!(mass, 13),
+                IsotopeMassForm::Lit(mass) => assert_eq!(mass, 13),
                 _ => panic!("expected Lit"),
             }
         });
@@ -1066,7 +1068,7 @@ mod tests {
             };
             let unpaired_electrons = Py::new(
                 py,
-                UnpairedElectronsAst::from_rust(
+                UnpairedElectronsForm::from_rust(
                     py,
                     &GraphIrUnpairedElectronsForm {
                         count: GraphIrNumForm::Lit(1),
@@ -1121,7 +1123,7 @@ mod tests {
                 .__setitem__(py, 0, nitrogen.bind(py).borrow())
                 .unwrap();
             match views.__getitem__(py, 0).unwrap().element(py).unwrap() {
-                ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
+                ElementForm::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
                 _ => panic!("expected Lit"),
             }
         });
@@ -1809,7 +1811,7 @@ mod tests {
                 )
                 .unwrap();
             match constraints.tetrahedral_stereo(py).unwrap().unwrap() {
-                TetrahedralStereoAst::Stereo(coset) => {
+                TetrahedralStereoForm::Stereo(coset) => {
                     assert_eq!(
                         coset.bind(py).borrow().to_rust(py),
                         GraphIrStereoCoset::Lit(1)

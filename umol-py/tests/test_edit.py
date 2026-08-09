@@ -19,7 +19,7 @@ from umol import (
     DativeBondUpdate,
     Edit,
     Edits,
-    ElectronCountsAst,
+    ElectronCountsForm,
     Entity,
     MoleculeDefaults,
     MoleculeConstraint,
@@ -30,7 +30,7 @@ from umol import (
     NoncovalentBondAst,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
-    NoncovalentBondKindAst,
+    NoncovalentBondKindForm,
     NoncovalentBondUpdate,
     ParseError,
     StereoAtomAst,
@@ -39,12 +39,12 @@ from umol import (
     StereoBondAst,
     StereoBondFieldChange,
     StereoBondUpdate,
-    StereoConfigurationAst,
+    StereoConfigurationForm,
     StereoConfigurationUpdate,
     StereoCoset,
     StereoKind,
     StereoLigandKind,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -74,7 +74,7 @@ def test_new_error(index):
 
 def test_constraint_edit():
     constraint = Constraint.Atom(
-        0, AtomConstraintAst.Valence(ValueAst.Lit(4))
+        0, AtomConstraintAst.Valence(NumForm.Lit(4))
     )
 
     identity = ConstraintEdit(constraint)
@@ -101,7 +101,7 @@ def test_constraint_edit():
         Edit.ModifyAtomField(
             id=New(0),
             change=AtomFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                old=NumForm.Lit(0), new=NumForm.Lit(1)
             ),
         ),
         Edit.AddMoleculeConstraint(
@@ -375,7 +375,7 @@ def test_edits_update_empty():
 def test_edits_update():
     edits = Edits()
     atom_constraints = AtomConstraintsAst(
-        [AtomConstraintAst.Valence(ValueAst.Lit(4))]
+        [AtomConstraintAst.Valence(NumForm.Lit(4))]
     )
 
     edits.update_atom(
@@ -433,80 +433,80 @@ def test_edits_update():
         Edit.ModifyAtomField(
             id=New(0),
             change=AtomFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                old=NumForm.Lit(0), new=NumForm.Lit(1)
             ),
         ),
         Edit.ModifyAtomField(
             id=New(0),
             change=AtomFieldChange.ImplicitHydrogens(
-                old=ValueAst.Lit(3), new=ValueAst.Lit(2)
+                old=NumForm.Lit(3), new=NumForm.Lit(2)
             ),
         ),
         Edit.ModifyAtomConstraint(
             id=New(0),
-            old=AtomConstraintAst.Valence(ValueAst.Lit(3)),
-            new=AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            old=AtomConstraintAst.Valence(NumForm.Lit(3)),
+            new=AtomConstraintAst.Valence(NumForm.Lit(4)),
         ),
         Edit.ModifyBondField(
             id=0,
             change=BondFieldChange.Order(
-                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                old=NumForm.Lit(1), new=NumForm.Lit(2)
             ),
         ),
         Edit.ModifyBondField(
             id=0,
             change=BondFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                old=NumForm.Lit(0), new=NumForm.Lit(1)
             ),
         ),
         Edit.ModifyDativeBondField(
             id=New(0),
             change=DativeBondFieldChange.Order(
-                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                old=NumForm.Lit(1), new=NumForm.Lit(2)
             ),
         ),
         Edit.ModifyAromaticSystemField(
             id=0,
             change=AromaticSystemFieldChange.Electrons(
-                old=ElectronCountsAst.Lit([1, 1]),
-                new=ElectronCountsAst.Lit([2, 0]),
+                old=ElectronCountsForm.Lit([1, 1]),
+                new=ElectronCountsForm.Lit([2, 0]),
             ),
         ),
         Edit.ModifyAromaticSystemField(
             id=0,
             change=AromaticSystemFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                old=NumForm.Lit(0), new=NumForm.Lit(1)
             ),
         ),
         Edit.ModifyMulticenterBondField(
             id=New(0),
             change=MulticenterBondFieldChange.Electrons(
-                old=ElectronCountsAst.Lit([1, 1]),
-                new=ElectronCountsAst.Lit([2, 0]),
+                old=ElectronCountsForm.Lit([1, 1]),
+                new=ElectronCountsForm.Lit([2, 0]),
             ),
         ),
         Edit.ModifyMulticenterBondField(
             id=New(0),
             change=MulticenterBondFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                old=NumForm.Lit(0), new=NumForm.Lit(1)
             ),
         ),
         Edit.ModifyNoncovalentBondField(
             id=0,
             change=NoncovalentBondFieldChange.Kind(
-                old=NoncovalentBondKindAst.Lit(
+                old=NoncovalentBondKindForm.Lit(
                     NoncovalentBondKind.HydrogenBond
                 ),
-                new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic),
+                new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic),
             ),
         ),
         Edit.ModifyStereoAtomField(
             id=New(0),
             change=StereoAtomFieldChange.Configuration(
-                old=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Lit(0)
                 ),
-                new=StereoConfigurationAst.Kinded(
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Lit(1)
                 ),
             ),
@@ -514,10 +514,10 @@ def test_edits_update():
         Edit.ModifyStereoBondField(
             id=0,
             change=StereoBondFieldChange.Configuration(
-                old=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans, StereoCoset.Lit(0)
                 ),
-                new=StereoConfigurationAst.Kinded(
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans, StereoCoset.Lit(1)
                 ),
             ),

@@ -9,13 +9,13 @@ use crate::lattice::impl_py_lattice;
 
 /// A boolean expression: undetermined, or a literal `True` / `False`.
 #[pyclass]
-pub enum BooleanAst {
+pub enum BooleanForm {
     Undetermined(),
     Lit(bool),
 }
 
 #[pymethods]
-impl BooleanAst {
+impl BooleanForm {
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }
@@ -26,14 +26,14 @@ impl BooleanAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            BooleanAst::Undetermined() => ("Undetermined", 0),
-            BooleanAst::Lit(_) => ("Lit", 1),
+            BooleanForm::Undetermined() => ("Undetermined", 0),
+            BooleanForm::Lit(_) => ("Lit", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "BooleanAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "BooleanForm", variant, arity)
     }
 }
 
-impl BooleanAst {
+impl BooleanForm {
     pub(crate) fn from_rust(ast: &GraphIrBooleanForm) -> Self {
         match ast {
             GraphIrBooleanForm::Undetermined => Self::Undetermined(),
@@ -50,20 +50,20 @@ impl BooleanAst {
 }
 
 impl_py_lattice!(
-    BooleanAst,
+    BooleanForm,
     GraphIrBooleanForm,
-    |value: &BooleanAst, _py: Python<'_>| -> PyResult<GraphIrBooleanForm> { Ok(value.to_rust()) },
-    |_py: Python<'_>, value: GraphIrBooleanForm| -> PyResult<BooleanAst> {
-        Ok(BooleanAst::from_rust(&value))
+    |value: &BooleanForm, _py: Python<'_>| -> PyResult<GraphIrBooleanForm> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: GraphIrBooleanForm| -> PyResult<BooleanForm> {
+        Ok(BooleanForm::from_rust(&value))
     }
 );
 
-/// Setter coercion for a boolean field: a Python `bool` → `Lit`, or a `BooleanAst`
-/// passthrough (matching `impl Into<BooleanAst>`).
+/// Setter coercion for a boolean field: a Python `bool` → `Lit`, or a `BooleanForm`
+/// passthrough (matching `impl Into<BooleanForm>`).
 #[derive(FromPyObject)]
 pub(crate) enum BooleanLike {
     Lit(bool),
-    Ast(Py<BooleanAst>),
+    Ast(Py<BooleanForm>),
 }
 
 impl BooleanLike {
@@ -86,6 +86,6 @@ mod tests {
     #[case(GraphIrBooleanForm::Lit(true))]
     #[case(GraphIrBooleanForm::Lit(false))]
     fn test_boolean_ast_roundtrip(#[case] ast: GraphIrBooleanForm) {
-        assert_eq!(BooleanAst::from_rust(&ast).to_rust(), ast);
+        assert_eq!(BooleanForm::from_rust(&ast).to_rust(), ast);
     }
 }

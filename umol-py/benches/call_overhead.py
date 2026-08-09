@@ -14,7 +14,7 @@ from umol import (
     MoleculeAst,
     RefinementRounds,
     StructuralFingerprintConfig,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -29,7 +29,7 @@ def main() -> None:
     parser.add_argument("--repeat", type=int, default=5)
     args = parser.parse_args()
 
-    value_as_lit = ValueAst.Lit(0).as_lit
+    value_as_lit = NumForm.Lit(0).as_lit
     molecule = MoleculeAst.from_smiles("CCO")
     hashed_wl = partial(
         molecule.hashed_fingerprint,

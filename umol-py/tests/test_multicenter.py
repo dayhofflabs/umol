@@ -2,7 +2,7 @@ import pytest
 
 from umol import (
     AtomAst,
-    ElectronCountsAst,
+    ElectronCountsForm,
     Element,
     MoleculeAst,
     MulticenterBondAst,
@@ -11,9 +11,9 @@ from umol import (
     MulticenterBondConstraintsAst,
     MulticenterBondUpdate,
     ParseError,
-    UnpairedElectronsAst,
+    UnpairedElectronsForm,
     UnpairedElectronsUpdate,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -30,15 +30,15 @@ from umol import (
                 charge=1,
                 unpaired_electrons=UnpairedElectronsUpdate(count=1),
                 constraints=MulticenterBondConstraintsAst(
-                    [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(3))]
+                    [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(3))]
                 ),
             ),
             (
-                ElectronCountsAst.Lit([1, 1, 1]),
-                ValueAst.Lit(1),
+                ElectronCountsForm.Lit([1, 1, 1]),
+                NumForm.Lit(1),
                 UnpairedElectronsUpdate(count=1),
                 MulticenterBondConstraintsAst(
-                    [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(3))]
+                    [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(3))]
                 ),
             ),
         ),
@@ -48,7 +48,7 @@ from umol import (
                 constraints=MulticenterBondConstraintsAst(
                     [
                         MulticenterBondConstraintAst.ElectronCount(
-                            ValueAst.Undetermined()
+                            NumForm.Undetermined()
                         )
                     ]
                 ),
@@ -60,7 +60,7 @@ from umol import (
                 MulticenterBondConstraintsAst(
                     [
                         MulticenterBondConstraintAst.ElectronCount(
-                            ValueAst.Undetermined()
+                            NumForm.Undetermined()
                         )
                     ]
                 ),
@@ -108,8 +108,8 @@ def three_center_bond():
 
 def test_multicenterbondast_new():
     bond = MulticenterBondAst([1, 1, 1])
-    assert bond.electrons == ElectronCountsAst.Lit([1, 1, 1])
-    assert bond.charge == ValueAst.Undetermined()
+    assert bond.electrons == ElectronCountsForm.Lit([1, 1, 1])
+    assert bond.charge == NumForm.Undetermined()
     assert len(bond.constraints) == 0
 
 
@@ -117,39 +117,39 @@ def test_multicenterbondast_new_kwargs():
     bond = MulticenterBondAst(
         [1, 1, 1],
         charge=-1,
-        unpaired_electrons=UnpairedElectronsAst(0, 1),
+        unpaired_electrons=UnpairedElectronsForm(0, 1),
     )
-    assert bond.charge == ValueAst.Lit(-1)
-    assert bond.unpaired_electrons == UnpairedElectronsAst(0, 1)
+    assert bond.charge == NumForm.Lit(-1)
+    assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 def test_multicenterbondast_constraints_kwarg():
     bond = MulticenterBondAst(
         [1, 1, 1],
         constraints=MulticenterBondConstraintsAst(
-            [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
         ),
     )
     assert len(bond.constraints) == 1
-    assert bond.constraints.electron_count == ValueAst.Lit(6)
+    assert bond.constraints.electron_count == NumForm.Lit(6)
 
 
 def test_multicenterbondast_electrons_setter():
     bond = MulticenterBondAst([1, 1, 1])
     bond.electrons = [2, 2]
-    assert bond.electrons == ElectronCountsAst.Lit([2, 2])
+    assert bond.electrons == ElectronCountsForm.Lit([2, 2])
 
 
 def test_multicenterbondast_charge_setter():
     bond = MulticenterBondAst([1, 1, 1])
     bond.charge = -1
-    assert bond.charge == ValueAst.Lit(-1)
+    assert bond.charge == NumForm.Lit(-1)
 
 
 def test_multicenterbondast_unpaired_electrons_setter():
     bond = MulticenterBondAst([1, 1, 1])
-    bond.unpaired_electrons = UnpairedElectronsAst(0, 1)
-    assert bond.unpaired_electrons == UnpairedElectronsAst(0, 1)
+    bond.unpaired_electrons = UnpairedElectronsForm(0, 1)
+    assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
@@ -168,7 +168,7 @@ def test_multicenterbondast_asdict():
     bond = MulticenterBondAst(
         [1, 1, 1],
         constraints=MulticenterBondConstraintsAst(
-            [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))]
+            [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
         ),
     )
     d = bond.asdict()
@@ -178,32 +178,32 @@ def test_multicenterbondast_asdict():
         "unpaired_electrons",
         "constraints",
     }
-    assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1])
-    assert d["constraints"]["electron_count"] == ValueAst.Lit(6)
+    assert d["electrons"] == ElectronCountsForm.Lit([1, 1, 1])
+    assert d["constraints"]["electron_count"] == NumForm.Lit(6)
 
 
 def test_multicenterbondast_set_constraints():
     bond = MulticenterBondAst([1, 1, 1])
     bond.constraints = MulticenterBondConstraintsAst(
-        [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))]
+        [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
-    assert bond.constraints.electron_count == ValueAst.Lit(6)
+    assert bond.constraints.electron_count == NumForm.Lit(6)
 
 
 def test_multicenterbondconstraints_electron_count():
     constraints = MulticenterBondConstraintsAst([])
-    assert constraints.electron_count == ValueAst.Undetermined()
+    assert constraints.electron_count == NumForm.Undetermined()
     constraints.electron_count = 6
-    assert constraints.electron_count == ValueAst.Lit(6)
+    assert constraints.electron_count == NumForm.Lit(6)
 
 
 def test_multicenterbondconstraints_mapping_ops():
     constraints = MulticenterBondConstraintsAst([])
-    constraints.set(MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))
+    constraints.set(MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)))
     assert len(constraints) == 1
     assert MulticenterBondConstraintKey.ElectronCount() in constraints
     assert constraints[MulticenterBondConstraintKey.ElectronCount()] == (
-        MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
+        MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))
     )
     assert [key for key in constraints] == [MulticenterBondConstraintKey.ElectronCount()]
     del constraints[MulticenterBondConstraintKey.ElectronCount()]
@@ -230,18 +230,18 @@ def test_multicenterbondconstraintkey_electron_count():
 
 def test_multicenterbondconstraints_asdict():
     constraints = MulticenterBondConstraintsAst(
-        [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))]
+        [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
     d = constraints.asdict()
     assert set(d.keys()) == {"electron_count"}
-    assert d["electron_count"] == ValueAst.Lit(6)
+    assert d["electron_count"] == NumForm.Lit(6)
 
 
 def test_multicenterbondview_fields():
     view = three_center_bond().multicenter_bonds[0]
     assert view.id == 0
     assert view.atom_ids == (0, 1, 2)
-    assert view.electrons == ElectronCountsAst.Lit([1, 1, 1])
+    assert view.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(view) == "MulticenterBondView(id=0)"
 
 
@@ -249,19 +249,19 @@ def test_multicenterbondview_set_electrons():
     mol = three_center_bond()
     mol.multicenter_bonds[0].electrons = [2, 2, 2]
     # a fresh view re-reads the molecule, proving the write landed on it
-    assert mol.multicenter_bonds[0].electrons == ElectronCountsAst.Lit([2, 2, 2])
+    assert mol.multicenter_bonds[0].electrons == ElectronCountsForm.Lit([2, 2, 2])
 
 
 def test_multicenterbondview_set_charge():
     mol = three_center_bond()
     mol.multicenter_bonds[0].charge = -1
-    assert mol.multicenter_bonds[0].charge == ValueAst.Lit(-1)
+    assert mol.multicenter_bonds[0].charge == NumForm.Lit(-1)
 
 
 def test_multicenterbondview_set_unpaired_electrons():
     mol = three_center_bond()
-    mol.multicenter_bonds[0].unpaired_electrons = UnpairedElectronsAst(0, 1)
-    assert mol.multicenter_bonds[0].unpaired_electrons == UnpairedElectronsAst(0, 1)
+    mol.multicenter_bonds[0].unpaired_electrons = UnpairedElectronsForm(0, 1)
+    assert mol.multicenter_bonds[0].unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 def test_multicenterbondview_asdict():
@@ -273,31 +273,31 @@ def test_multicenterbondview_asdict():
         "unpaired_electrons",
         "constraints",
     }
-    assert d["electrons"] == ElectronCountsAst.Lit([1, 1, 1])
+    assert d["electrons"] == ElectronCountsForm.Lit([1, 1, 1])
 
 
 def test_multicenterbondview_constraints_write_through():
     mol = three_center_bond()
     mol.multicenter_bonds[0].constraints.set(
-        MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
+        MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))
     )
     constraints = mol.multicenter_bonds[0].constraints
     assert len(constraints) == 1
-    assert constraints.electron_count == ValueAst.Lit(6)
+    assert constraints.electron_count == NumForm.Lit(6)
 
 
 def test_multicenterbondview_constraints_electron_count_property():
     mol = three_center_bond()
     mol.multicenter_bonds[0].constraints.electron_count = 6
-    assert mol.multicenter_bonds[0].constraints.electron_count == ValueAst.Lit(6)
+    assert mol.multicenter_bonds[0].constraints.electron_count == NumForm.Lit(6)
 
 
 def test_multicenterbondview_set_constraints():
     mol = three_center_bond()
     mol.multicenter_bonds[0].constraints = MulticenterBondConstraintsAst(
-        [MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))]
+        [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
-    assert mol.multicenter_bonds[0].constraints.electron_count == ValueAst.Lit(6)
+    assert mol.multicenter_bonds[0].constraints.electron_count == NumForm.Lit(6)
 
 
 def test_multicenterbondviews_len_getitem():
@@ -316,7 +316,7 @@ def test_multicenterbondviews_setitem():
     mol.multicenter_bonds[0] = MulticenterBondAst([2, 2, 2])
     view = mol.multicenter_bonds[0]
     # value replaced, members preserved
-    assert view.electrons == ElectronCountsAst.Lit([2, 2, 2])
+    assert view.electrons == ElectronCountsForm.Lit([2, 2, 2])
     assert view.atom_ids == (0, 1, 2)
 
 

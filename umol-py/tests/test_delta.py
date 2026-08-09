@@ -13,7 +13,7 @@ from umol import (
     BondConstraintAst,
     BondDelta,
     BondFieldChange,
-    BooleanAst,
+    BooleanForm,
     Constraint,
     ConstraintDelta,
     ContradictionError,
@@ -24,9 +24,9 @@ from umol import (
     Delta,
     Deltas,
     Element,
-    ElementAst,
-    ElectronCountsAst,
-    IsotopeMassAst,
+    ElementForm,
+    ElectronCountsForm,
+    IsotopeMassForm,
     MoleculeAst,
     MoleculeConstraint,
     MulticenterBondAst,
@@ -38,7 +38,7 @@ from umol import (
     NoncovalentBondDelta,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
-    NoncovalentBondKindAst,
+    NoncovalentBondKindForm,
     Permutation,
     StereoAtomAst,
     StereoAtomConstraintAst,
@@ -48,55 +48,55 @@ from umol import (
     StereoBondConstraintAst,
     StereoBondDelta,
     StereoBondFieldChange,
-    StereoConfigurationAst,
+    StereoConfigurationForm,
     StereoCoset,
     StereoKind,
     StereoLigand,
     StereoLigandKind,
     StereogenicityAst,
     SubPatternAnchor,
-    UnpairedElectronsAst,
-    ValueAst,
+    UnpairedElectronsForm,
+    NumForm,
 )
 
 
 def test_atomfieldchange_fields():
-    change = AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))
+    change = AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1))
 
-    assert change.old == ValueAst.Lit(0)
-    assert change.new == ValueAst.Lit(-1)
+    assert change.old == NumForm.Lit(0)
+    assert change.new == NumForm.Lit(-1)
     assert repr(change) == (
-        "AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))"
+        "AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1))"
     )
     with pytest.raises(AttributeError):
-        change.old = ValueAst.Lit(1)
+        change.old = NumForm.Lit(1)
     with pytest.raises(TypeError):
         hash(change)
 
 
 def test_atomfieldchange_match_scalar():
     change = AtomFieldChange.ImplicitHydrogens(
-        old=ValueAst.Lit(3), new=ValueAst.Lit(2)
+        old=NumForm.Lit(3), new=NumForm.Lit(2)
     )
 
     match change:
         case AtomFieldChange.ImplicitHydrogens(old, new):
-            assert (old, new) == (ValueAst.Lit(3), ValueAst.Lit(2))
+            assert (old, new) == (NumForm.Lit(3), NumForm.Lit(2))
         case _:
             raise AssertionError("atom field change did not match its scalar variant")
 
 
 def test_atomfieldchange_match_structured():
     change = AtomFieldChange.Element(
-        old=ElementAst.Lit(Element("C")),
-        new=ElementAst.Lit(Element("N")),
+        old=ElementForm.Lit(Element("C")),
+        new=ElementForm.Lit(Element("N")),
     )
 
     match change:
         case AtomFieldChange.Element(old=old, new=new):
             assert (old, new) == (
-                ElementAst.Lit(Element("C")),
-                ElementAst.Lit(Element("N")),
+                ElementForm.Lit(Element("C")),
+                ElementForm.Lit(Element("N")),
             )
         case _:
             raise AssertionError("atom field change did not match its structured variant")
@@ -104,37 +104,37 @@ def test_atomfieldchange_match_structured():
 
 def test_atomfieldchange_inverse():
     change = AtomFieldChange.UnpairedElectrons(
-        old=UnpairedElectronsAst(0, 1), new=UnpairedElectronsAst(1, 2)
+        old=UnpairedElectronsForm(0, 1), new=UnpairedElectronsForm(1, 2)
     )
 
     inverse = change.inverse()
 
     assert isinstance(inverse, AtomFieldChange.UnpairedElectrons)
-    assert inverse.old == UnpairedElectronsAst(1, 2)
-    assert inverse.new == UnpairedElectronsAst(0, 1)
+    assert inverse.old == UnpairedElectronsForm(1, 2)
+    assert inverse.new == UnpairedElectronsForm(0, 1)
     assert inverse.inverse() == change
 
 
 def test_bondfieldchange_fields():
-    change = BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))
+    change = BondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))
 
-    assert change.old == ValueAst.Lit(1)
-    assert change.new == ValueAst.Lit(2)
+    assert change.old == NumForm.Lit(1)
+    assert change.new == NumForm.Lit(2)
     assert repr(change) == (
-        "BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
+        "BondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))"
     )
 
 
 def test_bondfieldchange_match():
     change = BondFieldChange.UnpairedElectrons(
-        old=UnpairedElectronsAst(0, 1), new=UnpairedElectronsAst(1, 2)
+        old=UnpairedElectronsForm(0, 1), new=UnpairedElectronsForm(1, 2)
     )
 
     match change:
         case BondFieldChange.UnpairedElectrons(old, new):
             assert (old, new) == (
-                UnpairedElectronsAst(0, 1),
-                UnpairedElectronsAst(1, 2),
+                UnpairedElectronsForm(0, 1),
+                UnpairedElectronsForm(1, 2),
             )
         case _:
             raise AssertionError("bond field change did not match its variant")
@@ -142,60 +142,60 @@ def test_bondfieldchange_match():
 
 def test_dativebondfieldchange_fields():
     change = DativeBondFieldChange.Order(
-        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+        old=NumForm.Lit(1), new=NumForm.Lit(2)
     )
 
-    assert change.old == ValueAst.Lit(1)
-    assert change.new == ValueAst.Lit(2)
+    assert change.old == NumForm.Lit(1)
+    assert change.new == NumForm.Lit(2)
     assert repr(change) == (
-        "DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
+        "DativeBondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))"
     )
 
 
 def test_dativebondfieldchange_match():
     change = DativeBondFieldChange.Order(
-        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+        old=NumForm.Lit(1), new=NumForm.Lit(2)
     )
 
     match change:
         case DativeBondFieldChange.Order(old=old, new=new):
-            assert (old, new) == (ValueAst.Lit(1), ValueAst.Lit(2))
+            assert (old, new) == (NumForm.Lit(1), NumForm.Lit(2))
         case _:
             raise AssertionError("dative bond field change did not match its variant")
 
     inverse = change.inverse()
     assert isinstance(inverse, DativeBondFieldChange.Order)
     assert inverse == DativeBondFieldChange.Order(
-        old=ValueAst.Lit(2), new=ValueAst.Lit(1)
+        old=NumForm.Lit(2), new=NumForm.Lit(1)
     )
 
 
 def test_aromaticsystemfieldchange_fields():
     change = AromaticSystemFieldChange.Electrons(
-        old=ElectronCountsAst.Undetermined(),
-        new=ElectronCountsAst.Lit([1, 1, 1]),
+        old=ElectronCountsForm.Undetermined(),
+        new=ElectronCountsForm.Lit([1, 1, 1]),
     )
 
-    assert change.old == ElectronCountsAst.Undetermined()
-    assert change.new == ElectronCountsAst.Lit([1, 1, 1])
+    assert change.old == ElectronCountsForm.Undetermined()
+    assert change.new == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(change) == (
         "AromaticSystemFieldChange.Electrons("
-        "old=ElectronCountsAst.Undetermined(), "
-        "new=ElectronCountsAst.Lit([1, 1, 1]))"
+        "old=ElectronCountsForm.Undetermined(), "
+        "new=ElectronCountsForm.Lit([1, 1, 1]))"
     )
 
 
 def test_aromaticsystemfieldchange_match():
     change = AromaticSystemFieldChange.Electrons(
-        old=ElectronCountsAst.Lit([2, 0, 2]),
-        new=ElectronCountsAst.Lit([1, 1, 1]),
+        old=ElectronCountsForm.Lit([2, 0, 2]),
+        new=ElectronCountsForm.Lit([1, 1, 1]),
     )
 
     match change:
         case AromaticSystemFieldChange.Electrons(old=old, new=new):
             assert (old, new) == (
-                ElectronCountsAst.Lit([2, 0, 2]),
-                ElectronCountsAst.Lit([1, 1, 1]),
+                ElectronCountsForm.Lit([2, 0, 2]),
+                ElectronCountsForm.Lit([1, 1, 1]),
             )
         case _:
             raise AssertionError("aromatic field change did not match its variant")
@@ -203,48 +203,48 @@ def test_aromaticsystemfieldchange_match():
 
 def test_multicenterbondfieldchange_fields():
     change = MulticenterBondFieldChange.Charge(
-        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+        old=NumForm.Lit(0), new=NumForm.Lit(1)
     )
 
-    assert change.old == ValueAst.Lit(0)
-    assert change.new == ValueAst.Lit(1)
+    assert change.old == NumForm.Lit(0)
+    assert change.new == NumForm.Lit(1)
     assert repr(change) == (
         "MulticenterBondFieldChange.Charge("
-        "old=ValueAst.Lit(0), new=ValueAst.Lit(1))"
+        "old=NumForm.Lit(0), new=NumForm.Lit(1))"
     )
 
 
 def test_multicenterbondfieldchange_match():
     change = MulticenterBondFieldChange.Electrons(
-        old=ElectronCountsAst.Lit([1, 0, 1]),
-        new=ElectronCountsAst.Lit([2, 0, 1]),
+        old=ElectronCountsForm.Lit([1, 0, 1]),
+        new=ElectronCountsForm.Lit([2, 0, 1]),
     )
 
     match change:
         case MulticenterBondFieldChange.Electrons(old, new):
             assert (old, new) == (
-                ElectronCountsAst.Lit([1, 0, 1]),
-                ElectronCountsAst.Lit([2, 0, 1]),
+                ElectronCountsForm.Lit([1, 0, 1]),
+                ElectronCountsForm.Lit([2, 0, 1]),
             )
         case _:
             raise AssertionError("multicenter field change did not match its variant")
 
     inverse = change.inverse()
     assert isinstance(inverse, MulticenterBondFieldChange.Electrons)
-    assert inverse.old == ElectronCountsAst.Lit([2, 0, 1])
-    assert inverse.new == ElectronCountsAst.Lit([1, 0, 1])
+    assert inverse.old == ElectronCountsForm.Lit([2, 0, 1])
+    assert inverse.new == ElectronCountsForm.Lit([1, 0, 1])
 
 
 def test_noncovalentbondfieldchange_match():
     change = NoncovalentBondFieldChange.Kind(
-        old=NoncovalentBondKindAst.Undetermined(),
-        new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+        old=NoncovalentBondKindForm.Undetermined(),
+        new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond),
     )
 
     match change:
         case NoncovalentBondFieldChange.Kind(old=old, new=new):
-            assert old == NoncovalentBondKindAst.Undetermined()
-            assert new == NoncovalentBondKindAst.Lit(
+            assert old == NoncovalentBondKindForm.Undetermined()
+            assert new == NoncovalentBondKindForm.Lit(
                 NoncovalentBondKind.HydrogenBond
             )
         case _:
@@ -253,24 +253,24 @@ def test_noncovalentbondfieldchange_match():
 
 def test_stereoatomfieldchange_fields():
     change = StereoAtomFieldChange.Configuration(
-        old=StereoConfigurationAst.Undetermined(),
-        new=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Undetermined(),
+        new=StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
     )
 
-    assert change.old == StereoConfigurationAst.Undetermined()
-    assert change.new == StereoConfigurationAst.Kinded(
+    assert change.old == StereoConfigurationForm.Undetermined()
+    assert change.new == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Undetermined()
     )
     assert repr(change) == (
         "StereoAtomFieldChange.Configuration("
-        "old=StereoConfigurationAst.Undetermined(), "
-        "new=StereoConfigurationAst.Kinded("
+        "old=StereoConfigurationForm.Undetermined(), "
+        "new=StereoConfigurationForm.Kinded("
         "StereoKind.Tetrahedral, StereoCoset.Undetermined()))"
     )
     with pytest.raises(AttributeError):
-        change.old = StereoConfigurationAst.Kinded(
+        change.old = StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Lit(0)
         )
     with pytest.raises(TypeError):
@@ -279,20 +279,20 @@ def test_stereoatomfieldchange_fields():
 
 def test_stereoatomfieldchange_match_positional():
     change = StereoAtomFieldChange.Configuration(
-        old=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
-        new=StereoConfigurationAst.Kinded(
+        new=StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Lit(1)
         ),
     )
 
     match change:
         case StereoAtomFieldChange.Configuration(old, new):
-            assert old == StereoConfigurationAst.Kinded(
+            assert old == StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Undetermined()
             )
-            assert new == StereoConfigurationAst.Kinded(
+            assert new == StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Lit(1)
             )
         case _:
@@ -301,16 +301,16 @@ def test_stereoatomfieldchange_match_positional():
 
 def test_stereoatomfieldchange_match_named():
     change = StereoAtomFieldChange.Configuration(
-        old=StereoConfigurationAst.Undetermined(),
-        new=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Undetermined(),
+        new=StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
     )
 
     match change:
         case StereoAtomFieldChange.Configuration(old=old, new=new):
-            assert old == StereoConfigurationAst.Undetermined()
-            assert new == StereoConfigurationAst.Kinded(
+            assert old == StereoConfigurationForm.Undetermined()
+            assert new == StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Undetermined()
             )
         case _:
@@ -319,10 +319,10 @@ def test_stereoatomfieldchange_match_named():
 
 def test_stereoatomfieldchange_inverse():
     change = StereoAtomFieldChange.Configuration(
-        old=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
-        new=StereoConfigurationAst.Kinded(
+        new=StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Lit(1)
         ),
     )
@@ -330,10 +330,10 @@ def test_stereoatomfieldchange_inverse():
     inverse = change.inverse()
 
     assert isinstance(inverse, StereoAtomFieldChange.Configuration)
-    assert inverse.old == StereoConfigurationAst.Kinded(
+    assert inverse.old == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
-    assert inverse.new == StereoConfigurationAst.Kinded(
+    assert inverse.new == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Undetermined()
     )
     assert inverse != change
@@ -342,24 +342,24 @@ def test_stereoatomfieldchange_inverse():
 
 def test_stereobondfieldchange_fields():
     change = StereoBondFieldChange.Configuration(
-        old=StereoConfigurationAst.Undetermined(),
-        new=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Undetermined(),
+        new=StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
     )
 
-    assert change.old == StereoConfigurationAst.Undetermined()
-    assert change.new == StereoConfigurationAst.Kinded(
+    assert change.old == StereoConfigurationForm.Undetermined()
+    assert change.new == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Undetermined()
     )
     assert repr(change) == (
         "StereoBondFieldChange.Configuration("
-        "old=StereoConfigurationAst.Undetermined(), "
-        "new=StereoConfigurationAst.Kinded("
+        "old=StereoConfigurationForm.Undetermined(), "
+        "new=StereoConfigurationForm.Kinded("
         "StereoKind.CisTrans, StereoCoset.Undetermined()))"
     )
     with pytest.raises(AttributeError):
-        change.old = StereoConfigurationAst.Kinded(
+        change.old = StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Lit(0)
         )
     with pytest.raises(TypeError):
@@ -368,20 +368,20 @@ def test_stereobondfieldchange_fields():
 
 def test_stereobondfieldchange_match_positional():
     change = StereoBondFieldChange.Configuration(
-        old=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
-        new=StereoConfigurationAst.Kinded(
+        new=StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Lit(1)
         ),
     )
 
     match change:
         case StereoBondFieldChange.Configuration(old, new):
-            assert old == StereoConfigurationAst.Kinded(
+            assert old == StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Undetermined()
             )
-            assert new == StereoConfigurationAst.Kinded(
+            assert new == StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Lit(1)
             )
         case _:
@@ -390,16 +390,16 @@ def test_stereobondfieldchange_match_positional():
 
 def test_stereobondfieldchange_match_named():
     change = StereoBondFieldChange.Configuration(
-        old=StereoConfigurationAst.Undetermined(),
-        new=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Undetermined(),
+        new=StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
     )
 
     match change:
         case StereoBondFieldChange.Configuration(old=old, new=new):
-            assert old == StereoConfigurationAst.Undetermined()
-            assert new == StereoConfigurationAst.Kinded(
+            assert old == StereoConfigurationForm.Undetermined()
+            assert new == StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Undetermined()
             )
         case _:
@@ -408,10 +408,10 @@ def test_stereobondfieldchange_match_named():
 
 def test_stereobondfieldchange_inverse():
     change = StereoBondFieldChange.Configuration(
-        old=StereoConfigurationAst.Kinded(
+        old=StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
-        new=StereoConfigurationAst.Kinded(
+        new=StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Lit(1)
         ),
     )
@@ -419,10 +419,10 @@ def test_stereobondfieldchange_inverse():
     inverse = change.inverse()
 
     assert isinstance(inverse, StereoBondFieldChange.Configuration)
-    assert inverse.old == StereoConfigurationAst.Kinded(
+    assert inverse.old == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(1)
     )
-    assert inverse.new == StereoConfigurationAst.Kinded(
+    assert inverse.new == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Undetermined()
     )
     assert inverse != change
@@ -434,56 +434,56 @@ def test_stereobondfieldchange_inverse():
     [
         (
             StereoAtomFieldChange.Configuration(
-                old=StereoConfigurationAst.Undetermined(),
-                new=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Undetermined(),
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Undetermined()
                 ),
             ),
             "StereoAtomFieldChange.Configuration("
-            "old=StereoConfigurationAst.Undetermined(), "
-            "new=StereoConfigurationAst.Kinded("
+            "old=StereoConfigurationForm.Undetermined(), "
+            "new=StereoConfigurationForm.Kinded("
             "StereoKind.Tetrahedral, StereoCoset.Undetermined()))",
         ),
         (
             StereoAtomFieldChange.Configuration(
-                old=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Undetermined()
                 ),
-                new=StereoConfigurationAst.Kinded(
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Lit(1)
                 ),
             ),
             "StereoAtomFieldChange.Configuration("
-            "old=StereoConfigurationAst.Kinded("
+            "old=StereoConfigurationForm.Kinded("
             "StereoKind.Tetrahedral, StereoCoset.Undetermined()), "
-            "new=StereoConfigurationAst.Kinded("
+            "new=StereoConfigurationForm.Kinded("
             "StereoKind.Tetrahedral, StereoCoset.Lit(1)))",
         ),
         (
             StereoBondFieldChange.Configuration(
-                old=StereoConfigurationAst.Undetermined(),
-                new=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Undetermined(),
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans, StereoCoset.Undetermined()
                 ),
             ),
             "StereoBondFieldChange.Configuration("
-            "old=StereoConfigurationAst.Undetermined(), "
-            "new=StereoConfigurationAst.Kinded("
+            "old=StereoConfigurationForm.Undetermined(), "
+            "new=StereoConfigurationForm.Kinded("
             "StereoKind.CisTrans, StereoCoset.Undetermined()))",
         ),
         (
             StereoBondFieldChange.Configuration(
-                old=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans, StereoCoset.Undetermined()
                 ),
-                new=StereoConfigurationAst.Kinded(
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans, StereoCoset.Lit(1)
                 ),
             ),
             "StereoBondFieldChange.Configuration("
-            "old=StereoConfigurationAst.Kinded("
+            "old=StereoConfigurationForm.Kinded("
             "StereoKind.CisTrans, StereoCoset.Undetermined()), "
-            "new=StereoConfigurationAst.Kinded("
+            "new=StereoConfigurationForm.Kinded("
             "StereoKind.CisTrans, StereoCoset.Lit(1)))",
         ),
     ],
@@ -507,143 +507,143 @@ def test_stereofieldchange_closure(change, expected_repr):
     [
         (
             AtomFieldChange.Element(
-                old=ElementAst.Lit(Element("C")),
-                new=ElementAst.Lit(Element("N")),
+                old=ElementForm.Lit(Element("C")),
+                new=ElementForm.Lit(Element("N")),
             ),
-            "AtomFieldChange.Element(old=ElementAst.Lit(Element('C')), "
-            "new=ElementAst.Lit(Element('N')))",
+            "AtomFieldChange.Element(old=ElementForm.Lit(Element('C')), "
+            "new=ElementForm.Lit(Element('N')))",
         ),
         (
             AtomFieldChange.IsotopeMass(
-                old=IsotopeMassAst.Lit(12),
-                new=IsotopeMassAst.Lit(13),
+                old=IsotopeMassForm.Lit(12),
+                new=IsotopeMassForm.Lit(13),
             ),
-            "AtomFieldChange.IsotopeMass(old=IsotopeMassAst.Lit(12), "
-            "new=IsotopeMassAst.Lit(13))",
+            "AtomFieldChange.IsotopeMass(old=IsotopeMassForm.Lit(12), "
+            "new=IsotopeMassForm.Lit(13))",
         ),
         (
             AtomFieldChange.Charge(
-                old=ValueAst.Lit(0),
-                new=ValueAst.Lit(-1),
+                old=NumForm.Lit(0),
+                new=NumForm.Lit(-1),
             ),
-            "AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))",
+            "AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1))",
         ),
         (
             AtomFieldChange.ImplicitHydrogens(
-                old=ValueAst.Lit(3),
-                new=ValueAst.Lit(2),
+                old=NumForm.Lit(3),
+                new=NumForm.Lit(2),
             ),
-            "AtomFieldChange.ImplicitHydrogens(old=ValueAst.Lit(3), "
-            "new=ValueAst.Lit(2))",
+            "AtomFieldChange.ImplicitHydrogens(old=NumForm.Lit(3), "
+            "new=NumForm.Lit(2))",
         ),
         (
             AtomFieldChange.LonePairs(
-                old=ValueAst.Lit(1),
-                new=ValueAst.Lit(2),
+                old=NumForm.Lit(1),
+                new=NumForm.Lit(2),
             ),
-            "AtomFieldChange.LonePairs(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
+            "AtomFieldChange.LonePairs(old=NumForm.Lit(1), new=NumForm.Lit(2))",
         ),
         (
             AtomFieldChange.UnpairedElectrons(
-                old=UnpairedElectronsAst(0, 1),
-                new=UnpairedElectronsAst(1, 2),
+                old=UnpairedElectronsForm(0, 1),
+                new=UnpairedElectronsForm(1, 2),
             ),
-            "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), "
-            "ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), "
-            "ValueAst.Lit(2)))",
+            "AtomFieldChange.UnpairedElectrons(old=UnpairedElectronsForm(NumForm.Lit(0), "
+            "NumForm.Lit(1)), new=UnpairedElectronsForm(NumForm.Lit(1), "
+            "NumForm.Lit(2)))",
         ),
         (
             BondFieldChange.Order(
-                old=ValueAst.Lit(1),
-                new=ValueAst.Lit(2),
+                old=NumForm.Lit(1),
+                new=NumForm.Lit(2),
             ),
-            "BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
+            "BondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))",
         ),
         (
             BondFieldChange.Charge(
-                old=ValueAst.Lit(0),
-                new=ValueAst.Lit(1),
+                old=NumForm.Lit(0),
+                new=NumForm.Lit(1),
             ),
-            "BondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(1))",
+            "BondFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(1))",
         ),
         (
             BondFieldChange.UnpairedElectrons(
-                old=UnpairedElectronsAst(0, 1),
-                new=UnpairedElectronsAst(1, 2),
+                old=UnpairedElectronsForm(0, 1),
+                new=UnpairedElectronsForm(1, 2),
             ),
-            "BondFieldChange.UnpairedElectrons(old=UnpairedElectronsAst(ValueAst.Lit(0), "
-            "ValueAst.Lit(1)), new=UnpairedElectronsAst(ValueAst.Lit(1), "
-            "ValueAst.Lit(2)))",
+            "BondFieldChange.UnpairedElectrons(old=UnpairedElectronsForm(NumForm.Lit(0), "
+            "NumForm.Lit(1)), new=UnpairedElectronsForm(NumForm.Lit(1), "
+            "NumForm.Lit(2)))",
         ),
         (
             DativeBondFieldChange.Order(
-                old=ValueAst.Lit(1),
-                new=ValueAst.Lit(2),
+                old=NumForm.Lit(1),
+                new=NumForm.Lit(2),
             ),
-            "DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
+            "DativeBondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))",
         ),
         (
             AromaticSystemFieldChange.Electrons(
-                old=ElectronCountsAst.Undetermined(),
-                new=ElectronCountsAst.Lit([1, 1, 1]),
+                old=ElectronCountsForm.Undetermined(),
+                new=ElectronCountsForm.Lit([1, 1, 1]),
             ),
             "AromaticSystemFieldChange.Electrons("
-            "old=ElectronCountsAst.Undetermined(), "
-            "new=ElectronCountsAst.Lit([1, 1, 1]))",
+            "old=ElectronCountsForm.Undetermined(), "
+            "new=ElectronCountsForm.Lit([1, 1, 1]))",
         ),
         (
             AromaticSystemFieldChange.Charge(
-                old=ValueAst.Lit(0),
-                new=ValueAst.Lit(-1),
+                old=NumForm.Lit(0),
+                new=NumForm.Lit(-1),
             ),
-            "AromaticSystemFieldChange.Charge(old=ValueAst.Lit(0), "
-            "new=ValueAst.Lit(-1))",
+            "AromaticSystemFieldChange.Charge(old=NumForm.Lit(0), "
+            "new=NumForm.Lit(-1))",
         ),
         (
             AromaticSystemFieldChange.UnpairedElectrons(
-                old=UnpairedElectronsAst(0, 1),
-                new=UnpairedElectronsAst(1, 2),
+                old=UnpairedElectronsForm(0, 1),
+                new=UnpairedElectronsForm(1, 2),
             ),
-            "AromaticSystemFieldChange.UnpairedElectrons(old=UnpairedElectronsAst("
-            "ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst("
-            "ValueAst.Lit(1), ValueAst.Lit(2)))",
+            "AromaticSystemFieldChange.UnpairedElectrons(old=UnpairedElectronsForm("
+            "NumForm.Lit(0), NumForm.Lit(1)), new=UnpairedElectronsForm("
+            "NumForm.Lit(1), NumForm.Lit(2)))",
         ),
         (
             MulticenterBondFieldChange.Electrons(
-                old=ElectronCountsAst.Lit([1, 0, 1]),
-                new=ElectronCountsAst.Lit([2, 0, 1]),
+                old=ElectronCountsForm.Lit([1, 0, 1]),
+                new=ElectronCountsForm.Lit([2, 0, 1]),
             ),
             "MulticenterBondFieldChange.Electrons("
-            "old=ElectronCountsAst.Lit([1, 0, 1]), "
-            "new=ElectronCountsAst.Lit([2, 0, 1]))",
+            "old=ElectronCountsForm.Lit([1, 0, 1]), "
+            "new=ElectronCountsForm.Lit([2, 0, 1]))",
         ),
         (
             MulticenterBondFieldChange.Charge(
-                old=ValueAst.Lit(0),
-                new=ValueAst.Lit(1),
+                old=NumForm.Lit(0),
+                new=NumForm.Lit(1),
             ),
-            "MulticenterBondFieldChange.Charge(old=ValueAst.Lit(0), "
-            "new=ValueAst.Lit(1))",
+            "MulticenterBondFieldChange.Charge(old=NumForm.Lit(0), "
+            "new=NumForm.Lit(1))",
         ),
         (
             MulticenterBondFieldChange.UnpairedElectrons(
-                old=UnpairedElectronsAst(0, 1),
-                new=UnpairedElectronsAst(2, 3),
+                old=UnpairedElectronsForm(0, 1),
+                new=UnpairedElectronsForm(2, 3),
             ),
-            "MulticenterBondFieldChange.UnpairedElectrons(old=UnpairedElectronsAst("
-            "ValueAst.Lit(0), ValueAst.Lit(1)), new=UnpairedElectronsAst("
-            "ValueAst.Lit(2), ValueAst.Lit(3)))",
+            "MulticenterBondFieldChange.UnpairedElectrons(old=UnpairedElectronsForm("
+            "NumForm.Lit(0), NumForm.Lit(1)), new=UnpairedElectronsForm("
+            "NumForm.Lit(2), NumForm.Lit(3)))",
         ),
         (
             NoncovalentBondFieldChange.Kind(
-                old=NoncovalentBondKindAst.Undetermined(),
-                new=NoncovalentBondKindAst.Lit(
+                old=NoncovalentBondKindForm.Undetermined(),
+                new=NoncovalentBondKindForm.Lit(
                     NoncovalentBondKind.HydrogenBond
                 ),
             ),
             "NoncovalentBondFieldChange.Kind("
-            "old=NoncovalentBondKindAst.Undetermined(), "
-            "new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond))",
+            "old=NoncovalentBondKindForm.Undetermined(), "
+            "new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond))",
         ),
     ],
     ids=[
@@ -681,10 +681,10 @@ def test_atomdelta_fields():
     source.charge = -1
 
     assert delta.id == 3
-    assert delta.ast.charge == ValueAst.Undetermined()
+    assert delta.ast.charge == NumForm.Undetermined()
     assert repr(delta) == "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))"
     delta.ast.charge = 1
-    assert delta.ast.charge == ValueAst.Lit(1)
+    assert delta.ast.charge == NumForm.Lit(1)
     with pytest.raises(AttributeError):
         delta.id = 4
     with pytest.raises(TypeError):
@@ -711,14 +711,14 @@ def test_atomdelta_add_match():
 def test_atomdelta_modifyfield_match():
     delta = AtomDelta.ModifyField(
         id=3,
-        change=AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)),
+        change=AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1)),
     )
 
     match delta:
         case AtomDelta.ModifyField(id, change):
             assert id == 3
             assert change == AtomFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                old=NumForm.Lit(0), new=NumForm.Lit(-1)
             )
         case _:
             raise AssertionError("atom delta did not match its field variant")
@@ -732,20 +732,20 @@ def test_atomdelta_modifyconstraint_match():
     delta = AtomDelta.ModifyConstraint(
         id=3,
         old=None,
-        new=AtomConstraintAst.Valence(ValueAst.Lit(4)),
+        new=AtomConstraintAst.Valence(NumForm.Lit(4)),
     )
 
     match delta:
         case AtomDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 3
             assert old is None
-            assert new == AtomConstraintAst.Valence(ValueAst.Lit(4))
+            assert new == AtomConstraintAst.Valence(NumForm.Lit(4))
         case _:
             raise AssertionError("atom delta did not match its constraint variant")
 
     inverse = delta.inverse()
     assert isinstance(inverse, AtomDelta.ModifyConstraint)
-    assert inverse.old == AtomConstraintAst.Valence(ValueAst.Lit(4))
+    assert inverse.old == AtomConstraintAst.Valence(NumForm.Lit(4))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -759,12 +759,12 @@ def test_bonddelta_fields():
     assert delta.id == 2
     assert delta.atoms == (5, 1)
     assert isinstance(delta.atoms, tuple)
-    assert delta.ast.order == ValueAst.Lit(1)
+    assert delta.ast.order == NumForm.Lit(1)
     assert repr(delta) == (
         "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))"
     )
     delta.ast.order = 3
-    assert delta.ast.order == ValueAst.Lit(3)
+    assert delta.ast.order == NumForm.Lit(3)
     with pytest.raises(AttributeError):
         delta.atoms = (1, 5)
     with pytest.raises(TypeError):
@@ -793,14 +793,14 @@ def test_bonddelta_add_match():
 def test_bonddelta_modifyfield_match():
     delta = BondDelta.ModifyField(
         id=2,
-        change=BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)),
+        change=BondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2)),
     )
 
     match delta:
         case BondDelta.ModifyField(id, change):
             assert id == 2
             assert change == BondFieldChange.Order(
-                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                old=NumForm.Lit(1), new=NumForm.Lit(2)
             )
         case _:
             raise AssertionError("bond delta did not match its field variant")
@@ -814,20 +814,20 @@ def test_bonddelta_modifyconstraint_match():
     delta = BondDelta.ModifyConstraint(
         id=2,
         old=None,
-        new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+        new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
     )
 
     match delta:
         case BondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 2
             assert old is None
-            assert new == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+            assert new == BondConstraintAst.Aromatic(BooleanForm.Lit(True))
         case _:
             raise AssertionError("bond delta did not match its constraint variant")
 
     inverse = delta.inverse()
     assert isinstance(inverse, BondDelta.ModifyConstraint)
-    assert inverse.old == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    assert inverse.old == BondConstraintAst.Aromatic(BooleanForm.Lit(True))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -847,13 +847,13 @@ def test_dativebonddelta_fields():
     assert delta.donors == [4, 2, 4]
     assert isinstance(delta.donors, list)
     assert delta.acceptor == 3
-    assert delta.ast.order == ValueAst.Lit(1)
+    assert delta.ast.order == NumForm.Lit(1)
     assert repr(delta) == (
         "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, "
         "ast=DativeBondAst.parse('1'))"
     )
     delta.ast.order = 3
-    assert delta.ast.order == ValueAst.Lit(3)
+    assert delta.ast.order == NumForm.Lit(3)
     with pytest.raises(AttributeError):
         delta.donors = [2, 4, 4]
     with pytest.raises(TypeError):
@@ -890,7 +890,7 @@ def test_dativebonddelta_modifyfield_match():
     delta = DativeBondDelta.ModifyField(
         id=1,
         change=DativeBondFieldChange.Order(
-            old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+            old=NumForm.Lit(1), new=NumForm.Lit(2)
         ),
     )
 
@@ -898,7 +898,7 @@ def test_dativebonddelta_modifyfield_match():
         case DativeBondDelta.ModifyField(id, change):
             assert id == 1
             assert change == DativeBondFieldChange.Order(
-                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                old=NumForm.Lit(1), new=NumForm.Lit(2)
             )
         case _:
             raise AssertionError("dative bond delta did not match its field variant")
@@ -912,20 +912,20 @@ def test_dativebonddelta_modifyconstraint_match():
     delta = DativeBondDelta.ModifyConstraint(
         id=1,
         old=None,
-        new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+        new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)),
     )
 
     match delta:
         case DativeBondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 1
             assert old is None
-            assert new == DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
+            assert new == DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))
         case _:
             raise AssertionError("dative bond delta did not match its constraint variant")
 
     inverse = delta.inverse()
     assert isinstance(inverse, DativeBondDelta.ModifyConstraint)
-    assert inverse.old == DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    assert inverse.old == DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -939,13 +939,13 @@ def test_aromaticsystemdelta_fields():
     assert delta.id == 2
     assert delta.atoms == [4, 2, 4]
     assert isinstance(delta.atoms, list)
-    assert delta.ast.electrons == ElectronCountsAst.Lit([1, 1, 1])
+    assert delta.ast.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(delta) == (
         "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], "
         "ast=AromaticSystemAst.parse('[1,1,1]'))"
     )
     delta.ast.charge = -1
-    assert delta.ast.charge == ValueAst.Lit(-1)
+    assert delta.ast.charge == NumForm.Lit(-1)
     with pytest.raises(AttributeError):
         delta.atoms = [2, 4, 4]
     with pytest.raises(TypeError):
@@ -979,7 +979,7 @@ def test_aromaticsystemdelta_modifyfield_match():
     delta = AromaticSystemDelta.ModifyField(
         id=2,
         change=AromaticSystemFieldChange.Charge(
-            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+            old=NumForm.Lit(0), new=NumForm.Lit(-1)
         ),
     )
 
@@ -987,7 +987,7 @@ def test_aromaticsystemdelta_modifyfield_match():
         case AromaticSystemDelta.ModifyField(id, change):
             assert id == 2
             assert change == AromaticSystemFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                old=NumForm.Lit(0), new=NumForm.Lit(-1)
             )
         case _:
             raise AssertionError("aromatic system delta did not match its field variant")
@@ -1001,14 +1001,14 @@ def test_aromaticsystemdelta_modifyconstraint_match():
     delta = AromaticSystemDelta.ModifyConstraint(
         id=2,
         old=None,
-        new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+        new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)),
     )
 
     match delta:
         case AromaticSystemDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 2
             assert old is None
-            assert new == AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
+            assert new == AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
         case _:
             raise AssertionError(
                 "aromatic system delta did not match its constraint variant"
@@ -1016,7 +1016,7 @@ def test_aromaticsystemdelta_modifyconstraint_match():
 
     inverse = delta.inverse()
     assert isinstance(inverse, AromaticSystemDelta.ModifyConstraint)
-    assert inverse.old == AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
+    assert inverse.old == AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -1030,13 +1030,13 @@ def test_multicenterbonddelta_fields():
     assert delta.id == 3
     assert delta.atoms == [4, 2, 4]
     assert isinstance(delta.atoms, list)
-    assert delta.ast.electrons == ElectronCountsAst.Lit([1, 1, 1])
+    assert delta.ast.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(delta) == (
         "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], "
         "ast=MulticenterBondAst.parse('[1,1,1]'))"
     )
     delta.ast.charge = -1
-    assert delta.ast.charge == ValueAst.Lit(-1)
+    assert delta.ast.charge == NumForm.Lit(-1)
     with pytest.raises(AttributeError):
         delta.atoms = [2, 4, 4]
     with pytest.raises(TypeError):
@@ -1070,7 +1070,7 @@ def test_multicenterbonddelta_modifyfield_match():
     delta = MulticenterBondDelta.ModifyField(
         id=3,
         change=MulticenterBondFieldChange.Charge(
-            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+            old=NumForm.Lit(0), new=NumForm.Lit(-1)
         ),
     )
 
@@ -1078,7 +1078,7 @@ def test_multicenterbonddelta_modifyfield_match():
         case MulticenterBondDelta.ModifyField(id, change):
             assert id == 3
             assert change == MulticenterBondFieldChange.Charge(
-                old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                old=NumForm.Lit(0), new=NumForm.Lit(-1)
             )
         case _:
             raise AssertionError("multicenter bond delta did not match its field variant")
@@ -1092,14 +1092,14 @@ def test_multicenterbonddelta_modifyconstraint_match():
     delta = MulticenterBondDelta.ModifyConstraint(
         id=3,
         old=None,
-        new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)),
+        new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)),
     )
 
     match delta:
         case MulticenterBondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 3
             assert old is None
-            assert new == MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
+            assert new == MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))
         case _:
             raise AssertionError(
                 "multicenter bond delta did not match its constraint variant"
@@ -1107,7 +1107,7 @@ def test_multicenterbonddelta_modifyconstraint_match():
 
     inverse = delta.inverse()
     assert isinstance(inverse, MulticenterBondDelta.ModifyConstraint)
-    assert inverse.old == MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
+    assert inverse.old == MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -1121,7 +1121,7 @@ def test_noncovalentbonddelta_fields():
     assert delta.id == 4
     assert delta.atoms == (5, 2)
     assert isinstance(delta.atoms, tuple)
-    assert delta.ast.kind == NoncovalentBondKindAst.Lit(
+    assert delta.ast.kind == NoncovalentBondKindForm.Lit(
         NoncovalentBondKind.HydrogenBond
     )
     assert repr(delta) == (
@@ -1129,7 +1129,7 @@ def test_noncovalentbonddelta_fields():
         "ast=NoncovalentBondAst.parse('Hbd'))"
     )
     delta.ast.kind = NoncovalentBondKind.Ionic
-    assert delta.ast.kind == NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic)
+    assert delta.ast.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic)
     with pytest.raises(AttributeError):
         delta.atoms = (2, 5)
     with pytest.raises(TypeError):
@@ -1163,8 +1163,8 @@ def test_noncovalentbonddelta_modifyfield_match():
     delta = NoncovalentBondDelta.ModifyField(
         id=4,
         change=NoncovalentBondFieldChange.Kind(
-            old=NoncovalentBondKindAst.Undetermined(),
-            new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            old=NoncovalentBondKindForm.Undetermined(),
+            new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond),
         ),
     )
 
@@ -1172,8 +1172,8 @@ def test_noncovalentbonddelta_modifyfield_match():
         case NoncovalentBondDelta.ModifyField(id, change):
             assert id == 4
             assert change == NoncovalentBondFieldChange.Kind(
-                old=NoncovalentBondKindAst.Undetermined(),
-                new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+                old=NoncovalentBondKindForm.Undetermined(),
+                new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond),
             )
         case _:
             raise AssertionError("noncovalent bond delta did not match its field variant")
@@ -1187,7 +1187,7 @@ def test_noncovalentbonddelta_modifyconstraint_match():
     delta = NoncovalentBondDelta.ModifyConstraint(
         id=4,
         old=None,
-        new=NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+        new=NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True)),
     )
 
     match delta:
@@ -1195,7 +1195,7 @@ def test_noncovalentbonddelta_modifyconstraint_match():
             assert id == 4
             assert old is None
             assert new == NoncovalentBondConstraintAst.Intramolecular(
-                BooleanAst.Lit(True)
+                BooleanForm.Lit(True)
             )
         case _:
             raise AssertionError(
@@ -1205,7 +1205,7 @@ def test_noncovalentbonddelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, NoncovalentBondDelta.ModifyConstraint)
     assert inverse.old == NoncovalentBondConstraintAst.Intramolecular(
-        BooleanAst.Lit(True)
+        BooleanForm.Lit(True)
     )
     assert inverse.new is None
     assert inverse.inverse() == delta
@@ -1213,7 +1213,7 @@ def test_noncovalentbonddelta_modifyconstraint_match():
 
 def test_stereoatomdelta_fields():
     source = StereoAtomAst(
-        StereoConfigurationAst.Kinded(
+        StereoConfigurationForm.Kinded(
             StereoKind.Tetrahedral, StereoCoset.Lit(0)
         )
     )
@@ -1228,7 +1228,7 @@ def test_stereoatomdelta_fields():
         ast=source,
     )
 
-    source.configuration = StereoConfigurationAst.Kinded(
+    source.configuration = StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
 
@@ -1240,7 +1240,7 @@ def test_stereoatomdelta_fields():
         StereoLigand(4, StereoLigandKind.Atom),
     ]
     assert isinstance(delta.ligands, list)
-    assert delta.ast.configuration == StereoConfigurationAst.Kinded(
+    assert delta.ast.configuration == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert repr(delta) == (
@@ -1250,10 +1250,10 @@ def test_stereoatomdelta_fields():
         "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], "
         "ast=StereoAtomAst.parse('Th0'))"
     )
-    delta.ast.configuration = StereoConfigurationAst.Kinded(
+    delta.ast.configuration = StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
-    assert delta.ast.configuration == StereoConfigurationAst.Kinded(
+    assert delta.ast.configuration == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
     with pytest.raises(AttributeError):
@@ -1271,7 +1271,7 @@ def test_stereoatomdelta_add_match():
             StereoLigand(2, StereoLigandKind.LonePair),
         ],
         ast=StereoAtomAst(
-            StereoConfigurationAst.Kinded(
+            StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Lit(0)
             )
         ),
@@ -1285,7 +1285,7 @@ def test_stereoatomdelta_add_match():
                 StereoLigand(4, StereoLigandKind.Atom),
                 StereoLigand(2, StereoLigandKind.LonePair),
             ]
-            assert ast.configuration == StereoConfigurationAst.Kinded(
+            assert ast.configuration == StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Lit(0)
             )
         case _:
@@ -1302,8 +1302,8 @@ def test_stereoatomdelta_modifyfield_match():
     delta = StereoAtomDelta.ModifyField(
         id=5,
         change=StereoAtomFieldChange.Configuration(
-            old=StereoConfigurationAst.Undetermined(),
-            new=StereoConfigurationAst.Kinded(
+            old=StereoConfigurationForm.Undetermined(),
+            new=StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Lit(0)
             ),
         ),
@@ -1313,8 +1313,8 @@ def test_stereoatomdelta_modifyfield_match():
         case StereoAtomDelta.ModifyField(id, change):
             assert id == 5
             assert change == StereoAtomFieldChange.Configuration(
-                old=StereoConfigurationAst.Undetermined(),
-                new=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Undetermined(),
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Lit(0)
                 ),
             )
@@ -1429,7 +1429,7 @@ def test_stereoatomdelta_involutions():
 
 def test_stereobonddelta_fields():
     source = StereoBondAst(
-        StereoConfigurationAst.Kinded(
+        StereoConfigurationForm.Kinded(
             StereoKind.CisTrans, StereoCoset.Lit(0)
         )
     )
@@ -1444,7 +1444,7 @@ def test_stereobonddelta_fields():
         ast=source,
     )
 
-    source.configuration = StereoConfigurationAst.Kinded(
+    source.configuration = StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(1)
     )
 
@@ -1456,7 +1456,7 @@ def test_stereobonddelta_fields():
         StereoLigand(4, StereoLigandKind.Atom),
     ]
     assert isinstance(delta.ligands, list)
-    assert delta.ast.configuration == StereoConfigurationAst.Kinded(
+    assert delta.ast.configuration == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(0)
     )
     assert repr(delta) == (
@@ -1466,10 +1466,10 @@ def test_stereobonddelta_fields():
         "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], "
         "ast=StereoBondAst.parse('Ct0'))"
     )
-    delta.ast.configuration = StereoConfigurationAst.Kinded(
+    delta.ast.configuration = StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(1)
     )
-    assert delta.ast.configuration == StereoConfigurationAst.Kinded(
+    assert delta.ast.configuration == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(1)
     )
     with pytest.raises(AttributeError):
@@ -1487,7 +1487,7 @@ def test_stereobonddelta_add_match():
             StereoLigand(2, StereoLigandKind.LonePair),
         ],
         ast=StereoBondAst(
-            StereoConfigurationAst.Kinded(
+            StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Lit(0)
             )
         ),
@@ -1501,7 +1501,7 @@ def test_stereobonddelta_add_match():
                 StereoLigand(4, StereoLigandKind.Atom),
                 StereoLigand(2, StereoLigandKind.LonePair),
             ]
-            assert ast.configuration == StereoConfigurationAst.Kinded(
+            assert ast.configuration == StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Lit(0)
             )
         case _:
@@ -1518,8 +1518,8 @@ def test_stereobonddelta_modifyfield_match():
     delta = StereoBondDelta.ModifyField(
         id=5,
         change=StereoBondFieldChange.Configuration(
-            old=StereoConfigurationAst.Undetermined(),
-            new=StereoConfigurationAst.Kinded(
+            old=StereoConfigurationForm.Undetermined(),
+            new=StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Lit(0)
             ),
         ),
@@ -1529,8 +1529,8 @@ def test_stereobonddelta_modifyfield_match():
         case StereoBondDelta.ModifyField(id, change):
             assert id == 5
             assert change == StereoBondFieldChange.Configuration(
-                old=StereoConfigurationAst.Undetermined(),
-                new=StereoConfigurationAst.Kinded(
+                old=StereoConfigurationForm.Undetermined(),
+                new=StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans, StereoCoset.Lit(0)
                 ),
             )
@@ -1662,22 +1662,22 @@ def test_stereobonddelta_involutions():
             AtomDelta.ModifyField(
                 id=3,
                 change=AtomFieldChange.Charge(
-                    old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                    old=NumForm.Lit(0), new=NumForm.Lit(-1)
                 ),
             ),
             "AtomDelta.ModifyField(id=3, "
             "change=AtomFieldChange.Charge("
-            "old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+            "old=NumForm.Lit(0), new=NumForm.Lit(-1)))",
             AtomDelta.ModifyField,
         ),
         (
             AtomDelta.ModifyConstraint(
                 id=3,
                 old=None,
-                new=AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                new=AtomConstraintAst.Valence(NumForm.Lit(4)),
             ),
             "AtomDelta.ModifyConstraint(id=3, old=None, "
-            "new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
+            "new=AtomConstraintAst.Valence(NumForm.Lit(4)))",
             AtomDelta.ModifyConstraint,
         ),
         (
@@ -1694,22 +1694,22 @@ def test_stereobonddelta_involutions():
             BondDelta.ModifyField(
                 id=2,
                 change=BondFieldChange.Order(
-                    old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                    old=NumForm.Lit(1), new=NumForm.Lit(2)
                 ),
             ),
             "BondDelta.ModifyField(id=2, "
             "change=BondFieldChange.Order("
-            "old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+            "old=NumForm.Lit(1), new=NumForm.Lit(2)))",
             BondDelta.ModifyField,
         ),
         (
             BondDelta.ModifyConstraint(
                 id=2,
                 old=None,
-                new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
             ),
             "BondDelta.ModifyConstraint(id=2, old=None, "
-            "new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+            "new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
             BondDelta.ModifyConstraint,
         ),
     ],
@@ -1755,22 +1755,22 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             DativeBondDelta.ModifyField(
                 id=1,
                 change=DativeBondFieldChange.Order(
-                    old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                    old=NumForm.Lit(1), new=NumForm.Lit(2)
                 ),
             ),
             "DativeBondDelta.ModifyField(id=1, "
             "change=DativeBondFieldChange.Order("
-            "old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+            "old=NumForm.Lit(1), new=NumForm.Lit(2)))",
             DativeBondDelta.ModifyField,
         ),
         (
             DativeBondDelta.ModifyConstraint(
                 id=1,
                 old=None,
-                new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)),
             ),
             "DativeBondDelta.ModifyConstraint(id=1, old=None, "
-            "new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+            "new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
             DativeBondDelta.ModifyConstraint,
         ),
         (
@@ -1793,22 +1793,22 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             AromaticSystemDelta.ModifyField(
                 id=2,
                 change=AromaticSystemFieldChange.Charge(
-                    old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                    old=NumForm.Lit(0), new=NumForm.Lit(-1)
                 ),
             ),
             "AromaticSystemDelta.ModifyField(id=2, "
             "change=AromaticSystemFieldChange.Charge("
-            "old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+            "old=NumForm.Lit(0), new=NumForm.Lit(-1)))",
             AromaticSystemDelta.ModifyField,
         ),
         (
             AromaticSystemDelta.ModifyConstraint(
                 id=2,
                 old=None,
-                new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+                new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)),
             ),
             "AromaticSystemDelta.ModifyConstraint(id=2, old=None, "
-            "new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+            "new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)))",
             AromaticSystemDelta.ModifyConstraint,
         ),
         (
@@ -1831,22 +1831,22 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             MulticenterBondDelta.ModifyField(
                 id=3,
                 change=MulticenterBondFieldChange.Charge(
-                    old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                    old=NumForm.Lit(0), new=NumForm.Lit(-1)
                 ),
             ),
             "MulticenterBondDelta.ModifyField(id=3, "
             "change=MulticenterBondFieldChange.Charge("
-            "old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+            "old=NumForm.Lit(0), new=NumForm.Lit(-1)))",
             MulticenterBondDelta.ModifyField,
         ),
         (
             MulticenterBondDelta.ModifyConstraint(
                 id=3,
                 old=None,
-                new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)),
+                new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)),
             ),
             "MulticenterBondDelta.ModifyConstraint(id=3, old=None, "
-            "new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+            "new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)))",
             MulticenterBondDelta.ModifyConstraint,
         ),
         (
@@ -1873,16 +1873,16 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             NoncovalentBondDelta.ModifyField(
                 id=4,
                 change=NoncovalentBondFieldChange.Kind(
-                    old=NoncovalentBondKindAst.Undetermined(),
-                    new=NoncovalentBondKindAst.Lit(
+                    old=NoncovalentBondKindForm.Undetermined(),
+                    new=NoncovalentBondKindForm.Lit(
                         NoncovalentBondKind.HydrogenBond
                     ),
                 ),
             ),
             "NoncovalentBondDelta.ModifyField(id=4, "
             "change=NoncovalentBondFieldChange.Kind("
-            "old=NoncovalentBondKindAst.Undetermined(), "
-            "new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)))",
+            "old=NoncovalentBondKindForm.Undetermined(), "
+            "new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)))",
             NoncovalentBondDelta.ModifyField,
         ),
         (
@@ -1890,12 +1890,12 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
                 id=4,
                 old=None,
                 new=NoncovalentBondConstraintAst.Intramolecular(
-                    BooleanAst.Lit(True)
+                    BooleanForm.Lit(True)
                 ),
             ),
             "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, "
             "new=NoncovalentBondConstraintAst.Intramolecular("
-            "BooleanAst.Lit(True)))",
+            "BooleanForm.Lit(True)))",
             NoncovalentBondDelta.ModifyConstraint,
         ),
     ],
@@ -1935,7 +1935,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 site=3,
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoAtomAst(
-                    StereoConfigurationAst.Kinded(
+                    StereoConfigurationForm.Kinded(
                         StereoKind.Tetrahedral, StereoCoset.Lit(0)
                     )
                 ),
@@ -1950,7 +1950,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 site=3,
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoAtomAst(
-                    StereoConfigurationAst.Kinded(
+                    StereoConfigurationForm.Kinded(
                         StereoKind.Tetrahedral, StereoCoset.Lit(0)
                     )
                 ),
@@ -1963,13 +1963,13 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
             StereoAtomDelta.ModifyField(
                 id=5,
                 change=StereoAtomFieldChange.Configuration(
-                    old=StereoConfigurationAst.Undetermined(),
-                    new=StereoConfigurationAst.Kinded(
+                    old=StereoConfigurationForm.Undetermined(),
+                    new=StereoConfigurationForm.Kinded(
                         StereoKind.Tetrahedral, StereoCoset.Lit(0)
                     ),
                 ),
             ),
-            "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
+            "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationForm.Undetermined(), new=StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
             StereoAtomDelta.ModifyField,
             False,
         ),
@@ -2014,7 +2014,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 site=3,
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoBondAst(
-                    StereoConfigurationAst.Kinded(
+                    StereoConfigurationForm.Kinded(
                         StereoKind.CisTrans, StereoCoset.Lit(0)
                     )
                 ),
@@ -2029,7 +2029,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 site=3,
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoBondAst(
-                    StereoConfigurationAst.Kinded(
+                    StereoConfigurationForm.Kinded(
                         StereoKind.CisTrans, StereoCoset.Lit(0)
                     )
                 ),
@@ -2042,13 +2042,13 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
             StereoBondDelta.ModifyField(
                 id=5,
                 change=StereoBondFieldChange.Configuration(
-                    old=StereoConfigurationAst.Undetermined(),
-                    new=StereoConfigurationAst.Kinded(
+                    old=StereoConfigurationForm.Undetermined(),
+                    new=StereoConfigurationForm.Kinded(
                         StereoKind.CisTrans, StereoCoset.Lit(0)
                     ),
                 ),
             ),
-            "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
+            "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationForm.Undetermined(), new=StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
             StereoBondDelta.ModifyField,
             False,
         ),
@@ -2114,7 +2114,7 @@ def test_stereodelta_closure(delta, expected_repr, inverse_type, self_inverse):
 
 
 def test_constraintdelta_fields():
-    source = Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))
+    source = Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))
     delta = ConstraintDelta.Add(constraint=source)
 
     assert delta.constraint == source
@@ -2122,7 +2122,7 @@ def test_constraintdelta_fields():
     assert delta.constraint is delta.constraint
     assert repr(delta) == (
         "ConstraintDelta.Add(constraint=Constraint.Atom(3, "
-        "AtomConstraintAst.Degree(ValueAst.Lit(2))))"
+        "AtomConstraintAst.Degree(NumForm.Lit(2))))"
     )
     with pytest.raises(AttributeError):
         delta.constraint = Constraint.Or([])
@@ -2134,7 +2134,7 @@ def test_constraintdelta_add_match():
     delta = ConstraintDelta.Add(
         constraint=Constraint.Atom(
             3,
-            AtomConstraintAst.Degree(ValueAst.Lit(2)),
+            AtomConstraintAst.Degree(NumForm.Lit(2)),
         )
     )
 
@@ -2142,7 +2142,7 @@ def test_constraintdelta_add_match():
         case ConstraintDelta.Add(Constraint.Atom(atom_id, constraint)):
             assert (atom_id, constraint) == (
                 3,
-                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                AtomConstraintAst.Degree(NumForm.Lit(2)),
             )
         case _:
             raise AssertionError("constraint delta did not match its add variant")
@@ -2159,7 +2159,7 @@ def test_constraintdelta_remove_match():
             [
                 Constraint.Atom(
                     7,
-                    AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                    AtomConstraintAst.Valence(NumForm.Lit(4)),
                 ),
                 Constraint.Not(Constraint.Or([])),
             ]
@@ -2177,7 +2177,7 @@ def test_constraintdelta_remove_match():
         ):
             assert (atom_id, constraint) == (
                 7,
-                AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                AtomConstraintAst.Valence(NumForm.Lit(4)),
             )
         case _:
             raise AssertionError("constraint delta did not match its remove variant")
@@ -2199,7 +2199,7 @@ def test_constraintdelta_payload_ownership():
 
     match delta.constraint:
         case Constraint.Molecule(MoleculeConstraint.SubPattern(_, stored_molecule)):
-            assert stored_molecule.atoms[0].charge == ValueAst.Undetermined()
+            assert stored_molecule.atoms[0].charge == NumForm.Undetermined()
             stored_molecule.atoms[0].charge = -1
         case _:
             raise AssertionError("constraint delta did not retain its stored subpattern")
@@ -2207,7 +2207,7 @@ def test_constraintdelta_payload_ownership():
     inverse = delta.inverse()
     match inverse.constraint:
         case Constraint.Molecule(MoleculeConstraint.SubPattern(_, stored_molecule)):
-            assert stored_molecule.atoms[0].charge == ValueAst.Lit(-1)
+            assert stored_molecule.atoms[0].charge == NumForm.Lit(-1)
         case _:
             raise AssertionError("inverse did not retain the changed stored subpattern")
 
@@ -2219,10 +2219,10 @@ def test_constraintdelta_payload_ownership():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    AtomConstraintAst.Degree(NumForm.Lit(2)),
                 )
             ),
-            "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2))))",
+            "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2))))",
             ConstraintDelta.Remove,
         ),
         (
@@ -2231,13 +2231,13 @@ def test_constraintdelta_payload_ownership():
                     [
                         Constraint.Atom(
                             7,
-                            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                            AtomConstraintAst.Valence(NumForm.Lit(4)),
                         ),
                         Constraint.Not(Constraint.Or([])),
                     ]
                 )
             ),
-            "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
+            "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(NumForm.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
             ConstraintDelta.Add,
         ),
     ],
@@ -2260,7 +2260,7 @@ def test_delta_fields():
     assert repr(delta) == "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))"
 
     child.ast.charge = 1
-    assert delta._0.ast.charge == ValueAst.Lit(1)
+    assert delta._0.ast.charge == NumForm.Lit(1)
 
     with pytest.raises(AttributeError):
         delta._0 = AtomDelta.Remove(id=3, ast=AtomAst(Element("C")))
@@ -2357,7 +2357,7 @@ def test_delta_atom_match():
                     site=3,
                     ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                     ast=StereoAtomAst(
-                        StereoConfigurationAst.Kinded(
+                        StereoConfigurationForm.Kinded(
                             StereoKind.Tetrahedral,
                             StereoCoset.Lit(0),
                         )
@@ -2375,7 +2375,7 @@ def test_delta_atom_match():
                     site=3,
                     ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                     ast=StereoBondAst(
-                        StereoConfigurationAst.Kinded(
+                        StereoConfigurationForm.Kinded(
                             StereoKind.CisTrans,
                             StereoCoset.Lit(0),
                         )
@@ -2391,11 +2391,11 @@ def test_delta_atom_match():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                        AtomConstraintAst.Degree(NumForm.Lit(2)),
                     )
                 )
             ),
-            "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))",
+            "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))",
             Delta.Constraint,
             ConstraintDelta.Remove,
         ),
@@ -2462,7 +2462,7 @@ def test_delta_match():
                 site=3,
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoAtomAst(
-                    StereoConfigurationAst.Kinded(
+                    StereoConfigurationForm.Kinded(
                         StereoKind.Tetrahedral,
                         StereoCoset.Lit(0),
                     )
@@ -2475,7 +2475,7 @@ def test_delta_match():
                 site=3,
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoBondAst(
-                    StereoConfigurationAst.Kinded(
+                    StereoConfigurationForm.Kinded(
                         StereoKind.CisTrans,
                         StereoCoset.Lit(0),
                     )
@@ -2486,7 +2486,7 @@ def test_delta_match():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    AtomConstraintAst.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2525,7 +2525,7 @@ def test_delta_match():
                 StereoAtomDelta.Add(id=5, site=3, ligands=ligands, ast=ast)
             ):
                 assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
-                assert ast.configuration == StereoConfigurationAst.Kinded(
+                assert ast.configuration == StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral,
                     StereoCoset.Lit(0),
                 )
@@ -2534,7 +2534,7 @@ def test_delta_match():
                 StereoBondDelta.Add(id=5, site=3, ligands=ligands, ast=ast)
             ):
                 assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
-                assert ast.configuration == StereoConfigurationAst.Kinded(
+                assert ast.configuration == StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans,
                     StereoCoset.Lit(0),
                 )
@@ -2542,7 +2542,7 @@ def test_delta_match():
             case Delta.Constraint(ConstraintDelta.Add(constraint=constraint)):
                 assert constraint == Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    AtomConstraintAst.Degree(NumForm.Lit(2)),
                 )
                 seen.append("constraint")
             case _:
@@ -2581,7 +2581,7 @@ def test_deltas_sequence():
         "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), "
         "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))])"
     )
-    assert deltas[0]._0.ast.charge == ValueAst.Undetermined()
+    assert deltas[0]._0.ast.charge == NumForm.Undetermined()
     with pytest.raises(TypeError):
         hash(deltas)
 
@@ -2610,7 +2610,7 @@ def test_deltas_extend():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                        AtomConstraintAst.Degree(NumForm.Lit(2)),
                     )
                 )
             )
@@ -2634,7 +2634,7 @@ def test_deltas_extend():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    AtomConstraintAst.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2651,7 +2651,7 @@ def test_deltas_extend_self():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                        AtomConstraintAst.Degree(NumForm.Lit(2)),
                     )
                 )
             ),
@@ -2666,7 +2666,7 @@ def test_deltas_extend_self():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    AtomConstraintAst.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2675,7 +2675,7 @@ def test_deltas_extend_self():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    AtomConstraintAst.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2690,7 +2690,7 @@ def test_deltas_getitem():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                        AtomConstraintAst.Degree(NumForm.Lit(2)),
                     )
                 )
             ),
@@ -2703,7 +2703,7 @@ def test_deltas_getitem():
     assert type(deltas[-1]) is Delta.Constraint
 
     first._0.ast.charge = 1
-    assert deltas[0]._0.ast.charge == ValueAst.Undetermined()
+    assert deltas[0]._0.ast.charge == NumForm.Undetermined()
 
     with pytest.raises(IndexError, match="delta index out of range"):
         deltas[2]
@@ -2726,7 +2726,7 @@ def test_deltas_iter():
         Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
     ]
     entries[0]._0.ast.charge = -1
-    assert deltas[0]._0.ast.charge == ValueAst.Undetermined()
+    assert deltas[0]._0.ast.charge == NumForm.Undetermined()
 
 
 @pytest.mark.parametrize(
@@ -2739,7 +2739,7 @@ def test_deltas_iter():
                         AtomDelta.ModifyField(
                             id=0,
                             change=AtomFieldChange.Charge(
-                                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                                old=NumForm.Lit(0), new=NumForm.Lit(1)
                             ),
                         )
                     ),
@@ -2747,7 +2747,7 @@ def test_deltas_iter():
                         AtomDelta.ModifyField(
                             id=0,
                             change=AtomFieldChange.Charge(
-                                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                                old=NumForm.Lit(1), new=NumForm.Lit(2)
                             ),
                         )
                     ),
@@ -2759,7 +2759,7 @@ def test_deltas_iter():
                         AtomDelta.ModifyField(
                             id=0,
                             change=AtomFieldChange.Charge(
-                                old=ValueAst.Lit(0), new=ValueAst.Lit(2)
+                                old=NumForm.Lit(0), new=NumForm.Lit(2)
                             ),
                         )
                     )
@@ -2784,7 +2784,7 @@ def test_deltas_iter():
                         BondDelta.ModifyField(
                             id=0,
                             change=BondFieldChange.Order(
-                                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                                old=NumForm.Lit(1), new=NumForm.Lit(2)
                             ),
                         )
                     ),
@@ -2792,7 +2792,7 @@ def test_deltas_iter():
                         AtomDelta.ModifyField(
                             id=0,
                             change=AtomFieldChange.Charge(
-                                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                                old=NumForm.Lit(0), new=NumForm.Lit(1)
                             ),
                         )
                     ),
@@ -2804,7 +2804,7 @@ def test_deltas_iter():
                         AtomDelta.ModifyField(
                             id=0,
                             change=AtomFieldChange.Charge(
-                                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                                old=NumForm.Lit(0), new=NumForm.Lit(1)
                             ),
                         )
                     ),
@@ -2812,7 +2812,7 @@ def test_deltas_iter():
                         BondDelta.ModifyField(
                             id=0,
                             change=BondFieldChange.Order(
-                                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                                old=NumForm.Lit(1), new=NumForm.Lit(2)
                             ),
                         )
                     ),
@@ -2841,7 +2841,7 @@ def test_deltas_iter():
                         ConstraintDelta.Add(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                                AtomConstraintAst.Degree(NumForm.Lit(2)),
                             )
                         )
                     ),
@@ -2849,7 +2849,7 @@ def test_deltas_iter():
                         ConstraintDelta.Add(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                                AtomConstraintAst.Degree(NumForm.Lit(2)),
                             )
                         )
                     ),
@@ -2857,7 +2857,7 @@ def test_deltas_iter():
                         ConstraintDelta.Remove(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                                AtomConstraintAst.Degree(NumForm.Lit(2)),
                             )
                         )
                     ),
@@ -2869,7 +2869,7 @@ def test_deltas_iter():
                         ConstraintDelta.Add(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                                AtomConstraintAst.Degree(NumForm.Lit(2)),
                             )
                         )
                     )
@@ -2897,7 +2897,7 @@ def test_deltas_canonicalize_error():
                 AtomDelta.ModifyField(
                     id=0,
                     change=AtomFieldChange.Charge(
-                        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        old=NumForm.Lit(0), new=NumForm.Lit(1)
                     ),
                 )
             ),
@@ -2905,7 +2905,7 @@ def test_deltas_canonicalize_error():
                 AtomDelta.ModifyField(
                     id=0,
                     change=AtomFieldChange.Charge(
-                        old=ValueAst.Lit(2), new=ValueAst.Lit(3)
+                        old=NumForm.Lit(2), new=NumForm.Lit(3)
                     ),
                 )
             ),
@@ -2926,7 +2926,7 @@ def test_deltas_canonical_eq():
                 BondDelta.ModifyField(
                     id=0,
                     change=BondFieldChange.Order(
-                        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                        old=NumForm.Lit(1), new=NumForm.Lit(2)
                     ),
                 )
             ),
@@ -2934,7 +2934,7 @@ def test_deltas_canonical_eq():
                 AtomDelta.ModifyField(
                     id=0,
                     change=AtomFieldChange.Charge(
-                        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        old=NumForm.Lit(0), new=NumForm.Lit(1)
                     ),
                 )
             ),
@@ -2946,7 +2946,7 @@ def test_deltas_canonical_eq():
                 AtomDelta.ModifyField(
                     id=0,
                     change=AtomFieldChange.Charge(
-                        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        old=NumForm.Lit(0), new=NumForm.Lit(1)
                     ),
                 )
             ),
@@ -2954,7 +2954,7 @@ def test_deltas_canonical_eq():
                 BondDelta.ModifyField(
                     id=0,
                     change=BondFieldChange.Order(
-                        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                        old=NumForm.Lit(1), new=NumForm.Lit(2)
                     ),
                 )
             ),

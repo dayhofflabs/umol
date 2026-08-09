@@ -2,7 +2,7 @@ import pytest
 
 from umol import (
     AtomAst,
-    BooleanAst,
+    BooleanForm,
     DativeBondAst,
     DativeBondConstraintAst,
     DativeBondConstraintKey,
@@ -13,7 +13,7 @@ from umol import (
     ParseError,
     RingMembershipAst,
     RingScope,
-    ValueAst,
+    NumForm,
 )
 
 
@@ -21,17 +21,17 @@ from umol import (
     ("update", "expected"),
     [
         (DativeBondUpdate(), (None, DativeBondConstraintsAst([]))),
-        (DativeBondUpdate(order=2), (ValueAst.Lit(2), DativeBondConstraintsAst([]))),
+        (DativeBondUpdate(order=2), (NumForm.Lit(2), DativeBondConstraintsAst([]))),
         (
             DativeBondUpdate(
                 constraints=DativeBondConstraintsAst(
-                    [DativeBondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+                    [DativeBondConstraintAst.Aromatic(BooleanForm.Undetermined())]
                 )
             ),
             (
                 None,
                 DativeBondConstraintsAst(
-                    [DativeBondConstraintAst.Aromatic(BooleanAst.Undetermined())]
+                    [DativeBondConstraintAst.Aromatic(BooleanForm.Undetermined())]
                 ),
             ),
         ),
@@ -72,7 +72,7 @@ def ammonia_borane():
 
 def test_dativebondast_new():
     bond = DativeBondAst(1)
-    assert bond.order == ValueAst.Lit(1)
+    assert bond.order == NumForm.Lit(1)
     assert len(bond.constraints) == 0
 
 
@@ -80,17 +80,17 @@ def test_dativebondast_constraints_kwarg():
     bond = DativeBondAst(
         1,
         constraints=DativeBondConstraintsAst(
-            [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+            [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
         ),
     )
     assert len(bond.constraints) == 1
-    assert bond.constraints.aromatic == BooleanAst.Lit(True)
+    assert bond.constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_dativebondast_order_setter():
     bond = DativeBondAst(1)
     bond.order = 2
-    assert bond.order == ValueAst.Lit(2)
+    assert bond.order == NumForm.Lit(2)
 
 
 @pytest.mark.parametrize("dsl", ["1", "1#a", "1#R(6)"])
@@ -109,57 +109,57 @@ def test_dativebondast_asdict():
     bond = DativeBondAst(
         1,
         constraints=DativeBondConstraintsAst(
-            [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+            [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
         ),
     )
     d = bond.asdict()
     assert set(d.keys()) == {"order", "constraints"}
-    assert d["order"] == ValueAst.Lit(1)
-    assert d["constraints"]["aromatic"] == BooleanAst.Lit(True)
+    assert d["order"] == NumForm.Lit(1)
+    assert d["constraints"]["aromatic"] == BooleanForm.Lit(True)
 
 
 def test_dativebondast_set_constraints():
     bond = DativeBondAst(1)
     bond.constraints = DativeBondConstraintsAst(
-        [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+        [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
     )
-    assert bond.constraints.aromatic == BooleanAst.Lit(True)
+    assert bond.constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_dativebondconstraints_aromatic_and_ring():
     constraints = DativeBondConstraintsAst(
         [
-            DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)),
             DativeBondConstraintAst.RingMembership(
-                RingMembershipAst(RingScope.All(), ValueAst.Lit(2))
+                RingMembershipAst(RingScope.All(), NumForm.Lit(2))
             ),
         ]
     )
     assert len(constraints) == 2
-    assert constraints.aromatic == BooleanAst.Lit(True)
-    assert constraints.ring_count == ValueAst.Lit(2)
+    assert constraints.aromatic == BooleanForm.Lit(True)
+    assert constraints.ring_count == NumForm.Lit(2)
 
 
 def test_dativebondconstraints_ring_size_count():
     constraints = DativeBondConstraintsAst(
         [
             DativeBondConstraintAst.RingMembership(
-                RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))
+                RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))
             )
         ]
     )
-    assert constraints.ring_size_count[6] == ValueAst.Lit(1)
+    assert constraints.ring_size_count[6] == NumForm.Lit(1)
     assert constraints.ring_size_count[5] is None
     assert constraints.ring_count is None
 
 
 def test_dativebondconstraints_mapping_ops():
     constraints = DativeBondConstraintsAst([])
-    constraints.set(DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))
+    constraints.set(DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)))
     assert len(constraints) == 1
     assert DativeBondConstraintKey.Aromatic() in constraints
     assert constraints[DativeBondConstraintKey.Aromatic()] == (
-        DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
+        DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))
     )
     assert [key for key in constraints] == [DativeBondConstraintKey.Aromatic()]
     del constraints[DativeBondConstraintKey.Aromatic()]
@@ -181,25 +181,25 @@ def test_dativebondconstraintkey_ring_membership():
 def test_dativebondconstraints_asdict():
     constraints = DativeBondConstraintsAst(
         [
-            DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)),
             DativeBondConstraintAst.RingMembership(
-                RingMembershipAst(RingScope.All(), ValueAst.Lit(2))
+                RingMembershipAst(RingScope.All(), NumForm.Lit(2))
             ),
             DativeBondConstraintAst.RingMembership(
-                RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))
+                RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))
             ),
         ]
     )
     d = constraints.asdict()
     assert set(d.keys()) == {"aromatic", "ring_count", "ring_size_count_6"}
-    assert d["ring_count"] == ValueAst.Lit(2)
-    assert d["ring_size_count_6"] == ValueAst.Lit(1)
+    assert d["ring_count"] == NumForm.Lit(2)
+    assert d["ring_size_count_6"] == NumForm.Lit(1)
 
 
 def test_dativebondview_fields():
     view = ammonia_borane().dative_bonds[0]
     assert view.id == 0
-    assert view.order == ValueAst.Lit(1)
+    assert view.order == NumForm.Lit(1)
     assert view.acceptor == 0
     assert view.donors == [1]
     # atom_ids is the donors followed by the acceptor
@@ -211,30 +211,30 @@ def test_dativebondview_set_order():
     mol = ammonia_borane()
     mol.dative_bonds[0].order = 2
     # a fresh view re-reads the molecule, proving the write landed on it
-    assert mol.dative_bonds[0].order == ValueAst.Lit(2)
+    assert mol.dative_bonds[0].order == NumForm.Lit(2)
 
 
 def test_dativebondview_asdict():
     view = ammonia_borane().dative_bonds[0]
     d = view.asdict()
     assert set(d.keys()) == {"order", "constraints"}
-    assert d["order"] == ValueAst.Lit(1)
+    assert d["order"] == NumForm.Lit(1)
 
 
 def test_dativebondview_constraints_write_through():
     mol = ammonia_borane()
     mol.dative_bonds[0].constraints.set(
-        DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
+        DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))
     )
     constraints = mol.dative_bonds[0].constraints
     assert len(constraints) == 1
-    assert constraints.aromatic == BooleanAst.Lit(True)
+    assert constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_dativebondview_constraints_aromatic_property():
     mol = ammonia_borane()
     mol.dative_bonds[0].constraints.aromatic = True
-    assert mol.dative_bonds[0].constraints.aromatic == BooleanAst.Lit(True)
+    assert mol.dative_bonds[0].constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_dativebondview_constraints_ring_size_count():
@@ -248,9 +248,9 @@ def test_dativebondview_constraints_ring_size_count():
 def test_dativebondview_set_constraints():
     mol = ammonia_borane()
     mol.dative_bonds[0].constraints = DativeBondConstraintsAst(
-        [DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+        [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
     )
-    assert mol.dative_bonds[0].constraints.aromatic == BooleanAst.Lit(True)
+    assert mol.dative_bonds[0].constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_dativebondviews_len_getitem():
@@ -269,7 +269,7 @@ def test_dativebondviews_setitem():
     mol.dative_bonds[0] = DativeBondAst(2)
     view = mol.dative_bonds[0]
     # value replaced, participants preserved
-    assert view.order == ValueAst.Lit(2)
+    assert view.order == NumForm.Lit(2)
     assert view.acceptor == 0
     assert view.donors == [1]
 
@@ -281,7 +281,7 @@ def test_dativebondviews_setitem_out_of_range():
 
 def test_dativebondviews_iter():
     orders = [view.order for view in ammonia_borane().dative_bonds]
-    assert orders == [ValueAst.Lit(1)]
+    assert orders == [NumForm.Lit(1)]
 
 
 def test_dativebondviews_of():
