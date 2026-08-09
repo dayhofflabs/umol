@@ -519,7 +519,7 @@ mod tests {
         AromaticSystemId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
         StereoBondId,
     };
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
     use crate::mol_dsl;
 
     #[fixture]
@@ -603,7 +603,7 @@ mod tests {
     })]
     #[case::multicenter_all(RelationalConstraint::MulticenterBondAllAtoms {
         bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(ValueAst::RangeFrom(1))),
+        predicate: Box::new(AtomConstraintAst::degree(NumForm::RangeFrom(1))),
     })]
     #[case::multicenter_any(RelationalConstraint::MulticenterBondAnyAtom {
         bond: MulticenterBondId(0),
@@ -638,7 +638,7 @@ mod tests {
     })]
     #[case::stereo_atom_all(RelationalConstraint::StereoAtomAllLigands {
         stereo_atom: StereoAtomId(0),
-        predicate: Box::new(AtomConstraintAst::degree(ValueAst::RangeFrom(1))),
+        predicate: Box::new(AtomConstraintAst::degree(NumForm::RangeFrom(1))),
     })]
     #[case::stereo_atom_any(RelationalConstraint::StereoAtomAnyLigand {
         stereo_atom: StereoAtomId(0),
@@ -658,7 +658,7 @@ mod tests {
     })]
     #[case::stereo_bond_all(RelationalConstraint::StereoBondAllLigands {
         stereo_bond: StereoBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(ValueAst::RangeFrom(0))),
+        predicate: Box::new(AtomConstraintAst::degree(NumForm::RangeFrom(0))),
     })]
     #[case::stereo_bond_any(RelationalConstraint::StereoBondAnyLigand {
         stereo_bond: StereoBondId(0),
@@ -666,7 +666,7 @@ mod tests {
     })]
     #[case::vacuous_predicate(RelationalConstraint::DativeBondAllDonors {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::valence(ValueAst::Undetermined)),
+        predicate: Box::new(AtomConstraintAst::valence(NumForm::Undetermined)),
     })]
     fn test_relational_constraint_validator_validate(
         relational_molecule: MoleculeAst,

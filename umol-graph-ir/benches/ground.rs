@@ -6,9 +6,9 @@
 //! - `indole_ground`: realistic, fully-lowered ground molecule (nearly every
 //!   field is `Lit`). Represents the common case.
 //! - `indole_bool_expr`: indole with a few fields replaced by boolean-domain
-//!   `ValueAst::PredExpr` patterns (`Rel`, `Mem`).
+//!   `NumForm::PredExpr` patterns (`Rel`, `Mem`).
 //! - `arith_expr_heavy`: every numeric field on every atom carries an
-//!   arithmetic `ValueAst::ArithExpr` of depth 3 (non-ground symbolic values).
+//!   arithmetic `NumForm::ArithExpr` of depth 3 (non-ground symbolic values).
 
 use std::collections::BTreeSet;
 use std::hint::black_box;
@@ -19,7 +19,7 @@ use umol_edn::FromEdn;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
     ArithExpr, AtomAst, AtomId, BondAst, ElementAst, IntoIr, IsotopeMassAst, MemOp, MoleculeAst,
-    MoleculeEntries, PredExpr, RelOp, UnpairedElectronsAst, ValueAst,
+    MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsAst,
 };
 
 #[path = "fixtures.rs"]
@@ -39,12 +39,12 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
     // is_arithmetic()).
     let mut ast = indole_ground();
     let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).ast.charge = ValueAst::pred_expr(PredExpr::Rel(
+    b.atom_mut(AtomId(0)).ast.charge = NumForm::pred_expr(PredExpr::Rel(
         ArithExpr::Var("c".into()),
         RelOp::Eq,
         ArithExpr::Lit(0),
     ));
-    b.atom_mut(AtomId(2)).ast.lone_pairs = ValueAst::pred_expr(PredExpr::Mem(
+    b.atom_mut(AtomId(2)).ast.lone_pairs = NumForm::pred_expr(PredExpr::Mem(
         ArithExpr::Var("n".into()),
         MemOp::In,
         BTreeSet::from([0, 1, 2]),
@@ -57,7 +57,7 @@ fn arith_expr_heavy() -> MoleculeAst {
     // Every numeric field is an arithmetic `ArithExpr` of depth 3 — a
     // non-ground symbolic value, so `is_ground` (literal-only) returns false.
     let arith = || {
-        ValueAst::arith_expr(ArithExpr::Product(vec![
+        NumForm::arith_expr(ArithExpr::Product(vec![
             ArithExpr::Sum(vec![ArithExpr::Lit(2), ArithExpr::Lit(3)]),
             ArithExpr::Neg(Box::new(ArithExpr::Lit(1))),
         ]))
@@ -66,7 +66,7 @@ fn arith_expr_heavy() -> MoleculeAst {
         element: ElementAst::Lit(el),
         isotope_mass: IsotopeMassAst::Lit(12),
         charge: arith(),
-        implicit_hydrogens: ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Lit(1)))),
+        implicit_hydrogens: NumForm::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Lit(1)))),
         lone_pairs: arith(),
         unpaired_electrons: UnpairedElectronsAst {
             count: arith(),

@@ -14,7 +14,7 @@ use super::super::super::id::{AtomId, BondId};
 use super::super::super::molecule::MoleculeAst;
 use super::super::super::substructure::SubstructureMatchConfig;
 use super::super::super::traits::Lattice;
-use super::super::super::value::ValueAst;
+use super::super::super::value::NumForm;
 use super::{ConstraintError, ConstraintValidateConfig};
 
 /// Evaluates one molecule-scope aggregate, connectivity, or subpattern constraint.
@@ -40,7 +40,7 @@ impl MoleculeConstraintValidator {
                 let derived = atoms
                     .into_iter()
                     .map(|atom| ast.atom(atom).charge())
-                    .fold(ValueAst::Lit(0), |sum, charge| sum + charge);
+                    .fold(NumForm::Lit(0), |sum, charge| sum + charge);
                 return Ok(evaluate(sum, &derived, constraint));
             }
             MoleculeConstraint::UnpairedElectronCoupling {
@@ -59,7 +59,7 @@ impl MoleculeConstraintValidator {
                 let derived = bonds
                     .into_iter()
                     .map(|bond| ast.bond(bond).order())
-                    .fold(ValueAst::Lit(0), |sum, order| sum + order);
+                    .fold(NumForm::Lit(0), |sum, order| sum + order);
                 return Ok(evaluate(sum, &derived, constraint));
             }
             MoleculeConstraint::Connected { atoms } => {
@@ -224,8 +224,8 @@ fn anchor_matches(anchor: &SubPatternAnchor, correspondence: &MoleculeCorrespond
 }
 
 fn evaluate(
-    asserted: &ValueAst,
-    derived: &ValueAst,
+    asserted: &NumForm,
+    derived: &NumForm,
     constraint: &MoleculeConstraint,
 ) -> Solution<(), MoleculeConstraintContradiction> {
     if asserted.is_undetermined() {
@@ -370,27 +370,27 @@ mod tests {
     #[rstest]
     #[case::charge_subset(MoleculeConstraint::ChargeSum {
         atoms: Some(vec![AtomId(0), AtomId(1)]),
-        sum: ValueAst::Lit(0),
+        sum: NumForm::Lit(0),
     })]
     #[case::charge_all(MoleculeConstraint::ChargeSum {
         atoms: None,
-        sum: ValueAst::Lit(2),
+        sum: NumForm::Lit(2),
     })]
     #[case::charge_empty(MoleculeConstraint::ChargeSum {
         atoms: Some(vec![]),
-        sum: ValueAst::Lit(0),
+        sum: NumForm::Lit(0),
     })]
     #[case::bond_subset(MoleculeConstraint::BondOrderSum {
         bonds: Some(vec![BondId(0), BondId(1)]),
-        sum: ValueAst::Lit(3),
+        sum: NumForm::Lit(3),
     })]
     #[case::bond_all(MoleculeConstraint::BondOrderSum {
         bonds: None,
-        sum: ValueAst::Lit(4),
+        sum: NumForm::Lit(4),
     })]
     #[case::bond_empty(MoleculeConstraint::BondOrderSum {
         bonds: Some(vec![]),
-        sum: ValueAst::Lit(0),
+        sum: NumForm::Lit(0),
     })]
     #[case::coupling_vacuous(MoleculeConstraint::UnpairedElectronCoupling {
         atoms: None,
@@ -418,11 +418,11 @@ mod tests {
     #[rstest]
     #[case::charge(MoleculeConstraint::ChargeSum {
         atoms: None,
-        sum: ValueAst::Lit(0),
+        sum: NumForm::Lit(0),
     })]
     #[case::bond_order(MoleculeConstraint::BondOrderSum {
         bonds: None,
-        sum: ValueAst::Lit(0),
+        sum: NumForm::Lit(0),
     })]
     #[case::connected_all(MoleculeConstraint::Connected { atoms: None })]
     #[case::connected_subset(MoleculeConstraint::Connected {
@@ -440,14 +440,14 @@ mod tests {
         r#"{:atoms ["C#c+" "C"] :bonds []}"#,
         MoleculeConstraint::ChargeSum {
             atoms: None,
-            sum: ValueAst::Lit(1),
+            sum: NumForm::Lit(1),
         },
     )]
     #[case::bond_order(
         r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#,
         MoleculeConstraint::BondOrderSum {
             bonds: None,
-            sum: ValueAst::Lit(1),
+            sum: NumForm::Lit(1),
         },
     )]
     #[case::coupling_literal(
@@ -462,8 +462,8 @@ mod tests {
         MoleculeConstraint::UnpairedElectronCoupling {
             atoms: None,
             unpaired_electrons: UnpairedElectronsAst {
-                count: ValueAst::Lit(0),
-                multiplicity: ValueAst::Undetermined,
+                count: NumForm::Lit(0),
+                multiplicity: NumForm::Undetermined,
             },
         },
     )]
@@ -482,19 +482,19 @@ mod tests {
     #[rstest]
     #[case::charge_subset(MoleculeConstraint::ChargeSum {
         atoms: Some(vec![AtomId(0), AtomId(1)]),
-        sum: ValueAst::Lit(1),
+        sum: NumForm::Lit(1),
     })]
     #[case::charge_all(MoleculeConstraint::ChargeSum {
         atoms: None,
-        sum: ValueAst::Lit(0),
+        sum: NumForm::Lit(0),
     })]
     #[case::bond_subset(MoleculeConstraint::BondOrderSum {
         bonds: Some(vec![BondId(0), BondId(1)]),
-        sum: ValueAst::Lit(2),
+        sum: NumForm::Lit(2),
     })]
     #[case::bond_all(MoleculeConstraint::BondOrderSum {
         bonds: None,
-        sum: ValueAst::Lit(3),
+        sum: NumForm::Lit(3),
     })]
     #[case::connected_subset(MoleculeConstraint::Connected {
         atoms: Some(vec![AtomId(0), AtomId(3)]),
@@ -516,7 +516,7 @@ mod tests {
     #[case::charge(
         MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomId(99)]),
-            sum: ValueAst::Undetermined,
+            sum: NumForm::Undetermined,
         },
         Entity::Atom(AtomId(99)),
     )]
@@ -530,7 +530,7 @@ mod tests {
     #[case::bond_order(
         MoleculeConstraint::BondOrderSum {
             bonds: Some(vec![BondId(99)]),
-            sum: ValueAst::Undetermined,
+            sum: NumForm::Undetermined,
         },
         Entity::Bond(BondId(99)),
     )]

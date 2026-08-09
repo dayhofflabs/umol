@@ -5,7 +5,7 @@ use umol_graph::ops::aromaticity::ClarAromaticity;
 use umol_graph_core::MaximumIndependentSetAlgorithm;
 use umol_graph_ir::ir::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-    MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
+    MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
 };
 
 #[derive(Deserialize)]
@@ -21,7 +21,7 @@ fn test_clar_aromaticity_find_from_rings() {
         .map(|_| {
             let mut atom = AtomAst::from_element(Element::C);
             atom.constraints.set(AtomConstraintAst::AromaticValence(
-                AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+                AromaticValenceAst::Aromatic(NumForm::Lit(1)),
             ));
             atom
         })

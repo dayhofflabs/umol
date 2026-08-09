@@ -17,7 +17,7 @@ use umol_chem::element::Element;
 use umol_graph_ir::dsl::{
     AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
 };
-use umol_graph_ir::ir::{AtomAst, ElementAst, IntoIr, ValueAst};
+use umol_graph_ir::ir::{AtomAst, ElementAst, IntoIr, NumForm};
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
@@ -147,7 +147,7 @@ impl AtomTypeRegistry {
             _ => panic!("registry entries must have literal elements"),
         };
         let charge = match &atom.charge {
-            ValueAst::Lit(c) => *c as i8,
+            NumForm::Lit(c) => *c as i8,
             _ => panic!("registry entries must have literal charges"),
         };
         self.atom_types
@@ -202,7 +202,7 @@ fn parse_entry(
             source, atom_element, element
         )));
     }
-    let &ValueAst::Lit(atom_charge) = &atom.charge else {
+    let &NumForm::Lit(atom_charge) = &atom.charge else {
         return Err(ConfigError::InvalidAtomTypeRegistry(format!(
             "atom '{}' has non-literal charge",
             source

@@ -4,8 +4,8 @@
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, TransactionError,
-    UnpairedElectronsAst, ValueAst,
+    Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, NumForm, TransactionError,
+    UnpairedElectronsAst,
 };
 use umol_utils::solution::Solution;
 
@@ -51,8 +51,8 @@ impl MulticenterBondsResolver {
             let bond = ast.multicenter_bond(bond_id).ast;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = MulticenterBondUpdate::default();
-            if matches!(bond.charge, ValueAst::Undetermined) {
-                update.charge = Some(ValueAst::Lit(0));
+            if matches!(bond.charge, NumForm::Undetermined) {
+                update.charge = Some(NumForm::Lit(0));
             }
             if selected_unpaired_electrons.is_undetermined() {
                 selected_unpaired_electrons = UnpairedElectronsAst::closed_shell();
@@ -105,8 +105,8 @@ mod tests {
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 change: MulticenterBondFieldChange::Charge {
-                    old: ValueAst::Undetermined,
-                    new: ValueAst::Lit(0),
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(0),
                 },
             },
             Edit::ModifyMulticenterBondField {
@@ -125,8 +125,8 @@ mod tests {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             change: MulticenterBondFieldChange::UnpairedElectrons {
                 old: UnpairedElectronsAst {
-                    count: ValueAst::Undetermined,
-                    multiplicity: ValueAst::Lit(3),
+                    count: NumForm::Undetermined,
+                    multiplicity: NumForm::Lit(3),
                 },
                 new: UnpairedElectronsAst::from((2_u8, 3_u8)),
             },
@@ -215,7 +215,7 @@ mod tests {
         molecule
             .multicenter_bond_mut(MulticenterBondId(1))
             .ast
-            .charge = ValueAst::Lit(9);
+            .charge = NumForm::Lit(9);
         let expected = molecule.clone();
         let mut editor = molecule.edit();
         assert_eq!(

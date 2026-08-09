@@ -417,15 +417,15 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
                     Delta::Atom(AtomDelta::ModifyField {
                         id: AtomId(0),
                         change: AtomFieldChange::Charge {
-                            old: ValueAst::Lit(old),
-                            new: ValueAst::Lit(first),
+                            old: NumForm::Lit(old),
+                            new: NumForm::Lit(first),
                         },
                     }),
                     Delta::Atom(AtomDelta::ModifyField {
                         id: AtomId(0),
                         change: AtomFieldChange::Charge {
-                            old: ValueAst::Lit(discontinuous_old),
-                            new: ValueAst::Lit(new),
+                            old: NumForm::Lit(discontinuous_old),
+                            new: NumForm::Lit(new),
                         },
                     }),
                 ]),
@@ -522,7 +522,7 @@ proptest! {
     fn test_reaction_ast_apply_error(host_atom_count in 1usize..=8) {
         let constraint = Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomId(0)]),
-            sum: ValueAst::Lit(0),
+            sum: NumForm::Lit(0),
         });
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {

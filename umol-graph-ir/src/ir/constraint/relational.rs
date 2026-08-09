@@ -668,7 +668,7 @@ mod tests {
     use umol_graph_core::{Compaction, RelationId};
 
     use super::*;
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
 
     #[allow(clippy::too_many_arguments)]
     fn remapping(
@@ -694,7 +694,7 @@ mod tests {
     }
 
     fn val_pred() -> Box<AtomConstraintAst> {
-        Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4)))
+        Box::new(AtomConstraintAst::Valence(NumForm::Lit(4)))
     }
 
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
@@ -889,15 +889,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::predicate_litset_singleton(
-        RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(ValueAst::lit_set([4]))) },
-        Ok(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4))) }))]
+        RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::lit_set([4]))) },
+        Ok(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))) }))]
     #[case::both_ends_canonicalize(
         RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-            predicates: [Box::new(AtomConstraintAst::Valence(ValueAst::lit_set([4]))), Box::new(AtomConstraintAst::Degree(ValueAst::lit_set([2])))] },
+            predicates: [Box::new(AtomConstraintAst::Valence(NumForm::lit_set([4]))), Box::new(AtomConstraintAst::Degree(NumForm::lit_set([2])))] },
         Ok(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-            predicates: [Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4))), Box::new(AtomConstraintAst::Degree(ValueAst::Lit(2)))] }))]
+            predicates: [Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))), Box::new(AtomConstraintAst::Degree(NumForm::Lit(2)))] }))]
     #[case::predicate_empty_litset_contradiction(
-        RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintAst::Valence(ValueAst::lit_set(Vec::<i64>::new()))) },
+        RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::lit_set(Vec::<i64>::new()))) },
         Err(Contradiction))]
     fn test_relational_constraint_canonicalize(
         #[case] input: RelationalConstraint,

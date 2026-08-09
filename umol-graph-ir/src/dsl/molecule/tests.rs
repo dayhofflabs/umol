@@ -11,7 +11,7 @@ use crate::ir::boolean::BooleanAst;
 use crate::ir::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
 use crate::ir::electrons::ElectronCountsAst;
 use crate::ir::spin::UnpairedElectronsAst;
-use crate::ir::value::ValueAst;
+use crate::ir::value::NumForm;
 use crate::mol_dsl;
 
 #[fixture]
@@ -456,15 +456,15 @@ fn test_molecule_dsl_edn_roundtrip_connected_constraint() {
 /// the surviving molecule constraints are exactly those left after render → reparse.
 #[rustfmt::skip]
 #[rstest]
-#[case::charge_sum_vacuous(vec![MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined }], vec![])]
-#[case::bond_order_sum_vacuous(vec![MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Undetermined }], vec![])]
+#[case::charge_sum_vacuous(vec![MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Undetermined }], vec![])]
+#[case::bond_order_sum_vacuous(vec![MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Undetermined }], vec![])]
 #[case::unpaired_electron_coupling_vacuous(vec![MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }], vec![])]
 #[case::vacuous_dropped_concrete_kept(
     vec![
-        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Undetermined },
-        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+        MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Undetermined },
+        MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
     ],
-    vec![MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }])]
+    vec![MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }])]
 fn test_molecule_dsl_to_edn_vacuous_constraints(
     #[case] pushed: Vec<MoleculeConstraint>,
     #[case] expected: Vec<MoleculeConstraint>,

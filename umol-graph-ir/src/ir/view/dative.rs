@@ -9,7 +9,7 @@ use super::super::dative::DativeBondAst;
 use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::traits::Lattice;
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 use super::atom::AtomView;
 
 /// Namespace accessor for dative-bond views on a `MoleculeAst`.
@@ -188,7 +188,7 @@ pub struct DativeBondView<'a> {
 
 impl<'a> DativeBondView<'a> {
     #[inline]
-    pub fn order(&self) -> &'a ValueAst {
+    pub fn order(&self) -> &'a NumForm {
         &self.ast.order
     }
 

@@ -4,7 +4,7 @@ use super::super::constraint::RingScope;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::super::ring::{intersection, RingId, RingSet, RingSetKind};
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 
 /// Molecule ring views: owned ring set plus borrow of molecule.
 #[derive(Debug)]
@@ -130,19 +130,19 @@ impl<'a> RingAtomView<'a> {
     /// Count of rings in this view containing the atom and matching `scope` (`All` = any,
     /// `Size(s)` = size `s`). Constraint matching constructs the view with the fixed Relevant
     /// projection through size 22. Always `Lit`.
-    pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
+    pub fn ring_membership(&self, scope: RingScope) -> NumForm {
         let count = match scope {
             RingScope::All => self.rings().count(),
             RingScope::Size(s) => self.rings().filter(|r| r.len() == s as usize).count(),
         };
-        ValueAst::Lit(count as i64)
+        NumForm::Lit(count as i64)
     }
 
-    pub fn ring_count(&self) -> ValueAst {
+    pub fn ring_count(&self) -> NumForm {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+    pub fn ring_size_count(&self, s: u8) -> NumForm {
         self.ring_membership(RingScope::Size(s))
     }
 
@@ -152,25 +152,25 @@ impl<'a> RingAtomView<'a> {
     }
 
     /// Count of incident bonds that lie in a ring. Always `Lit`.
-    pub fn ring_degree(&self) -> ValueAst {
+    pub fn ring_degree(&self) -> NumForm {
         let count = self
             .molecule
             .atom(self.id)
             .neighbors()
             .filter(|n| self.rings.contains_bond(n.bond().id))
             .count();
-        ValueAst::Lit(count as i64)
+        NumForm::Lit(count as i64)
     }
 
     /// Sum of bond orders of incident bonds that lie in a ring. `Undetermined`
     /// if any contributing bond's order is non-`Lit`.
-    pub fn ring_valence(&self) -> ValueAst {
+    pub fn ring_valence(&self) -> NumForm {
         self.molecule
             .atom(self.id)
             .neighbors()
             .filter(|n| self.rings.contains_bond(n.bond().id))
             .map(|n| n.bond().order().clone())
-            .fold(ValueAst::Lit(0), |acc, order| acc + order)
+            .fold(NumForm::Lit(0), |acc, order| acc + order)
     }
 }
 
@@ -196,19 +196,19 @@ impl<'a> RingBondView<'a> {
     /// Count of rings in this view containing the bond and matching `scope` (`All` = any,
     /// `Size(s)` = size `s`). Constraint matching constructs the view with the fixed Relevant
     /// projection through size 22. Always `Lit`.
-    pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
+    pub fn ring_membership(&self, scope: RingScope) -> NumForm {
         let count = match scope {
             RingScope::All => self.rings().count(),
             RingScope::Size(s) => self.rings().filter(|r| r.len() == s as usize).count(),
         };
-        ValueAst::Lit(count as i64)
+        NumForm::Lit(count as i64)
     }
 
-    pub fn ring_count(&self) -> ValueAst {
+    pub fn ring_count(&self) -> NumForm {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+    pub fn ring_size_count(&self, s: u8) -> NumForm {
         self.ring_membership(RingScope::Size(s))
     }
 
@@ -388,15 +388,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::all_ring_atom(AtomId(0), RingScope::All, ValueAst::Lit(1))]
-    #[case::size_match(AtomId(0), RingScope::Size(6), ValueAst::Lit(1))]
-    #[case::size_no_match(AtomId(0), RingScope::Size(5), ValueAst::Lit(0))]
-    #[case::chain_atom(AtomId(6), RingScope::All, ValueAst::Lit(0))]
+    #[case::all_ring_atom(AtomId(0), RingScope::All, NumForm::Lit(1))]
+    #[case::size_match(AtomId(0), RingScope::Size(6), NumForm::Lit(1))]
+    #[case::size_no_match(AtomId(0), RingScope::Size(5), NumForm::Lit(0))]
+    #[case::chain_atom(AtomId(6), RingScope::All, NumForm::Lit(0))]
     fn test_ring_atom_view_ring_membership(
         ring_with_chain: MoleculeAst,
         #[case] atom: AtomId,
         #[case] scope: RingScope,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -408,12 +408,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_atom(AtomId(0), ValueAst::Lit(1))]
-    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    #[case::ring_atom(AtomId(0), NumForm::Lit(1))]
+    #[case::chain_atom(AtomId(6), NumForm::Lit(0))]
     fn test_ring_atom_view_ring_count(
         ring_with_chain: MoleculeAst,
         #[case] atom: AtomId,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -425,14 +425,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::size_match(AtomId(0), 6, ValueAst::Lit(1))]
-    #[case::size_no_match(AtomId(0), 5, ValueAst::Lit(0))]
-    #[case::chain_atom(AtomId(6), 6, ValueAst::Lit(0))]
+    #[case::size_match(AtomId(0), 6, NumForm::Lit(1))]
+    #[case::size_no_match(AtomId(0), 5, NumForm::Lit(0))]
+    #[case::chain_atom(AtomId(6), 6, NumForm::Lit(0))]
     fn test_ring_atom_view_ring_size_count(
         ring_with_chain: MoleculeAst,
         #[case] atom: AtomId,
         #[case] size: u8,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -461,12 +461,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
-    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    #[case::ring_atom(AtomId(0), NumForm::Lit(2))]
+    #[case::chain_atom(AtomId(6), NumForm::Lit(0))]
     fn test_ring_atom_view_ring_degree(
         ring_with_chain: MoleculeAst,
         #[case] atom: AtomId,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -478,12 +478,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
-    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    #[case::ring_atom(AtomId(0), NumForm::Lit(2))]
+    #[case::chain_atom(AtomId(6), NumForm::Lit(0))]
     fn test_ring_atom_view_ring_valence(
         ring_with_chain: MoleculeAst,
         #[case] atom: AtomId,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -529,15 +529,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::all_ring_bond(BondId(0), RingScope::All, ValueAst::Lit(1))]
-    #[case::size_match(BondId(0), RingScope::Size(6), ValueAst::Lit(1))]
-    #[case::size_no_match(BondId(0), RingScope::Size(5), ValueAst::Lit(0))]
-    #[case::chain_bond(BondId(6), RingScope::All, ValueAst::Lit(0))]
+    #[case::all_ring_bond(BondId(0), RingScope::All, NumForm::Lit(1))]
+    #[case::size_match(BondId(0), RingScope::Size(6), NumForm::Lit(1))]
+    #[case::size_no_match(BondId(0), RingScope::Size(5), NumForm::Lit(0))]
+    #[case::chain_bond(BondId(6), RingScope::All, NumForm::Lit(0))]
     fn test_ring_bond_view_ring_membership(
         ring_with_chain: MoleculeAst,
         #[case] bond: BondId,
         #[case] scope: RingScope,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -549,12 +549,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_bond(BondId(0), ValueAst::Lit(1))]
-    #[case::chain_bond(BondId(6), ValueAst::Lit(0))]
+    #[case::ring_bond(BondId(0), NumForm::Lit(1))]
+    #[case::chain_bond(BondId(6), NumForm::Lit(0))]
     fn test_ring_bond_view_ring_count(
         ring_with_chain: MoleculeAst,
         #[case] bond: BondId,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain
@@ -566,14 +566,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::size_match(BondId(0), 6, ValueAst::Lit(1))]
-    #[case::size_no_match(BondId(0), 5, ValueAst::Lit(0))]
-    #[case::chain_bond(BondId(6), 6, ValueAst::Lit(0))]
+    #[case::size_match(BondId(0), 6, NumForm::Lit(1))]
+    #[case::size_no_match(BondId(0), 5, NumForm::Lit(0))]
+    #[case::chain_bond(BondId(6), 6, NumForm::Lit(0))]
     fn test_ring_bond_view_ring_size_count(
         ring_with_chain: MoleculeAst,
         #[case] bond: BondId,
         #[case] size: u8,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(
             ring_with_chain

@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{AtomView, ElementAst, MoleculeAst, ValueAst};
+use umol_graph_ir::ir::{AtomView, ElementAst, MoleculeAst, NumForm};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
@@ -85,7 +85,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
     };
     let double_count = view
         .neighbors()
-        .filter(|n| matches!(n.bond().ast.order, ValueAst::Lit(2)))
+        .filter(|n| matches!(n.bond().ast.order, NumForm::Lit(2)))
         .count();
     match double_count {
         1 => Some(1),
@@ -93,7 +93,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
             Element::N | Element::O | Element::S | Element::Se | Element::P | Element::As => {
                 Some(2)
             }
-            Element::C if matches!(view.ast.charge, ValueAst::Lit(1)) => Some(0),
+            Element::C if matches!(view.ast.charge, NumForm::Lit(1)) => Some(0),
             _ => None,
         },
         _ => None,
@@ -118,7 +118,7 @@ mod tests {
 
     fn kekule_carbon() -> AtomAst {
         let mut atom = AtomAst::from_element(Element::C);
-        atom.charge = ValueAst::Lit(0);
+        atom.charge = NumForm::Lit(0);
         atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
         atom
     }

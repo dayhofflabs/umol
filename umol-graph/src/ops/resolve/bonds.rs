@@ -4,8 +4,8 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    BondHandle, BondUpdate, Edits, Lattice, MoleculeAst, TransactionError, UnpairedElectronsAst,
-    ValueAst,
+    BondHandle, BondUpdate, Edits, Lattice, MoleculeAst, NumForm, TransactionError,
+    UnpairedElectronsAst,
 };
 use umol_utils::solution::Solution;
 
@@ -33,8 +33,8 @@ impl BondsResolver {
             let bond = ast.bond(bond_id).ast;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = BondUpdate::default();
-            if matches!(bond.charge, ValueAst::Undetermined) {
-                update.charge = Some(ValueAst::Lit(0));
+            if matches!(bond.charge, NumForm::Undetermined) {
+                update.charge = Some(NumForm::Lit(0));
             }
             if selected_unpaired_electrons.is_undetermined() {
                 selected_unpaired_electrons = UnpairedElectronsAst::closed_shell();
@@ -77,8 +77,8 @@ mod tests {
             Edit::ModifyBondField {
                 id: BondHandle::Id(BondId(0)),
                 change: BondFieldChange::Charge {
-                    old: ValueAst::Undetermined,
-                    new: ValueAst::Lit(0),
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(0),
                 },
             },
             Edit::ModifyBondField {
@@ -96,8 +96,8 @@ mod tests {
             id: BondHandle::Id(BondId(0)),
             change: BondFieldChange::UnpairedElectrons {
                 old: UnpairedElectronsAst {
-                    count: ValueAst::Undetermined,
-                    multiplicity: ValueAst::Lit(3),
+                    count: NumForm::Undetermined,
+                    multiplicity: NumForm::Lit(3),
                 },
                 new: UnpairedElectronsAst::from((2_u8, 3_u8)),
             },
@@ -133,7 +133,7 @@ mod tests {
     fn test_bonds_resolver_plan_stale() {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
         let edits = BondsResolver::new().plan(&molecule);
-        molecule.bond_mut(BondId(1)).ast.charge = ValueAst::Lit(9);
+        molecule.bond_mut(BondId(1)).ast.charge = NumForm::Lit(9);
         let expected = molecule.clone();
         let mut editor = molecule.edit();
         assert_eq!(

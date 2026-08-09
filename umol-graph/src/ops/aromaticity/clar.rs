@@ -137,7 +137,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-        MoleculeEntries, RingConfig, RingId, RingModel, RingSetKind, ValueAst,
+        MoleculeEntries, NumForm, RingConfig, RingId, RingModel, RingSetKind,
     };
 
     use super::*;
@@ -156,7 +156,7 @@ mod tests {
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
                     atom.constraints.set(AtomConstraintAst::AromaticValence(
-                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
+                        AromaticValenceAst::Aromatic(NumForm::Lit(n)),
                     ));
                 }
                 atom
@@ -292,7 +292,7 @@ mod tests {
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceAst::Undetermined)
                 {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 },
             )
@@ -360,7 +360,7 @@ mod tests {
                         .aromatic_valence()
                         .unwrap_or(&AromaticValenceAst::Undetermined)
                     {
-                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                        AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                         _ => None,
                     }
                 },

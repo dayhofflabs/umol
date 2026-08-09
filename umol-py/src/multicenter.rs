@@ -28,7 +28,7 @@ use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// Attribute updates for a multicenter bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -42,7 +42,7 @@ impl MulticenterBondUpdate {
     fn new(
         py: Python<'_>,
         electrons: Option<ElectronCountsLike>,
-        charge: Option<ValueLike>,
+        charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
@@ -134,7 +134,7 @@ impl MulticenterBondAst {
     fn new(
         py: Python<'_>,
         electrons: ElectronCountsLike,
-        charge: Option<ValueLike>,
+        charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<MulticenterBondConstraintsAst>>,
     ) -> Self {
@@ -184,7 +184,7 @@ impl MulticenterBondAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&mut self, py: Python<'_>, value: NumLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -335,7 +335,7 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -570,7 +570,7 @@ mod tests {
         MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
         MulticenterBondConstraintKey as GraphIrMulticenterBondConstraintKey,
         MulticenterBondConstraintsAst as GraphIrMulticenterBondConstraintsAst,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+        NumForm as GraphIrNumForm, UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
     };
 
     use super::*;
@@ -602,7 +602,7 @@ mod tests {
             let bond = MulticenterBondAst::new(
                 py,
                 ElectronCountsLike::Lit(vec![1, 1, 1]),
-                Some(ValueLike::Lit(-2)),
+                Some(NumLike::Lit(-2)),
                 Some(unpaired_electrons.bind(py).borrow()),
                 None,
             );
@@ -610,7 +610,7 @@ mod tests {
                 bond.inner().electrons,
                 GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
             );
-            assert_eq!(bond.inner().charge, GraphIrValueAst::Lit(-2));
+            assert_eq!(bond.inner().charge, GraphIrNumForm::Lit(-2));
             assert_eq!(bond.inner().unpaired_electrons, unpaired_electrons_ast);
         });
     }
@@ -638,7 +638,7 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().constraints.electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -687,10 +687,10 @@ mod tests {
                 MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
                 ]));
-            bond.set_charge(py, ValueLike::Lit(-1));
+            bond.set_charge(py, NumLike::Lit(-1));
             assert_eq!(
                 bond.charge(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(-1)
+                GraphIrNumForm::Lit(-1)
             );
         });
     }
@@ -749,7 +749,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -818,14 +818,14 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrMulticenterBondId(0),
             };
-            view.set_charge(py, ValueLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1));
             let fresh = MulticenterBondView {
                 owner,
                 id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
                 fresh.charge(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(-1)
+                GraphIrNumForm::Lit(-1)
             );
         });
     }
@@ -908,7 +908,7 @@ mod tests {
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1080,7 +1080,7 @@ mod tests {
 
     #[rstest]
     #[case(GraphIrMulticenterBondConstraintAst::electron_count(6))]
-    #[case(GraphIrMulticenterBondConstraintAst::electron_count(GraphIrValueAst::Undetermined))]
+    #[case(GraphIrMulticenterBondConstraintAst::electron_count(GraphIrNumForm::Undetermined))]
     fn test_multicenter_bond_constraint_ast_roundtrip(
         #[case] ast: GraphIrMulticenterBondConstraintAst,
     ) {
@@ -1110,7 +1110,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1152,7 +1152,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1174,7 +1174,7 @@ mod tests {
             let removed = constraints.pop(py, key).unwrap();
             match removed {
                 Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1200,7 +1200,7 @@ mod tests {
             assert_eq!(c.__len__(), 1);
             assert_eq!(
                 c.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1228,7 +1228,7 @@ mod tests {
             assert_eq!(c.__len__(), 1);
             assert_eq!(
                 c.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1262,7 +1262,7 @@ mod tests {
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1295,7 +1295,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1327,7 +1327,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1461,7 +1461,7 @@ mod tests {
             let empty = MulticenterBondConstraintsAst::new(py, vec![]);
             assert_eq!(
                 empty.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Undetermined
+                GraphIrNumForm::Undetermined
             );
             let ec = into_py_variant(
                 py,
@@ -1475,7 +1475,7 @@ mod tests {
             let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1484,10 +1484,10 @@ mod tests {
     fn test_multicenter_bond_constraints_ast_set_electron_count() {
         Python::attach(|py| {
             let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
-            constraints.set_electron_count(py, ValueLike::Lit(6));
+            constraints.set_electron_count(py, NumLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1528,7 +1528,7 @@ mod tests {
             let value = dict.get_item("electron_count").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                ValueAst::from_rust(py, &GraphIrValueAst::Lit(6)).unwrap(),
+                ValueAst::from_rust(py, &GraphIrNumForm::Lit(6)).unwrap(),
             )
             .unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
@@ -1565,7 +1565,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1592,7 +1592,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1631,7 +1631,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1651,15 +1651,15 @@ mod tests {
             };
             assert_eq!(
                 view.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Undetermined
+                GraphIrNumForm::Undetermined
             );
-            view.set_electron_count(py, ValueLike::Lit(6));
+            view.set_electron_count(py, NumLike::Lit(6));
             let fresh = MulticenterBondConstraintsView {
                 backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
             };
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1693,7 +1693,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }

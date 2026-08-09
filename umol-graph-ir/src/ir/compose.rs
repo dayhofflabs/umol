@@ -135,7 +135,7 @@ mod tests {
     };
     use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCoset, StereoKind};
     use super::super::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
-    use super::super::value::ValueAst;
+    use super::super::value::NumForm;
     use super::*;
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
@@ -151,14 +151,14 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(3) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -166,7 +166,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(3) },
             })]),
         )]
     )]
@@ -191,7 +191,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -249,7 +249,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
@@ -262,7 +262,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(3) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -271,7 +271,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(3) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(3) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
@@ -292,14 +292,14 @@ mod tests {
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(3) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -311,7 +311,7 @@ mod tests {
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(3) },
             })]),
         )]
     )]
@@ -327,7 +327,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
@@ -340,7 +340,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(3) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -353,7 +353,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(3) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(3) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
@@ -374,7 +374,7 @@ mod tests {
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         ReactionAst::new(
@@ -401,7 +401,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                     id: NoncovalentBondId(0),
@@ -420,7 +420,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         ReactionAst::new(
@@ -431,7 +431,7 @@ mod tests {
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(3) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -444,14 +444,14 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(3) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -459,7 +459,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(3) },
             })]),
         )]
     )]
@@ -480,7 +480,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -489,7 +489,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                     id: NoncovalentBondId(0),
@@ -516,7 +516,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -525,7 +525,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
@@ -550,7 +550,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -559,7 +559,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
@@ -584,7 +584,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -593,7 +593,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::AromaticSystem(AromaticSystemDelta::Remove {
                     id: AromaticSystemId(0),
@@ -630,14 +630,14 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
@@ -654,11 +654,11 @@ mod tests {
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(1),
-                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                    change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
                 }),
             ]),
         )]
@@ -682,8 +682,8 @@ mod tests {
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(0),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::Lit(0),
+                    new: NumForm::Lit(1),
                 },
             })]),
         ),
@@ -704,8 +704,8 @@ mod tests {
                 Delta::Atom(AtomDelta::ModifyField {
                     id: AtomId(0),
                     change: AtomFieldChange::Charge {
-                        old: ValueAst::Lit(0),
-                        new: ValueAst::Lit(1),
+                        old: NumForm::Lit(0),
+                        new: NumForm::Lit(1),
                     },
                 }),
             ]),
@@ -735,8 +735,8 @@ mod tests {
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
                 },
             })]),
         );
@@ -752,8 +752,8 @@ mod tests {
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(2),
-                    new: ValueAst::Lit(3),
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(3),
                 },
             })]),
         );
@@ -818,8 +818,8 @@ mod tests {
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(start),
-                    new: ValueAst::Lit(mid),
+                    old: NumForm::Lit(start),
+                    new: NumForm::Lit(mid),
                 },
             })]),
         );
@@ -835,8 +835,8 @@ mod tests {
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(mid),
-                    new: ValueAst::Lit(end),
+                    old: NumForm::Lit(mid),
+                    new: NumForm::Lit(end),
                 },
             })]),
         );

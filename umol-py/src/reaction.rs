@@ -635,14 +635,14 @@ mod tests {
         NoncovalentBondAst as GraphIrNoncovalentBondAst,
         NoncovalentBondDelta as GraphIrNoncovalentBondDelta,
         NoncovalentBondId as GraphIrNoncovalentBondId,
-        NoncovalentBondKind as GraphIrNoncovalentBondKind,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
         ReactionSpanAst as GraphIrReactionSpanAst,
         ReactionSpanEntries as GraphIrReactionSpanEntries, StereoAtomAst as GraphIrStereoAtomAst,
         StereoAtomDelta as GraphIrStereoAtomDelta, StereoAtomId as GraphIrStereoAtomId,
         StereoBondAst as GraphIrStereoBondAst, StereoBondDelta as GraphIrStereoBondDelta,
         StereoBondId as GraphIrStereoBondId, StereoCoset as GraphIrStereoCoset,
         StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
-        StereoLigandKind as GraphIrStereoLigandKind, ValueAst as GraphIrValueAst,
+        StereoLigandKind as GraphIrStereoLigandKind,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -970,8 +970,8 @@ mod tests {
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
             id: GraphIrAtomId(0),
             change: GraphIrAtomFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(-1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(-1),
             },
         })],
     )]
@@ -1287,8 +1287,8 @@ mod tests {
             vec![GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),
                 change: GraphIrBondFieldChange::Order {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(2),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(2),
                 },
             })]
             .into_iter()
@@ -1673,15 +1673,15 @@ mod tests {
                         GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                             id: GraphIrAtomId(0),
                             change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrValueAst::Lit(0),
-                                new: GraphIrValueAst::Lit(1),
+                                old: GraphIrNumForm::Lit(0),
+                                new: GraphIrNumForm::Lit(1),
                             },
                         }),
                         GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                             id: GraphIrAtomId(0),
                             change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrValueAst::Lit(1),
-                                new: GraphIrValueAst::Lit(2),
+                                old: GraphIrNumForm::Lit(1),
+                                new: GraphIrNumForm::Lit(2),
                             },
                         }),
                     ]
@@ -1696,8 +1696,8 @@ mod tests {
                 vec![GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                     id: GraphIrAtomId(0),
                     change: GraphIrAtomFieldChange::Charge {
-                        old: GraphIrValueAst::Lit(0),
-                        new: GraphIrValueAst::Lit(2),
+                        old: GraphIrNumForm::Lit(0),
+                        new: GraphIrNumForm::Lit(2),
                     },
                 })]
                 .into_iter()
@@ -1729,15 +1729,15 @@ mod tests {
                         GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                             id: GraphIrAtomId(0),
                             change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrValueAst::Lit(0),
-                                new: GraphIrValueAst::Lit(1),
+                                old: GraphIrNumForm::Lit(0),
+                                new: GraphIrNumForm::Lit(1),
                             },
                         }),
                         GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                             id: GraphIrAtomId(0),
                             change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrValueAst::Lit(2),
-                                new: GraphIrValueAst::Lit(3),
+                                old: GraphIrNumForm::Lit(2),
+                                new: GraphIrNumForm::Lit(3),
                             },
                         }),
                     ]
@@ -1813,8 +1813,8 @@ mod tests {
                     vec![GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                         id: GraphIrBondId(0),
                         change: GraphIrBondFieldChange::Order {
-                            old: GraphIrValueAst::Lit(2),
-                            new: GraphIrValueAst::Lit(3),
+                            old: GraphIrNumForm::Lit(2),
+                            new: GraphIrNumForm::Lit(3),
                         },
                     })]
                     .into_iter()
@@ -2684,8 +2684,8 @@ mod tests {
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Lit(0),
-                    new: GraphIrValueAst::Undetermined,
+                    old: GraphIrNumForm::Lit(0),
+                    new: GraphIrNumForm::Undetermined,
                 },
             })]),
         ),
@@ -2704,8 +2704,8 @@ mod tests {
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(0),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(0),
                 },
             })]),
         ),
@@ -2987,8 +2987,8 @@ mod tests {
             GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),
                 change: GraphIrBondFieldChange::Order {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(2),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(2),
                 },
             })]),
         );
@@ -3065,8 +3065,8 @@ mod tests {
             GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),
                 change: GraphIrBondFieldChange::Order {
-                    old: GraphIrValueAst::Lit(2),
-                    new: GraphIrValueAst::Lit(3),
+                    old: GraphIrNumForm::Lit(2),
+                    new: GraphIrNumForm::Lit(3),
                 },
             })]),
         );
@@ -3119,8 +3119,8 @@ mod tests {
             GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),
                 change: GraphIrBondFieldChange::Order {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(2),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(2),
                 },
             })]),
         );
@@ -3234,8 +3234,8 @@ mod tests {
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Undetermined,
-                    new: GraphIrValueAst::Lit(1),
+                    old: GraphIrNumForm::Undetermined,
+                    new: GraphIrNumForm::Lit(1),
                 },
             })]),
         );
@@ -3417,7 +3417,7 @@ mod tests {
     fn test_reaction_application_iter_error() {
         let constraint = GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::ChargeSum {
             atoms: Some(vec![GraphIrAtomId(0)]),
-            sum: GraphIrValueAst::Lit(0),
+            sum: GraphIrNumForm::Lit(0),
         });
         let reaction = GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {

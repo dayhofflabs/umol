@@ -93,7 +93,7 @@ mod tests {
     use super::super::delta::{BondDelta, Delta, Deltas};
     use super::super::edit::BondFieldChange;
     use super::super::id::{AtomId, BondId};
-    use super::super::value::ValueAst;
+    use super::super::value::NumForm;
     use super::*;
 
     /// A `lhs ⇒ rhs` derivation over C-C, bond order 1 → 2, with total atom correspondence.
@@ -205,8 +205,8 @@ mod tests {
                 Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit(1),
-                        new: ValueAst::Lit(2),
+                        old: NumForm::Lit(1),
+                        new: NumForm::Lit(2),
                     },
                 })]),
             )

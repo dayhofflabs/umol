@@ -18,7 +18,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// The key (identity) of a dative bond constraint, for keyed lookup. The
 /// ring-membership key carries its ring scope; all other keys are the bare
@@ -381,7 +381,7 @@ impl DativeBondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: NumLike) {
         self.0.set(GraphIrDativeBondConstraintAst::ring_membership(
             GraphIrRingScope::All,
             value.to_rust(py),
@@ -747,7 +747,7 @@ impl DativeBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) {
         self.set_ast(
             py,
             GraphIrDativeBondConstraintAst::ring_membership(
@@ -876,7 +876,7 @@ impl DativeBondRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueLike) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) {
         let constraint = GraphIrDativeBondConstraintAst::ring_membership(
             GraphIrRingScope::Size(size),
             count.to_rust(py),

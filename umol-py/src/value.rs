@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    ArithExpr as GraphIrArithExpr, AsLit, MemOp as GraphIrMemOp, PredExpr as GraphIrPredExpr,
-    RelOp as GraphIrRelOp, ValueAst as GraphIrValueAst,
+    ArithExpr as GraphIrArithExpr, AsLit, MemOp as GraphIrMemOp, NumForm as GraphIrNumForm,
+    PredExpr as GraphIrPredExpr, RelOp as GraphIrRelOp,
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
@@ -310,34 +310,34 @@ impl ValueAst {
 }
 
 impl ValueAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrValueAst) -> PyResult<ValueAst> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrNumForm) -> PyResult<ValueAst> {
         Ok(match ast {
-            GraphIrValueAst::Undetermined => ValueAst::Undetermined(),
-            GraphIrValueAst::Lit(n) => ValueAst::Lit(*n),
-            GraphIrValueAst::LitSet(members) => ValueAst::LitSet((**members).clone()),
-            GraphIrValueAst::RangeFrom(n) => ValueAst::RangeFrom(*n),
-            GraphIrValueAst::RangeTo(n) => ValueAst::RangeTo(*n),
-            GraphIrValueAst::ArithExpr(t) => {
+            GraphIrNumForm::Undetermined => ValueAst::Undetermined(),
+            GraphIrNumForm::Lit(n) => ValueAst::Lit(*n),
+            GraphIrNumForm::LitSet(members) => ValueAst::LitSet((**members).clone()),
+            GraphIrNumForm::RangeFrom(n) => ValueAst::RangeFrom(*n),
+            GraphIrNumForm::RangeTo(n) => ValueAst::RangeTo(*n),
+            GraphIrNumForm::ArithExpr(t) => {
                 ValueAst::ArithExpr(into_py_variant(py, ArithExpr::from_rust(py, t)?)?)
             }
-            GraphIrValueAst::PredExpr(p) => {
+            GraphIrNumForm::PredExpr(p) => {
                 ValueAst::PredExpr(into_py_variant(py, PredExpr::from_rust(py, p)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrValueAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNumForm {
         match self {
-            ValueAst::Undetermined() => GraphIrValueAst::Undetermined,
-            ValueAst::Lit(n) => GraphIrValueAst::Lit(*n),
-            ValueAst::LitSet(members) => GraphIrValueAst::LitSet(Box::new(members.clone())),
-            ValueAst::RangeFrom(n) => GraphIrValueAst::RangeFrom(*n),
-            ValueAst::RangeTo(n) => GraphIrValueAst::RangeTo(*n),
+            ValueAst::Undetermined() => GraphIrNumForm::Undetermined,
+            ValueAst::Lit(n) => GraphIrNumForm::Lit(*n),
+            ValueAst::LitSet(members) => GraphIrNumForm::LitSet(Box::new(members.clone())),
+            ValueAst::RangeFrom(n) => GraphIrNumForm::RangeFrom(*n),
+            ValueAst::RangeTo(n) => GraphIrNumForm::RangeTo(*n),
             ValueAst::ArithExpr(t) => {
-                GraphIrValueAst::ArithExpr(Box::new(t.bind(py).borrow().to_rust(py)))
+                GraphIrNumForm::ArithExpr(Box::new(t.bind(py).borrow().to_rust(py)))
             }
             ValueAst::PredExpr(p) => {
-                GraphIrValueAst::PredExpr(Box::new(p.bind(py).borrow().to_rust(py)))
+                GraphIrNumForm::PredExpr(Box::new(p.bind(py).borrow().to_rust(py)))
             }
         }
     }
@@ -345,45 +345,45 @@ impl ValueAst {
 
 impl_py_lattice!(
     ValueAst,
-    GraphIrValueAst,
-    |value: &ValueAst, py: Python<'_>| -> PyResult<GraphIrValueAst> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrValueAst| -> PyResult<ValueAst> {
+    GraphIrNumForm,
+    |value: &ValueAst, py: Python<'_>| -> PyResult<GraphIrNumForm> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: GraphIrNumForm| -> PyResult<ValueAst> {
         ValueAst::from_rust(py, &value)
     }
 );
 
-/// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), matching `impl Into<ValueAst>`
+/// A Python `ValueAst` or `int` (→ `NumForm::Lit`), matching `impl Into<NumForm>`
 /// on the Rust builders. The `*Like` convention for binding coercion inputs (`*Input`
 /// is the DSL side); shared by the atom fields, unpaired-electron components, and
 /// ring-membership count.
 #[derive(FromPyObject)]
-pub enum ValueLike {
+pub enum NumLike {
     Ast(Py<ValueAst>),
     Lit(i64),
 }
 
-impl ValueLike {
-    /// Coerce to the value AST (for `impl Into<ValueAst>` Rust builders).
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrValueAst {
+impl NumLike {
+    /// Coerce to the numeric form used by `impl Into<NumForm>` Rust builders.
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNumForm {
         match self {
-            ValueLike::Ast(value) => value.bind(py).borrow().to_rust(py),
-            ValueLike::Lit(number) => GraphIrValueAst::Lit(*number),
+            NumLike::Ast(value) => value.bind(py).borrow().to_rust(py),
+            NumLike::Lit(number) => GraphIrNumForm::Lit(*number),
         }
     }
 
     /// Coerce to a `Py<ValueAst>` (for value structs that store the value field).
     pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<ValueAst>> {
         match self {
-            ValueLike::Ast(value) => Ok(value.clone_ref(py)),
-            ValueLike::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
+            NumLike::Ast(value) => Ok(value.clone_ref(py)),
+            NumLike::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
         }
     }
 }
 
-/// `IntoPyObject` for `&ValueLike` so it can be a complex-enum field: constructors
+/// `IntoPyObject` for `&NumLike` so it can be a complex-enum field: constructors
 /// (`AromaticValenceAst.Aromatic(1)`) coerce `int | ValueAst` in, and the field
 /// reads back as a `ValueAst`.
-impl<'py> IntoPyObject<'py> for &ValueLike {
+impl<'py> IntoPyObject<'py> for &NumLike {
     type Target = ValueAst;
     type Output = Bound<'py, ValueAst>;
     type Error = PyErr;
@@ -453,18 +453,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrValueAst::Undetermined)]
-    #[case(GraphIrValueAst::Lit(7))]
-    #[case(GraphIrValueAst::LitSet(Box::new(BTreeSet::from([1, 2, 3]))))]
-    #[case(GraphIrValueAst::RangeFrom(1))]
-    #[case(GraphIrValueAst::RangeTo(9))]
-    #[case(GraphIrValueAst::ArithExpr(Box::new(GraphIrArithExpr::Var("x".into()))))]
-    #[case(GraphIrValueAst::PredExpr(Box::new(GraphIrPredExpr::Rel(
+    #[case(GraphIrNumForm::Undetermined)]
+    #[case(GraphIrNumForm::Lit(7))]
+    #[case(GraphIrNumForm::LitSet(Box::new(BTreeSet::from([1, 2, 3]))))]
+    #[case(GraphIrNumForm::RangeFrom(1))]
+    #[case(GraphIrNumForm::RangeTo(9))]
+    #[case(GraphIrNumForm::ArithExpr(Box::new(GraphIrArithExpr::Var("x".into()))))]
+    #[case(GraphIrNumForm::PredExpr(Box::new(GraphIrPredExpr::Rel(
         GraphIrArithExpr::Var("h".into()),
         GraphIrRelOp::Le,
         GraphIrArithExpr::Lit(3),
     ))))]
-    fn test_value_ast_roundtrip(#[case] ast: GraphIrValueAst) {
+    fn test_value_ast_roundtrip(#[case] ast: GraphIrNumForm) {
         Python::attach(|py| {
             let value = ValueAst::from_rust(py, &ast).unwrap();
             assert_eq!(value.to_rust(py), ast);
@@ -472,12 +472,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrValueAst::Lit(4), Some(4))]
-    #[case(GraphIrValueAst::Lit(-1), Some(-1))]
-    #[case(GraphIrValueAst::Undetermined, None)]
-    #[case(GraphIrValueAst::RangeFrom(1), None)]
-    #[case(GraphIrValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
-    fn test_value_ast_as_lit(#[case] ast: GraphIrValueAst, #[case] expected: Option<i64>) {
+    #[case(GraphIrNumForm::Lit(4), Some(4))]
+    #[case(GraphIrNumForm::Lit(-1), Some(-1))]
+    #[case(GraphIrNumForm::Undetermined, None)]
+    #[case(GraphIrNumForm::RangeFrom(1), None)]
+    #[case(GraphIrNumForm::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
+    fn test_value_ast_as_lit(#[case] ast: GraphIrNumForm, #[case] expected: Option<i64>) {
         Python::attach(|py| {
             assert_eq!(ValueAst::from_rust(py, &ast).unwrap().as_lit(py), expected);
         });

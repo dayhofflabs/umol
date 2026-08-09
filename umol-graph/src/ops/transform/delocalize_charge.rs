@@ -5,7 +5,7 @@ use std::iter::once;
 
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomId, ElectronCountsAst, ElementAst,
-    MoleculeAst, ValueAst,
+    MoleculeAst, NumForm,
 };
 
 use crate::ops::transform::Transformer;
@@ -42,7 +42,7 @@ impl DelocalizationPlan {
         if old_electrons.len() != atom_ids.len() {
             return None;
         }
-        let ValueAst::Lit(mut charge) = view.ast.charge else {
+        let NumForm::Lit(mut charge) = view.ast.charge else {
             return None;
         };
 
@@ -50,16 +50,16 @@ impl DelocalizationPlan {
         let mut atoms = Vec::with_capacity(atom_ids.len());
         for atom_id in atom_ids {
             let atom = ast.atom(atom_id);
-            let ValueAst::Lit(atom_charge) = atom.charge() else {
+            let NumForm::Lit(atom_charge) = atom.charge() else {
                 return None;
             };
-            let ValueAst::Lit(degree) = atom.degree() else {
+            let NumForm::Lit(degree) = atom.degree() else {
                 return None;
             };
-            let ValueAst::Lit(implicit_hydrogens) = atom.implicit_hydrogens() else {
+            let NumForm::Lit(implicit_hydrogens) = atom.implicit_hydrogens() else {
                 return None;
             };
-            let ValueAst::Lit(lone_pairs) = atom.lone_pairs() else {
+            let NumForm::Lit(lone_pairs) = atom.lone_pairs() else {
                 return None;
             };
             let contribution = i64::from(element.valence_electrons())
@@ -82,13 +82,13 @@ impl DelocalizationPlan {
     fn apply(self, ast: &mut MoleculeAst) {
         for (atom_id, contribution) in self.atoms {
             let atom = &mut ast.atom_mut(atom_id).ast;
-            atom.charge = ValueAst::Lit(0);
+            atom.charge = NumForm::Lit(0);
             atom.constraints.set(AtomConstraintAst::AromaticValence(
-                AromaticValenceAst::Aromatic(ValueAst::Lit(contribution)),
+                AromaticValenceAst::Aromatic(NumForm::Lit(contribution)),
             ));
         }
         let system = &mut ast.aromatic_system_mut(self.system).ast;
-        system.charge = ValueAst::Lit(self.charge);
+        system.charge = NumForm::Lit(self.charge);
         system.electrons = ElectronCountsAst::Lit(self.electrons);
     }
 }

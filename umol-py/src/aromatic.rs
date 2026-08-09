@@ -19,7 +19,7 @@ use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// Attribute updates for an aromatic system.
 #[pyclass(frozen, skip_from_py_object)]
@@ -33,7 +33,7 @@ impl AromaticSystemUpdate {
     fn new(
         py: Python<'_>,
         electrons: Option<ElectronCountsLike>,
-        charge: Option<ValueLike>,
+        charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
@@ -125,7 +125,7 @@ impl AromaticSystemAst {
     fn new(
         py: Python<'_>,
         electrons: ElectronCountsLike,
-        charge: Option<ValueLike>,
+        charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
@@ -175,7 +175,7 @@ impl AromaticSystemAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&mut self, py: Python<'_>, value: NumLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -326,7 +326,7 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -569,8 +569,8 @@ mod tests {
         AromaticSystemConstraintKey as GraphIrAromaticSystemConstraintKey,
         AromaticSystemConstraintsAst as GraphIrAromaticSystemConstraintsAst,
         AtomAst as GraphIrAtomAst, AtomId as GraphIrAtomId,
-        ElectronCountsAst as GraphIrElectronCountsAst, MoleculeEntries,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+        ElectronCountsAst as GraphIrElectronCountsAst, MoleculeEntries, NumForm as GraphIrNumForm,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
     };
 
     use super::*;
@@ -602,7 +602,7 @@ mod tests {
             let system = AromaticSystemAst::new(
                 py,
                 ElectronCountsLike::Lit(vec![1, 1, 1]),
-                Some(ValueLike::Lit(-2)),
+                Some(NumLike::Lit(-2)),
                 Some(unpaired_electrons.bind(py).borrow()),
                 None,
             );
@@ -610,7 +610,7 @@ mod tests {
                 system.inner().electrons,
                 GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
             );
-            assert_eq!(system.inner().charge, GraphIrValueAst::Lit(-2));
+            assert_eq!(system.inner().charge, GraphIrNumForm::Lit(-2));
             assert_eq!(system.inner().unpaired_electrons, unpaired_electrons_ast);
         });
     }
@@ -637,7 +637,7 @@ mod tests {
             );
             assert_eq!(
                 system.inner().constraints.electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -686,10 +686,10 @@ mod tests {
                 AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
                     1, 1, 1,
                 ]));
-            system.set_charge(py, ValueLike::Lit(-1));
+            system.set_charge(py, NumLike::Lit(-1));
             assert_eq!(
                 system.charge(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(-1)
+                GraphIrNumForm::Lit(-1)
             );
         });
     }
@@ -748,7 +748,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -817,14 +817,14 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrAromaticSystemId(0),
             };
-            view.set_charge(py, ValueLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1));
             let fresh = AromaticSystemView {
                 owner,
                 id: GraphIrAromaticSystemId(0),
             };
             assert_eq!(
                 fresh.charge(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(-1)
+                GraphIrNumForm::Lit(-1)
             );
         });
     }
@@ -907,7 +907,7 @@ mod tests {
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1070,7 +1070,7 @@ mod tests {
 
     #[rstest]
     #[case(GraphIrAromaticSystemConstraintAst::electron_count(6))]
-    #[case(GraphIrAromaticSystemConstraintAst::electron_count(GraphIrValueAst::Undetermined))]
+    #[case(GraphIrAromaticSystemConstraintAst::electron_count(GraphIrNumForm::Undetermined))]
     fn test_aromatic_system_constraint_ast_roundtrip(
         #[case] ast: GraphIrAromaticSystemConstraintAst,
     ) {
@@ -1100,7 +1100,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1142,7 +1142,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1164,7 +1164,7 @@ mod tests {
             let removed = constraints.pop(py, key).unwrap();
             match removed {
                 Some(AromaticSystemConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1190,7 +1190,7 @@ mod tests {
             assert_eq!(c.__len__(), 1);
             assert_eq!(
                 c.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1218,7 +1218,7 @@ mod tests {
             assert_eq!(c.__len__(), 1);
             assert_eq!(
                 c.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1251,7 +1251,7 @@ mod tests {
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1289,7 +1289,7 @@ mod tests {
                     .inner()
                     .constraints
                     .electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1326,7 +1326,7 @@ mod tests {
                     .inner()
                     .constraints
                     .electron_count(),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1460,7 +1460,7 @@ mod tests {
             let empty = AromaticSystemConstraintsAst::new(py, vec![]);
             assert_eq!(
                 empty.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Undetermined
+                GraphIrNumForm::Undetermined
             );
             let ec = into_py_variant(
                 py,
@@ -1474,7 +1474,7 @@ mod tests {
             let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1483,10 +1483,10 @@ mod tests {
     fn test_aromatic_system_constraints_ast_set_electron_count() {
         Python::attach(|py| {
             let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
-            constraints.set_electron_count(py, ValueLike::Lit(6));
+            constraints.set_electron_count(py, NumLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1527,7 +1527,7 @@ mod tests {
             let value = dict.get_item("electron_count").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                ValueAst::from_rust(py, &GraphIrValueAst::Lit(6)).unwrap(),
+                ValueAst::from_rust(py, &GraphIrNumForm::Lit(6)).unwrap(),
             )
             .unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
@@ -1564,7 +1564,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1591,7 +1591,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AromaticSystemConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1630,7 +1630,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1650,15 +1650,15 @@ mod tests {
             };
             assert_eq!(
                 view.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Undetermined
+                GraphIrNumForm::Undetermined
             );
-            view.set_electron_count(py, ValueLike::Lit(6));
+            view.set_electron_count(py, NumLike::Lit(6));
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
             };
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1692,7 +1692,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(6)
+                GraphIrNumForm::Lit(6)
             );
         });
     }

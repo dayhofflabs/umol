@@ -251,7 +251,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
-        ElementAst, MoleculeAst, MoleculeEntries, RingConfig, RingModel, RingSetKind, ValueAst,
+        ElementAst, MoleculeAst, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
 
     use super::*;
@@ -264,7 +264,7 @@ mod tests {
         (
             AtomAst {
                 element: ElementAst::Lit(element),
-                charge: ValueAst::Lit(charge),
+                charge: NumForm::Lit(charge),
                 ..Default::default()
             },
             Some(pi),
@@ -281,7 +281,7 @@ mod tests {
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
                     atom.constraints.set(AtomConstraintAst::AromaticValence(
-                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
+                        AromaticValenceAst::Aromatic(NumForm::Lit(n)),
                     ));
                 }
                 atom
@@ -543,7 +543,7 @@ mod tests {
             .aromatic_valence()
             .unwrap_or(&AromaticValenceAst::Undetermined)
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+            AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
             _ => None,
         });
         assert_eq!(systems.len(), 1);
@@ -576,7 +576,7 @@ mod tests {
             .aromatic_valence()
             .unwrap_or(&AromaticValenceAst::Undetermined)
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+            AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
             _ => None,
         });
         assert!(systems.is_empty());
@@ -599,7 +599,7 @@ mod tests {
             .aromatic_valence()
             .unwrap_or(&AromaticValenceAst::Undetermined)
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+            AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
             _ => None,
         });
         assert_eq!(systems.len(), 1);

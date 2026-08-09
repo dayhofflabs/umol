@@ -1652,7 +1652,7 @@ mod tests {
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::reaction::ReactionAst;
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
     use crate::ir::MoleculeCorrespondence;
 
     #[fixture]
@@ -1744,7 +1744,7 @@ mod tests {
         }),
         Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
             id: BondId(0),
-            change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
         })]),
     ))]
     // Unchanged / Removed / Added atoms and bonds + an Added constraint.

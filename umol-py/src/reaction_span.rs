@@ -307,11 +307,11 @@ mod tests {
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
         MoleculeEntries as GraphIrMoleculeEntries, MulticenterBondAst as GraphIrMulticenterBondAst,
         NoncovalentBondAst as GraphIrNoncovalentBondAst,
-        NoncovalentBondKind as GraphIrNoncovalentBondKind, ReactionAst as GraphIrReactionAst,
-        StereoAtomAst as GraphIrStereoAtomAst, StereoBondAst as GraphIrStereoBondAst,
-        StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
-        StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
-        ValueAst as GraphIrValueAst,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
+        ReactionAst as GraphIrReactionAst, StereoAtomAst as GraphIrStereoAtomAst,
+        StereoBondAst as GraphIrStereoBondAst, StereoCoset as GraphIrStereoCoset,
+        StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
+        StereoLigandKind as GraphIrStereoLigandKind,
     };
 
     use super::*;
@@ -517,9 +517,9 @@ mod tests {
     fn test_reaction_span_ast_from_entries() {
         Python::attach(|py| {
             let canonical_lhs =
-                GraphIrAtomAst::from_element(ChemElement::C).with_charge(GraphIrValueAst::Lit(1));
+                GraphIrAtomAst::from_element(ChemElement::C).with_charge(GraphIrNumForm::Lit(1));
             let canonical_rhs = GraphIrAtomAst::from_element(ChemElement::C)
-                .with_charge(GraphIrValueAst::lit_set([1_i64]));
+                .with_charge(GraphIrNumForm::lit_set([1_i64]));
             let modified_lhs = GraphIrAtomAst::from_element(ChemElement::C);
             let modified_rhs = GraphIrAtomAst::from_element(ChemElement::N);
             let removed_atom = GraphIrAtomAst::from_element(ChemElement::O);

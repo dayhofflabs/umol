@@ -14,27 +14,27 @@ use winnow::Parser;
 use super::error::{PResult, ParseError};
 use super::operators::{mem_op, mem_op_str, rel_op, rel_op_str};
 use crate::ir::traits::{FromIr, IntoIr};
-use crate::ir::value::{ArithExpr, PredExpr, ValueAst};
+use crate::ir::value::{ArithExpr, NumForm, PredExpr};
 
-/// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
+/// Surface DSL wrapper around `NumForm`. EDN form is hybrid: `Lit` → `Int`,
 /// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `ArithExpr`/
 /// `PredExpr` → string via the value subgrammar (EDN has no native form for
 /// the arithmetic/boolean grammar and round-trip fidelity is mandatory).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ValueDsl(pub ValueAst);
+pub struct ValueDsl(pub NumForm);
 
-impl FromIr<ValueAst> for ValueDsl {
+impl FromIr<NumForm> for ValueDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &ValueAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &NumForm, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoIr<ValueAst> for ValueDsl {
+impl IntoIr<NumForm> for ValueDsl {
     type Ctx = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> ValueAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> NumForm {
         self.0
     }
 }
@@ -48,8 +48,8 @@ impl Display for ValueDsl {
 impl<'de> FromEdn<'de> for ValueDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let v = match edn {
-            Edn::Int(n) => ValueAst::Lit(*n),
-            Edn::Keyword(k) if k.name() == "undetermined" => ValueAst::Undetermined,
+            Edn::Int(n) => NumForm::Lit(*n),
+            Edn::Keyword(k) if k.name() == "undetermined" => NumForm::Undetermined,
             Edn::Vector(xs) => {
                 let mut out = BTreeSet::new();
                 for e in xs.iter() {
@@ -62,7 +62,7 @@ impl<'de> FromEdn<'de> for ValueDsl {
                     };
                     out.insert(*n);
                 }
-                ValueAst::from(out)
+                NumForm::from(out)
             }
             Edn::Str(s) => parse_value(s).map_err(|e| DeError::subgrammar("value", e))?,
             other => {
@@ -80,15 +80,15 @@ impl<'de> FromEdn<'de> for ValueDsl {
 impl ToEdn for ValueDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
-            ValueAst::Lit(n) => Edn::Int(*n),
-            ValueAst::Undetermined => Edn::Keyword(EdnKeyword::owned("undetermined".to_string())),
-            ValueAst::LitSet(xs) => {
+            NumForm::Lit(n) => Edn::Int(*n),
+            NumForm::Undetermined => Edn::Keyword(EdnKeyword::owned("undetermined".to_string())),
+            NumForm::LitSet(xs) => {
                 Edn::Vector(xs.iter().map(|n| Edn::Int(*n)).collect::<Vec<_>>().into())
             }
-            ValueAst::RangeFrom(_)
-            | ValueAst::RangeTo(_)
-            | ValueAst::ArithExpr(_)
-            | ValueAst::PredExpr(_) => Edn::Str(Cow::Owned(self.to_string())),
+            NumForm::RangeFrom(_)
+            | NumForm::RangeTo(_)
+            | NumForm::ArithExpr(_)
+            | NumForm::PredExpr(_) => Edn::Str(Cow::Owned(self.to_string())),
         }
     }
 }
@@ -106,15 +106,15 @@ const PREC_PRODUCT: u8 = 6;
 const PREC_NEG: u8 = 7;
 const PREC_ATOM: u8 = 8;
 
-pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &NumForm) -> fmt::Result {
     match v {
-        ValueAst::Undetermined => f.write_char('*'),
-        ValueAst::Lit(n) => write!(f, "{}", n),
-        ValueAst::LitSet(s) => fmt_set(f, s.iter().copied()),
-        ValueAst::RangeFrom(n) => write!(f, "({n}..)"),
-        ValueAst::RangeTo(n) => write!(f, "(..{n})"),
-        ValueAst::ArithExpr(t) => fmt_arith_expr(f, t, PREC_OR),
-        ValueAst::PredExpr(p) => fmt_pred_expr(f, p, PREC_OR),
+        NumForm::Undetermined => f.write_char('*'),
+        NumForm::Lit(n) => write!(f, "{}", n),
+        NumForm::LitSet(s) => fmt_set(f, s.iter().copied()),
+        NumForm::RangeFrom(n) => write!(f, "({n}..)"),
+        NumForm::RangeTo(n) => write!(f, "(..{n})"),
+        NumForm::ArithExpr(t) => fmt_arith_expr(f, t, PREC_OR),
+        NumForm::PredExpr(p) => fmt_pred_expr(f, p, PREC_OR),
     }
 }
 
@@ -248,16 +248,16 @@ fn fmt_pred_expr(f: &mut fmt::Formatter<'_>, p: &PredExpr, parent: u8) -> fmt::R
     Ok(())
 }
 
-/// Parse a complete value-string into a `ValueAst`.
-pub fn parse_value(input: &str) -> Result<ValueAst, ParseError> {
+/// Parse a complete value-string into a `NumForm`.
+pub fn parse_value(input: &str) -> Result<NumForm, ParseError> {
     value.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
+pub(crate) fn value(i: &mut &str) -> PResult<NumForm> {
     alt((
-        terminated(signed_int, (multispace0, terminator)).map(ValueAst::Lit),
-        "*".value(ValueAst::Undetermined),
-        set.map(|v: Vec<i64>| ValueAst::lit_set(v)),
+        terminated(signed_int, (multispace0, terminator)).map(NumForm::Lit),
+        "*".value(NumForm::Undetermined),
+        set.map(|v: Vec<i64>| NumForm::lit_set(v)),
         range,
         or_expr.map(parsed_to_value),
     ))
@@ -266,12 +266,12 @@ pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
 
 /// A half-open range: `(i..)` → `RangeFrom(i)`, `(..j)` → `RangeTo(j)`. The
 /// both-bounded form is intentionally absent (it is a finite set; use `{…}`).
-fn range(i: &mut &str) -> PResult<ValueAst> {
+fn range(i: &mut &str) -> PResult<NumForm> {
     delimited(
         ('(', multispace0),
         alt((
-            (signed_int, multispace0, "..").map(|(lo, _, _)| ValueAst::RangeFrom(lo)),
-            ("..", multispace0, signed_int).map(|(_, _, hi)| ValueAst::RangeTo(hi)),
+            (signed_int, multispace0, "..").map(|(lo, _, _)| NumForm::RangeFrom(lo)),
+            ("..", multispace0, signed_int).map(|(_, _, hi)| NumForm::RangeTo(hi)),
         )),
         (multispace0, ')'),
     )
@@ -284,10 +284,10 @@ enum Parsed {
     PredExpr(PredExpr),
 }
 
-fn parsed_to_value(parsed: Parsed) -> ValueAst {
+fn parsed_to_value(parsed: Parsed) -> NumForm {
     match parsed {
-        Parsed::ArithExpr(expression) => ValueAst::arith_expr(expression),
-        Parsed::PredExpr(expression) => ValueAst::pred_expr(expression),
+        Parsed::ArithExpr(expression) => NumForm::arith_expr(expression),
+        Parsed::PredExpr(expression) => NumForm::pred_expr(expression),
     }
 }
 
@@ -522,45 +522,45 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::star("*", ValueAst::Undetermined)]
-    #[case::num("0", ValueAst::Lit(0))]
-    #[case::num_neg("-1", ValueAst::Lit(-1))]
-    #[case::num_pos("+1", ValueAst::Lit(1))]
-    #[case::num_i64_min("-9223372036854775808", ValueAst::Lit(i64::MIN))]
-    #[case::set("{0,1,2}", ValueAst::lit_set([0, 1, 2]))]
-    #[case::set_spaced("{ 0, 1 ,2}", ValueAst::lit_set([0, 1, 2]))]
-    #[case::range_from("(1..)", ValueAst::RangeFrom(1))]
-    #[case::range_to("(..3)", ValueAst::RangeTo(3))]
-    #[case::range_from_neg("(-2..)", ValueAst::RangeFrom(-2))]
-    #[case::var("?h", ValueAst::arith_expr(ArithExpr::Var("h".to_string())))]
-    #[case::sum("1 + 2", ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])))]
-    #[case::diff("1 - 2", ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Neg(Box::new(ArithExpr::Lit(2)))])))]
-    #[case::mult("3 * ?h", ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(3), ArithExpr::Var("h".to_string())])))]
-    #[case::div("10 / 3", ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))))]
-    #[case::rem("10 % 3", ValueAst::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))))]
-    #[case::neg_var("-?x", ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))))]
-    #[case::rel_eq("?h == 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))))]
-    #[case::rel_ne("?h != 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ne, ArithExpr::Lit(0))))]
-    #[case::rel_ge("?h >= 1", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
-    #[case::rel_le("?h <= 1", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Le, ArithExpr::Lit(1))))]
-    #[case::rel_lt("?h < 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Lt, ArithExpr::Lit(0))))]
-    #[case::rel_gt("?h > 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Gt, ArithExpr::Lit(0))))]
-    #[case::mem_in("?h :: {0,1}", ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1]))))]
-    #[case::mem_notin("?h !: {0,1}", ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))))]
-    #[case::not("!?h == 0", ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))))))]
-    #[case::and("?h == 0 & ?v == 1", ValueAst::pred_expr(PredExpr::And(vec![
+    #[case::star("*", NumForm::Undetermined)]
+    #[case::num("0", NumForm::Lit(0))]
+    #[case::num_neg("-1", NumForm::Lit(-1))]
+    #[case::num_pos("+1", NumForm::Lit(1))]
+    #[case::num_i64_min("-9223372036854775808", NumForm::Lit(i64::MIN))]
+    #[case::set("{0,1,2}", NumForm::lit_set([0, 1, 2]))]
+    #[case::set_spaced("{ 0, 1 ,2}", NumForm::lit_set([0, 1, 2]))]
+    #[case::range_from("(1..)", NumForm::RangeFrom(1))]
+    #[case::range_to("(..3)", NumForm::RangeTo(3))]
+    #[case::range_from_neg("(-2..)", NumForm::RangeFrom(-2))]
+    #[case::var("?h", NumForm::arith_expr(ArithExpr::Var("h".to_string())))]
+    #[case::sum("1 + 2", NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])))]
+    #[case::diff("1 - 2", NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Neg(Box::new(ArithExpr::Lit(2)))])))]
+    #[case::mult("3 * ?h", NumForm::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(3), ArithExpr::Var("h".to_string())])))]
+    #[case::div("10 / 3", NumForm::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))))]
+    #[case::rem("10 % 3", NumForm::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))))]
+    #[case::neg_var("-?x", NumForm::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))))]
+    #[case::rel_eq("?h == 0", NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))))]
+    #[case::rel_ne("?h != 0", NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ne, ArithExpr::Lit(0))))]
+    #[case::rel_ge("?h >= 1", NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
+    #[case::rel_le("?h <= 1", NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Le, ArithExpr::Lit(1))))]
+    #[case::rel_lt("?h < 0", NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Lt, ArithExpr::Lit(0))))]
+    #[case::rel_gt("?h > 0", NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Gt, ArithExpr::Lit(0))))]
+    #[case::mem_in("?h :: {0,1}", NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1]))))]
+    #[case::mem_notin("?h !: {0,1}", NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))))]
+    #[case::not("!?h == 0", NumForm::pred_expr(PredExpr::Not(Box::new(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))))))]
+    #[case::and("?h == 0 & ?v == 1", NumForm::pred_expr(PredExpr::And(vec![
         PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
         PredExpr::Rel(ArithExpr::Var("v".to_string()), RelOp::Eq, ArithExpr::Lit(1)),
     ])))]
-    #[case::or("?h == 0 | ?v == 1", ValueAst::pred_expr(PredExpr::Or(vec![
+    #[case::or("?h == 0 | ?v == 1", NumForm::pred_expr(PredExpr::Or(vec![
         PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
         PredExpr::Rel(ArithExpr::Var("v".to_string()), RelOp::Eq, ArithExpr::Lit(1)),
     ])))]
-    #[case::paren_arith("(0 + 1) * 1", ValueAst::arith_expr(ArithExpr::Product(vec![
+    #[case::paren_arith("(0 + 1) * 1", NumForm::arith_expr(ArithExpr::Product(vec![
         ArithExpr::Sum(vec![ArithExpr::Lit(0), ArithExpr::Lit(1)]),
         ArithExpr::Lit(1),
     ])))]
-    fn test_value(#[case] input: &str, #[case] expected: ValueAst) {
+    fn test_value(#[case] input: &str, #[case] expected: NumForm) {
         let result = value.parse(input);
         assert!(result.is_ok(), "{:?} error: {:?}", input, result.clone().unwrap_err());
         assert_eq!(result.unwrap(), expected);
@@ -593,33 +593,33 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(ValueAst::Undetermined, "*")]
-    #[case::lit_neg(ValueAst::Lit(-3), "-3")]
-    #[case::set(ValueAst::lit_set([0, 1, 2]), "{0,1,2}")]
-    #[case::range_from(ValueAst::RangeFrom(1), "(1..)")]
-    #[case::range_to(ValueAst::RangeTo(3), "(..3)")]
-    #[case::term_var(ValueAst::arith_expr(ArithExpr::Var("h".to_string())), "?h")]
-    #[case::term_neg(ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))), "-?x")]
-    #[case::term_sum(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])), "1 + 2")]
-    #[case::term_mul(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(3), ArithExpr::Var("h".to_string())])), "3 * ?h")]
-    #[case::term_div(ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), "10 / 3")]
-    #[case::term_rem(ValueAst::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), "10 % 3")]
-    #[case::pred_rel(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))), "?h == 0")]
-    #[case::pred_ne(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ne, ArithExpr::Lit(0))), "?h != 0")]
-    #[case::pred_lt(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Lt, ArithExpr::Lit(0))), "?h < 0")]
-    #[case::pred_le(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Le, ArithExpr::Lit(1))), "?h <= 1")]
-    #[case::pred_gt(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Gt, ArithExpr::Lit(0))), "?h > 0")]
-    #[case::pred_ge(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))), "?h >= 1")]
-    #[case::pred_mem(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
-    #[case::pred_mem_notin(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
-    #[case::pred_and_of_or(ValueAst::pred_expr(PredExpr::And(vec![
+    #[case::undetermined(NumForm::Undetermined, "*")]
+    #[case::lit_neg(NumForm::Lit(-3), "-3")]
+    #[case::set(NumForm::lit_set([0, 1, 2]), "{0,1,2}")]
+    #[case::range_from(NumForm::RangeFrom(1), "(1..)")]
+    #[case::range_to(NumForm::RangeTo(3), "(..3)")]
+    #[case::term_var(NumForm::arith_expr(ArithExpr::Var("h".to_string())), "?h")]
+    #[case::term_neg(NumForm::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))), "-?x")]
+    #[case::term_sum(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])), "1 + 2")]
+    #[case::term_mul(NumForm::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(3), ArithExpr::Var("h".to_string())])), "3 * ?h")]
+    #[case::term_div(NumForm::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), "10 / 3")]
+    #[case::term_rem(NumForm::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), "10 % 3")]
+    #[case::pred_rel(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))), "?h == 0")]
+    #[case::pred_ne(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ne, ArithExpr::Lit(0))), "?h != 0")]
+    #[case::pred_lt(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Lt, ArithExpr::Lit(0))), "?h < 0")]
+    #[case::pred_le(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Le, ArithExpr::Lit(1))), "?h <= 1")]
+    #[case::pred_gt(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Gt, ArithExpr::Lit(0))), "?h > 0")]
+    #[case::pred_ge(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))), "?h >= 1")]
+    #[case::pred_mem(NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
+    #[case::pred_mem_notin(NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
+    #[case::pred_and_of_or(NumForm::pred_expr(PredExpr::And(vec![
         PredExpr::Or(vec![
             PredExpr::Rel(ArithExpr::Var("a".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
             PredExpr::Rel(ArithExpr::Var("b".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
         ]),
         PredExpr::Rel(ArithExpr::Var("c".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
     ])), "(?a == 0 | ?b == 0) & ?c == 0")]
-    fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
+    fn test_value_display(#[case] input: NumForm, #[case] expected: &str) {
         assert_eq!(ValueDsl::from_ir(&input, &()).to_string(), expected);
     }
 
@@ -657,33 +657,33 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(ValueAst::Lit(4), Edn::Int(4))]
-    #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
-    #[case::set(ValueAst::lit_set([1, 2, 3]), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
-    #[case::term_var(ValueAst::arith_expr(ArithExpr::Var("h".to_string())), Edn::Str(Cow::Borrowed("?h")))]
-    #[case::range_from(ValueAst::RangeFrom(1), Edn::Str(Cow::Borrowed("(1..)")))]
+    #[case::lit(NumForm::Lit(4), Edn::Int(4))]
+    #[case::undetermined(NumForm::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
+    #[case::set(NumForm::lit_set([1, 2, 3]), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case::term_var(NumForm::arith_expr(ArithExpr::Var("h".to_string())), Edn::Str(Cow::Borrowed("?h")))]
+    #[case::range_from(NumForm::RangeFrom(1), Edn::Str(Cow::Borrowed("(1..)")))]
     #[case::pred_rel(
-        ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
+        NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
-    fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
+    fn test_value_dsl_to_edn(#[case] v: NumForm, #[case] expected: Edn<'static>) {
         use umol_edn::ToEdn;
         assert_eq!(ValueDsl::from_ir(&v, &()).to_edn(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::int(Edn::Int(5), ValueAst::Lit(5))]
-    #[case::keyword(Edn::Keyword(EdnKeyword::owned("undetermined".into())), ValueAst::Undetermined)]
-    #[case::vector(Edn::Vector(vec![Edn::Int(0), Edn::Int(2)].into()), ValueAst::lit_set([0, 2]))]
-    #[case::str_int(Edn::Str(Cow::Borrowed("4")), ValueAst::Lit(4))]
-    #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::lit_set([1, 2]))]
-    #[case::str_range(Edn::Str(Cow::Borrowed("(1..)")), ValueAst::RangeFrom(1))]
+    #[case::int(Edn::Int(5), NumForm::Lit(5))]
+    #[case::keyword(Edn::Keyword(EdnKeyword::owned("undetermined".into())), NumForm::Undetermined)]
+    #[case::vector(Edn::Vector(vec![Edn::Int(0), Edn::Int(2)].into()), NumForm::lit_set([0, 2]))]
+    #[case::str_int(Edn::Str(Cow::Borrowed("4")), NumForm::Lit(4))]
+    #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), NumForm::lit_set([1, 2]))]
+    #[case::str_range(Edn::Str(Cow::Borrowed("(1..)")), NumForm::RangeFrom(1))]
     #[case::str_pred(
         Edn::Str(Cow::Borrowed("?h == 0")),
-        ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
+        NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
     )]
-    fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: ValueAst) {
+    fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: NumForm) {
         use umol_edn::FromEdn;
         assert_eq!(ValueDsl::from_edn(&input).unwrap().into_ir(&()), expected);
     }
@@ -697,13 +697,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(ValueAst::Lit(3))]
-    #[case::undetermined(ValueAst::Undetermined)]
-    #[case::set(ValueAst::lit_set([1, 2, 3]))]
-    #[case::range_from(ValueAst::RangeFrom(1))]
-    #[case::range_to(ValueAst::RangeTo(3))]
-    #[case::pred(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
-    fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
+    #[case::lit(NumForm::Lit(3))]
+    #[case::undetermined(NumForm::Undetermined)]
+    #[case::set(NumForm::lit_set([1, 2, 3]))]
+    #[case::range_from(NumForm::RangeFrom(1))]
+    #[case::range_to(NumForm::RangeTo(3))]
+    #[case::pred(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
+    fn test_value_dsl_edn_roundtrip(#[case] v: NumForm) {
         use umol_edn::{FromEdn, ToEdn};
         let edn = ValueDsl::from_ir(&v, &()).to_edn();
         let back = ValueDsl::from_edn(&edn).unwrap().into_ir(&());

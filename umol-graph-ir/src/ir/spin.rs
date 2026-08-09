@@ -4,13 +4,13 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
 use super::traits::{AsLit, Canonicalize};
-use super::value::ValueAst;
+use super::value::NumForm;
 
-/// Unpaired-electron count and multiplicity as independent `ValueAst` fields.
+/// Unpaired-electron count and multiplicity as independent `NumForm` fields.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Canonicalize)]
 pub struct UnpairedElectronsAst {
-    pub count: ValueAst,
-    pub multiplicity: ValueAst,
+    pub count: NumForm,
+    pub multiplicity: NumForm,
 }
 
 impl UnpairedElectronsAst {
@@ -44,13 +44,13 @@ impl UnpairedElectronsAst {
 
     pub fn high_spin_complete(&mut self) {
         match (&self.count, &self.multiplicity) {
-            (ValueAst::Undetermined, ValueAst::Lit(m)) => {
+            (NumForm::Undetermined, NumForm::Lit(m)) => {
                 let unpaired_electrons = *m - 1;
-                self.count = ValueAst::Lit(unpaired_electrons);
+                self.count = NumForm::Lit(unpaired_electrons);
             }
-            (ValueAst::Lit(u), ValueAst::Undetermined) => {
+            (NumForm::Lit(u), NumForm::Undetermined) => {
                 let multiplicity = u + 1;
-                self.multiplicity = ValueAst::Lit(multiplicity);
+                self.multiplicity = NumForm::Lit(multiplicity);
             }
             _ => {}
         }
@@ -60,8 +60,8 @@ impl UnpairedElectronsAst {
 impl Default for UnpairedElectronsAst {
     fn default() -> Self {
         Self {
-            count: ValueAst::Undetermined,
-            multiplicity: ValueAst::Undetermined,
+            count: NumForm::Undetermined,
+            multiplicity: NumForm::Undetermined,
         }
     }
 }
@@ -69,8 +69,8 @@ impl Default for UnpairedElectronsAst {
 impl From<(u8, u8)> for UnpairedElectronsAst {
     fn from((count, multiplicity): (u8, u8)) -> Self {
         Self {
-            count: ValueAst::Lit(i64::from(count)),
-            multiplicity: ValueAst::Lit(multiplicity as i64),
+            count: NumForm::Lit(i64::from(count)),
+            multiplicity: NumForm::Lit(multiplicity as i64),
         }
     }
 }
@@ -78,8 +78,8 @@ impl From<(u8, u8)> for UnpairedElectronsAst {
 impl From<UnpairedElectrons> for UnpairedElectronsAst {
     fn from(unpaired_electrons: UnpairedElectrons) -> Self {
         Self {
-            count: ValueAst::Lit(unpaired_electrons.count),
-            multiplicity: ValueAst::Lit(unpaired_electrons.multiplicity),
+            count: NumForm::Lit(unpaired_electrons.count),
+            multiplicity: NumForm::Lit(unpaired_electrons.multiplicity),
         }
     }
 }
@@ -107,8 +107,8 @@ impl AsLit for UnpairedElectronsAst {
 /// `Some(value)` sets it exactly, including to `Undetermined`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnpairedElectronsUpdate {
-    pub count: Option<ValueAst>,
-    pub multiplicity: Option<ValueAst>,
+    pub count: Option<NumForm>,
+    pub multiplicity: Option<NumForm>,
 }
 
 #[cfg(test)]
@@ -129,19 +129,19 @@ mod tests {
         assert_eq!(
             UnpairedElectronsAst::closed_shell(),
             UnpairedElectronsAst {
-                count: ValueAst::Lit(0),
-                multiplicity: ValueAst::Lit(1),
+                count: NumForm::Lit(0),
+                multiplicity: NumForm::Lit(1),
             }
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::count((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: None }, (0_u8, 3_u8).into())]
-    #[case::multiplicity((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) }, (2_u8, 1_u8).into())]
-    #[case::count_undetermined((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None }, UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) })]
-    #[case::multiplicity_undetermined((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Undetermined) }, UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined })]
-    #[case::both((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) }, (0_u8, 1_u8).into())]
+    #[case::count((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, (0_u8, 3_u8).into())]
+    #[case::multiplicity((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, (2_u8, 1_u8).into())]
+    #[case::count_undetermined((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) })]
+    #[case::multiplicity_undetermined((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined })]
+    #[case::both((2_u8, 3_u8).into(), UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: Some(NumForm::Lit(1)) }, (0_u8, 1_u8).into())]
     fn test_unpaired_electrons_ast_update(
         #[case] unpaired_electrons: UnpairedElectronsAst,
         #[case] update: UnpairedElectronsUpdate,
@@ -163,9 +163,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::multiplicity((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) })]
-    #[case::count_undetermined((2_u8, 3_u8).into(), UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, UnpairedElectronsUpdate { count: Some(ValueAst::Undetermined), multiplicity: None })]
-    #[case::both((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), UnpairedElectronsUpdate { count: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) })]
+    #[case::multiplicity((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) })]
+    #[case::count_undetermined((2_u8, 3_u8).into(), UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None })]
+    #[case::both((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: Some(NumForm::Lit(1)) })]
     fn test_unpaired_electrons_ast_difference_to(
         #[case] unpaired_electrons: UnpairedElectronsAst,
         #[case] other: UnpairedElectronsAst,
@@ -176,8 +176,8 @@ mod tests {
 
     #[rstest]
     #[case::canonical(
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) },
-        UnpairedElectronsAst { count: ValueAst::lit_set([2]), multiplicity: ValueAst::lit_set([1]) },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::lit_set([2]), multiplicity: NumForm::lit_set([1]) },
     )]
     fn test_unpaired_electrons_ast_difference_to_identity(
         #[case] unpaired_electrons: UnpairedElectronsAst,
@@ -190,9 +190,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::count_undetermined(UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
-    #[case::multiplicity_undetermined(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
-    #[case::both_determined(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) }, UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
+    #[case::count_undetermined(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) })]
+    #[case::multiplicity_undetermined(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) })]
+    #[case::both_determined(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) }, UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) })]
     fn test_unpaired_electrons_ast_high_spin_complete(
         #[case] input: UnpairedElectronsAst,
         #[case] expected: UnpairedElectronsAst,
@@ -205,12 +205,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_field(
-        UnpairedElectronsAst { count: ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)])), multiplicity: ValueAst::Lit(3) },
-        Ok(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) }),
+        UnpairedElectronsAst { count: NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)])), multiplicity: NumForm::Lit(3) },
+        Ok(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) }),
     )]
     #[case::parity_invalid_is_allowed(
-        UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) },
-        Ok(UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) }),
+        UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Lit(1) },
+        Ok(UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Lit(1) }),
     )]
     fn test_unpaired_electrons_ast_canonicalize(
         #[case] input: UnpairedElectronsAst,
@@ -222,8 +222,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::both_undetermined(UnpairedElectronsAst::default())]
-    #[case::valid_triplet(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
-    #[case::parity_invalid(UnpairedElectronsAst { count: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) })]
+    #[case::valid_triplet(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) })]
+    #[case::parity_invalid(UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Lit(1) })]
     fn test_unpaired_electrons_ast_canonicalize_identity(#[case] input: UnpairedElectronsAst) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
@@ -233,7 +233,7 @@ mod tests {
     #[case::default_undetermined(UnpairedElectronsAst::default(), false)]
     #[case::from_dsl(spin!("#u2").into(), true)]
     #[case::from_pair((2, 3).into(), true)]
-    #[case::partial(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, false)]
+    #[case::partial(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, false)]
     fn test_unpaired_electrons_ast_is_ground(#[case] ast: UnpairedElectronsAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -242,7 +242,7 @@ mod tests {
     #[rstest]
     #[case::both_undetermined(UnpairedElectronsAst::default(), true)]
     #[case::ground((2_u8, 3_u8).into(), false)]
-    #[case::partial(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, false)]
+    #[case::partial(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, false)]
     fn test_unpaired_electrons_ast_is_undetermined(#[case] ast: UnpairedElectronsAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
@@ -253,8 +253,8 @@ mod tests {
     #[case::exact((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), Some((2_u8, 3_u8).into()))]
     #[case::count_conflict((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), None)]
     #[case::field_wise(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
         Some((2_u8, 3_u8).into()),
     )]
     fn test_unpaired_electrons_ast_meet(
@@ -271,8 +271,8 @@ mod tests {
     #[case::exact((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), (2_u8, 3_u8).into())]
     #[case::field_wise_widen(
         (2_u8, 3_u8).into(),
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) },
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::lit_set([1, 3]) },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::lit_set([1, 3]) },
     )]
     fn test_unpaired_electrons_ast_join(
         #[case] a: UnpairedElectronsAst,
@@ -289,7 +289,7 @@ mod tests {
     #[case::exact((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), true)]
     #[case::count_mismatch((2_u8, 3_u8).into(), (0_u8, 3_u8).into(), false)]
     #[case::partial_pattern(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) },
         (2_u8, 3_u8).into(),
         true,
     )]
@@ -304,11 +304,11 @@ mod tests {
     #[rstest]
     #[case::closed_shell(
         UnpairedElectrons { count: 0, multiplicity: 1 },
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(1) }
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(1) }
     )]
     #[case::structurally_invalid(
         UnpairedElectrons { count: -1, multiplicity: 0 },
-        UnpairedElectronsAst { count: ValueAst::Lit(-1), multiplicity: ValueAst::Lit(0) }
+        UnpairedElectronsAst { count: NumForm::Lit(-1), multiplicity: NumForm::Lit(0) }
     )]
     fn test_unpaired_electrons_ast_from_unpaired_electrons(
         #[case] unpaired_electrons: UnpairedElectrons,
@@ -320,11 +320,11 @@ mod tests {
     #[rstest]
     #[case::closed_shell(
         SpinState::closed_shell(),
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(1) }
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(1) }
     )]
     #[case::triplet(
         spin!("#u2#s3"),
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) }
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) }
     )]
     fn test_unpaired_electrons_ast_from_spin_state(
         #[case] spin_state: SpinState,
@@ -337,11 +337,11 @@ mod tests {
     #[rstest]
     #[case::both_undetermined(UnpairedElectronsAst::default(), None)]
     #[case::count_lit_only(
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
         None,
     )]
     #[case::multiplicity_lit_only(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) },
         None,
     )]
     #[case::valid_triplet(
@@ -357,19 +357,19 @@ mod tests {
         Some(UnpairedElectrons { count: 1, multiplicity: 1 })
     )]
     #[case::negative_count(
-        UnpairedElectronsAst { count: ValueAst::Lit(-1), multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Lit(-1), multiplicity: NumForm::Lit(1) },
         Some(UnpairedElectrons { count: -1, multiplicity: 1 }),
     )]
     #[case::count_out_of_range(
-        UnpairedElectronsAst { count: ValueAst::Lit(256), multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Lit(256), multiplicity: NumForm::Lit(1) },
         Some(UnpairedElectrons { count: 256, multiplicity: 1 }),
     )]
     #[case::zero_multiplicity(
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(0) },
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(0) },
         Some(UnpairedElectrons { count: 0, multiplicity: 0 }),
     )]
     #[case::multiplicity_out_of_range(
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(256) },
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(256) },
         Some(UnpairedElectrons { count: 0, multiplicity: 256 }),
     )]
     fn test_unpaired_electrons_ast_as_lit(

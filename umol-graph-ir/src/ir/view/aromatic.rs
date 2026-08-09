@@ -12,7 +12,7 @@ use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::super::spin::UnpairedElectronsAst;
 use super::super::traits::Lattice;
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 use super::atom::AtomView;
 use super::bond::BondView;
 
@@ -183,7 +183,7 @@ impl<'a> AromaticSystemView<'a> {
     }
 
     #[inline]
-    pub fn charge(&self) -> &'a ValueAst {
+    pub fn charge(&self) -> &'a NumForm {
         &self.ast.charge
     }
 
@@ -231,10 +231,10 @@ impl<'a> AromaticSystemView<'a> {
 
     /// Sum of per-atom electron contributions on this aromatic system.
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
-    pub fn electron_count(&self) -> ValueAst {
+    pub fn electron_count(&self) -> NumForm {
         match &self.ast.electrons {
-            ElectronCountsAst::Lit(counts) => ValueAst::Lit(counts.iter().sum()),
-            ElectronCountsAst::Undetermined => ValueAst::Undetermined,
+            ElectronCountsAst::Lit(counts) => NumForm::Lit(counts.iter().sum()),
+            ElectronCountsAst::Undetermined => NumForm::Undetermined,
         }
     }
 
@@ -358,7 +358,7 @@ mod tests {
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondAst;
     use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -538,7 +538,7 @@ mod tests {
             molecule
                 .aromatic_system(AromaticSystemId(0))
                 .electron_count(),
-            ValueAst::Undetermined,
+            NumForm::Undetermined,
         );
     }
 

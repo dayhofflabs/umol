@@ -36,7 +36,7 @@ use super::super::ring::{RingConfig, RingModel};
 use super::super::stereo::StereoKind;
 use super::super::substructure::SubstructureMatchAlgorithm;
 use super::super::traits::Lattice;
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 use super::super::view::RingViews;
 
 /// Algorithm selectors used by complete model-independent constraint validation.
@@ -540,8 +540,8 @@ fn is_atom_ring_constraint(constraint: &AtomConstraintAst) -> bool {
 }
 
 fn evaluate_value(
-    asserted: &ValueAst,
-    derived: &ValueAst,
+    asserted: &NumForm,
+    derived: &NumForm,
     contradiction: impl FnOnce() -> ConstraintContradiction,
 ) -> Solution<(), ConstraintContradiction> {
     if asserted.is_undetermined() {

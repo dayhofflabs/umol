@@ -204,7 +204,7 @@ mod tests {
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::{StereoCoset, StereoKind};
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
 
     #[rstest]
     fn test_molecule_builder() {
@@ -223,19 +223,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::undetermined_grounds(AtomAst::from_element(Element::C), ValueAst::Lit(0))]
+    #[case::undetermined_grounds(AtomAst::from_element(Element::C), NumForm::Lit(0))]
     #[case::preset_charge_preserved(
         AtomAst::from_element(Element::C).with_charge(2_i64),
-        ValueAst::Lit(2)
+        NumForm::Lit(2)
     )]
-    fn test_molecule_builder_ground(#[case] spec: AtomAst, #[case] expected_charge: ValueAst) {
+    fn test_molecule_builder_ground(#[case] spec: AtomAst, #[case] expected_charge: NumForm) {
         let mut builder = MoleculeBuilder::ground();
         let atom = builder.atom(spec);
         let mol = builder.build();
 
         assert_eq!(mol.atom(atom).ast.charge, expected_charge);
         // an unspecified field is grounded regardless of the preset charge
-        assert_eq!(mol.atom(atom).ast.implicit_hydrogens, ValueAst::Lit(0));
+        assert_eq!(mol.atom(atom).ast.implicit_hydrogens, NumForm::Lit(0));
     }
 
     #[rstest]

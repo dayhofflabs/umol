@@ -11,39 +11,39 @@ use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::TetrahedralStereoAst;
 use super::super::traits::{AsLit, Canonicalize, Lattice};
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomConstraintAst {
-    Valence(ValueAst),
-    DonatedPairs(ValueAst),
-    AcceptedPairs(ValueAst),
+    Valence(NumForm),
+    DonatedPairs(NumForm),
+    AcceptedPairs(NumForm),
     AromaticValence(AromaticValenceAst),
     MulticenterValence(MulticenterValenceAst),
     TetrahedralStereo(TetrahedralStereoAst),
-    Degree(ValueAst),
-    TotalDegree(ValueAst),
-    TotalValence(ValueAst),
+    Degree(NumForm),
+    TotalDegree(NumForm),
+    TotalValence(NumForm),
     /// Incident bonds belonging to the fixed Relevant ring projection.
-    RingDegree(ValueAst),
+    RingDegree(NumForm),
     /// Sum of incident bond orders in the fixed Relevant ring projection.
-    RingValence(ValueAst),
-    TotalHydrogens(ValueAst),
+    RingValence(NumForm),
+    TotalHydrogens(NumForm),
     /// Ring count in the fixed Relevant ring projection, optionally restricted by size.
     RingMembership(RingMembershipAst),
 }
 
 impl AtomConstraintAst {
-    pub fn valence(v: impl Into<ValueAst>) -> Self {
+    pub fn valence(v: impl Into<NumForm>) -> Self {
         Self::Valence(v.into())
     }
 
-    pub fn donated_pairs(v: impl Into<ValueAst>) -> Self {
+    pub fn donated_pairs(v: impl Into<NumForm>) -> Self {
         Self::DonatedPairs(v.into())
     }
 
-    pub fn accepted_pairs(v: impl Into<ValueAst>) -> Self {
+    pub fn accepted_pairs(v: impl Into<NumForm>) -> Self {
         Self::AcceptedPairs(v.into())
     }
 
@@ -59,31 +59,31 @@ impl AtomConstraintAst {
         Self::TetrahedralStereo(c.into())
     }
 
-    pub fn degree(v: impl Into<ValueAst>) -> Self {
+    pub fn degree(v: impl Into<NumForm>) -> Self {
         Self::Degree(v.into())
     }
 
-    pub fn total_degree(v: impl Into<ValueAst>) -> Self {
+    pub fn total_degree(v: impl Into<NumForm>) -> Self {
         Self::TotalDegree(v.into())
     }
 
-    pub fn total_valence(v: impl Into<ValueAst>) -> Self {
+    pub fn total_valence(v: impl Into<NumForm>) -> Self {
         Self::TotalValence(v.into())
     }
 
-    pub fn ring_degree(v: impl Into<ValueAst>) -> Self {
+    pub fn ring_degree(v: impl Into<NumForm>) -> Self {
         Self::RingDegree(v.into())
     }
 
-    pub fn ring_valence(v: impl Into<ValueAst>) -> Self {
+    pub fn ring_valence(v: impl Into<NumForm>) -> Self {
         Self::RingValence(v.into())
     }
 
-    pub fn total_hydrogens(v: impl Into<ValueAst>) -> Self {
+    pub fn total_hydrogens(v: impl Into<NumForm>) -> Self {
         Self::TotalHydrogens(v.into())
     }
 
-    pub fn ring_membership(scope: RingScope, count: impl Into<ValueAst>) -> Self {
+    pub fn ring_membership(scope: RingScope, count: impl Into<NumForm>) -> Self {
         Self::RingMembership(RingMembershipAst::new(scope, count))
     }
 
@@ -109,9 +109,9 @@ impl AtomConstraintAst {
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
         match self {
-            Self::Valence(_) => Self::Valence(ValueAst::Undetermined),
-            Self::DonatedPairs(_) => Self::DonatedPairs(ValueAst::Undetermined),
-            Self::AcceptedPairs(_) => Self::AcceptedPairs(ValueAst::Undetermined),
+            Self::Valence(_) => Self::Valence(NumForm::Undetermined),
+            Self::DonatedPairs(_) => Self::DonatedPairs(NumForm::Undetermined),
+            Self::AcceptedPairs(_) => Self::AcceptedPairs(NumForm::Undetermined),
             Self::AromaticValence(_) => Self::AromaticValence(AromaticValenceAst::Undetermined),
             Self::MulticenterValence(_) => {
                 Self::MulticenterValence(MulticenterValenceAst::Undetermined)
@@ -119,14 +119,14 @@ impl AtomConstraintAst {
             Self::TetrahedralStereo(_) => {
                 Self::TetrahedralStereo(TetrahedralStereoAst::Undetermined)
             }
-            Self::Degree(_) => Self::Degree(ValueAst::Undetermined),
-            Self::TotalDegree(_) => Self::TotalDegree(ValueAst::Undetermined),
-            Self::TotalValence(_) => Self::TotalValence(ValueAst::Undetermined),
-            Self::RingDegree(_) => Self::RingDegree(ValueAst::Undetermined),
-            Self::RingValence(_) => Self::RingValence(ValueAst::Undetermined),
-            Self::TotalHydrogens(_) => Self::TotalHydrogens(ValueAst::Undetermined),
+            Self::Degree(_) => Self::Degree(NumForm::Undetermined),
+            Self::TotalDegree(_) => Self::TotalDegree(NumForm::Undetermined),
+            Self::TotalValence(_) => Self::TotalValence(NumForm::Undetermined),
+            Self::RingDegree(_) => Self::RingDegree(NumForm::Undetermined),
+            Self::RingValence(_) => Self::RingValence(NumForm::Undetermined),
+            Self::TotalHydrogens(_) => Self::TotalHydrogens(NumForm::Undetermined),
             Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
+                Self::RingMembership(RingMembershipAst::new(m.scope, NumForm::Undetermined))
             }
         }
     }
@@ -333,7 +333,7 @@ impl AtomConstraintsAst {
         Self::default()
     }
 
-    pub fn valence(&self) -> Option<&ValueAst> {
+    pub fn valence(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::Valence) {
             Some(AtomConstraintAst::Valence(v)) => Some(v),
             _ => None,
@@ -361,80 +361,80 @@ impl AtomConstraintsAst {
         }
     }
 
-    pub fn degree(&self) -> Option<&ValueAst> {
+    pub fn degree(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::Degree) {
             Some(AtomConstraintAst::Degree(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn total_degree(&self) -> Option<&ValueAst> {
+    pub fn total_degree(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::TotalDegree) {
             Some(AtomConstraintAst::TotalDegree(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn total_valence(&self) -> Option<&ValueAst> {
+    pub fn total_valence(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::TotalValence) {
             Some(AtomConstraintAst::TotalValence(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn ring_degree(&self) -> Option<&ValueAst> {
+    pub fn ring_degree(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::RingDegree) {
             Some(AtomConstraintAst::RingDegree(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn ring_valence(&self) -> Option<&ValueAst> {
+    pub fn ring_valence(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::RingValence) {
             Some(AtomConstraintAst::RingValence(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn total_hydrogens(&self) -> Option<&ValueAst> {
+    pub fn total_hydrogens(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::TotalHydrogens) {
             Some(AtomConstraintAst::TotalHydrogens(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn donated_pairs(&self) -> Option<&ValueAst> {
+    pub fn donated_pairs(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::DonatedPairs) {
             Some(AtomConstraintAst::DonatedPairs(v)) => Some(v),
             _ => None,
         }
     }
 
-    pub fn accepted_pairs(&self) -> Option<&ValueAst> {
+    pub fn accepted_pairs(&self) -> Option<&NumForm> {
         match self.get(AtomConstraintKey::AcceptedPairs) {
             Some(AtomConstraintAst::AcceptedPairs(v)) => Some(v),
             _ => None,
         }
     }
 
-    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &ValueAst)> {
+    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &NumForm)> {
         self.iter().filter_map(|c| match c {
             AtomConstraintAst::RingMembership(m) => Some((m.scope, &m.count)),
             _ => None,
         })
     }
 
-    fn ring_membership(&self, scope: RingScope) -> Option<&ValueAst> {
+    fn ring_membership(&self, scope: RingScope) -> Option<&NumForm> {
         self.ring_memberships()
             .find(|(s, _)| *s == scope)
             .map(|(_, v)| v)
     }
 
-    pub fn ring_count(&self) -> Option<&ValueAst> {
+    pub fn ring_count(&self) -> Option<&NumForm> {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> Option<&ValueAst> {
+    pub fn ring_size_count(&self, s: u8) -> Option<&NumForm> {
         self.ring_membership(RingScope::Size(s))
     }
 
@@ -642,13 +642,13 @@ impl Lattice for AtomConstraintsAst {
     fn matches(&self, target: &Self) -> bool {
         self.iter().all(|c| match c {
             AtomConstraintAst::Valence(v) => {
-                v.matches(target.valence().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.valence().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::DonatedPairs(v) => {
-                v.matches(target.donated_pairs().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.donated_pairs().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::AcceptedPairs(v) => {
-                v.matches(target.accepted_pairs().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.accepted_pairs().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::AromaticValence(av) => av.matches(
                 target
@@ -666,27 +666,27 @@ impl Lattice for AtomConstraintsAst {
                     .unwrap_or(&TetrahedralStereoAst::Undetermined),
             ),
             AtomConstraintAst::Degree(v) => {
-                v.matches(target.degree().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.degree().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::TotalDegree(v) => {
-                v.matches(target.total_degree().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.total_degree().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::TotalValence(v) => {
-                v.matches(target.total_valence().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.total_valence().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::RingDegree(v) => {
-                v.matches(target.ring_degree().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.ring_degree().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::RingValence(v) => {
-                v.matches(target.ring_valence().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.ring_valence().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::TotalHydrogens(v) => {
-                v.matches(target.total_hydrogens().unwrap_or(&ValueAst::Undetermined))
+                v.matches(target.total_hydrogens().unwrap_or(&NumForm::Undetermined))
             }
             AtomConstraintAst::RingMembership(rm) => rm.count.matches(
                 target
                     .ring_membership(rm.scope)
-                    .unwrap_or(&ValueAst::Undetermined),
+                    .unwrap_or(&NumForm::Undetermined),
             ),
         })
     }
@@ -770,7 +770,7 @@ pub enum AromaticValenceAst {
     #[default]
     Undetermined,
     NotAromatic,
-    Aromatic(ValueAst),
+    Aromatic(NumForm),
 }
 
 impl AromaticValenceAst {
@@ -782,7 +782,7 @@ impl AromaticValenceAst {
         Self::NotAromatic
     }
 
-    pub fn aromatic(v: impl Into<ValueAst>) -> Self {
+    pub fn aromatic(v: impl Into<NumForm>) -> Self {
         Self::Aromatic(v.into())
     }
 
@@ -790,18 +790,18 @@ impl AromaticValenceAst {
         matches!(self, Self::Aromatic(_))
     }
 
-    pub fn aromatic_covalence(&self) -> ValueAst {
+    pub fn aromatic_covalence(&self) -> NumForm {
         self.as_lit()
             .map(AromaticValence::valence_count)
             .map(aromatic_covalence)
-            .map(ValueAst::Lit)
-            .unwrap_or(ValueAst::Undetermined)
+            .map(NumForm::Lit)
+            .unwrap_or(NumForm::Undetermined)
     }
 
     /// Pattern matches value.
     pub fn matches_value(&self, value: i64) -> bool {
         match self {
-            Self::Aromatic(v) => v.matches(&ValueAst::Lit(value)),
+            Self::Aromatic(v) => v.matches(&NumForm::Lit(value)),
             Self::NotAromatic => value == 0,
             Self::Undetermined => true,
         }
@@ -812,13 +812,13 @@ impl From<AromaticValence> for AromaticValenceAst {
     fn from(valence: AromaticValence) -> Self {
         match valence {
             AromaticValence::NotAromatic => Self::NotAromatic,
-            AromaticValence::Aromatic(valence) => Self::Aromatic(ValueAst::Lit(valence)),
+            AromaticValence::Aromatic(valence) => Self::Aromatic(NumForm::Lit(valence)),
         }
     }
 }
 
 impl Canonicalize for AromaticValenceAst {
-    /// Delegate to the inner `ValueAst`; `NotAromatic`/`Undetermined` identity.
+    /// Delegate to the inner `NumForm`; `NotAromatic`/`Undetermined` identity.
     /// No cross-variant fold (`Aromatic(Lit(0))` stays distinct from `NotAromatic`).
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -878,7 +878,7 @@ impl Lattice for AromaticValenceAst {
     }
 
     /// Partial-order check `target ⊑ self`, allocation-free — defers to the inner
-    /// `ValueAst::matches` for the `Aromatic` value, never building a `meet`.
+    /// `NumForm::matches` for the `Aromatic` value, never building a `meet`.
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, Self::Undetermined | Self::NotAromatic) => true,
@@ -936,7 +936,7 @@ pub enum MulticenterValenceAst {
     #[default]
     Undetermined,
     NotMulticenter,
-    Multicenter(ValueAst),
+    Multicenter(NumForm),
 }
 
 impl MulticenterValenceAst {
@@ -948,7 +948,7 @@ impl MulticenterValenceAst {
         Self::NotMulticenter
     }
 
-    pub fn multicenter(v: impl Into<ValueAst>) -> Self {
+    pub fn multicenter(v: impl Into<NumForm>) -> Self {
         Self::Multicenter(v.into())
     }
 
@@ -959,7 +959,7 @@ impl MulticenterValenceAst {
     /// Pattern matches value.
     pub fn matches_value(&self, value: i64) -> bool {
         match self {
-            Self::Multicenter(v) => v.matches(&ValueAst::Lit(value)),
+            Self::Multicenter(v) => v.matches(&NumForm::Lit(value)),
             Self::NotMulticenter => value == 0,
             Self::Undetermined => true,
         }
@@ -970,13 +970,13 @@ impl From<MulticenterValence> for MulticenterValenceAst {
     fn from(valence: MulticenterValence) -> Self {
         match valence {
             MulticenterValence::NotMulticenter => Self::NotMulticenter,
-            MulticenterValence::Multicenter(valence) => Self::Multicenter(ValueAst::Lit(valence)),
+            MulticenterValence::Multicenter(valence) => Self::Multicenter(NumForm::Lit(valence)),
         }
     }
 }
 
 impl Canonicalize for MulticenterValenceAst {
-    /// Delegate to the inner `ValueAst`; `NotMulticenter`/`Undetermined` identity.
+    /// Delegate to the inner `NumForm`; `NotMulticenter`/`Undetermined` identity.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::Multicenter(v) => Self::Multicenter(v.canonicalize()?),
@@ -1035,7 +1035,7 @@ impl Lattice for MulticenterValenceAst {
     }
 
     /// Partial-order check `target ⊑ self`, allocation-free — defers to the inner
-    /// `ValueAst::matches` for the `Multicenter` value, never building a `meet`.
+    /// `NumForm::matches` for the `Multicenter` value, never building a `meet`.
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, Self::Undetermined | Self::NotMulticenter) => true,
@@ -1072,17 +1072,17 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintAst::Valence(ValueAst::Lit(4)))]
-    #[case::total_valence(AtomConstraintAst::total_valence(5), AtomConstraintAst::TotalValence(ValueAst::Lit(5)))]
-    #[case::donated_pairs(AtomConstraintAst::donated_pairs(1), AtomConstraintAst::DonatedPairs(ValueAst::Lit(1)))]
-    #[case::accepted_pairs(AtomConstraintAst::accepted_pairs(2), AtomConstraintAst::AcceptedPairs(ValueAst::Lit(2)))]
-    #[case::degree(AtomConstraintAst::degree(3), AtomConstraintAst::Degree(ValueAst::Lit(3)))]
-    #[case::total_degree(AtomConstraintAst::total_degree(4), AtomConstraintAst::TotalDegree(ValueAst::Lit(4)))]
-    #[case::ring_degree(AtomConstraintAst::ring_degree(2), AtomConstraintAst::RingDegree(ValueAst::Lit(2)))]
-    #[case::ring_valence(AtomConstraintAst::ring_valence(3), AtomConstraintAst::RingValence(ValueAst::Lit(3)))]
-    #[case::total_hydrogens(AtomConstraintAst::total_hydrogens(3), AtomConstraintAst::TotalHydrogens(ValueAst::Lit(3)))]
-    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, 1), AtomConstraintAst::RingMembership(RingMembershipAst { scope: RingScope::All, count: ValueAst::Lit(1) }))]
-    #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::Lit(1) }))]
+    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintAst::Valence(NumForm::Lit(4)))]
+    #[case::total_valence(AtomConstraintAst::total_valence(5), AtomConstraintAst::TotalValence(NumForm::Lit(5)))]
+    #[case::donated_pairs(AtomConstraintAst::donated_pairs(1), AtomConstraintAst::DonatedPairs(NumForm::Lit(1)))]
+    #[case::accepted_pairs(AtomConstraintAst::accepted_pairs(2), AtomConstraintAst::AcceptedPairs(NumForm::Lit(2)))]
+    #[case::degree(AtomConstraintAst::degree(3), AtomConstraintAst::Degree(NumForm::Lit(3)))]
+    #[case::total_degree(AtomConstraintAst::total_degree(4), AtomConstraintAst::TotalDegree(NumForm::Lit(4)))]
+    #[case::ring_degree(AtomConstraintAst::ring_degree(2), AtomConstraintAst::RingDegree(NumForm::Lit(2)))]
+    #[case::ring_valence(AtomConstraintAst::ring_valence(3), AtomConstraintAst::RingValence(NumForm::Lit(3)))]
+    #[case::total_hydrogens(AtomConstraintAst::total_hydrogens(3), AtomConstraintAst::TotalHydrogens(NumForm::Lit(3)))]
+    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, 1), AtomConstraintAst::RingMembership(RingMembershipAst { scope: RingScope::All, count: NumForm::Lit(1) }))]
+    #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
     #[case::aromatic_valence(
         AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic),
         AtomConstraintAst::AromaticValence(AromaticValenceAst::NotAromatic),
@@ -1127,11 +1127,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence_litset_singleton(AtomConstraintAst::Valence(ValueAst::lit_set([4])), Ok(AtomConstraintAst::valence(4)))]
+    #[case::valence_litset_singleton(AtomConstraintAst::Valence(NumForm::lit_set([4])), Ok(AtomConstraintAst::valence(4)))]
     #[case::ring_count_litset_singleton(
-        AtomConstraintAst::RingMembership(RingMembershipAst::new(RingScope::Size(6), ValueAst::lit_set([2]))),
+        AtomConstraintAst::RingMembership(RingMembershipAst::new(RingScope::Size(6), NumForm::lit_set([2]))),
         Ok(AtomConstraintAst::ring_membership(RingScope::Size(6), 2)))]
-    #[case::empty_litset_contradiction(AtomConstraintAst::Valence(ValueAst::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+    #[case::empty_litset_contradiction(AtomConstraintAst::Valence(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
     fn test_atom_constraint_ast_canonicalize(
         #[case] constraint: AtomConstraintAst,
         #[case] expected: Result<AtomConstraintAst, Contradiction>,
@@ -1142,9 +1142,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::valence_lit(AtomConstraintAst::valence(4), false)]
-    #[case::valence_undetermined(AtomConstraintAst::Valence(ValueAst::Undetermined), true)]
-    #[case::degree_undetermined(AtomConstraintAst::Degree(ValueAst::Undetermined), true)]
-    #[case::ring_membership_undetermined(AtomConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
+    #[case::valence_undetermined(AtomConstraintAst::Valence(NumForm::Undetermined), true)]
+    #[case::degree_undetermined(AtomConstraintAst::Degree(NumForm::Undetermined), true)]
+    #[case::ring_membership_undetermined(AtomConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined), true)]
     #[case::aromatic_undetermined(AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined), true)]
     #[case::aromatic_not_aromatic(AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic), false)]
     #[case::aromatic_with_value(AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1)), false)]
@@ -1162,9 +1162,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintAst::Valence(ValueAst::Undetermined))]
-    #[case::degree(AtomConstraintAst::Degree(ValueAst::Lit(2)), AtomConstraintAst::Degree(ValueAst::Undetermined))]
-    #[case::ring_membership_keeps_scope(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
+    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintAst::Valence(NumForm::Undetermined))]
+    #[case::degree(AtomConstraintAst::Degree(NumForm::Lit(2)), AtomConstraintAst::Degree(NumForm::Undetermined))]
+    #[case::ring_membership_keeps_scope(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined))]
     #[case::aromatic(AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1)), AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined))]
     #[case::multicenter(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::multicenter(1)), AtomConstraintAst::multicenter_valence(MulticenterValenceAst::Undetermined))]
     #[case::tetrahedral(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined))]
@@ -1177,7 +1177,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_key_widens(AtomConstraintAst::valence(4), AtomConstraintAst::valence(3), Ok(AtomConstraintAst::Valence(ValueAst::lit_set([3, 4]))))]
+    #[case::same_key_widens(AtomConstraintAst::valence(4), AtomConstraintAst::valence(3), Ok(AtomConstraintAst::Valence(NumForm::lit_set([3, 4]))))]
     #[case::different_key(AtomConstraintAst::valence(4), AtomConstraintAst::degree(3), Err(NoJoin))]
     fn test_atom_constraint_ast_join(
         #[case] a: AtomConstraintAst,
@@ -1202,7 +1202,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, AromaticValenceAst::Undetermined)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic)]
-    #[case::aromatic(AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(ValueAst::Lit(1)))]
+    #[case::aromatic(AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(NumForm::Lit(1)))]
     fn test_aromatic_valence_ast_constructors(
         #[case] actual: AromaticValenceAst,
         #[case] expected: AromaticValenceAst,
@@ -1214,7 +1214,7 @@ mod tests {
     #[case::not_aromatic(AromaticValence::NotAromatic, AromaticValenceAst::NotAromatic)]
     #[case::aromatic(
         AromaticValence::Aromatic(1),
-        AromaticValenceAst::Aromatic(ValueAst::Lit(1))
+        AromaticValenceAst::Aromatic(NumForm::Lit(1))
     )]
     fn test_aromatic_valence_ast_from(
         #[case] valence: AromaticValence,
@@ -1226,7 +1226,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, false)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, false)]
-    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), true)]
+    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(NumForm::Undetermined), true)]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(1), true)]
     fn test_aromatic_valence_ast_is_aromatic(
         #[case] v: AromaticValenceAst,
@@ -1236,18 +1236,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::undetermined(AromaticValenceAst::Undetermined, ValueAst::Undetermined)]
-    #[case::not_aromatic(AromaticValenceAst::NotAromatic, ValueAst::Lit(0))]
+    #[case::undetermined(AromaticValenceAst::Undetermined, NumForm::Undetermined)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, NumForm::Lit(0))]
     #[case::aromatic_undetermined(
-        AromaticValenceAst::Aromatic(ValueAst::Undetermined),
-        ValueAst::Undetermined
+        AromaticValenceAst::Aromatic(NumForm::Undetermined),
+        NumForm::Undetermined
     )]
-    #[case::aromatic_one(AromaticValenceAst::aromatic(1), ValueAst::Lit(1))]
-    #[case::aromatic_zero(AromaticValenceAst::aromatic(0), ValueAst::Lit(0))]
-    #[case::aromatic_two(AromaticValenceAst::aromatic(2), ValueAst::Lit(0))]
+    #[case::aromatic_one(AromaticValenceAst::aromatic(1), NumForm::Lit(1))]
+    #[case::aromatic_zero(AromaticValenceAst::aromatic(0), NumForm::Lit(0))]
+    #[case::aromatic_two(AromaticValenceAst::aromatic(2), NumForm::Lit(0))]
     fn test_aromatic_valence_ast_aromatic_covalence(
         #[case] v: AromaticValenceAst,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         assert_eq!(v.aromatic_covalence(), expected);
     }
@@ -1256,10 +1256,7 @@ mod tests {
     #[case::undetermined(AromaticValenceAst::Undetermined, true)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, false)]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(1), false)]
-    #[case::aromatic_inner_undetermined(
-        AromaticValenceAst::Aromatic(ValueAst::Undetermined),
-        false
-    )]
+    #[case::aromatic_inner_undetermined(AromaticValenceAst::Aromatic(NumForm::Undetermined), false)]
     fn test_aromatic_valence_ast_is_undetermined(
         #[case] v: AromaticValenceAst,
         #[case] expected: bool,
@@ -1270,11 +1267,11 @@ mod tests {
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, None)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, Some(AromaticValence::NotAromatic))]
-    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), None)]
+    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(NumForm::Undetermined), None)]
     #[case::aromatic_zero(AromaticValenceAst::aromatic(0), Some(AromaticValence::Aromatic(0)))]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(AromaticValence::Aromatic(3)))]
     #[case::aromatic_term_unresolved(
-        AromaticValenceAst::Aromatic(ValueAst::arith_expr(ArithExpr::Lit(2))),
+        AromaticValenceAst::Aromatic(NumForm::arith_expr(ArithExpr::Lit(2))),
         None
     )]
     fn test_aromatic_valence_ast_as_lit(
@@ -1287,7 +1284,7 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_folds_inner(
-        AromaticValenceAst::Aromatic(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))),
+        AromaticValenceAst::Aromatic(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))),
         Ok(AromaticValenceAst::aromatic(2)),
     )]
     #[case::aromatic_zero_not_collapsed(
@@ -1317,7 +1314,7 @@ mod tests {
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), None)]
     #[case::aromatic_eq(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), Some(AromaticValenceAst::aromatic(1)))]
     #[case::aromatic_neq(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(2), None)]
-    #[case::aromatic_inner_wildcard(AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(2), Some(AromaticValenceAst::aromatic(2)))]
+    #[case::aromatic_inner_wildcard(AromaticValenceAst::Aromatic(NumForm::Undetermined), AromaticValenceAst::aromatic(2), Some(AromaticValenceAst::aromatic(2)))]
     fn test_aromatic_valence_ast_meet(
         #[case] a: AromaticValenceAst,
         #[case] b: AromaticValenceAst,
@@ -1332,7 +1329,7 @@ mod tests {
     #[case::not_not(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), AromaticValenceAst::Undetermined)]
     #[case::aromatic_eq(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1))]
-    #[case::aromatic_inner_wildcard(AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(ValueAst::Undetermined))]
+    #[case::aromatic_inner_wildcard(AromaticValenceAst::Aromatic(NumForm::Undetermined), AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(NumForm::Undetermined))]
     fn test_aromatic_valence_ast_join(
         #[case] a: AromaticValenceAst,
         #[case] b: AromaticValenceAst,
@@ -1378,7 +1375,7 @@ mod tests {
         false
     )]
     #[case::aromatic_wildcard_inner(
-        AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+        AromaticValenceAst::Aromatic(NumForm::Undetermined),
         AromaticValenceAst::aromatic(2),
         true
     )]
@@ -1410,7 +1407,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, MulticenterValenceAst::Undetermined)]
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter)]
-    #[case::multicenter(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Multicenter(ValueAst::Lit(2)))]
+    #[case::multicenter(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Multicenter(NumForm::Lit(2)))]
     fn test_multicenter_valence_ast_constructors(
         #[case] actual: MulticenterValenceAst,
         #[case] expected: MulticenterValenceAst,
@@ -1425,7 +1422,7 @@ mod tests {
     )]
     #[case::multicenter(
         MulticenterValence::Multicenter(2),
-        MulticenterValenceAst::Multicenter(ValueAst::Lit(2))
+        MulticenterValenceAst::Multicenter(NumForm::Lit(2))
     )]
     fn test_multicenter_valence_ast_from(
         #[case] valence: MulticenterValence,
@@ -1438,7 +1435,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, false)]
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, false)]
-    #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), true)]
+    #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(NumForm::Undetermined), true)]
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(1), true)]
     fn test_multicenter_valence_ast_is_multicenter(
         #[case] v: MulticenterValenceAst,
@@ -1462,10 +1459,10 @@ mod tests {
     #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, None)]
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, Some(MulticenterValence::NotMulticenter))]
-    #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), None)]
+    #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(NumForm::Undetermined), None)]
     #[case::multicenter_zero(MulticenterValenceAst::multicenter(0), Some(MulticenterValence::Multicenter(0)))]
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(2), Some(MulticenterValence::Multicenter(2)))]
-    #[case::multicenter_term_unresolved(MulticenterValenceAst::Multicenter(ValueAst::arith_expr(ArithExpr::Lit(3))), None)]
+    #[case::multicenter_term_unresolved(MulticenterValenceAst::Multicenter(NumForm::arith_expr(ArithExpr::Lit(3))), None)]
     fn test_multicenter_valence_ast_as_lit(
         #[case] v: MulticenterValenceAst,
         #[case] expected: Option<MulticenterValence>,
@@ -1476,7 +1473,7 @@ mod tests {
 
     #[rstest]
     #[case::multicenter_folds_inner(
-        MulticenterValenceAst::Multicenter(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)]))),
+        MulticenterValenceAst::Multicenter(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)]))),
         Ok(MulticenterValenceAst::multicenter(3)),
     )]
     #[case::multicenter_zero_not_collapsed(
@@ -1506,7 +1503,7 @@ mod tests {
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::multicenter(2), None)]
     #[case::multicenter_eq(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2), Some(MulticenterValenceAst::multicenter(2)))]
     #[case::multicenter_neq(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(3), None)]
-    #[case::multicenter_inner_wildcard(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), MulticenterValenceAst::multicenter(3), Some(MulticenterValenceAst::multicenter(3)))]
+    #[case::multicenter_inner_wildcard(MulticenterValenceAst::Multicenter(NumForm::Undetermined), MulticenterValenceAst::multicenter(3), Some(MulticenterValenceAst::multicenter(3)))]
     fn test_multicenter_valence_ast_meet(
         #[case] a: MulticenterValenceAst,
         #[case] b: MulticenterValenceAst,
@@ -1521,7 +1518,7 @@ mod tests {
     #[case::not_not(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter)]
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Undetermined)]
     #[case::multicenter_eq(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2))]
-    #[case::multicenter_inner_wildcard(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Multicenter(ValueAst::Undetermined))]
+    #[case::multicenter_inner_wildcard(MulticenterValenceAst::Multicenter(NumForm::Undetermined), MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Multicenter(NumForm::Undetermined))]
     fn test_multicenter_valence_ast_join(
         #[case] a: MulticenterValenceAst,
         #[case] b: MulticenterValenceAst,
@@ -1617,14 +1614,14 @@ mod tests {
     #[rstest]
     #[case::drop_vacuous(
         AtomConstraintsAst::from_iter([
-            AtomConstraintAst::Valence(ValueAst::Undetermined),
+            AtomConstraintAst::Valence(NumForm::Undetermined),
             AtomConstraintAst::degree(3),
         ]),
         Ok(AtomConstraintsAst::from_iter([AtomConstraintAst::degree(3)])))]
     #[case::canonicalizes_values(
         AtomConstraintsAst::from_iter([
-            AtomConstraintAst::Degree(ValueAst::lit_set([3])),
-            AtomConstraintAst::Valence(ValueAst::lit_set([4])),
+            AtomConstraintAst::Degree(NumForm::lit_set([3])),
+            AtomConstraintAst::Valence(NumForm::lit_set([4])),
         ]),
         Ok(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])))]
     fn test_atom_constraints_ast_canonicalize(
@@ -1638,11 +1635,11 @@ mod tests {
     #[rstest]
     #[case::fresh(vec![AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4)])]
     #[case::overwrite_same_key(vec![AtomConstraintAst::valence(3), AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4)])]
-    #[case::vacuous_overwrites(vec![AtomConstraintAst::valence(4), AtomConstraintAst::Valence(ValueAst::Undetermined)], vec![AtomConstraintAst::Valence(ValueAst::Undetermined)])]
-    #[case::vacuous_absent_inserts(vec![AtomConstraintAst::Valence(ValueAst::Undetermined)], vec![AtomConstraintAst::Valence(ValueAst::Undetermined)])]
+    #[case::vacuous_overwrites(vec![AtomConstraintAst::valence(4), AtomConstraintAst::Valence(NumForm::Undetermined)], vec![AtomConstraintAst::Valence(NumForm::Undetermined)])]
+    #[case::vacuous_absent_inserts(vec![AtomConstraintAst::Valence(NumForm::Undetermined)], vec![AtomConstraintAst::Valence(NumForm::Undetermined)])]
     #[case::new_key_sorts(vec![AtomConstraintAst::degree(3), AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])]
     #[case::ring_overwrite_scope(vec![AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 2)], vec![AtomConstraintAst::ring_membership(RingScope::Size(6), 2)])]
-    #[case::ring_vacuous_overwrites_scope(vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)], vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)])]
+    #[case::ring_vacuous_overwrites_scope(vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)], vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)])]
     fn test_atom_constraints_ast_set(
         #[case] sequence: Vec<AtomConstraintAst>,
         #[case] expected_state: Vec<AtomConstraintAst>,
@@ -1666,7 +1663,7 @@ mod tests {
         vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])]
     #[case::vacuous_removes(
         vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)],
-        vec![AtomConstraintAst::Valence(ValueAst::Undetermined)],
+        vec![AtomConstraintAst::Valence(NumForm::Undetermined)],
         vec![AtomConstraintAst::degree(3)])]
     #[case::empty_other(
         vec![AtomConstraintAst::valence(4)],
@@ -1692,7 +1689,7 @@ mod tests {
     #[case::modify(vec![AtomConstraintAst::valence(3)], Some(AtomConstraintAst::valence(3)), Some(AtomConstraintAst::valence(4)), Ok(()), vec![AtomConstraintAst::valence(4)])]
     #[case::remove(vec![AtomConstraintAst::valence(4)], Some(AtomConstraintAst::valence(4)), None, Ok(()), vec![])]
     #[case::add_from_absent(vec![], None, Some(AtomConstraintAst::valence(4)), Ok(()), vec![AtomConstraintAst::valence(4)])]
-    #[case::canonical_match(vec![AtomConstraintAst::Valence(ValueAst::lit_set([4]))], Some(AtomConstraintAst::valence(4)), Some(AtomConstraintAst::valence(5)), Ok(()), vec![AtomConstraintAst::valence(5)])]
+    #[case::canonical_match(vec![AtomConstraintAst::Valence(NumForm::lit_set([4]))], Some(AtomConstraintAst::valence(4)), Some(AtomConstraintAst::valence(5)), Ok(()), vec![AtomConstraintAst::valence(5)])]
     #[case::old_mismatch(vec![AtomConstraintAst::valence(3)], Some(AtomConstraintAst::valence(4)), Some(AtomConstraintAst::valence(5)), Err(Contradiction), vec![AtomConstraintAst::valence(3)])]
     #[case::old_absent_mismatch(vec![AtomConstraintAst::valence(3)], None, Some(AtomConstraintAst::valence(4)), Err(Contradiction), vec![AtomConstraintAst::valence(3)])]
     #[case::key_mismatch(vec![], Some(AtomConstraintAst::valence(3)), Some(AtomConstraintAst::degree(4)), Err(Contradiction), vec![])]
@@ -1862,7 +1859,7 @@ mod tests {
     #[rstest]
     #[case::empty_empty(AtomConstraintsAst::new(), AtomConstraintsAst::new(), Some(AtomConstraintsAst::new()))]
     #[case::adds_kind_from_other(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])))]
-    #[case::narrows_undetermined_to_lit(AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Undetermined)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
+    #[case::narrows_undetermined_to_lit(AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::Undetermined)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
         Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])))]
     #[case::lit_lit_match_preserved(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
         Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])))]
@@ -1878,7 +1875,7 @@ mod tests {
         Some(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)])))]
     #[case::ring_membership_size_dedup(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)]), AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)]),
         Some(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)])))]
-    #[case::prunes_vacuous(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Undetermined)]), Some(AtomConstraintsAst::new()))]
+    #[case::prunes_vacuous(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::Undetermined)]), Some(AtomConstraintsAst::new()))]
     #[case::tetrahedral_narrows_from_absent(AtomConstraintsAst::new(),
         AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
         Some(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)])))]
@@ -1913,7 +1910,7 @@ mod tests {
     #[case::keeps_only_shared_kinds(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(2)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
         AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]))]
     #[case::widens_value(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(3)]),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::lit_set([4, 3]))]))]
+        AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::lit_set([4, 3]))]))]
     #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
         AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
         AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]))]

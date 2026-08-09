@@ -49,24 +49,24 @@ use crate::ir::molecule::MoleculeAst;
 use crate::ir::spin::UnpairedElectronsAst;
 use crate::ir::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
 use crate::ir::traits::{FromIr, IntoIr};
-use crate::ir::value::ValueAst;
+use crate::ir::value::NumForm;
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'"' => {
             let s = de.read_string()?;
-            let v: ValueAst =
+            let v: NumForm =
                 parse_value(s.as_ref()).map_err(|e| DeError::subgrammar("value", e))?;
             Ok(ValueDsl(v))
         }
         b'[' => {
             let items = read_vec(de, |d| Ok(d.read_i64()?))?;
-            Ok(ValueDsl(ValueAst::lit_set(items)))
+            Ok(ValueDsl(NumForm::lit_set(items)))
         }
         b':' => {
             let name = de.read_keyword_name()?;
             if name.as_ref() == "undetermined" {
-                Ok(ValueDsl(ValueAst::Undetermined))
+                Ok(ValueDsl(NumForm::Undetermined))
             } else {
                 Err(
                     DeError::Custom(format!("unexpected keyword :{} in value position", name))
@@ -74,7 +74,7 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
                 )
             }
         }
-        _ => Ok(ValueDsl(ValueAst::Lit(de.read_i64()?))),
+        _ => Ok(ValueDsl(NumForm::Lit(de.read_i64()?))),
     }
 }
 
@@ -184,7 +184,7 @@ fn read_ring_membership_dsl(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<RingMembershipAst, EdnError> {
     let mut size: Option<u8> = None;
-    let mut count: Option<ValueAst> = None;
+    let mut count: Option<NumForm> = None;
     read_map(de, |de, key| {
         match key {
             "size" => size = Some(de.read_i64()? as u8),
@@ -2210,7 +2210,7 @@ mod tests {
     use crate::ir::stereo::{
         CisTransStereoAst, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity,
     };
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
     use crate::ir::BooleanAst;
 
     /// Every `fuzz_constraints` seed must parse as a `ConstraintDsl` or a `ConstraintsDsl` (tree) —
@@ -2309,15 +2309,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge_sum(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }, "{:charge-sum {:atoms [0 1] :sum 0}}")]
-    #[case::charge_sum_all(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }, "{:charge-sum {:sum 0}}")]
+    #[case::charge_sum(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: NumForm::Lit(0) }, "{:charge-sum {:atoms [0 1] :sum 0}}")]
+    #[case::charge_sum_all(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }, "{:charge-sum {:sum 0}}")]
     #[case::unpaired_electron_coupling(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() },
         "{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}")]
     #[case::unpaired_electron_coupling_all(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: (0_u8, 1_u8).into() },
         "{:unpaired-electron-coupling {:unpaired-electrons {:count 0 :multiplicity 1}}}")]
-    #[case::valence(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: ValueAst::Lit(4) },
+    #[case::valence(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: NumForm::Lit(4) },
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
-    #[case::bond_order_sum_all(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(0) }, "{:bond-order-sum {:sum 0}}")]
+    #[case::bond_order_sum_all(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Lit(0) }, "{:bond-order-sum {:sum 0}}")]
     #[case::connected(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1), AtomId(2)]) }, "{:connected {:atoms [0 1 2]}}")]
     #[case::connected_all(MoleculeConstraint::Connected { atoms: None }, "{:connected {}}")]
     fn test_molecule_constraint_dsl_roundtrip(
@@ -2487,9 +2487,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(4))), "{:atom [0 {:valence 4}]}")]
+    #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(4))), "{:atom [0 {:valence 4}]}")]
     #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraintAst::Aromatic(BooleanAst::Lit(true))), "{:bond [1 {:aromatic true}]}")]
-    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1))),
+    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))),
         "{:dative-bond [0 {:ring-membership {:count 1}}]}")]
     #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }),
         "{:dative-bond-donor [0 2]}")]
@@ -2498,39 +2498,39 @@ mod tests {
     #[case::dative_bond_leaf_parallels(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(2) }),
         "{:dative-bond-parallels [0 2]}")]
     #[case::dative_bond_leaf_all_donors(Constraint::Relational(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::Valence(ValueAst::Lit(3))) }), "{:dative-bond-all-donors [0 {:valence 3}]}")]
+        predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(3))) }), "{:dative-bond-all-donors [0 {:valence 3}]}")]
     #[case::aromatic_system_leaf_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0),
         atoms: vec![AtomId(0), AtomId(1)] }), "{:aromatic-system-atoms [0 [0 1]]}")]
     #[case::aromatic_system_leaf_contains(Constraint::Relational(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(2) }),
         "{:aromatic-system-contains [0 2]}")]
     #[case::aromatic_system_leaf_all_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(0),
-        predicate: Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4))) }), "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
+        predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))) }), "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
     #[case::multicenter_leaf_atoms(Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1), AtomId(2)] }), "{:multicenter-bond-atoms [0 [0 1 2]]}")]
     #[case::multicenter_leaf_contains_all(Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1)] }), "{:multicenter-bond-contains-all [0 [0 1]]}")]
     #[case::multicenter_leaf_any_atom(Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraintAst::Degree(ValueAst::Lit(3))) }), "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
+        predicate: Box::new(AtomConstraintAst::Degree(NumForm::Lit(3))) }), "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
     #[case::noncovalent_leaf_ends(Constraint::Relational(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(3)] }),
         "{:noncovalent-bond-ends [0 [0 3]]}")]
     #[case::noncovalent_leaf_contains(Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(0), atom: AtomId(2) }),
         "{:noncovalent-bond-contains [0 2]}")]
     #[case::noncovalent_leaf_ends_satisfy(Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-        predicates: [Box::new(AtomConstraintAst::Valence(ValueAst::Lit(2))), Box::new(AtomConstraintAst::Valence(ValueAst::Lit(3)))] }),
+        predicates: [Box::new(AtomConstraintAst::Valence(NumForm::Lit(2))), Box::new(AtomConstraintAst::Valence(NumForm::Lit(3)))] }),
         "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}")]
     #[case::molecule_connected(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1)]) }), "{:connected {:atoms [0 1]}}")]
-    #[case::molecule_charge_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
+    #[case::molecule_charge_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: NumForm::Lit(0) }),
         "{:charge-sum {:atoms [0 1] :sum 0}}")]
     #[case::molecule_unpaired_electron_coupling(Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: (1_u8, 2_u8).into() }),
         "{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}")]
-    #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: ValueAst::Lit(4) }),
+    #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: NumForm::Lit(4) }),
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
     #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
         "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
-    #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
-    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(4))), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
+    #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
+    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(4))), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
         "{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}")]
-    #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(ValueAst::Lit(4)))]),
+    #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(NumForm::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(NumForm::Lit(4)))]),
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
     fn test_constraint_dsl_roundtrip(
         #[from(full_namespace)] namespace: MoleculeContext,
@@ -2549,22 +2549,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraintAst::Valence(ValueAst::Lit(4)), "{:valence 4}")]
+    #[case::valence(AtomConstraintAst::Valence(NumForm::Lit(4)), "{:valence 4}")]
     #[case::aromatic_valence_not_aromatic(AtomConstraintAst::AromaticValence(AromaticValenceAst::NotAromatic), "{:aromatic-valence :not-aromatic}")]
-    #[case::aromatic_valence_aromatic(AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
+    #[case::aromatic_valence_aromatic(AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
     #[case::aromatic_valence_undetermined(AtomConstraintAst::AromaticValence(AromaticValenceAst::Undetermined), "{:aromatic-valence :undetermined}")]
     #[case::multicenter_valence_not_multicenter(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
-    #[case::multicenter_valence_multicenter(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
+    #[case::multicenter_valence_multicenter(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
     #[case::multicenter_valence_undetermined(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Undetermined), "{:multicenter-valence :undetermined}")]
-    #[case::donated_pairs(AtomConstraintAst::DonatedPairs(ValueAst::Lit(1)), "{:donated-pairs 1}")]
-    #[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(ValueAst::Lit(2)), "{:accepted-pairs 2}")]
-    #[case::degree(AtomConstraintAst::Degree(ValueAst::Lit(3)), "{:degree 3}")]
-    #[case::total_degree(AtomConstraintAst::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
-    #[case::ring_degree(AtomConstraintAst::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
-    #[case::ring_valence(AtomConstraintAst::RingValence(ValueAst::Lit(3)), "{:ring-valence 3}")]
-    #[case::total_valence(AtomConstraintAst::TotalValence(ValueAst::Lit(5)), "{:total-valence 5}")]
-    #[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
-    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
+    #[case::donated_pairs(AtomConstraintAst::DonatedPairs(NumForm::Lit(1)), "{:donated-pairs 1}")]
+    #[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(NumForm::Lit(2)), "{:accepted-pairs 2}")]
+    #[case::degree(AtomConstraintAst::Degree(NumForm::Lit(3)), "{:degree 3}")]
+    #[case::total_degree(AtomConstraintAst::TotalDegree(NumForm::Lit(4)), "{:total-degree 4}")]
+    #[case::ring_degree(AtomConstraintAst::RingDegree(NumForm::Lit(2)), "{:ring-degree 2}")]
+    #[case::ring_valence(AtomConstraintAst::RingValence(NumForm::Lit(3)), "{:ring-valence 3}")]
+    #[case::total_valence(AtomConstraintAst::TotalValence(NumForm::Lit(5)), "{:total-valence 5}")]
+    #[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(NumForm::Lit(3)), "{:total-hydrogens 3}")]
+    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)), "{:ring-membership {:count 1}}")]
     #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
     #[case::tetrahedral_stereo_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
     #[case::tetrahedral_stereo_lit(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
@@ -2585,7 +2585,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), "{:bond [0 {:aromatic true}]}")]
-    #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
+    #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
     #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
@@ -2660,7 +2660,7 @@ mod tests {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomId(0),
-            AtomConstraintAst::Valence(ValueAst::Lit(4)),
+            AtomConstraintAst::Valence(NumForm::Lit(4)),
         ));
         cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),

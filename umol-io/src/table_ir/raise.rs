@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
     MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst, NoncovalentBondAst,
-    StereoCoset, TetrahedralStereoAst, TryIntoIr, UnpairedElectronsAst, ValueAst,
+    NumForm, StereoCoset, TetrahedralStereoAst, TryIntoIr, UnpairedElectronsAst,
 };
 use umol_perm::{ClassKey, Permutation};
 use umol_utils::error::UmolError;
@@ -146,25 +146,25 @@ impl TryIntoIr<AtomAst> for &TableAtom {
                 None => IsotopeMassAst::Undetermined,
             },
             charge: match self.charge {
-                Some(c) => ValueAst::Lit(c as i64),
-                None => ValueAst::Undetermined,
+                Some(c) => NumForm::Lit(c as i64),
+                None => NumForm::Undetermined,
             },
             implicit_hydrogens: match self.implicit_hydrogens {
-                Some(n) => ValueAst::Lit(n as i64),
-                None => ValueAst::Undetermined,
+                Some(n) => NumForm::Lit(n as i64),
+                None => NumForm::Undetermined,
             },
             lone_pairs: match self.lone_pairs {
-                Some(n) => ValueAst::Lit(n as i64),
-                None => ValueAst::Undetermined,
+                Some(n) => NumForm::Lit(n as i64),
+                None => NumForm::Undetermined,
             },
             unpaired_electrons: UnpairedElectronsAst {
                 count: match self.unpaired_electrons {
-                    Some(unpaired_electrons) => ValueAst::Lit(unpaired_electrons as i64),
-                    None => ValueAst::Undetermined,
+                    Some(unpaired_electrons) => NumForm::Lit(unpaired_electrons as i64),
+                    None => NumForm::Undetermined,
                 },
                 multiplicity: match self.multiplicity {
-                    Some(multiplicity) => ValueAst::Lit(u8::from(multiplicity) as i64),
-                    None => ValueAst::Undetermined,
+                    Some(multiplicity) => NumForm::Lit(u8::from(multiplicity) as i64),
+                    None => NumForm::Undetermined,
                 },
             },
             constraints: Default::default(),
@@ -172,14 +172,14 @@ impl TryIntoIr<AtomAst> for &TableAtom {
         match self.aromatic {
             Some(true) => {
                 atom.constraints.set(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+                    AromaticValenceAst::Aromatic(NumForm::Undetermined),
                 ));
                 // A bare aromatic heteroatom specifies zero H; any H must be bracketed
                 // ([nH]), which arrives above as an explicit count.
                 if matches!(self.element, Some(element) if element != Element::C)
-                    && matches!(atom.implicit_hydrogens, ValueAst::Undetermined)
+                    && matches!(atom.implicit_hydrogens, NumForm::Undetermined)
                 {
-                    atom.implicit_hydrogens = ValueAst::Lit(0);
+                    atom.implicit_hydrogens = NumForm::Lit(0);
                 }
             }
             Some(false) => {
@@ -193,11 +193,11 @@ impl TryIntoIr<AtomAst> for &TableAtom {
         if matches!(atom.isotope_mass, IsotopeMassAst::Undetermined) {
             atom.isotope_mass = IsotopeMassAst::Natural;
         }
-        if matches!(atom.charge, ValueAst::Undetermined) {
-            atom.charge = ValueAst::Lit(0);
+        if matches!(atom.charge, NumForm::Undetermined) {
+            atom.charge = NumForm::Lit(0);
         }
-        if matches!(atom.unpaired_electrons.count, ValueAst::Undetermined) {
-            atom.unpaired_electrons.count = ValueAst::Lit(0);
+        if matches!(atom.unpaired_electrons.count, NumForm::Undetermined) {
+            atom.unpaired_electrons.count = NumForm::Lit(0);
         }
         atom.constraints.retain(|c| !c.is_undetermined());
         Ok(atom)
@@ -211,8 +211,8 @@ impl TryIntoIr<BondAst> for &TableBond {
     fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<BondAst, RaiseError> {
         let mut bond = BondAst::new(raise_bond_order(self.order));
         bond.charge = match self.charge {
-            Some(c) => ValueAst::Lit(c as i64),
-            None => ValueAst::Undetermined,
+            Some(c) => NumForm::Lit(c as i64),
+            None => NumForm::Undetermined,
         };
         if matches!(self.order, TableBondOrder::Aromatic) {
             bond.constraints
@@ -222,19 +222,19 @@ impl TryIntoIr<BondAst> for &TableBond {
     }
 }
 
-fn raise_bond_order(order: TableBondOrder) -> ValueAst {
+fn raise_bond_order(order: TableBondOrder) -> NumForm {
     match order {
-        TableBondOrder::Zero => ValueAst::Lit(0),
-        TableBondOrder::Single => ValueAst::Lit(1),
-        TableBondOrder::Double => ValueAst::Lit(2),
-        TableBondOrder::Triple => ValueAst::Lit(3),
-        TableBondOrder::Quadruple => ValueAst::Lit(4),
-        TableBondOrder::Quintuple => ValueAst::Lit(5),
-        TableBondOrder::Sextuple => ValueAst::Lit(6),
+        TableBondOrder::Zero => NumForm::Lit(0),
+        TableBondOrder::Single => NumForm::Lit(1),
+        TableBondOrder::Double => NumForm::Lit(2),
+        TableBondOrder::Triple => NumForm::Lit(3),
+        TableBondOrder::Quadruple => NumForm::Lit(4),
+        TableBondOrder::Quintuple => NumForm::Lit(5),
+        TableBondOrder::Sextuple => NumForm::Lit(6),
         // Definite-aromatic: localized bond order is 1 by Kekulé convention;
         // the aromatic flag is added separately as `BondConstraintAst::Aromatic`.
         // Renders as `1#a`.
-        TableBondOrder::Aromatic => ValueAst::Lit(1),
+        TableBondOrder::Aromatic => NumForm::Lit(1),
         // Fuzzy orders: no concrete bond order can be assigned; raise to
         // `Undetermined`. Aromatic-flag setting (where applicable) is left
         // off — the chemistry of these is too ambiguous for the raise.
@@ -242,7 +242,7 @@ fn raise_bond_order(order: TableBondOrder) -> ValueAst {
         TableBondOrder::SingleOrDouble
         | TableBondOrder::SingleOrAromatic
         | TableBondOrder::DoubleOrAromatic
-        | TableBondOrder::Any => ValueAst::Undetermined,
+        | TableBondOrder::Any => NumForm::Undetermined,
     }
 }
 
@@ -474,12 +474,12 @@ mod tests {
                 atoms: vec![AtomAst {
                     element: ElementAst::Lit(Element::C),
                     isotope_mass: IsotopeMassAst::Natural,
-                    charge: ValueAst::Lit(0),
-                    implicit_hydrogens: ValueAst::Lit(4),
-                    lone_pairs: ValueAst::Undetermined,
+                    charge: NumForm::Lit(0),
+                    implicit_hydrogens: NumForm::Lit(4),
+                    lone_pairs: NumForm::Undetermined,
                     unpaired_electrons: UnpairedElectronsAst {
-                        count: ValueAst::Lit(0),
-                        multiplicity: ValueAst::Undetermined,
+                        count: NumForm::Lit(0),
+                        multiplicity: NumForm::Undetermined,
                     },
                     constraints: AtomConstraintsAst::new(),
                 }],
@@ -523,12 +523,12 @@ mod tests {
         AtomAst {
             element: ElementAst::Undetermined,
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Undetermined,
-            lone_pairs: ValueAst::Undetermined,
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Undetermined,
+            lone_pairs: NumForm::Undetermined,
             unpaired_electrons: UnpairedElectronsAst {
-                count: ValueAst::Lit(0),
-                multiplicity: ValueAst::Undetermined,
+                count: NumForm::Lit(0),
+                multiplicity: NumForm::Undetermined,
             },
             constraints: AtomConstraintsAst::new(),
         }
@@ -543,12 +543,12 @@ mod tests {
         AtomAst {
             element: ElementAst::Undetermined,
             isotope_mass: IsotopeMassAst::Lit(13),
-            charge: ValueAst::Lit(-1),
-            implicit_hydrogens: ValueAst::Lit(2),
-            lone_pairs: ValueAst::Lit(1),
+            charge: NumForm::Lit(-1),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(1),
             unpaired_electrons: UnpairedElectronsAst {
-                count: ValueAst::Lit(2),
-                multiplicity: ValueAst::Lit(1),
+                count: NumForm::Lit(2),
+                multiplicity: NumForm::Lit(1),
             },
             constraints: AtomConstraintsAst::new(),
         }
@@ -585,15 +585,15 @@ mod tests {
             Ok(AtomAst {
                 element: ElementAst::Undetermined,
                 isotope_mass: IsotopeMassAst::Natural,
-                charge: ValueAst::Lit(0),
-                implicit_hydrogens: ValueAst::Undetermined,
-                lone_pairs: ValueAst::Undetermined,
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Undetermined,
+                lone_pairs: NumForm::Undetermined,
                 unpaired_electrons: UnpairedElectronsAst {
-                    count: ValueAst::Lit(0),
-                    multiplicity: ValueAst::Undetermined,
+                    count: NumForm::Lit(0),
+                    multiplicity: NumForm::Undetermined,
                 },
                 constraints: AtomConstraintsAst::from(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+                    AromaticValenceAst::Aromatic(NumForm::Undetermined),
                 )),
             })
         );
@@ -604,7 +604,7 @@ mod tests {
     #[case::table_aromatic_false(Some(false), Some(AromaticValenceAst::NotAromatic))]
     #[case::table_aromatic_true(
         Some(true),
-        Some(AromaticValenceAst::Aromatic(ValueAst::Undetermined))
+        Some(AromaticValenceAst::Aromatic(NumForm::Undetermined))
     )]
     fn test_table_molecule_try_into_ir_aromatic(
         mut carbon: TableMolecule,
@@ -622,16 +622,16 @@ mod tests {
     // A bare aromatic heteroatom resolves to zero H; aromatic carbon and explicit
     // bracket H are left to the valence model / preserved.
     #[rstest]
-    #[case::aromatic_nitrogen_bare(Element::N, Some(true), None, ValueAst::Lit(0))]
-    #[case::aromatic_oxygen_bare(Element::O, Some(true), None, ValueAst::Lit(0))]
-    #[case::aromatic_nitrogen_bracket_h(Element::N, Some(true), Some(1), ValueAst::Lit(1))]
-    #[case::aromatic_carbon_bare(Element::C, Some(true), None, ValueAst::Undetermined)]
-    #[case::aliphatic_nitrogen_bare(Element::N, Some(false), None, ValueAst::Undetermined)]
+    #[case::aromatic_nitrogen_bare(Element::N, Some(true), None, NumForm::Lit(0))]
+    #[case::aromatic_oxygen_bare(Element::O, Some(true), None, NumForm::Lit(0))]
+    #[case::aromatic_nitrogen_bracket_h(Element::N, Some(true), Some(1), NumForm::Lit(1))]
+    #[case::aromatic_carbon_bare(Element::C, Some(true), None, NumForm::Undetermined)]
+    #[case::aliphatic_nitrogen_bare(Element::N, Some(false), None, NumForm::Undetermined)]
     fn test_table_molecule_try_into_ir_aromatic_heteroatoms(
         #[case] element: Element,
         #[case] aromatic: Option<bool>,
         #[case] hydrogens: Option<u8>,
-        #[case] expected: ValueAst,
+        #[case] expected: NumForm,
     ) {
         let mut atom = TableAtom::from_element(element);
         atom.aromatic = aromatic;
@@ -648,7 +648,7 @@ mod tests {
     ) {
         let ast: MoleculeAst = (&diatomic).try_into_ir(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
-        assert!(matches!(bond.order, ValueAst::Lit(2)));
+        assert!(matches!(bond.order, NumForm::Lit(2)));
     }
 
     #[rstest]
@@ -657,7 +657,7 @@ mod tests {
     ) {
         let ast: MoleculeAst = (&diatomic).try_into_ir(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
-        assert!(matches!(bond.order, ValueAst::Lit(1)));
+        assert!(matches!(bond.order, NumForm::Lit(1)));
         assert!(bond
             .constraints
             .iter()
@@ -679,7 +679,7 @@ mod tests {
     fn test_parse_mol_to_ast(#[case] input: &str, #[case] expected_atom: &str) {
         let ast = parse_mol_to_ast(input).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
-        assert_eq!(atom.charge, ValueAst::Lit(0));
+        assert_eq!(atom.charge, NumForm::Lit(0));
         assert!(atom.constraints.aromatic_valence().is_none());
         assert_eq!(atom.to_string(), expected_atom);
     }
@@ -690,8 +690,8 @@ mod tests {
         let smiles = Smiles::parse(input).unwrap();
         let ast: MoleculeAst = smiles.as_table_ir().try_into_ir(&()).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
-        assert_eq!(atom.charge, ValueAst::Lit(0));
-        assert!(matches!(atom.implicit_hydrogens, ValueAst::Undetermined));
+        assert_eq!(atom.charge, NumForm::Lit(0));
+        assert!(matches!(atom.implicit_hydrogens, NumForm::Undetermined));
         assert!(matches!(
             atom.constraints.aromatic_valence(),
             Some(AromaticValenceAst::NotAromatic)
@@ -709,12 +709,12 @@ mod tests {
             &AtomAst {
                 element: ElementAst::Undetermined,
                 isotope_mass: IsotopeMassAst::Natural,
-                charge: ValueAst::Lit(0),
-                implicit_hydrogens: ValueAst::Undetermined,
-                lone_pairs: ValueAst::Undetermined,
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Undetermined,
+                lone_pairs: NumForm::Undetermined,
                 unpaired_electrons: UnpairedElectronsAst {
-                    count: ValueAst::Lit(0),
-                    multiplicity: ValueAst::Undetermined,
+                    count: NumForm::Lit(0),
+                    multiplicity: NumForm::Undetermined,
                 },
                 constraints: AtomConstraintsAst::new(),
             }

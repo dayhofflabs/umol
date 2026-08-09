@@ -549,7 +549,7 @@ mod tests {
     };
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::{StereoCoset, StereoKind};
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
 
     #[rstest]
     #[case::element(
@@ -793,9 +793,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::grounded(atom(Element::C) + ground(), ValueAst::Lit(0))]
-    #[case::ungrounded(MoleculeSpec::new() + atom(Element::C), ValueAst::Undetermined)]
-    fn test_molecule_spec_ground(#[case] spec: MoleculeSpec, #[case] expected_charge: ValueAst) {
+    #[case::grounded(atom(Element::C) + ground(), NumForm::Lit(0))]
+    #[case::ungrounded(MoleculeSpec::new() + atom(Element::C), NumForm::Undetermined)]
+    fn test_molecule_spec_ground(#[case] spec: MoleculeSpec, #[case] expected_charge: NumForm) {
         let mol = spec.build();
 
         assert_eq!(mol.atom(AtomId(0)).ast.charge, expected_charge);

@@ -9,8 +9,8 @@ use umol_graph_core::{
     RefinementRounds, RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
 };
 use umol_graph_ir::ir::{
-    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
-    RingConfig, ValueAst,
+    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, NumForm,
+    ReactionAst, RingConfig,
 };
 use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -310,8 +310,8 @@ fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
         Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
             id: AtomId(0),
             change: AtomFieldChange::Charge {
-                old: ValueAst::Lit(1),
-                new: ValueAst::Lit(0),
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(0),
             },
         })]),
     ),

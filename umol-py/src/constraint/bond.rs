@@ -18,7 +18,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::stereo::{CisTransStereoAst, CisTransStereoLike};
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// The key (identity) of a bond constraint, for keyed lookup. The ring-membership
 /// key carries its ring scope; all other keys are the bare discriminant.
@@ -396,7 +396,7 @@ impl BondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: NumLike) {
         self.0.set(GraphIrBondConstraintAst::ring_membership(
             GraphIrRingScope::All,
             value.to_rust(py),
@@ -769,7 +769,7 @@ impl BondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) {
         self.set_ast(
             py,
             GraphIrBondConstraintAst::ring_membership(GraphIrRingScope::All, value.to_rust(py)),
@@ -882,7 +882,7 @@ impl BondRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueLike) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) {
         let constraint = GraphIrBondConstraintAst::ring_membership(
             GraphIrRingScope::Size(size),
             count.to_rust(py),

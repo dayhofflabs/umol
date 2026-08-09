@@ -155,7 +155,7 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeEntries, ValueAst,
+        AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeEntries, NumForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
@@ -177,8 +177,8 @@ mod tests {
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::ImplicitHydrogens {
-                        old: ValueAst::Undetermined,
-                        new: ValueAst::Lit(4),
+                        old: NumForm::Undetermined,
+                        new: NumForm::Lit(4),
                     },
                 },
                 Edit::ModifyAtomConstraint {

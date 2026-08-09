@@ -9,10 +9,10 @@ use crate::strategies::*;
 
 proptest! {
     #[test]
-    fn test_value_ast_lattice_laws(
-        a in any_value_ast_strategy(),
-        b in any_value_ast_strategy(),
-        c in any_value_ast_strategy(),
+    fn test_num_form_lattice_laws(
+        a in any_num_form_strategy(),
+        b in any_num_form_strategy(),
+        c in any_num_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -33,10 +33,10 @@ proptest! {
     /// canonicality — which the canonicalized strategies above never reach. One
     /// per `canonical()`-overriding leaf with a fold path.
     #[test]
-    fn test_value_ast_lattice_laws_raw(
-        a in raw_value_ast_strategy(),
-        b in raw_value_ast_strategy(),
-        c in raw_value_ast_strategy(),
+    fn test_num_form_lattice_laws_raw(
+        a in raw_num_form_strategy(),
+        b in raw_num_form_strategy(),
+        c in raw_num_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }
@@ -162,7 +162,7 @@ proptest! {
         let ast = AromaticValenceAst::from(AromaticValence::Aromatic(valence));
         let expected = if valence == 1 { 1 } else { 0 };
         prop_assert_eq!(aromatic_covalence(valence), expected);
-        prop_assert_eq!(ast.aromatic_covalence(), ValueAst::Lit(expected));
+        prop_assert_eq!(ast.aromatic_covalence(), NumForm::Lit(expected));
     }
 
     #[test]

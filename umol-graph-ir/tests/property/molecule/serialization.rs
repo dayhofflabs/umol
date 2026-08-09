@@ -113,7 +113,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_binding_present() {
     let mut cs = Constraints::new();
     cs.push(Constraint::Atom(
         AtomId(0),
-        AtomConstraintAst::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(NumForm::Lit(4)),
     ));
     let ast = MoleculeAst::from_entries(MoleculeEntries {
         atoms,

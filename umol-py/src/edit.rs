@@ -1816,13 +1816,13 @@ mod tests {
         NoncovalentBondAst as GraphIrNoncovalentBondAst,
         NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
-        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst,
+        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst, NumForm as GraphIrNumForm,
         StereoAtomAst as GraphIrStereoAtomAst,
         StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
         StereoBondAst as GraphIrStereoBondAst,
         StereoBondFieldChange as GraphIrStereoBondFieldChange,
         StereoConfigurationAst as GraphIrStereoConfigurationAst, StereoKind as GraphIrStereoKind,
-        StereoLigandKind as GraphIrStereoLigandKind, ValueAst as GraphIrValueAst,
+        StereoLigandKind as GraphIrStereoLigandKind,
     };
 
     use super::*;
@@ -1940,15 +1940,15 @@ mod tests {
         GraphIrEdit::ModifyAtomField {
             id: GraphIrAtomHandle::Id(GraphIrAtomId(0)),
             change: GraphIrAtomFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(1),
             },
         },
         GraphIrEdit::ModifyBondField {
             id: GraphIrBondHandle::New(0),
             change: GraphIrBondFieldChange::Order {
-                old: GraphIrValueAst::Lit(1),
-                new: GraphIrValueAst::Lit(2),
+                old: GraphIrNumForm::Lit(1),
+                new: GraphIrNumForm::Lit(2),
             },
         },
         GraphIrEdit::AddDativeBond {
@@ -1963,8 +1963,8 @@ mod tests {
         GraphIrEdit::ModifyDativeBondField {
             id: GraphIrDativeBondHandle::Id(GraphIrDativeBondId(0)),
             change: GraphIrDativeBondFieldChange::Order {
-                old: GraphIrValueAst::Lit(1),
-                new: GraphIrValueAst::Lit(2),
+                old: GraphIrNumForm::Lit(1),
+                new: GraphIrNumForm::Lit(2),
             },
         },
         GraphIrEdit::AddAromaticSystem {
@@ -1979,8 +1979,8 @@ mod tests {
         GraphIrEdit::ModifyAromaticSystemField {
             id: GraphIrAromaticSystemHandle::New(0),
             change: GraphIrAromaticSystemFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(-1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(-1),
             },
         },
         GraphIrEdit::AddMulticenterBond {
@@ -1995,8 +1995,8 @@ mod tests {
         GraphIrEdit::ModifyMulticenterBondField {
             id: GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(0)),
             change: GraphIrMulticenterBondFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(1),
             },
         },
         GraphIrEdit::AddNoncovalentBond {

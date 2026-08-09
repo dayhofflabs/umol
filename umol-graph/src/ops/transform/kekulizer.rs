@@ -22,7 +22,7 @@ use umol_graph_core::{
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
     ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
-    EntityStructureValidator, MoleculeAst, ValueAst,
+    EntityStructureValidator, MoleculeAst, NumForm,
 };
 use umol_utils::solution::Solution;
 
@@ -150,10 +150,10 @@ impl MatchingInput {
             });
         }
 
-        let ValueAst::Lit(charge) = view.charge() else {
+        let NumForm::Lit(charge) = view.charge() else {
             return Err(KekulizerError::UndeterminedCharge(system));
         };
-        let (ValueAst::Lit(unpaired_electrons), ValueAst::Lit(multiplicity)) = (
+        let (NumForm::Lit(unpaired_electrons), NumForm::Lit(multiplicity)) = (
             &view.unpaired_electrons().count,
             &view.unpaired_electrons().multiplicity,
         ) else {
@@ -273,12 +273,12 @@ impl Transformer for Kekulizer {
             }));
             for &bid in &plan.matched_bonds {
                 let bond = candidate.bond_mut(bid).ast;
-                bond.order = ValueAst::Lit(2);
+                bond.order = NumForm::Lit(2);
                 bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &bid in &plan.unmatched_bonds {
                 let bond = candidate.bond_mut(bid).ast;
-                bond.order = ValueAst::Lit(1);
+                bond.order = NumForm::Lit(1);
                 bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &aidx in &plan.atoms {
@@ -288,21 +288,21 @@ impl Transformer for Kekulizer {
             if let Some(system_charge) = plan.mobile_charge {
                 let exposed = plan.exposed_atoms[0];
                 let atom = candidate.atom_mut(exposed).ast;
-                let ValueAst::Lit(local_charge) = atom.charge else {
+                let NumForm::Lit(local_charge) = atom.charge else {
                     return Err(KekulizerError::UndeterminedExposedAtomCharge {
                         system: plan.system_idx,
                         atom: exposed,
                     });
                 };
-                atom.charge = ValueAst::Lit(local_charge + system_charge);
+                atom.charge = NumForm::Lit(local_charge + system_charge);
                 if system_charge == -1 {
-                    let ValueAst::Lit(lone_pairs) = atom.lone_pairs else {
+                    let NumForm::Lit(lone_pairs) = atom.lone_pairs else {
                         return Err(KekulizerError::UndeterminedExposedAtomLonePairs {
                             system: plan.system_idx,
                             atom: exposed,
                         });
                     };
-                    atom.lone_pairs = ValueAst::Lit(lone_pairs + 1);
+                    atom.lone_pairs = NumForm::Lit(lone_pairs + 1);
                 }
             }
         }
@@ -411,7 +411,7 @@ impl Kekulizer {
 
             let matching_input = MatchingInput::from_system(view)?;
             let mobile_charge = match (matching_input.mode, view.charge()) {
-                (MatchingInputMode::OneMobileExposure, ValueAst::Lit(charge)) => Some(*charge),
+                (MatchingInputMode::OneMobileExposure, NumForm::Lit(charge)) => Some(*charge),
                 (MatchingInputMode::Prescribed, _) => None,
                 (MatchingInputMode::OneMobileExposure, _) => {
                     unreachable!("matching input requires a literal system charge")

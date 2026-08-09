@@ -58,7 +58,7 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AromaticValenceAst, AtomId, ValueAst};
+    use umol_graph_ir::ir::{AromaticValenceAst, AtomId, NumForm};
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ast;
 
@@ -142,7 +142,7 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 6]
+        vec![Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))); 6]
     )]
     #[case::reset(
         CtfileIoConfig::basic(),

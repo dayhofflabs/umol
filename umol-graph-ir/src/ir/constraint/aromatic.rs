@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst` via
 /// `AromaticSystemConstraintsAst`.
@@ -16,11 +16,11 @@ use super::super::value::ValueAst;
 pub enum AromaticSystemConstraintAst {
     /// Asserted total π-electron count for the system. Cross-checked by the
     /// `ConsistencyValidator` against `sum(AromaticSystemAst::electrons)`.
-    ElectronCount(ValueAst),
+    ElectronCount(NumForm),
 }
 
 impl AromaticSystemConstraintAst {
-    pub fn electron_count(v: impl Into<ValueAst>) -> Self {
+    pub fn electron_count(v: impl Into<NumForm>) -> Self {
         Self::ElectronCount(v.into())
     }
 
@@ -34,7 +34,7 @@ impl AromaticSystemConstraintAst {
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
         match self {
-            Self::ElectronCount(_) => Self::ElectronCount(ValueAst::Undetermined),
+            Self::ElectronCount(_) => Self::ElectronCount(NumForm::Undetermined),
         }
     }
 
@@ -112,10 +112,10 @@ impl AromaticSystemConstraintsAst {
     }
 
     /// The system's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
-    pub fn electron_count(&self) -> ValueAst {
+    pub fn electron_count(&self) -> NumForm {
         match self.get(AromaticSystemConstraintKey::ElectronCount) {
             Some(AromaticSystemConstraintAst::ElectronCount(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            _ => NumForm::Undetermined,
         }
     }
 
@@ -390,7 +390,7 @@ mod tests {
     #[rstest]
     #[case::electron_count(
         AromaticSystemConstraintAst::electron_count(6),
-        AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6))
+        AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6))
     )]
     fn test_aromatic_system_constraint_ast_constructors(
         #[case] actual: AromaticSystemConstraintAst,
@@ -414,7 +414,7 @@ mod tests {
     #[rstest]
     #[case::electron_count(
         AromaticSystemConstraintAst::electron_count(6),
-        AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)
+        AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)
     )]
     fn test_aromatic_system_constraint_ast_as_undetermined(
         #[case] c: AromaticSystemConstraintAst,
@@ -425,8 +425,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count_litset_singleton(AromaticSystemConstraintAst::ElectronCount(ValueAst::lit_set([6])), Ok(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::empty_litset_contradiction(AromaticSystemConstraintAst::ElectronCount(ValueAst::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+    #[case::electron_count_litset_singleton(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([6])), Ok(AromaticSystemConstraintAst::electron_count(6)))]
+    #[case::empty_litset_contradiction(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
     fn test_aromatic_system_constraint_ast_canonicalize(
         #[case] constraint: AromaticSystemConstraintAst,
         #[case] expected: Result<AromaticSystemConstraintAst, Contradiction>,
@@ -437,7 +437,7 @@ mod tests {
     #[rstest]
     #[case::lit(AromaticSystemConstraintAst::electron_count(6), false)]
     #[case::undetermined(
-        AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined),
+        AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined),
         true
     )]
     fn test_aromatic_system_constraint_ast_is_undetermined(
@@ -450,7 +450,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_value(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(6), Some(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::narrows_undetermined(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined), Some(AromaticSystemConstraintAst::electron_count(6)))]
+    #[case::narrows_undetermined(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined), Some(AromaticSystemConstraintAst::electron_count(6)))]
     #[case::incompatible(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(2), None)]
     fn test_aromatic_system_constraint_ast_meet(#[case] a: AromaticSystemConstraintAst, #[case] b: AromaticSystemConstraintAst, #[case] expected: Option<AromaticSystemConstraintAst>) {
         assert_eq!(a.meet(&b), expected);
@@ -459,7 +459,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_value(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(6), Ok(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::widens(AromaticSystemConstraintAst::electron_count(1), AromaticSystemConstraintAst::electron_count(2), Ok(AromaticSystemConstraintAst::ElectronCount(ValueAst::lit_set([1, 2]))))]
+    #[case::widens(AromaticSystemConstraintAst::electron_count(1), AromaticSystemConstraintAst::electron_count(2), Ok(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([1, 2]))))]
     fn test_aromatic_system_constraint_ast_join(#[case] a: AromaticSystemConstraintAst, #[case] b: AromaticSystemConstraintAst, #[case] expected: Result<AromaticSystemConstraintAst, NoJoin>) {
         assert_eq!(a.join(&b), expected);
     }
@@ -493,7 +493,7 @@ mod tests {
     #[rstest]
     #[case::fresh(vec![AromaticSystemConstraintAst::electron_count(6)], vec![AromaticSystemConstraintAst::electron_count(6)])]
     #[case::overwrite_same_key(vec![AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(10)], vec![AromaticSystemConstraintAst::electron_count(10)])]
-    #[case::vacuous_stores(vec![AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)], vec![AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)])]
+    #[case::vacuous_stores(vec![AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)], vec![AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)])]
     fn test_aromatic_system_constraints_ast_set(#[case] sequence: Vec<AromaticSystemConstraintAst>, #[case] expected: Vec<AromaticSystemConstraintAst>) {
         let mut cs = AromaticSystemConstraintsAst::new();
         for c in sequence {
@@ -514,7 +514,7 @@ mod tests {
         vec![AromaticSystemConstraintAst::electron_count(6)])]
     #[case::vacuous_removes(
         vec![AromaticSystemConstraintAst::electron_count(6)],
-        vec![AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)],
+        vec![AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)],
         vec![])]
     fn test_aromatic_system_constraints_ast_update(#[case] initial: Vec<AromaticSystemConstraintAst>, #[case] other: Vec<AromaticSystemConstraintAst>, #[case] expected: Vec<AromaticSystemConstraintAst>) {
         let mut cs = AromaticSystemConstraintsAst::from_iter(initial);
@@ -658,13 +658,13 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::canonicalizes_value(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::lit_set([6]))),
+        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([6]))),
         Ok(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
     #[case::drop_vacuous(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)),
+        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)),
         Ok(AromaticSystemConstraintsAst::new()))]
     #[case::contradiction(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::lit_set(Vec::<i64>::new()))),
+        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
     fn test_aromatic_system_constraints_ast_canonicalize(
         #[case] constraints: AromaticSystemConstraintsAst,
@@ -679,10 +679,10 @@ mod tests {
         Some(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
     #[case::b_only_kept(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
         Some(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
-    #[case::shared_key_meets(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)),
+    #[case::shared_key_meets(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)),
         Some(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
     #[case::shared_key_contradicts(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)), None)]
-    #[case::prunes_vacuous(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)), Some(AromaticSystemConstraintsAst::new()))]
+    #[case::prunes_vacuous(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), Some(AromaticSystemConstraintsAst::new()))]
     fn test_aromatic_system_constraints_ast_meet(#[case] a: AromaticSystemConstraintsAst, #[case] b: AromaticSystemConstraintsAst, #[case] expected: Option<AromaticSystemConstraintsAst>) {
         assert_eq!(a.meet(&b), expected);
     }
@@ -690,10 +690,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::widens_value(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(1)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)),
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::lit_set([1, 2]))))]
+        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([1, 2]))))]
     #[case::single_side_dropped(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::new(),
         AromaticSystemConstraintsAst::new())]
-    #[case::undetermined_drops(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
+    #[case::undetermined_drops(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
         AromaticSystemConstraintsAst::new())]
     fn test_aromatic_system_constraints_ast_join(#[case] a: AromaticSystemConstraintsAst, #[case] b: AromaticSystemConstraintsAst, #[case] expected: AromaticSystemConstraintsAst) {
         assert_eq!(a.join(&b), Ok(expected));
@@ -704,7 +704,7 @@ mod tests {
     #[case::empty_pattern_matches_anything(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
     #[case::required_present(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
     #[case::required_absent(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::new(), false)]
-    #[case::wildcard_matches_lit(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(ValueAst::Undetermined)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
+    #[case::wildcard_matches_lit(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
     #[case::lit_mismatch(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)), false)]
     fn test_aromatic_system_constraints_ast_matches(
         #[case] pattern: AromaticSystemConstraintsAst,

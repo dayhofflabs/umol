@@ -237,7 +237,7 @@ mod tests {
         AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
         BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, Entity,
         MoleculeAst, MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
-        StereoAtomAst, StereoBondAst, StereoCoset, StereoKind, ValueAst,
+        NumForm, StereoAtomAst, StereoBondAst, StereoCoset, StereoKind,
     };
 
     #[rustfmt::skip]
@@ -345,8 +345,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", AtomUpdate::default())]
-    #[case::element("C#h4", AtomUpdate { element: Some(ElementAst::Lit(Element::C)), implicit_hydrogens: Some(ValueAst::Lit(4)), ..Default::default() })]
-    #[case::field_only("#h4", AtomUpdate { implicit_hydrogens: Some(ValueAst::Lit(4)), ..Default::default() })]
+    #[case::element("C#h4", AtomUpdate { element: Some(ElementAst::Lit(Element::C)), implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
+    #[case::field_only("#h4", AtomUpdate { implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
     #[case::constraint_only("#v4", AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() })]
     fn test_atom_update_macro(#[case] input: &str, #[case] expected: AtomUpdate) {
         assert_eq!(atom_update_dsl!(input), expected);
@@ -376,8 +376,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", BondUpdate::default())]
-    #[case::order("1", BondUpdate { order: Some(ValueAst::Lit(1)), ..Default::default() })]
-    #[case::field_only("#c+", BondUpdate { charge: Some(ValueAst::Lit(1)), ..Default::default() })]
+    #[case::order("1", BondUpdate { order: Some(NumForm::Lit(1)), ..Default::default() })]
+    #[case::field_only("#c+", BondUpdate { charge: Some(NumForm::Lit(1)), ..Default::default() })]
     #[case::constraint_only("#a", BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() })]
     fn test_bond_update_macro(#[case] input: &str, #[case] expected: BondUpdate) {
         assert_eq!(bond_update_dsl!(input), expected);

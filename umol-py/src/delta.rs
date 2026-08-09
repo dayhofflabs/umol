@@ -2212,14 +2212,14 @@ mod tests {
         MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
         NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
-        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst,
+        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst, NumForm as GraphIrNumForm,
         StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
         StereoBondConstraintAst as GraphIrStereoBondConstraintAst,
         StereoConfigurationAst as GraphIrStereoConfigurationAst, StereoCoset as GraphIrStereoCoset,
         StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
         StereoLigandKind as GraphIrStereoLigandKind, Stereogenicity as GraphIrStereogenicity,
         StereogenicityAst as GraphIrStereogenicityAst,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
     };
     use umol_perm::Permutation as PermPermutation;
 
@@ -2236,25 +2236,25 @@ mod tests {
         new: GraphIrIsotopeMassAst::Lit(13),
     })]
     #[case::charge(GraphIrAtomFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(-1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(-1),
     })]
     #[case::implicit_hydrogens(GraphIrAtomFieldChange::ImplicitHydrogens {
-        old: GraphIrValueAst::Lit(3),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(3),
+        new: GraphIrNumForm::Lit(2),
     })]
     #[case::lone_pairs(GraphIrAtomFieldChange::LonePairs {
-        old: GraphIrValueAst::Lit(1),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(1),
+        new: GraphIrNumForm::Lit(2),
     })]
     #[case::unpaired_electrons(GraphIrAtomFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(1),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(1),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
     })]
     fn test_atom_field_change_roundtrip(#[case] change: GraphIrAtomFieldChange) {
@@ -2269,23 +2269,23 @@ mod tests {
     #[rstest]
     #[case::equal(
         GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
         GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
         true,
     )]
     #[case::different(
         GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
         GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(1),
         },
         false,
     )]
@@ -2322,8 +2322,8 @@ mod tests {
     )]
     #[case::charge(
         GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
         "ValueAst.Lit(0)",
         "ValueAst.Lit(-1)",
@@ -2331,8 +2331,8 @@ mod tests {
     )]
     #[case::implicit_hydrogens(
         GraphIrAtomFieldChange::ImplicitHydrogens {
-            old: GraphIrValueAst::Lit(3),
-            new: GraphIrValueAst::Lit(2),
+            old: GraphIrNumForm::Lit(3),
+            new: GraphIrNumForm::Lit(2),
         },
         "ValueAst.Lit(3)",
         "ValueAst.Lit(2)",
@@ -2340,8 +2340,8 @@ mod tests {
     )]
     #[case::lone_pairs(
         GraphIrAtomFieldChange::LonePairs {
-            old: GraphIrValueAst::Lit(1),
-            new: GraphIrValueAst::Lit(2),
+            old: GraphIrNumForm::Lit(1),
+            new: GraphIrNumForm::Lit(2),
         },
         "ValueAst.Lit(1)",
         "ValueAst.Lit(2)",
@@ -2350,12 +2350,12 @@ mod tests {
     #[case::unpaired_electrons(
         GraphIrAtomFieldChange::UnpairedElectrons {
             old: GraphIrUnpairedElectronsAst {
-                count: GraphIrValueAst::Lit(0),
-                multiplicity: GraphIrValueAst::Lit(1),
+                count: GraphIrNumForm::Lit(0),
+                multiplicity: GraphIrNumForm::Lit(1),
             },
             new: GraphIrUnpairedElectronsAst {
-                count: GraphIrValueAst::Lit(1),
-                multiplicity: GraphIrValueAst::Lit(2),
+                count: GraphIrNumForm::Lit(1),
+                multiplicity: GraphIrNumForm::Lit(2),
             },
         },
         "UnpairedElectronsAst(ValueAst.Lit(0), ValueAst.Lit(1))",
@@ -2406,25 +2406,25 @@ mod tests {
         new: GraphIrIsotopeMassAst::Lit(13),
     })]
     #[case::charge(GraphIrAtomFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(-1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(-1),
     })]
     #[case::implicit_hydrogens(GraphIrAtomFieldChange::ImplicitHydrogens {
-        old: GraphIrValueAst::Lit(3),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(3),
+        new: GraphIrNumForm::Lit(2),
     })]
     #[case::lone_pairs(GraphIrAtomFieldChange::LonePairs {
-        old: GraphIrValueAst::Lit(1),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(1),
+        new: GraphIrNumForm::Lit(2),
     })]
     #[case::unpaired_electrons(GraphIrAtomFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(1),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(1),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
     })]
     fn test_atom_field_change_inverse(#[case] change: GraphIrAtomFieldChange) {
@@ -2442,21 +2442,21 @@ mod tests {
 
     #[rstest]
     #[case::order(GraphIrBondFieldChange::Order {
-        old: GraphIrValueAst::Lit(1),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(1),
+        new: GraphIrNumForm::Lit(2),
     })]
     #[case::charge(GraphIrBondFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(1),
     })]
     #[case::unpaired_electrons(GraphIrBondFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(1),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(1),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
     })]
     fn test_bond_field_change_roundtrip(#[case] change: GraphIrBondFieldChange) {
@@ -2470,21 +2470,21 @@ mod tests {
 
     #[rstest]
     #[case::order(GraphIrBondFieldChange::Order {
-        old: GraphIrValueAst::Lit(1),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(1),
+        new: GraphIrNumForm::Lit(2),
     })]
     #[case::charge(GraphIrBondFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(1),
     })]
     #[case::unpaired_electrons(GraphIrBondFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(1),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(1),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
     })]
     fn test_bond_field_change_inverse(#[case] change: GraphIrBondFieldChange) {
@@ -2502,8 +2502,8 @@ mod tests {
 
     #[rstest]
     #[case::order(GraphIrDativeBondFieldChange::Order {
-        old: GraphIrValueAst::Lit(1),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(1),
+        new: GraphIrNumForm::Lit(2),
     })]
     fn test_dative_bond_field_change_roundtrip(#[case] change: GraphIrDativeBondFieldChange) {
         Python::attach(|py| {
@@ -2518,8 +2518,8 @@ mod tests {
 
     #[rstest]
     #[case::order(GraphIrDativeBondFieldChange::Order {
-        old: GraphIrValueAst::Lit(1),
-        new: GraphIrValueAst::Lit(2),
+        old: GraphIrNumForm::Lit(1),
+        new: GraphIrNumForm::Lit(2),
     })]
     fn test_dative_bond_field_change_inverse(#[case] change: GraphIrDativeBondFieldChange) {
         Python::attach(|py| {
@@ -2540,17 +2540,17 @@ mod tests {
         new: GraphIrElectronCountsAst::Lit(vec![1, 1, 1]),
     })]
     #[case::charge(GraphIrAromaticSystemFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(-1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(-1),
     })]
     #[case::unpaired_electrons(GraphIrAromaticSystemFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(1),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(1),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
     })]
     fn test_aromatic_system_field_change_roundtrip(
@@ -2572,17 +2572,17 @@ mod tests {
         new: GraphIrElectronCountsAst::Lit(vec![1, 1, 1]),
     })]
     #[case::charge(GraphIrAromaticSystemFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(-1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(-1),
     })]
     #[case::unpaired_electrons(GraphIrAromaticSystemFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(1),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(1),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
     })]
     fn test_aromatic_system_field_change_inverse(#[case] change: GraphIrAromaticSystemFieldChange) {
@@ -2604,17 +2604,17 @@ mod tests {
         new: GraphIrElectronCountsAst::Lit(vec![2, 0, 1]),
     })]
     #[case::charge(GraphIrMulticenterBondFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(1),
     })]
     #[case::unpaired_electrons(GraphIrMulticenterBondFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(2),
-            multiplicity: GraphIrValueAst::Lit(3),
+            count: GraphIrNumForm::Lit(2),
+            multiplicity: GraphIrNumForm::Lit(3),
         },
     })]
     fn test_multicenter_bond_field_change_roundtrip(
@@ -2636,17 +2636,17 @@ mod tests {
         new: GraphIrElectronCountsAst::Lit(vec![2, 0, 1]),
     })]
     #[case::charge(GraphIrMulticenterBondFieldChange::Charge {
-        old: GraphIrValueAst::Lit(0),
-        new: GraphIrValueAst::Lit(1),
+        old: GraphIrNumForm::Lit(0),
+        new: GraphIrNumForm::Lit(1),
     })]
     #[case::unpaired_electrons(GraphIrMulticenterBondFieldChange::UnpairedElectrons {
         old: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(0),
-            multiplicity: GraphIrValueAst::Lit(1),
+            count: GraphIrNumForm::Lit(0),
+            multiplicity: GraphIrNumForm::Lit(1),
         },
         new: GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(2),
-            multiplicity: GraphIrValueAst::Lit(3),
+            count: GraphIrNumForm::Lit(2),
+            multiplicity: GraphIrNumForm::Lit(3),
         },
     })]
     fn test_multicenter_bond_field_change_inverse(
@@ -3054,24 +3054,24 @@ mod tests {
     #[case::modify_field(GraphIrAtomDelta::ModifyField {
         id: GraphIrAtomId(3),
         change: GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
     })]
     #[case::constraint_added(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
         old: None,
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
     })]
     #[case::constraint_removed(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(3))),
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(3))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
     })]
     fn test_atom_delta_roundtrip(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
@@ -3133,8 +3133,8 @@ mod tests {
         GraphIrAtomDelta::ModifyField {
             id: GraphIrAtomId(3),
             change: GraphIrAtomFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(-1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(-1),
             },
         },
         "AtomDelta.ModifyField(id=3, change=AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
@@ -3143,7 +3143,7 @@ mod tests {
         GraphIrAtomDelta::ModifyConstraint {
             id: GraphIrAtomId(3),
             old: None,
-            new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+            new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
         },
         "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
     )]
@@ -3175,24 +3175,24 @@ mod tests {
     #[case::modify_field(GraphIrAtomDelta::ModifyField {
         id: GraphIrAtomId(3),
         change: GraphIrAtomFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
     })]
     #[case::constraint_added(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
         old: None,
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
     })]
     #[case::constraint_removed(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(3))),
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrValueAst::Lit(4))),
+        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(3))),
+        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
     })]
     fn test_atom_delta_inverse(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
@@ -3211,18 +3211,18 @@ mod tests {
     #[case::add(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrBondDelta::Remove {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrBondDelta::ModifyField {
         id: GraphIrBondId(2),
         change: GraphIrBondFieldChange::Order {
-            old: GraphIrValueAst::Lit(1),
-            new: GraphIrValueAst::Lit(2),
+            old: GraphIrNumForm::Lit(1),
+            new: GraphIrNumForm::Lit(2),
         },
     })]
     #[case::constraint_added(GraphIrBondDelta::ModifyConstraint {
@@ -3251,12 +3251,12 @@ mod tests {
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
         },
         true,
     )]
@@ -3264,12 +3264,12 @@ mod tests {
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(1), GraphIrAtomId(5)],
-            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
         },
         false,
     )]
@@ -3290,7 +3290,7 @@ mod tests {
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
         },
         "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
     )]
@@ -3298,7 +3298,7 @@ mod tests {
         GraphIrBondDelta::Remove {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
         },
         "BondDelta.Remove(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
     )]
@@ -3306,8 +3306,8 @@ mod tests {
         GraphIrBondDelta::ModifyField {
             id: GraphIrBondId(2),
             change: GraphIrBondFieldChange::Order {
-                old: GraphIrValueAst::Lit(1),
-                new: GraphIrValueAst::Lit(2),
+                old: GraphIrNumForm::Lit(1),
+                new: GraphIrNumForm::Lit(2),
             },
         },
         "BondDelta.ModifyField(id=2, change=BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
@@ -3340,18 +3340,18 @@ mod tests {
     #[case::add(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrBondDelta::Remove {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrBondDelta::ModifyField {
         id: GraphIrBondId(2),
         change: GraphIrBondFieldChange::Order {
-            old: GraphIrValueAst::Lit(1),
-            new: GraphIrValueAst::Lit(2),
+            old: GraphIrNumForm::Lit(1),
+            new: GraphIrNumForm::Lit(2),
         },
     })]
     #[case::constraint_added(GraphIrBondDelta::ModifyConstraint {
@@ -3387,19 +3387,19 @@ mod tests {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrDativeBondDelta::Remove {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrDativeBondDelta::ModifyField {
         id: GraphIrDativeBondId(1),
         change: GraphIrDativeBondFieldChange::Order {
-            old: GraphIrValueAst::Lit(1),
-            new: GraphIrValueAst::Lit(2),
+            old: GraphIrNumForm::Lit(1),
+            new: GraphIrNumForm::Lit(2),
         },
     })]
     #[case::constraint_added(GraphIrDativeBondDelta::ModifyConstraint {
@@ -3432,13 +3432,13 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrDativeBondDelta::Add {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
         },
         true,
     )]
@@ -3447,13 +3447,13 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrDativeBondDelta::Add {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
         },
         false,
     )]
@@ -3475,7 +3475,7 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
         },
         "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
     )]
@@ -3484,7 +3484,7 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
         },
         "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
     )]
@@ -3492,8 +3492,8 @@ mod tests {
         GraphIrDativeBondDelta::ModifyField {
             id: GraphIrDativeBondId(1),
             change: GraphIrDativeBondFieldChange::Order {
-                old: GraphIrValueAst::Lit(1),
-                new: GraphIrValueAst::Lit(2),
+                old: GraphIrNumForm::Lit(1),
+                new: GraphIrNumForm::Lit(2),
             },
         },
         "DativeBondDelta.ModifyField(id=1, change=DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
@@ -3528,19 +3528,19 @@ mod tests {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrDativeBondDelta::Remove {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrDativeBondDelta::ModifyField {
         id: GraphIrDativeBondId(1),
         change: GraphIrDativeBondFieldChange::Order {
-            old: GraphIrValueAst::Lit(1),
-            new: GraphIrValueAst::Lit(2),
+            old: GraphIrNumForm::Lit(1),
+            new: GraphIrNumForm::Lit(2),
         },
     })]
     #[case::constraint_added(GraphIrDativeBondDelta::ModifyConstraint {
@@ -3585,24 +3585,24 @@ mod tests {
     #[case::modify_field(GraphIrAromaticSystemDelta::ModifyField {
         id: GraphIrAromaticSystemId(2),
         change: GraphIrAromaticSystemFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
     })]
     #[case::constraint_added(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
         old: None,
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_aromatic_system_delta_roundtrip(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
@@ -3675,8 +3675,8 @@ mod tests {
         GraphIrAromaticSystemDelta::ModifyField {
             id: GraphIrAromaticSystemId(2),
             change: GraphIrAromaticSystemFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(-1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(-1),
             },
         },
         "AromaticSystemDelta.ModifyField(id=2, change=AromaticSystemFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
@@ -3685,7 +3685,7 @@ mod tests {
         GraphIrAromaticSystemDelta::ModifyConstraint {
             id: GraphIrAromaticSystemId(2),
             old: None,
-            new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+            new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
         },
         "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
     )]
@@ -3723,24 +3723,24 @@ mod tests {
     #[case::modify_field(GraphIrAromaticSystemDelta::ModifyField {
         id: GraphIrAromaticSystemId(2),
         change: GraphIrAromaticSystemFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
     })]
     #[case::constraint_added(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
         old: None,
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_aromatic_system_delta_inverse(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
@@ -3769,24 +3769,24 @@ mod tests {
     #[case::modify_field(GraphIrMulticenterBondDelta::ModifyField {
         id: GraphIrMulticenterBondId(3),
         change: GraphIrMulticenterBondFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
     })]
     #[case::constraint_added(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
         old: None,
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_multicenter_bond_delta_roundtrip(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
@@ -3859,8 +3859,8 @@ mod tests {
         GraphIrMulticenterBondDelta::ModifyField {
             id: GraphIrMulticenterBondId(3),
             change: GraphIrMulticenterBondFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(-1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(-1),
             },
         },
         "MulticenterBondDelta.ModifyField(id=3, change=MulticenterBondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
@@ -3869,7 +3869,7 @@ mod tests {
         GraphIrMulticenterBondDelta::ModifyConstraint {
             id: GraphIrMulticenterBondId(3),
             old: None,
-            new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+            new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
         },
         "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
     )]
@@ -3907,24 +3907,24 @@ mod tests {
     #[case::modify_field(GraphIrMulticenterBondDelta::ModifyField {
         id: GraphIrMulticenterBondId(3),
         change: GraphIrMulticenterBondFieldChange::Charge {
-            old: GraphIrValueAst::Lit(0),
-            new: GraphIrValueAst::Lit(-1),
+            old: GraphIrNumForm::Lit(0),
+            new: GraphIrNumForm::Lit(-1),
         },
     })]
     #[case::constraint_added(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
         old: None,
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(5))),
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrValueAst::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_multicenter_bond_delta_inverse(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
@@ -4886,13 +4886,13 @@ mod tests {
     #[case::bond(GraphIrDelta::Bond(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::dative_bond(GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::aromatic_system(GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
         id: GraphIrAromaticSystemId(2),
@@ -5037,13 +5037,13 @@ mod tests {
     #[case::bond(GraphIrDelta::Bond(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::dative_bond(GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrValueAst::Lit(1)),
+        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::aromatic_system(GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
         id: GraphIrAromaticSystemId(2),
@@ -5339,23 +5339,23 @@ mod tests {
             GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Lit(0),
-                    new: GraphIrValueAst::Lit(1),
+                    old: GraphIrNumForm::Lit(0),
+                    new: GraphIrNumForm::Lit(1),
                 },
             }),
             GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(2),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(2),
                 },
             }),
         ],
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
             id: GraphIrAtomId(0),
             change: GraphIrAtomFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(2),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(2),
             },
         })],
     )]
@@ -5377,15 +5377,15 @@ mod tests {
             GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),
                 change: GraphIrBondFieldChange::Order {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(2),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(2),
                 },
             }),
             GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Lit(0),
-                    new: GraphIrValueAst::Lit(1),
+                    old: GraphIrNumForm::Lit(0),
+                    new: GraphIrNumForm::Lit(1),
                 },
             }),
         ],
@@ -5393,15 +5393,15 @@ mod tests {
             GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
-                    old: GraphIrValueAst::Lit(0),
-                    new: GraphIrValueAst::Lit(1),
+                    old: GraphIrNumForm::Lit(0),
+                    new: GraphIrNumForm::Lit(1),
                 },
             }),
             GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),
                 change: GraphIrBondFieldChange::Order {
-                    old: GraphIrValueAst::Lit(1),
-                    new: GraphIrValueAst::Lit(2),
+                    old: GraphIrNumForm::Lit(1),
+                    new: GraphIrNumForm::Lit(2),
                 },
             }),
         ],
@@ -5429,15 +5429,15 @@ mod tests {
                 GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                     id: GraphIrAtomId(0),
                     change: GraphIrAtomFieldChange::Charge {
-                        old: GraphIrValueAst::Lit(0),
-                        new: GraphIrValueAst::Lit(1),
+                        old: GraphIrNumForm::Lit(0),
+                        new: GraphIrNumForm::Lit(1),
                     },
                 }),
                 GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                     id: GraphIrAtomId(0),
                     change: GraphIrAtomFieldChange::Charge {
-                        old: GraphIrValueAst::Lit(2),
-                        new: GraphIrValueAst::Lit(3),
+                        old: GraphIrNumForm::Lit(2),
+                        new: GraphIrNumForm::Lit(3),
                     },
                 }),
             ]

@@ -16,7 +16,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::multicenter::MulticenterBondAst;
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).
@@ -367,7 +367,7 @@ impl MulticenterBondConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: NumLike) {
         self.0
             .set(GraphIrMulticenterBondConstraintAst::electron_count(
                 value.to_rust(py),
@@ -694,7 +694,7 @@ impl MulticenterBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) {
         self.set_ast(
             py,
             GraphIrMulticenterBondConstraintAst::electron_count(value.to_rust(py)),

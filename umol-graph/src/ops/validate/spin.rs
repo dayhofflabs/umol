@@ -192,7 +192,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::spin::SpinMultiplicity;
     use umol_graph_ir::ir::{
-        AromaticSystemAst, BondAst, MoleculeEntries, MulticenterBondAst, ValueAst,
+        AromaticSystemAst, BondAst, MoleculeEntries, MulticenterBondAst, NumForm,
     };
 
     use super::*;
@@ -204,39 +204,39 @@ mod tests {
     #[case::open_shell_singlet((2_u8, 1_u8).into(), Solution::Determined(()))]
     #[case::triplet((2_u8, 3_u8).into(), Solution::Determined(()))]
     #[case::count_undetermined(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
         Solution::Underdetermined(()),
     )]
     #[case::multiplicity_undetermined(
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
         Solution::Underdetermined(()),
     )]
     #[case::count_negative(
-        UnpairedElectronsAst { count: ValueAst::Lit(-1), multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Lit(-1), multiplicity: NumForm::Lit(1) },
         Solution::Contradictory(SpinInvariantsContradiction::Atom {
             error: SpinStateError::UnpairedElectronsOutOfRange { count: -1 },
         }),
     )]
     #[case::count_above_u8(
-        UnpairedElectronsAst { count: ValueAst::Lit(256), multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Lit(256), multiplicity: NumForm::Lit(1) },
         Solution::Contradictory(SpinInvariantsContradiction::Atom {
             error: SpinStateError::UnpairedElectronsOutOfRange { count: 256 },
         }),
     )]
     #[case::multiplicity_zero(
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(0) },
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(0) },
         Solution::Contradictory(SpinInvariantsContradiction::Atom {
             error: SpinStateError::MultiplicityOutOfRange { multiplicity: 0 },
         }),
     )]
     #[case::multiplicity_above_u8(
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(256) },
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(256) },
         Solution::Contradictory(SpinInvariantsContradiction::Atom {
             error: SpinStateError::MultiplicityOutOfRange { multiplicity: 256 },
         }),
     )]
     #[case::parity(
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(2) },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(2) },
         Solution::Contradictory(SpinInvariantsContradiction::Atom {
             error: SpinStateError::Incompatible {
                 unpaired_electrons: 2,
@@ -245,7 +245,7 @@ mod tests {
         }),
     )]
     #[case::above_maximum(
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Lit(2) },
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(2) },
         Solution::Contradictory(SpinInvariantsContradiction::Atom {
             error: SpinStateError::Incompatible {
                 unpaired_electrons: 0,
@@ -286,7 +286,7 @@ mod tests {
     #[case::partial_pair(
         MoleculeEntries {
             atoms: vec![AtomAst {
-                unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
+                unpaired_electrons: UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
                 ..Default::default()
             }],
             ..Default::default()
@@ -356,7 +356,7 @@ mod tests {
         MoleculeEntries {
             atoms: vec![
                 AtomAst {
-                    unpaired_electrons: UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
+                    unpaired_electrons: UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
                     ..Default::default()
                 },
                 AtomAst { unpaired_electrons: UnpairedElectronsAst::closed_shell(), ..Default::default() },
@@ -407,8 +407,8 @@ mod tests {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsAst {
-                    count: ValueAst::Lit(2),
-                    multiplicity: ValueAst::Undetermined,
+                    count: NumForm::Lit(2),
+                    multiplicity: NumForm::Undetermined,
                 },
             }).into(),
             ..Default::default()
@@ -504,8 +504,8 @@ mod tests {
         MoleculeEntries {
             atoms: vec![AtomAst {
                 unpaired_electrons: UnpairedElectronsAst {
-                    count: ValueAst::Undetermined,
-                    multiplicity: ValueAst::Lit(1),
+                    count: NumForm::Undetermined,
+                    multiplicity: NumForm::Lit(1),
                 },
                 ..Default::default()
             }],
@@ -546,8 +546,8 @@ mod tests {
             let state_pair = |state| match state {
                 0 => UnpairedElectronsAst::closed_shell(),
                 1 => UnpairedElectronsAst {
-                    count: ValueAst::Undetermined,
-                    multiplicity: ValueAst::Lit(1),
+                    count: NumForm::Undetermined,
+                    multiplicity: NumForm::Lit(1),
                 },
                 2 => UnpairedElectronsAst::from((2_u8, 2_u8)),
                 _ => unreachable!("strategy only generates states 0..3"),

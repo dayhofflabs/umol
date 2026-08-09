@@ -350,36 +350,36 @@ proptest! {
                 EntityKind::Atom => Edit::ModifyAtomField {
                     id: AtomHandle::New(0),
                     change: AtomFieldChange::Charge {
-                        old: ValueAst::default(),
-                        new: ValueAst::Lit(1),
+                        old: NumForm::default(),
+                        new: NumForm::Lit(1),
                     },
                 },
                 EntityKind::Bond => Edit::ModifyBondField {
                     id: BondHandle::New(0),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit(1),
-                        new: ValueAst::Lit(2),
+                        old: NumForm::Lit(1),
+                        new: NumForm::Lit(2),
                     },
                 },
                 EntityKind::DativeBond => Edit::ModifyDativeBondField {
                     id: DativeBondHandle::New(0),
                     change: DativeBondFieldChange::Order {
-                        old: ValueAst::Lit(1),
-                        new: ValueAst::Lit(2),
+                        old: NumForm::Lit(1),
+                        new: NumForm::Lit(2),
                     },
                 },
                 EntityKind::AromaticSystem => Edit::ModifyAromaticSystemField {
                     id: AromaticSystemHandle::New(0),
                     change: AromaticSystemFieldChange::Charge {
-                        old: ValueAst::default(),
-                        new: ValueAst::Lit(1),
+                        old: NumForm::default(),
+                        new: NumForm::Lit(1),
                     },
                 },
                 EntityKind::MulticenterBond => Edit::ModifyMulticenterBondField {
                     id: MulticenterBondHandle::New(0),
                     change: MulticenterBondFieldChange::Charge {
-                        old: ValueAst::default(),
-                        new: ValueAst::Lit(-1),
+                        old: NumForm::default(),
+                        new: NumForm::Lit(-1),
                     },
                 },
                 EntityKind::NoncovalentBond => Edit::ModifyNoncovalentBondField {
@@ -424,27 +424,27 @@ proptest! {
             .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
 
         if kinds.contains(&EntityKind::Atom) {
-            prop_assert_eq!(&editor.atom(AtomId(4)).ast.charge, &ValueAst::Lit(1));
+            prop_assert_eq!(&editor.atom(AtomId(4)).ast.charge, &NumForm::Lit(1));
         }
         if kinds.contains(&EntityKind::Bond) {
-            prop_assert_eq!(&editor.bond(BondId(1)).ast.order, &ValueAst::Lit(2));
+            prop_assert_eq!(&editor.bond(BondId(1)).ast.order, &NumForm::Lit(2));
         }
         if kinds.contains(&EntityKind::DativeBond) {
             prop_assert_eq!(
                 &editor.dative_bond(DativeBondId(0)).ast.order,
-                &ValueAst::Lit(2),
+                &NumForm::Lit(2),
             );
         }
         if kinds.contains(&EntityKind::AromaticSystem) {
             prop_assert_eq!(
                 &editor.aromatic_system(AromaticSystemId(0)).ast.charge,
-                &ValueAst::Lit(1),
+                &NumForm::Lit(1),
             );
         }
         if kinds.contains(&EntityKind::MulticenterBond) {
             prop_assert_eq!(
                 &editor.multicenter_bond(MulticenterBondId(0)).ast.charge,
-                &ValueAst::Lit(-1),
+                &NumForm::Lit(-1),
             );
         }
         if kinds.contains(&EntityKind::NoncovalentBond) {
@@ -561,8 +561,8 @@ proptest! {
             .chain([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(atom_count as u32)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             }])
             .collect();

@@ -11,7 +11,7 @@ use super::super::molecule::MoleculeAst;
 use super::super::multicenter::MulticenterBondAst;
 use super::super::spin::UnpairedElectronsAst;
 use super::super::traits::Lattice;
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 use super::atom::AtomView;
 
 /// Namespace accessor for multicenter-bond views on a `MoleculeAst`.
@@ -185,7 +185,7 @@ impl<'a> MulticenterBondView<'a> {
     }
 
     #[inline]
-    pub fn charge(&self) -> &'a ValueAst {
+    pub fn charge(&self) -> &'a NumForm {
         &self.ast.charge
     }
 
@@ -212,10 +212,10 @@ impl<'a> MulticenterBondView<'a> {
 
     /// Sum of per-atom electron contributions on this multicenter bond.
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
-    pub fn electron_count(&self) -> ValueAst {
+    pub fn electron_count(&self) -> NumForm {
         match &self.ast.electrons {
-            ElectronCountsAst::Lit(counts) => ValueAst::Lit(counts.iter().sum()),
-            ElectronCountsAst::Undetermined => ValueAst::Undetermined,
+            ElectronCountsAst::Lit(counts) => NumForm::Lit(counts.iter().sum()),
+            ElectronCountsAst::Undetermined => NumForm::Undetermined,
         }
     }
 
@@ -318,7 +318,7 @@ mod tests {
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondAst;
     use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -458,7 +458,7 @@ mod tests {
             molecule
                 .multicenter_bond(MulticenterBondId(0))
                 .electron_count(),
-            ValueAst::Undetermined,
+            NumForm::Undetermined,
         );
     }
 

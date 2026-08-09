@@ -21,8 +21,8 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
-    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig, ValueAst,
+    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeEntries, NumForm, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig,
 };
 use walkdir::WalkDir;
 
@@ -86,7 +86,7 @@ fn carbon() -> AtomAst {
 }
 
 fn any_bond() -> BondAst {
-    BondAst::new(ValueAst::Undetermined)
+    BondAst::new(NumForm::Undetermined)
 }
 
 fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(u32, u32, BondAst)>) -> MoleculeAst {

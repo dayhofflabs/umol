@@ -267,10 +267,10 @@ mod tests {
     use umol_graph_ir::ir::{
         AtomAst, AtomConstraintAst, AtomId, Constraint, DativeBondId, ElementAst, Entity,
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
-        MoleculeConstraintContradiction, MoleculeEntries, RelationalConstraint,
+        MoleculeConstraintContradiction, MoleculeEntries, NumForm, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
         StereoAtomConstraintAst, StereoAtomId, StereoBondConstraintAst, StereoBondId, StereoKind,
-        StereogenicityAst, UnpairedElectronsAst, ValueAst,
+        StereogenicityAst, UnpairedElectronsAst,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -418,9 +418,9 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::C),
-                charge: ValueAst::Lit(0),
-                implicit_hydrogens: ValueAst::Lit(2),
-                lone_pairs: ValueAst::Lit(0),
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(2),
+                lone_pairs: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
                 ..Default::default()
             }],
@@ -539,12 +539,12 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::C),
-                charge: ValueAst::Lit(0),
-                implicit_hydrogens: ValueAst::Lit(4),
-                lone_pairs: ValueAst::Lit(0),
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(4),
+                lone_pairs: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsAst {
-                    count: ValueAst::Lit(0),
-                    multiplicity: ValueAst::Undetermined,
+                    count: NumForm::Lit(0),
+                    multiplicity: NumForm::Undetermined,
                 },
                 ..Default::default()
             }],
@@ -556,9 +556,9 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::C),
-                charge: ValueAst::Lit(0),
-                implicit_hydrogens: ValueAst::Lit(2),
-                lone_pairs: ValueAst::Lit(0),
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(2),
+                lone_pairs: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
                 ..Default::default()
             }],
@@ -666,7 +666,7 @@ mod tests {
     #[case::partial_spin(
         4,
         None,
-        UnpairedElectronsAst { count: ValueAst::Lit(0), multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Undetermined },
         Solution::Underdetermined(()),
     )]
     #[case::invalid_spin(
@@ -689,13 +689,13 @@ mod tests {
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
         let mut atom = AtomAst::from_element(Element::C);
-        atom.charge = ValueAst::Lit(0);
-        atom.lone_pairs = ValueAst::Lit(0);
-        atom.implicit_hydrogens = ValueAst::Lit(hydrogens);
+        atom.charge = NumForm::Lit(0);
+        atom.lone_pairs = NumForm::Lit(0);
+        atom.implicit_hydrogens = NumForm::Lit(hydrogens);
         atom.unpaired_electrons = unpaired_electrons;
         if let Some(v) = valence {
             atom.constraints
-                .set(AtomConstraintAst::Valence(ValueAst::Lit(v)));
+                .set(AtomConstraintAst::Valence(NumForm::Lit(v)));
         }
         let model = ChemistryModel::default();
         assert_eq!(
@@ -712,9 +712,9 @@ mod tests {
         ) {
             let atom = AtomAst {
                 element: ElementAst::Lit(Element::C),
-                charge: ValueAst::Lit(0),
-                implicit_hydrogens: ValueAst::Lit(4 - i64::from(count)),
-                lone_pairs: ValueAst::Lit(0),
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(4 - i64::from(count)),
+                lone_pairs: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsAst::from((count, multiplicity)),
                 ..Default::default()
             };
@@ -735,9 +735,9 @@ mod tests {
             let molecule = MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst {
                     element: ElementAst::Lit(Element::C),
-                    charge: ValueAst::Lit(0),
-                    implicit_hydrogens: ValueAst::Lit(4 - i64::from(count)),
-                    lone_pairs: ValueAst::Lit(0),
+                    charge: NumForm::Lit(0),
+                    implicit_hydrogens: NumForm::Lit(4 - i64::from(count)),
+                    lone_pairs: NumForm::Lit(0),
                     unpaired_electrons: UnpairedElectronsAst::from((count, multiplicity)),
                     ..Default::default()
                 }],

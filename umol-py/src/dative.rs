@@ -24,7 +24,7 @@ use crate::convert::hash_rust;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// Attribute updates for a dative bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -37,7 +37,7 @@ impl DativeBondUpdate {
     #[pyo3(signature = (*, order=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: Option<ValueLike>,
+        order: Option<NumLike>,
         constraints: Option<Py<DativeBondConstraintsAst>>,
     ) -> Self {
         Self::from_rust(&GraphIrDativeBondUpdate {
@@ -110,7 +110,7 @@ impl DativeBondAst {
     #[pyo3(signature = (order, *, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: ValueLike,
+        order: NumLike,
         constraints: Option<Py<DativeBondConstraintsAst>>,
     ) -> Self {
         let mut bond = GraphIrDativeBondAst::new(order.to_rust(py));
@@ -142,7 +142,7 @@ impl DativeBondAst {
     }
 
     #[setter]
-    fn set_order(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_order(&mut self, py: Python<'_>, value: NumLike) {
         self.0.order = value.to_rust(py);
     }
 
@@ -281,7 +281,7 @@ impl DativeBondView {
     }
 
     #[setter]
-    fn set_order(&self, py: Python<'_>, value: ValueLike) {
+    fn set_order(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -475,7 +475,7 @@ mod tests {
         DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
         DativeBondConstraintKey as GraphIrDativeBondConstraintKey,
         DativeBondConstraintsAst as GraphIrDativeBondConstraintsAst, MoleculeEntries,
-        RingScope as GraphIrRingScope, ValueAst as GraphIrValueAst,
+        NumForm as GraphIrNumForm, RingScope as GraphIrRingScope,
     };
 
     use super::*;
@@ -567,7 +567,7 @@ mod tests {
                 id: GraphIrDativeBondId(0),
             };
             assert_eq!(view.id(), 0);
-            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrValueAst::Lit(1));
+            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(1));
         });
     }
 
@@ -594,15 +594,12 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrDativeBondId(0),
             };
-            view.set_order(py, ValueLike::Lit(2));
+            view.set_order(py, NumLike::Lit(2));
             let fresh = DativeBondView {
                 owner,
                 id: GraphIrDativeBondId(0),
             };
-            assert_eq!(
-                fresh.order(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(2)
-            );
+            assert_eq!(fresh.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(2));
         });
     }
 
@@ -651,7 +648,7 @@ mod tests {
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, participants preserved
-            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrValueAst::Lit(2));
+            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(2));
             assert_eq!(view.acceptor(py).unwrap(), 0);
             assert_eq!(view.donors(py).unwrap(), vec![1]);
         });
@@ -933,7 +930,7 @@ mod tests {
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
             assert!(constraints
@@ -1021,7 +1018,7 @@ mod tests {
             assert_eq!(c.aromatic().to_rust(), GraphIrBooleanAst::Lit(true));
             assert_eq!(
                 c.ring_count(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(2)
+                GraphIrNumForm::Lit(2)
             );
         });
     }
@@ -1171,10 +1168,10 @@ mod tests {
     fn test_dative_bond_constraints_ast_set_ring_count() {
         Python::attach(|py| {
             let mut constraints = DativeBondConstraintsAst::new(py, vec![]);
-            constraints.set_ring_count(py, ValueLike::Lit(2));
+            constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(2)
+                GraphIrNumForm::Lit(2)
             );
         });
     }
@@ -1334,10 +1331,10 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, DativeBondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueLike::Lit(3));
+            proxy.__setitem__(py, 6, NumLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(3)
+                GraphIrNumForm::Lit(3)
             );
             proxy.__delitem__(py, 6);
             assert!(proxy.__getitem__(py, 6).unwrap().is_none());
@@ -1355,8 +1352,7 @@ mod tests {
             let view = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond.clone_ref(py)),
             };
-            view.ring_size_count(py)
-                .__setitem__(py, 5, ValueLike::Lit(1));
+            view.ring_size_count(py).__setitem__(py, 5, NumLike::Lit(1));
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
             };
@@ -1367,7 +1363,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
         });
     }
@@ -1377,8 +1373,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, DativeBondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueLike::Lit(3));
-            proxy.__setitem__(py, 5, ValueLike::Lit(1));
+            proxy.__setitem__(py, 6, NumLike::Lit(3));
+            proxy.__setitem__(py, 5, NumLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());
@@ -1436,8 +1432,7 @@ mod tests {
                     id: GraphIrDativeBondId(0),
                 },
             };
-            view.ring_size_count(py)
-                .__setitem__(py, 6, ValueLike::Lit(1));
+            view.ring_size_count(py).__setitem__(py, 6, NumLike::Lit(1));
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::Molecule {
                     owner,
@@ -1451,7 +1446,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
         });
     }

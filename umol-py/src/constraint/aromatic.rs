@@ -16,7 +16,7 @@ use crate::aromatic::AromaticSystemAst;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// The key (identity) of an aromatic-system constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).
@@ -367,7 +367,7 @@ impl AromaticSystemConstraintsAst {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: NumLike) {
         self.0
             .set(GraphIrAromaticSystemConstraintAst::electron_count(
                 value.to_rust(py),
@@ -693,7 +693,7 @@ impl AromaticSystemConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueLike) {
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) {
         self.set_ast(
             py,
             GraphIrAromaticSystemConstraintAst::electron_count(value.to_rust(py)),

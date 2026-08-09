@@ -5,7 +5,7 @@
 
 use super::super::error::{Contradiction, NoJoin};
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 
 /// `All` = total ring count; `Size(s)` = count of size-`s` rings. `All` sorts first.
 ///
@@ -21,11 +21,11 @@ pub enum RingScope {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RingMembershipAst {
     pub scope: RingScope,
-    pub count: ValueAst,
+    pub count: NumForm,
 }
 
 impl RingMembershipAst {
-    pub fn new(scope: RingScope, count: impl Into<ValueAst>) -> Self {
+    pub fn new(scope: RingScope, count: impl Into<NumForm>) -> Self {
         Self {
             scope,
             count: count.into(),
@@ -84,11 +84,11 @@ mod tests {
 
     #[rstest]
     #[case::folds_count(
-        RingMembershipAst::new(RingScope::Size(6), ValueAst::lit_set([2])),
-        Ok(RingMembershipAst::new(RingScope::Size(6), ValueAst::Lit(2)))
+        RingMembershipAst::new(RingScope::Size(6), NumForm::lit_set([2])),
+        Ok(RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(2)))
     )]
     #[case::empty_count_contradiction(
-        RingMembershipAst::new(RingScope::All, ValueAst::lit_set(Vec::<i64>::new())),
+        RingMembershipAst::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction)
     )]
     fn test_ring_membership_ast_canonicalize(
@@ -100,11 +100,11 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(
-        RingMembershipAst::new(RingScope::All, ValueAst::Undetermined),
+        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
         true,
         false
     )]
-    #[case::ground(RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)), false, true)]
+    #[case::ground(RingMembershipAst::new(RingScope::All, NumForm::Lit(3)), false, true)]
     fn test_ring_membership_ast_lattice_position(
         #[case] membership: RingMembershipAst,
         #[case] is_undetermined: bool,
@@ -116,18 +116,18 @@ mod tests {
 
     #[rstest]
     #[case::same_scope_narrows(
-        RingMembershipAst::new(RingScope::All, ValueAst::Undetermined),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        Some(RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)))
+        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        Some(RingMembershipAst::new(RingScope::All, NumForm::Lit(3)))
     )]
     #[case::same_scope_incompatible(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(4)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(4)),
         None
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::Size(6), ValueAst::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
         None
     )]
     fn test_ring_membership_ast_meet(
@@ -140,13 +140,13 @@ mod tests {
 
     #[rstest]
     #[case::same_scope(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        Ok(RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)))
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        Ok(RingMembershipAst::new(RingScope::All, NumForm::Lit(3)))
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::Size(6), ValueAst::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
         Err(NoJoin)
     )]
     fn test_ring_membership_ast_join(
@@ -159,18 +159,18 @@ mod tests {
 
     #[rstest]
     #[case::same_scope_matches(
-        RingMembershipAst::new(RingScope::All, ValueAst::Undetermined),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
         true
     )]
     #[case::same_scope_no_match(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(4)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(4)),
         false
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, ValueAst::Undetermined),
-        RingMembershipAst::new(RingScope::Size(6), ValueAst::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
         false
     )]
     fn test_ring_membership_ast_matches(
@@ -183,18 +183,18 @@ mod tests {
 
     #[rstest]
     #[case::same_scope_compatible(
-        RingMembershipAst::new(RingScope::All, ValueAst::Undetermined),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
         true
     )]
     #[case::same_scope_incompatible(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(4)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(4)),
         false
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, ValueAst::Lit(3)),
-        RingMembershipAst::new(RingScope::Size(6), ValueAst::Lit(3)),
+        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
         false
     )]
     fn test_ring_membership_ast_is_compatible(

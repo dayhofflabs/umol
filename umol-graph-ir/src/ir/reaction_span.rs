@@ -2080,7 +2080,7 @@ mod tests {
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
     use super::super::stereo::{StereoConfigurationAst, StereoCoset, StereoKind};
-    use super::super::value::ValueAst;
+    use super::super::value::NumForm;
     use super::*;
 
     #[rstest]
@@ -2272,8 +2272,8 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_from_entries_normalization() {
-        let lhs_atom = AtomAst::from_element(Element::C).with_charge(ValueAst::Lit(1));
-        let rhs_atom = AtomAst::from_element(Element::C).with_charge(ValueAst::lit_set([1_i64]));
+        let lhs_atom = AtomAst::from_element(Element::C).with_charge(NumForm::Lit(1));
+        let rhs_atom = AtomAst::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
         assert_ne!(lhs_atom, rhs_atom);
         let span = ReactionSpanAst::from_entries(ReactionSpanEntries {
             atoms: vec![
@@ -2395,7 +2395,7 @@ mod tests {
             atoms: vec![EntitySpan::Removed(AtomAst::from_element(Element::C))],
             constraints: vec![ConstraintSpan::Removed(Constraint::Atom(
                 AtomId(0),
-                AtomConstraintAst::valence(ValueAst::Lit(4)),
+                AtomConstraintAst::valence(NumForm::Lit(4)),
             ))],
             ..Default::default()
         },
@@ -2404,7 +2404,7 @@ mod tests {
         Vec::new(),
         vec![ConstraintSpan::Removed(Constraint::Atom(
             AtomId(0),
-            AtomConstraintAst::valence(ValueAst::Lit(4)),
+            AtomConstraintAst::valence(NumForm::Lit(4)),
         ))],
     )]
     fn test_reaction_span_ast_try_from_entries(
@@ -2714,7 +2714,7 @@ mod tests {
             atoms: vec![EntitySpan::Added(AtomAst::default())],
             constraints: vec![ConstraintSpan::Unchanged(Constraint::Atom(
                 AtomId(0),
-                AtomConstraintAst::valence(ValueAst::Lit(4)),
+                AtomConstraintAst::valence(NumForm::Lit(4)),
             ))],
             ..Default::default()
         },
@@ -2729,7 +2729,7 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(ValueAst::Lit(4))),
+        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(NumForm::Lit(4))),
         Entity::Atom(AtomId(0))
     )]
     #[case::bond(
@@ -2743,14 +2743,14 @@ mod tests {
     #[case::aromatic_system(
         Constraint::AromaticSystem(
             AromaticSystemId(0),
-            AromaticSystemConstraintAst::electron_count(ValueAst::Lit(2)),
+            AromaticSystemConstraintAst::electron_count(NumForm::Lit(2)),
         ),
         Entity::AromaticSystem(AromaticSystemId(0))
     )]
     #[case::multicenter_bond(
         Constraint::MulticenterBond(
             MulticenterBondId(0),
-            MulticenterBondConstraintAst::electron_count(ValueAst::Lit(2)),
+            MulticenterBondConstraintAst::electron_count(NumForm::Lit(2)),
         ),
         Entity::MulticenterBond(MulticenterBondId(0))
     )]
@@ -3196,8 +3196,8 @@ mod tests {
                 Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit(2),
-                        new: ValueAst::Lit(3),
+                        old: NumForm::Lit(2),
+                        new: NumForm::Lit(3),
                     },
                 })]),
             )
@@ -3267,8 +3267,8 @@ mod tests {
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
                 },
             })]),
         ),
@@ -4343,8 +4343,8 @@ mod tests {
             Some(Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
                 },
             })])),
         );

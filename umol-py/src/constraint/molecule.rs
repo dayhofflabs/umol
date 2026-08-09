@@ -1225,10 +1225,10 @@ mod tests {
         MoleculeAst as GraphIrMoleculeAst,
         MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
         NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
-        StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
+        NumForm as GraphIrNumForm, StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
         StereoBondConstraintAst as GraphIrStereoBondConstraintAst, StereoKind as GraphIrStereoKind,
         Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
     };
 
     use super::*;
@@ -1409,11 +1409,11 @@ mod tests {
     #[rstest]
     #[case::charge_sum_whole(GraphIrMoleculeConstraint::ChargeSum {
         atoms: None,
-        sum: GraphIrValueAst::Lit(1),
+        sum: GraphIrNumForm::Lit(1),
     })]
     #[case::charge_sum_empty_subset(GraphIrMoleculeConstraint::ChargeSum {
         atoms: Some(Vec::new()),
-        sum: GraphIrValueAst::Lit(2),
+        sum: GraphIrNumForm::Lit(2),
     })]
     #[case::unpaired_electron_coupling(GraphIrMoleculeConstraint::UnpairedElectronCoupling {
         atoms: Some(vec![GraphIrAtomId(3), GraphIrAtomId(4)]),
@@ -1421,7 +1421,7 @@ mod tests {
     })]
     #[case::bond_order_sum(GraphIrMoleculeConstraint::BondOrderSum {
         bonds: Some(vec![GraphIrBondId(5), GraphIrBondId(6)]),
-        sum: GraphIrValueAst::Lit(3),
+        sum: GraphIrNumForm::Lit(3),
     })]
     #[case::connected(GraphIrMoleculeConstraint::Connected {
         atoms: None,

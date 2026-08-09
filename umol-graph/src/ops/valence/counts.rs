@@ -11,7 +11,7 @@ use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
     AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edits, IsotopeMassAst, Lattice,
-    MoleculeAst, TransactionError, UnpairedElectronsAst, ValueAst,
+    MoleculeAst, NumForm, TransactionError, UnpairedElectronsAst,
 };
 use umol_utils::solution::Solution;
 
@@ -49,13 +49,13 @@ impl CountsInput {
             valence: atom
                 .constraints
                 .valence()
-                .unwrap_or(&ValueAst::Undetermined)
+                .unwrap_or(&NumForm::Undetermined)
                 .as_lit()
                 .unwrap_or(0),
             accepted_pairs: atom
                 .constraints
                 .accepted_pairs()
-                .unwrap_or(&ValueAst::Undetermined)
+                .unwrap_or(&NumForm::Undetermined)
                 .as_lit()
                 .unwrap_or(0),
             is_aromatic: atom
@@ -225,7 +225,7 @@ impl<'a> CountsValence<'a> {
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
-                AromaticValenceAst::Aromatic(ValueAst::Undetermined)
+                AromaticValenceAst::Aromatic(NumForm::Undetermined)
             )
         {
             return Err(CountsError::UndeterminedAromaticValence);
@@ -256,7 +256,7 @@ impl<'a> CountsValence<'a> {
         {
             if !atom
                 .implicit_hydrogens
-                .matches(&ValueAst::Lit(implicit_hydrogens))
+                .matches(&NumForm::Lit(implicit_hydrogens))
             {
                 continue;
             }
@@ -308,7 +308,7 @@ impl<'a> CountsValence<'a> {
 }
 
 fn candidate_implicit_hydrogens(
-    implicit_hydrogens: &ValueAst,
+    implicit_hydrogens: &NumForm,
     bonding_budget: Option<i64>,
     no_entry: bool,
 ) -> Result<Vec<i64>, CountsError> {
@@ -362,7 +362,7 @@ fn derive_lone_pairs_and_unpaired_electrons(
                 || !atom
                     .unpaired_electrons
                     .count
-                    .matches(&ValueAst::Lit(unpaired_electrons))
+                    .matches(&NumForm::Lit(unpaired_electrons))
             {
                 return None;
             }
@@ -374,7 +374,7 @@ fn derive_lone_pairs_and_unpaired_electrons(
                 return None;
             }
             let lone_pairs = remaining / 2;
-            if lone_pairs > max_lone_pairs || !atom.lone_pairs.matches(&ValueAst::Lit(lone_pairs)) {
+            if lone_pairs > max_lone_pairs || !atom.lone_pairs.matches(&NumForm::Lit(lone_pairs)) {
                 return None;
             }
             Some((lone_pairs, unpaired_electrons))
@@ -400,16 +400,16 @@ fn derive_atom(
     aromatic_valence: i64,
 ) -> AtomAst {
     AtomAst {
-        implicit_hydrogens: ValueAst::Lit(implicit_hydrogens),
-        lone_pairs: ValueAst::Lit(lone_pairs),
+        implicit_hydrogens: NumForm::Lit(implicit_hydrogens),
+        lone_pairs: NumForm::Lit(lone_pairs),
         unpaired_electrons: UnpairedElectronsAst {
-            count: ValueAst::Lit(unpaired_electrons),
-            multiplicity: ValueAst::Lit(multiplicity),
+            count: NumForm::Lit(unpaired_electrons),
+            multiplicity: NumForm::Lit(multiplicity),
         },
         constraints: AtomConstraintsAst::from_iter([
-            AtomConstraintAst::Valence(ValueAst::Lit(valence)),
+            AtomConstraintAst::Valence(NumForm::Lit(valence)),
             AtomConstraintAst::AromaticValence(if is_aromatic {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(aromatic_valence))
+                AromaticValenceAst::Aromatic(NumForm::Lit(aromatic_valence))
             } else {
                 AromaticValenceAst::NotAromatic
             }),
@@ -420,8 +420,8 @@ fn derive_atom(
 
 fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) -> Option<i64> {
     let multiplicity = match unpaired_electrons.multiplicity {
-        ValueAst::Lit(multiplicity) => multiplicity,
-        ValueAst::Undetermined => count.checked_add(1)?,
+        NumForm::Lit(multiplicity) => multiplicity,
+        NumForm::Undetermined => count.checked_add(1)?,
         _ => return None,
     };
     SpinState::try_from(UnpairedElectrons {
@@ -444,42 +444,42 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::explicit_triplet(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) },
         2,
         Some(3),
     )]
     #[case::explicit_open_shell_singlet(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
         2,
         Some(1),
     )]
     #[case::incompatible(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) },
         2,
         None,
     )]
     #[case::negative_multiplicity(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Lit(-1) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(-1) },
         2,
         None,
     )]
     #[case::derived(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
         2,
         Some(3),
     )]
     #[case::negative_count(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
         -1,
         None,
     )]
     #[case::pattern(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::lit_set([1, 3]) },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::lit_set([1, 3]) },
         2,
         None,
     )]
     #[case::overflow(
-        UnpairedElectronsAst { count: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
         i64::MAX,
         None,
     )]
@@ -508,15 +508,15 @@ mod tests {
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::ImplicitHydrogens {
-                        old: ValueAst::Undetermined,
-                        new: ValueAst::Lit(4),
+                        old: NumForm::Undetermined,
+                        new: NumForm::Lit(4),
                     },
                 },
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::LonePairs {
-                        old: ValueAst::Undetermined,
-                        new: ValueAst::Lit(0),
+                        old: NumForm::Undetermined,
+                        new: NumForm::Lit(0),
                     },
                 },
                 Edit::ModifyAtomField {

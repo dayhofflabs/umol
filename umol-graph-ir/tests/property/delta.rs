@@ -11,8 +11,8 @@ use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
     BondFieldChange, BondId, Canonicalize, Constraint, ConstraintDelta, DativeBondDelta,
     DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, MulticenterBondDelta,
-    MulticenterBondId, NoncovalentBondDelta, NoncovalentBondId, StereoAtomDelta, StereoAtomId,
-    StereoBondDelta, StereoBondId, ValueAst,
+    MulticenterBondId, NoncovalentBondDelta, NoncovalentBondId, NumForm, StereoAtomDelta,
+    StereoAtomId, StereoBondDelta, StereoBondId,
 };
 
 use crate::strategies::*;
@@ -207,7 +207,7 @@ fn constraint_delta_strategy() -> impl Strategy<Value = ConstraintDelta> {
     let constraint = (0i64..3).prop_map(|sum| {
         Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: None,
-            sum: ValueAst::Lit(sum),
+            sum: NumForm::Lit(sum),
         })
     });
     prop_oneof![

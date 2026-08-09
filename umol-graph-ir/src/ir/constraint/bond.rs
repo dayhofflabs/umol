@@ -10,7 +10,7 @@ use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::CisTransStereoAst;
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 
 /// Localized bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -30,7 +30,7 @@ impl BondConstraintAst {
         Self::CisTransStereo(c.into())
     }
 
-    pub fn ring_membership(scope: RingScope, count: impl Into<ValueAst>) -> Self {
+    pub fn ring_membership(scope: RingScope, count: impl Into<NumForm>) -> Self {
         Self::RingMembership(RingMembershipAst::new(scope, count.into()))
     }
 
@@ -49,7 +49,7 @@ impl BondConstraintAst {
             Self::Aromatic(_) => Self::Aromatic(BooleanAst::Undetermined),
             Self::CisTransStereo(_) => Self::CisTransStereo(CisTransStereoAst::Undetermined),
             Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
+                Self::RingMembership(RingMembershipAst::new(m.scope, NumForm::Undetermined))
             }
         }
     }
@@ -170,24 +170,24 @@ impl BondConstraintsAst {
         }
     }
 
-    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &ValueAst)> {
+    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &NumForm)> {
         self.iter().filter_map(|c| match c {
             BondConstraintAst::RingMembership(m) => Some((m.scope, &m.count)),
             _ => None,
         })
     }
 
-    fn ring_membership(&self, scope: RingScope) -> Option<&ValueAst> {
+    fn ring_membership(&self, scope: RingScope) -> Option<&NumForm> {
         self.ring_memberships()
             .find(|(s, _)| *s == scope)
             .map(|(_, v)| v)
     }
 
-    pub fn ring_count(&self) -> Option<&ValueAst> {
+    pub fn ring_count(&self) -> Option<&NumForm> {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> Option<&ValueAst> {
+    pub fn ring_size_count(&self, s: u8) -> Option<&NumForm> {
         self.ring_membership(RingScope::Size(s))
     }
 
@@ -401,7 +401,7 @@ impl Lattice for BondConstraintsAst {
             BondConstraintAst::RingMembership(rm) => rm.count.matches(
                 target
                     .ring_membership(rm.scope)
-                    .unwrap_or(&ValueAst::Undetermined),
+                    .unwrap_or(&NumForm::Undetermined),
             ),
         })
     }
@@ -471,7 +471,7 @@ mod tests {
     use crate::ir::stereo::{StereoCoset, StereoTerm};
     #[rustfmt::skip]
     #[rstest]
-    #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)))]
+    #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)))]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1))]
     #[case::cis_trans_stereo(BondConstraintAst::cis_trans_stereo(CisTransStereoAst::NotStereo), BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo))]
     fn test_bond_constraint_ast_constructors(
@@ -494,7 +494,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), BondConstraintAst::Aromatic(BooleanAst::Undetermined))]
-    #[case::ring_membership_keeps_scope(BondConstraintAst::ring_membership(RingScope::Size(6), 1), BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
+    #[case::ring_membership_keeps_scope(BondConstraintAst::ring_membership(RingScope::Size(6), 1), BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined))]
     #[case::cis_trans(BondConstraintAst::CisTransStereo(CisTransStereoAst::stereo(1_u32)), BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined))]
     fn test_bond_constraint_ast_as_undetermined(#[case] c: BondConstraintAst, #[case] expected: BondConstraintAst) {
         assert_eq!(c.as_undetermined(), expected);
@@ -504,13 +504,13 @@ mod tests {
     #[rstest]
     #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), Ok(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     #[case::ring_count_litset_singleton(
-        BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set([2]))),
+        BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set([2]))),
         Ok(BondConstraintAst::ring_membership(RingScope::All, 2)))]
     #[case::cis_trans_lifts_term(
         BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
         Ok(BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))))]
     #[case::empty_litset_contradiction(
-        BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set(Vec::<i64>::new()))),
+        BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
     fn test_bond_constraint_ast_canonicalize(
         #[case] constraint: BondConstraintAst,
@@ -523,9 +523,9 @@ mod tests {
     #[rstest]
     #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), false)]
     #[case::ring_membership_all_lit(BondConstraintAst::ring_membership(RingScope::All, 1), false)]
-    #[case::ring_membership_all_undetermined(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
+    #[case::ring_membership_all_undetermined(BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined), true)]
     #[case::ring_membership_size_lit(BondConstraintAst::ring_membership(RingScope::Size(6), 1), false)]
-    #[case::ring_membership_size_undetermined(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined), true)]
+    #[case::ring_membership_size_undetermined(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined), true)]
     #[case::cis_trans_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), false)]
     #[case::cis_trans_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined), true)]
     fn test_bond_constraint_ast_is_undetermined(#[case] c: BondConstraintAst, #[case] expected: bool) {
@@ -543,7 +543,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_key_widens(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::All, 2), Ok(BondConstraintAst::ring_membership(RingScope::All, ValueAst::lit_set([1, 2]))))]
+    #[case::same_key_widens(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::All, 2), Ok(BondConstraintAst::ring_membership(RingScope::All, NumForm::lit_set([1, 2]))))]
     #[case::different_key(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), BondConstraintAst::ring_membership(RingScope::All, 1), Err(NoJoin))]
     fn test_bond_constraint_ast_join(#[case] a: BondConstraintAst, #[case] b: BondConstraintAst, #[case] expected: Result<BondConstraintAst, NoJoin>) {
         assert_eq!(a.join(&b), expected);
@@ -775,7 +775,7 @@ mod tests {
     #[case::drop_vacuous(
         BondConstraintsAst::from_iter([
             BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
-            BondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined),
+            BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined),
         ]),
         Ok(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))])))]
     #[case::canonicalizes_values(
@@ -809,7 +809,7 @@ mod tests {
     #[case::keeps_only_shared_keys(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true)), BondConstraintAst::ring_membership(RingScope::All, 1)]), BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]),
         BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]))]
     #[case::widens_value(BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, 1)]), BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, 2)]),
-        BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::lit_set([1, 2]))]))]
+        BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::lit_set([1, 2]))]))]
     #[case::incompatible_drops_to_undetermined(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]), BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(false))]), BondConstraintsAst::new())]
     fn test_bond_constraints_ast_join(#[case] a: BondConstraintsAst, #[case] b: BondConstraintsAst, #[case] expected: BondConstraintsAst) {
         assert_eq!(a.join(&b), Ok(expected));
@@ -821,7 +821,7 @@ mod tests {
     #[case::aromatic_required_present(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]),
         BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]), true)]
     #[case::aromatic_required_absent(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]), BondConstraintsAst::new(), false)]
-    #[case::ring_membership_all_wildcard_matches_lit(BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined)]),
+    #[case::ring_membership_all_wildcard_matches_lit(BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)]),
         BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, 1)]), true)]
     #[case::ring_membership_all_lit_mismatch(BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, 1)]),
         BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, 2)]), false)]

@@ -93,7 +93,7 @@ mod tests {
     use umol_graph_ir::ir::{
         AtomAst as GraphIrAtomAst, AtomFieldChange as GraphIrAtomFieldChange,
         AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId, Edit as GraphIrEdit,
-        Edits as GraphIrEdits, ValueAst as GraphIrValueAst,
+        Edits as GraphIrEdits, NumForm as GraphIrNumForm,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -196,8 +196,8 @@ mod tests {
         edits.push(GraphIrEdit::ModifyAtomField {
             id: GraphIrAtomHandle::Id(GraphIrAtomId(7)),
             change: GraphIrAtomFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(1),
             },
         });
 

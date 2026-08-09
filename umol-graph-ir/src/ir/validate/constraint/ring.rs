@@ -12,7 +12,7 @@ use super::super::super::id::{AtomId, BondId, DativeBondId};
 use super::super::super::molecule::MoleculeAst;
 use super::super::super::ring::{RingConfig, RingModel};
 use super::super::super::traits::Lattice;
-use super::super::super::value::ValueAst;
+use super::super::super::value::NumForm;
 use super::super::super::view::{RingAtomView, RingBondView};
 use super::ConstraintError;
 
@@ -226,8 +226,8 @@ pub enum RingConstraintContradiction {
 }
 
 fn evaluate(
-    asserted: &ValueAst,
-    derived: &ValueAst,
+    asserted: &NumForm,
+    derived: &NumForm,
     contradiction: RingConstraintContradiction,
 ) -> Solution<(), RingConstraintContradiction> {
     if asserted.is_undetermined() {

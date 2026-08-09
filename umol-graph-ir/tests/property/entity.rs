@@ -427,22 +427,22 @@ proptest! {
 /// regression in `fmt_value_field_required` / `fmt_ring_count` / the
 /// AromaticValence / MulticenterValence formatters can't slip through.
 #[rstest]
-#[case::valence(AtomConstraintAst::Valence(ValueAst::Undetermined))]
-#[case::total_valence(AtomConstraintAst::TotalValence(ValueAst::Undetermined))]
-#[case::donated_pairs(AtomConstraintAst::DonatedPairs(ValueAst::Undetermined))]
-#[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(ValueAst::Undetermined))]
-#[case::degree(AtomConstraintAst::Degree(ValueAst::Undetermined))]
-#[case::total_degree(AtomConstraintAst::TotalDegree(ValueAst::Undetermined))]
-#[case::ring_degree(AtomConstraintAst::RingDegree(ValueAst::Undetermined))]
-#[case::ring_valence(AtomConstraintAst::RingValence(ValueAst::Undetermined))]
-#[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(ValueAst::Undetermined))]
+#[case::valence(AtomConstraintAst::Valence(NumForm::Undetermined))]
+#[case::total_valence(AtomConstraintAst::TotalValence(NumForm::Undetermined))]
+#[case::donated_pairs(AtomConstraintAst::DonatedPairs(NumForm::Undetermined))]
+#[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(NumForm::Undetermined))]
+#[case::degree(AtomConstraintAst::Degree(NumForm::Undetermined))]
+#[case::total_degree(AtomConstraintAst::TotalDegree(NumForm::Undetermined))]
+#[case::ring_degree(AtomConstraintAst::RingDegree(NumForm::Undetermined))]
+#[case::ring_valence(AtomConstraintAst::RingValence(NumForm::Undetermined))]
+#[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(NumForm::Undetermined))]
 #[case::ring_membership_all(AtomConstraintAst::ring_membership(
     RingScope::All,
-    ValueAst::Undetermined
+    NumForm::Undetermined
 ))]
 #[case::ring_membership_size(AtomConstraintAst::ring_membership(
     RingScope::All,
-    ValueAst::Undetermined
+    NumForm::Undetermined
 ))]
 #[case::aromatic_valence_undetermined(AtomConstraintAst::AromaticValence(
     AromaticValenceAst::Undetermined

@@ -40,7 +40,7 @@ use super::stereo::{
     StereoKind,
 };
 use super::traits::{Canonicalize, Lattice};
-use super::value::ValueAst;
+use super::value::NumForm;
 
 /// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded ast.
 pub type StereoAtomRemoval = (
@@ -86,16 +86,16 @@ pub enum AtomFieldChange {
         new: IsotopeMassAst,
     },
     Charge {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     ImplicitHydrogens {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     LonePairs {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     UnpairedElectrons {
         old: UnpairedElectronsAst,
@@ -120,12 +120,12 @@ impl AtomFieldChange {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BondFieldChange {
     Order {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     Charge {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     UnpairedElectrons {
         old: UnpairedElectronsAst,
@@ -145,7 +145,7 @@ impl BondFieldChange {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DativeBondFieldChange {
-    Order { old: ValueAst, new: ValueAst },
+    Order { old: NumForm, new: NumForm },
 }
 
 impl DativeBondFieldChange {
@@ -163,8 +163,8 @@ pub enum AromaticSystemFieldChange {
         new: ElectronCountsAst,
     },
     Charge {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     UnpairedElectrons {
         old: UnpairedElectronsAst,
@@ -189,8 +189,8 @@ pub enum MulticenterBondFieldChange {
         new: ElectronCountsAst,
     },
     Charge {
-        old: ValueAst,
-        new: ValueAst,
+        old: NumForm,
+        new: NumForm,
     },
     UnpairedElectrons {
         old: UnpairedElectronsAst,
@@ -1946,12 +1946,12 @@ mod tests {
     )]
     #[case::charge(
         AtomFieldChange::Charge {
-            old: ValueAst::Lit(0),
-            new: ValueAst::Lit(1),
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
         },
         AtomFieldChange::Charge {
-            old: ValueAst::Lit(1),
-            new: ValueAst::Lit(0),
+            old: NumForm::Lit(1),
+            new: NumForm::Lit(0),
         },
     )]
     fn test_atom_field_change_inverse(
@@ -2601,15 +2601,15 @@ mod tests {
         let update = AtomUpdate {
             element: Some(ElementAst::Lit(Element::N)),
             isotope_mass: Some(IsotopeMassAst::Lit(13)),
-            charge: Some(ValueAst::Lit(1)),
-            implicit_hydrogens: Some(ValueAst::Lit(3)),
-            lone_pairs: Some(ValueAst::Lit(1)),
+            charge: Some(NumForm::Lit(1)),
+            implicit_hydrogens: Some(NumForm::Lit(3)),
+            lone_pairs: Some(NumForm::Lit(1)),
             unpaired_electrons: UnpairedElectronsUpdate {
                 count: None,
-                multiplicity: Some(ValueAst::Lit(1)),
+                multiplicity: Some(NumForm::Lit(1)),
             },
             constraints: AtomConstraintsAst::from_iter([
-                AtomConstraintAst::valence(ValueAst::Undetermined),
+                AtomConstraintAst::valence(NumForm::Undetermined),
                 AtomConstraintAst::degree(2_i64),
             ]),
         };
@@ -2636,22 +2636,22 @@ mod tests {
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(7)),
                     change: AtomFieldChange::Charge {
-                        old: ValueAst::Lit(0),
-                        new: ValueAst::Lit(1),
+                        old: NumForm::Lit(0),
+                        new: NumForm::Lit(1),
                     },
                 },
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(7)),
                     change: AtomFieldChange::ImplicitHydrogens {
-                        old: ValueAst::Lit(4),
-                        new: ValueAst::Lit(3),
+                        old: NumForm::Lit(4),
+                        new: NumForm::Lit(3),
                     },
                 },
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(7)),
                     change: AtomFieldChange::LonePairs {
-                        old: ValueAst::Lit(0),
-                        new: ValueAst::Lit(1),
+                        old: NumForm::Lit(0),
+                        new: NumForm::Lit(1),
                     },
                 },
                 Edit::ModifyAtomField {
@@ -2692,8 +2692,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AtomAst::from_element(Element::C), AtomUpdate::default())]
-    #[case::canonical_field(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() })]
+    #[case::canonical_field(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_atom_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
         let mut edits = Edits::new();
         edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
@@ -2711,14 +2711,14 @@ mod tests {
                 1_i64,
             ));
         let update = BondUpdate {
-            order: Some(ValueAst::Lit(2)),
-            charge: Some(ValueAst::Undetermined),
+            order: Some(NumForm::Lit(2)),
+            charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate {
                 count: None,
-                multiplicity: Some(ValueAst::Lit(1)),
+                multiplicity: Some(NumForm::Lit(1)),
             },
             constraints: BondConstraintsAst::from_iter([
-                BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined),
+                BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
                 BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             ]),
         };
@@ -2731,15 +2731,15 @@ mod tests {
                 Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(7)),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit(1),
-                        new: ValueAst::Lit(2),
+                        old: NumForm::Lit(1),
+                        new: NumForm::Lit(2),
                     },
                 },
                 Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(7)),
                     change: BondFieldChange::Charge {
-                        old: ValueAst::Lit(0),
-                        new: ValueAst::Undetermined,
+                        old: NumForm::Lit(0),
+                        new: NumForm::Undetermined,
                     },
                 },
                 Edit::ModifyBondField {
@@ -2784,8 +2784,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(BondAst::from_order(1), BondUpdate::default())]
-    #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
+    #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_bond_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
         let mut edits = Edits::new();
         edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
@@ -2798,16 +2798,16 @@ mod tests {
     #[case::fields_and_constraints(
         DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
         DativeBondUpdate {
-            order: Some(ValueAst::Lit(2)),
+            order: Some(NumForm::Lit(2)),
             constraints: DativeBondConstraintsAst::from_iter([
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
                 DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             ]),
         },
         vec![
             Edit::ModifyDativeBondField {
                 id: DativeBondHandle::Id(DativeBondId(7)),
-                change: DativeBondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: DativeBondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             },
             Edit::ModifyDativeBondConstraint {
                 id: DativeBondHandle::Id(DativeBondId(7)),
@@ -2858,8 +2858,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(DativeBondAst::from_order(1), DativeBondUpdate::default())]
-    #[case::canonical_field(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(ValueAst::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(DativeBondAst::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
+    #[case::canonical_field(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(DativeBondAst::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_dative_bond_identity(
         #[case] current: DativeBondAst,
         #[case] update: DativeBondUpdate,
@@ -2880,9 +2880,9 @@ mod tests {
         AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
-            charge: Some(ValueAst::Undetermined),
-            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
-            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
+            charge: Some(NumForm::Undetermined),
+            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
+            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)),
         },
         vec![
             Edit::ModifyAromaticSystemField {
@@ -2891,7 +2891,7 @@ mod tests {
             },
             Edit::ModifyAromaticSystemField {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
-                change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined },
+                change: AromaticSystemFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined },
             },
             Edit::ModifyAromaticSystemField {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
@@ -2948,8 +2948,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
-    #[case::canonical_field(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
+    #[case::canonical_field(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_aromatic_system_identity(
         #[case] current: AromaticSystemAst,
         #[case] update: AromaticSystemUpdate,
@@ -2970,9 +2970,9 @@ mod tests {
         MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
-            charge: Some(ValueAst::Undetermined),
-            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(ValueAst::Lit(1)) },
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
+            charge: Some(NumForm::Undetermined),
+            unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
+            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)),
         },
         vec![
             Edit::ModifyMulticenterBondField {
@@ -2981,7 +2981,7 @@ mod tests {
             },
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),
-                change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined },
+                change: MulticenterBondFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined },
             },
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),
@@ -3038,8 +3038,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
-    #[case::canonical_field(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
+    #[case::canonical_field(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_multicenter_bond_identity(
         #[case] current: MulticenterBondAst,
         #[case] update: MulticenterBondUpdate,
@@ -3294,14 +3294,14 @@ mod tests {
     #[rstest]
     fn test_bond_field_change_inverse() {
         let change = BondFieldChange::Order {
-            old: ValueAst::Lit(1),
-            new: ValueAst::Lit(2),
+            old: NumForm::Lit(1),
+            new: NumForm::Lit(2),
         };
         assert_eq!(
             change.clone().inverse(),
             BondFieldChange::Order {
-                old: ValueAst::Lit(2),
-                new: ValueAst::Lit(1),
+                old: NumForm::Lit(2),
+                new: NumForm::Lit(1),
             },
         );
         assert_eq!(change.clone().inverse().inverse(), change);
@@ -3353,11 +3353,11 @@ mod tests {
         Constraint::Or(vec![
             Constraint::And(vec![
                 Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
-                Constraint::Atom(AtomId(7), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(2)))),
+                Constraint::Atom(AtomId(7), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(2)))),
             ]),
             Constraint::And(vec![
                 Constraint::Atom(AtomId(9), AtomConstraintAst::valence(2_i64)),
-                Constraint::Not(Box::new(Constraint::Atom(AtomId(9), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1)))))),
+                Constraint::Not(Box::new(Constraint::Atom(AtomId(9), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))))),
             ]),
         ]),
         vec![
@@ -3368,11 +3368,11 @@ mod tests {
             constraint: Constraint::Or(vec![
                 Constraint::And(vec![
                     Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
-                    Constraint::Atom(AtomId(0), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(2)))),
+                    Constraint::Atom(AtomId(0), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(2)))),
                 ]),
                 Constraint::And(vec![
                     Constraint::Atom(AtomId(0), AtomConstraintAst::valence(2_i64)),
-                    Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1)))))),
+                    Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))))),
                 ]),
             ]),
             atoms: vec![AtomHandle::New(0)], bonds: vec![], dative_bonds: vec![], aromatic_systems: vec![],
@@ -3446,8 +3446,8 @@ mod tests {
     )]
     #[case::molecule_subsets(
         Constraint::And(vec![
-            Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(7), AtomId(9)]), sum: ValueAst::Lit(0) }),
-            Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(4)]), sum: ValueAst::Lit(2) }),
+            Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(7), AtomId(9)]), sum: NumForm::Lit(0) }),
+            Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(4)]), sum: NumForm::Lit(2) }),
         ]),
         vec![
             (Entity::Atom(AtomId(7)), EntityHandle::Atom(AtomHandle::New(0))),
@@ -3456,8 +3456,8 @@ mod tests {
         ],
         ConstraintEdit {
             constraint: Constraint::And(vec![
-                Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
-                Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0)]), sum: ValueAst::Lit(2) }),
+                Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: NumForm::Lit(0) }),
+                Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0)]), sum: NumForm::Lit(2) }),
             ]),
             atoms: vec![AtomHandle::New(0), AtomHandle::Id(AtomId(2))], bonds: vec![BondHandle::New(1)], dative_bonds: vec![], aromatic_systems: vec![],
             multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],

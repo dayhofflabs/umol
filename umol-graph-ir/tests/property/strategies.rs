@@ -43,8 +43,8 @@ pub(crate) use umol_graph_ir::ir::{
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
     NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
-    NoncovalentBondUpdate, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst,
-    RelOp, RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst,
+    NoncovalentBondUpdate, NumForm, OrientedLigandPermutation, PredExpr, ReactionAst,
+    ReactionSpanAst, RelOp, RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst,
     StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange,
     StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
     StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondHandle,
@@ -52,7 +52,7 @@ pub(crate) use umol_graph_ir::ir::{
     StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition,
     Stereogenicity, StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity,
     TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsAst,
-    UnpairedElectronsUpdate, ValueAst,
+    UnpairedElectronsUpdate,
 };
 pub(crate) use umol_perm::{Orientation, Permutation};
 
@@ -99,13 +99,13 @@ pub(crate) fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
     .prop_map(|e| e.canonicalize().unwrap_or(ElementAst::Undetermined))
 }
 
-pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
+pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = NumForm> {
     prop_oneof![
-        4 => Just(ValueAst::Undetermined),
-        4 => range.clone().prop_map(ValueAst::Lit),
-        1 => prop::collection::vec(range, 2..=3).prop_map(ValueAst::lit_set),
-        2 => arith_expr_strategy().prop_map(ValueAst::arith_expr),
-        2 => pred_expr_strategy().prop_map(ValueAst::pred_expr),
+        4 => Just(NumForm::Undetermined),
+        4 => range.clone().prop_map(NumForm::Lit),
+        1 => prop::collection::vec(range, 2..=3).prop_map(NumForm::lit_set),
+        2 => arith_expr_strategy().prop_map(NumForm::arith_expr),
+        2 => pred_expr_strategy().prop_map(NumForm::pred_expr),
     ]
     .prop_map(canonicalize_value)
 }
@@ -173,25 +173,25 @@ fn rel_op_strategy() -> impl Strategy<Value = RelOp> {
 /// forms: the lattice laws and the render/parse identity compare against the
 /// generated value itself, so a non-canonical input would spuriously fail.
 /// The unsatisfiable case is unreachable for these generators.
-fn canonicalize_value(v: ValueAst) -> ValueAst {
-    v.canonicalize().unwrap_or(ValueAst::Undetermined)
+fn canonicalize_value(v: NumForm) -> NumForm {
+    v.canonicalize().unwrap_or(NumForm::Undetermined)
 }
 
-pub(crate) fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
+pub(crate) fn any_num_form_strategy() -> BoxedStrategy<NumForm> {
     value_basic(-10..=10).boxed()
 }
 
-/// Possibly **non-canonical** (but satisfiable) `ValueAst`: unlike `value_basic`
+/// Possibly **non-canonical** (but satisfiable) `NumForm`: unlike `value_basic`
 /// it does not canonicalize, so it exercises the input-canonicality-independent
 /// lattice laws on raw `ArithExpr`/`PredExpr` forms. Unsatisfiable draws are filtered
 /// out — on an unsatisfiable target the `matches` law's meet-derived RHS only
 /// agrees with the default for satisfiable targets.
-pub(crate) fn raw_value_ast_strategy() -> BoxedStrategy<ValueAst> {
+pub(crate) fn raw_num_form_strategy() -> BoxedStrategy<NumForm> {
     prop_oneof![
-        2 => Just(ValueAst::Undetermined),
-        2 => (-10i64..=10).prop_map(ValueAst::Lit),
-        3 => arith_expr_strategy().prop_map(ValueAst::arith_expr),
-        3 => pred_expr_strategy().prop_map(ValueAst::pred_expr),
+        2 => Just(NumForm::Undetermined),
+        2 => (-10i64..=10).prop_map(NumForm::Lit),
+        3 => arith_expr_strategy().prop_map(NumForm::arith_expr),
+        3 => pred_expr_strategy().prop_map(NumForm::pred_expr),
     ]
     .prop_filter("satisfiable", |v| v.clone().canonicalize().is_ok())
     .boxed()
@@ -225,7 +225,7 @@ pub(crate) fn raw_isotope_strategy() -> BoxedStrategy<IsotopeMassAst> {
 
 pub(crate) fn raw_aromatic_valence_ast_strategy() -> BoxedStrategy<AromaticValenceAst> {
     prop_oneof![
-        3 => raw_value_ast_strategy().prop_map(AromaticValenceAst::Aromatic),
+        3 => raw_num_form_strategy().prop_map(AromaticValenceAst::Aromatic),
         2 => aromatic_valence_ast_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
@@ -234,7 +234,7 @@ pub(crate) fn raw_aromatic_valence_ast_strategy() -> BoxedStrategy<AromaticValen
 
 pub(crate) fn raw_multicenter_valence_ast_strategy() -> BoxedStrategy<MulticenterValenceAst> {
     prop_oneof![
-        3 => raw_value_ast_strategy().prop_map(MulticenterValenceAst::Multicenter),
+        3 => raw_num_form_strategy().prop_map(MulticenterValenceAst::Multicenter),
         2 => multicenter_valence_ast_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
@@ -316,7 +316,7 @@ pub(crate) fn unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedEle
 }
 
 pub(crate) fn raw_unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedElectronsAst> {
-    (raw_value_ast_strategy(), raw_value_ast_strategy()).prop_map(|(count, multiplicity)| {
+    (raw_num_form_strategy(), raw_num_form_strategy()).prop_map(|(count, multiplicity)| {
         UnpairedElectronsAst {
             count,
             multiplicity,
@@ -374,14 +374,14 @@ pub(crate) fn non_vacuous_unpaired_electrons_strategy(
 /// the tree-based path, so the gap is contained.
 pub(crate) fn constraint_value_strategy(
     range: RangeInclusive<i64>,
-) -> impl Strategy<Value = ValueAst> {
+) -> impl Strategy<Value = NumForm> {
     prop_oneof![
-        3 => Just(ValueAst::Undetermined),
-        3 => range.clone().prop_map(ValueAst::Lit),
+        3 => Just(NumForm::Undetermined),
+        3 => range.clone().prop_map(NumForm::Lit),
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            NumForm::lit_set(v)
         }),
     ]
 }
@@ -391,13 +391,13 @@ pub(crate) fn constraint_value_strategy(
 /// in the entity-level formatter (see vacuous `RingMembership(_, Undetermined)`, intentionally dropped).
 pub(crate) fn constraint_inner_value_strategy(
     range: RangeInclusive<i64>,
-) -> impl Strategy<Value = ValueAst> {
+) -> impl Strategy<Value = NumForm> {
     prop_oneof![
-        range.clone().prop_map(ValueAst::Lit),
+        range.clone().prop_map(NumForm::Lit),
         prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            NumForm::lit_set(v)
         }),
     ]
 }
@@ -624,12 +624,12 @@ prop_compose! {
 /// order-1 bond with the inline `Aromatic` flag).
 pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst> {
     prop_oneof![
-        Just(BondAst::new(ValueAst::Lit(1))),
-        Just(BondAst::new(ValueAst::Lit(2))),
-        Just(BondAst::new(ValueAst::Lit(3))),
-        Just(BondAst::new(ValueAst::Lit(4))),
+        Just(BondAst::new(NumForm::Lit(1))),
+        Just(BondAst::new(NumForm::Lit(2))),
+        Just(BondAst::new(NumForm::Lit(3))),
+        Just(BondAst::new(NumForm::Lit(4))),
         Just(
-            BondAst::new(ValueAst::Lit(1))
+            BondAst::new(NumForm::Lit(1))
                 .with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         ),
     ]
@@ -665,10 +665,10 @@ pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
     // shorthands cover (`:single` / `:double` / `:triple`), keeping
     // canonical-form roundtrip exercised across haptic-pair counts.
     let order_strategy = prop_oneof![
-        Just(ValueAst::Lit(1)),
-        Just(ValueAst::Lit(2)),
-        Just(ValueAst::Lit(3)),
-        Just(ValueAst::Undetermined),
+        Just(NumForm::Lit(1)),
+        Just(NumForm::Lit(2)),
+        Just(NumForm::Lit(3)),
+        Just(NumForm::Undetermined),
     ];
     (order_strategy, dative_bond_constraints_strategy())
         .prop_map(|(order, constraints)| DativeBondAst { order, constraints })
@@ -685,7 +685,7 @@ prop_compose! {
 }
 
 /// Optional `ElectronCount` constraint (the asserted total). The strategy
-/// emits `None` half the time, otherwise wraps a `ValueAst::Lit` or
+/// emits `None` half the time, otherwise wraps a `NumForm::Lit` or
 /// `Set`. `Undetermined` is excluded because it has no canonical
 /// surface form in the entity-string `#e<n>` field — `#e*` is admitted on
 /// parse but the renderer omits the predicate entirely, breaking
@@ -707,7 +707,7 @@ pub(crate) fn aromatic_system_update_constraints_strategy(
         0.5,
         prop_oneof![
             electron_count_value_strategy(0..=12),
-            Just(ValueAst::Undetermined),
+            Just(NumForm::Undetermined),
         ],
     )
     .prop_map(|value| {
@@ -735,7 +735,7 @@ pub(crate) fn multicenter_bond_update_constraints_strategy(
         0.5,
         prop_oneof![
             electron_count_value_strategy(0..=8),
-            Just(ValueAst::Undetermined),
+            Just(NumForm::Undetermined),
         ],
     )
     .prop_map(|value| {
@@ -748,13 +748,13 @@ pub(crate) fn multicenter_bond_update_constraints_strategy(
 
 pub(crate) fn electron_count_value_strategy(
     range: RangeInclusive<i64>,
-) -> impl Strategy<Value = ValueAst> {
+) -> impl Strategy<Value = NumForm> {
     prop_oneof![
-        3 => range.clone().prop_map(ValueAst::Lit),
+        3 => range.clone().prop_map(NumForm::Lit),
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            NumForm::lit_set(v)
         }),
     ]
 }
@@ -2734,15 +2734,15 @@ impl StableAtomHandleTrace {
                 AtomHandle::Id(AtomId(self.target_index as u32))
             },
             change: AtomFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(7),
+                old: NumForm::default(),
+                new: NumForm::Lit(7),
             },
         });
         edits.push(Edit::ModifyAtomField {
             id: sentinel,
             change: AtomFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(9),
+                old: NumForm::default(),
+                new: NumForm::Lit(9),
             },
         });
         edits
@@ -3209,8 +3209,8 @@ impl TransactionCase {
                 Edits::from_iter([Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId((id % count) as u32)),
                     change: AtomFieldChange::Charge {
-                        old: ValueAst::default(),
-                        new: ValueAst::Lit(*charge),
+                        old: NumForm::default(),
+                        new: NumForm::Lit(*charge),
                     },
                 }])
             }
@@ -3219,8 +3219,8 @@ impl TransactionCase {
                 Edits::from_iter([Edit::ModifyBondField {
                     id: BondHandle::Id(BondId(bond_id as u32)),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit((bond_id % 3 + 1) as i64),
-                        new: ValueAst::Lit(*order as i64),
+                        old: NumForm::Lit((bond_id % 3 + 1) as i64),
+                        new: NumForm::Lit(*order as i64),
                     },
                 }])
             }
@@ -3340,22 +3340,22 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(1),
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
             },
         }),
         value(Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::ImplicitHydrogens {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(3),
+                old: NumForm::default(),
+                new: NumForm::Lit(3),
             },
         }),
         value(Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::LonePairs {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(1),
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
             },
         }),
         value(Edit::ModifyAtomField {
@@ -3368,15 +3368,15 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyBondField {
             id: BondHandle::Id(BondId(0)),
             change: BondFieldChange::Order {
-                old: ValueAst::Lit(1),
-                new: ValueAst::Lit(2),
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
             },
         }),
         value(Edit::ModifyBondField {
             id: BondHandle::Id(BondId(0)),
             change: BondFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(-1),
+                old: NumForm::default(),
+                new: NumForm::Lit(-1),
             },
         }),
         value(Edit::ModifyBondField {
@@ -3389,8 +3389,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyDativeBondField {
             id: DativeBondHandle::Id(DativeBondId(0)),
             change: DativeBondFieldChange::Order {
-                old: ValueAst::Lit(1),
-                new: ValueAst::Lit(2),
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
             },
         }),
         value(Edit::ModifyAromaticSystemField {
@@ -3403,8 +3403,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyAromaticSystemField {
             id: AromaticSystemHandle::Id(AromaticSystemId(0)),
             change: AromaticSystemFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(1),
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
             },
         }),
         value(Edit::ModifyAromaticSystemField {
@@ -3424,8 +3424,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyMulticenterBondField {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             change: MulticenterBondFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(-1),
+                old: NumForm::default(),
+                new: NumForm::Lit(-1),
             },
         }),
         value(Edit::ModifyMulticenterBondField {
@@ -3963,15 +3963,15 @@ pub(crate) fn consecutive_transaction_strategy(
             let first_edits = Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(first),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(first),
                 },
             }]);
             let second_edits = Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(first),
-                    new: ValueAst::Lit(second),
+                    old: NumForm::Lit(first),
+                    new: NumForm::Lit(second),
                 },
             }]);
             (base, first_edits, second_edits)
@@ -4077,8 +4077,8 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::ModifyAtomField {
                         id: AtomHandle::Id(AtomId(i as u32)),
                         change: AtomFieldChange::Charge {
-                            old: ValueAst::default(),
-                            new: ValueAst::Lit(1),
+                            old: NumForm::default(),
+                            new: NumForm::Lit(1),
                         },
                     });
                 }
@@ -4088,7 +4088,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::AddMoleculeConstraint {
                         constraint: Constraint::AromaticSystem(
                             AromaticSystemId(i as u32),
-                            AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6)),
+                            AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6)),
                         )
                         .into(),
                     });
@@ -4097,7 +4097,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::AddMoleculeConstraint {
                         constraint: Constraint::MulticenterBond(
                             MulticenterBondId(i as u32),
-                            MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(4)),
+                            MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(4)),
                         )
                         .into(),
                     });
@@ -4831,7 +4831,7 @@ fn build_reaction(
         }
         let Some(charge) = new_charge else { continue };
         let old = lhs.atom(id).ast.charge.clone();
-        let new = ValueAst::Lit(charge);
+        let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::Atom(AtomDelta::ModifyField {
                 id,
@@ -4846,7 +4846,7 @@ fn build_reaction(
         }
         let Some(order) = new_order else { continue };
         let old = lhs.bond(id).ast.order.clone();
-        let new = ValueAst::Lit(order);
+        let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::Bond(BondDelta::ModifyField {
                 id,
@@ -4869,7 +4869,7 @@ fn build_reaction(
         }
         let Some(order) = new_order else { continue };
         let old = lhs.dative_bond(id).ast.order.clone();
-        let new = ValueAst::Lit(order);
+        let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::DativeBond(DativeBondDelta::ModifyField {
                 id,
@@ -4884,7 +4884,7 @@ fn build_reaction(
         }
         let Some(charge) = new_charge else { continue };
         let old = lhs.aromatic_system(id).ast.charge.clone();
-        let new = ValueAst::Lit(charge);
+        let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
                 id,
@@ -4899,7 +4899,7 @@ fn build_reaction(
         }
         let Some(charge) = new_charge else { continue };
         let old = lhs.multicenter_bond(id).ast.charge.clone();
-        let new = ValueAst::Lit(charge);
+        let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
                 id,

@@ -523,9 +523,9 @@ mod tests {
         MulticenterBondId as GraphIrMulticenterBondId,
         NoncovalentBondAst as GraphIrNoncovalentBondAst,
         NoncovalentBondId as GraphIrNoncovalentBondId,
-        NoncovalentBondKind as GraphIrNoncovalentBondKind,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
         SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm,
-        SubstructureMatchConfig as GraphIrSubstructureMatchConfig, ValueAst as GraphIrValueAst,
+        SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -883,7 +883,7 @@ mod tests {
             GraphIrAtomHandle::Id(GraphIrAtomId(0)),
             initial.atom(GraphIrAtomId(0)).ast,
             &GraphIrAtomUpdate {
-                implicit_hydrogens: Some(GraphIrValueAst::Lit(2)),
+                implicit_hydrogens: Some(GraphIrNumForm::Lit(2)),
                 ..Default::default()
             },
         );
@@ -918,8 +918,8 @@ mod tests {
         rust_edits.push(GraphIrEdit::ModifyAtomField {
             id: GraphIrAtomHandle::Id(GraphIrAtomId(7)),
             change: GraphIrAtomFieldChange::Charge {
-                old: GraphIrValueAst::Lit(0),
-                new: GraphIrValueAst::Lit(1),
+                old: GraphIrNumForm::Lit(0),
+                new: GraphIrNumForm::Lit(1),
             },
         });
 

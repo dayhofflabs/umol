@@ -105,7 +105,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AtomConstraintAst, AtomFieldChange, AtomHandle, AtomId, Edit, Edits, IsotopeMassAst,
-        ValueAst,
+        NumForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
@@ -231,7 +231,7 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v*#a!"]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(0)),
-            old: Some(AtomConstraintAst::valence(ValueAst::Undetermined)),
+            old: Some(AtomConstraintAst::valence(NumForm::Undetermined)),
             new: Some(AtomConstraintAst::valence(0)),
         }])),
     )]

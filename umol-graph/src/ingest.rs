@@ -272,7 +272,7 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceAst, AtomId, BooleanAst, Deltas, ElectronCountsAst,
-        StereoCoset, TetrahedralStereoAst, ValueAst,
+        NumForm, StereoCoset, TetrahedralStereoAst,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
@@ -790,15 +790,15 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![ValueAst::Lit(1), ValueAst::Lit(0), ValueAst::Lit(0)],
-        ValueAst::Lit(0)
+        vec![NumForm::Lit(1), NumForm::Lit(0), NumForm::Lit(0)],
+        NumForm::Lit(0)
     )]
     fn test_ingest_smiles_with_charge(
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected_atom_charges: Vec<ValueAst>,
-        #[case] expected_system_charge: ValueAst,
+        #[case] expected_atom_charges: Vec<NumForm>,
+        #[case] expected_system_charge: NumForm,
     ) {
         let ast =
             ingest_smiles_with("[cH+]1[cH][cH]1", &io_config, &model, &resolve_config).unwrap();
@@ -821,7 +821,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 6]
+        vec![Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))); 6]
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),
@@ -941,11 +941,11 @@ mod tests {
                 .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             vec![
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(2))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(2))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
             ]
         );
         assert_eq!(
@@ -1379,11 +1379,11 @@ mod tests {
                 .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             vec![
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(2))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(2))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+                Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
             ]
         );
         assert_eq!(

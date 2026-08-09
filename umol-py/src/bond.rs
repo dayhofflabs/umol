@@ -21,7 +21,7 @@ use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// Attribute updates for a localized bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -34,8 +34,8 @@ impl BondUpdate {
     #[pyo3(signature = (*, order=None, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: Option<ValueLike>,
-        charge: Option<ValueLike>,
+        order: Option<NumLike>,
+        charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
@@ -127,8 +127,8 @@ impl BondAst {
     #[pyo3(signature = (order, *, charge=None, unpaired_electrons=None, constraints=None))]
     fn new(
         py: Python<'_>,
-        order: ValueLike,
-        charge: Option<ValueLike>,
+        order: NumLike,
+        charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
@@ -198,7 +198,7 @@ impl BondAst {
     }
 
     #[setter]
-    fn set_order(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_order(&mut self, py: Python<'_>, value: NumLike) {
         self.0.order = value.to_rust(py);
     }
 
@@ -208,7 +208,7 @@ impl BondAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&mut self, py: Python<'_>, value: NumLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -334,7 +334,7 @@ impl BondView {
     }
 
     #[setter]
-    fn set_order(&self, py: Python<'_>, value: ValueLike) {
+    fn set_order(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -350,7 +350,7 @@ impl BondView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -541,8 +541,8 @@ mod tests {
         BondConstraintKey as GraphIrBondConstraintKey,
         BondConstraintsAst as GraphIrBondConstraintsAst, BooleanAst as GraphIrBooleanAst,
         CisTransStereoAst as GraphIrCisTransStereoAst, MoleculeEntries as GraphIrMoleculeEntries,
-        RingScope as GraphIrRingScope, StereoCoset as GraphIrStereoCoset,
-        ValueAst as GraphIrValueAst,
+        NumForm as GraphIrNumForm, RingScope as GraphIrRingScope,
+        StereoCoset as GraphIrStereoCoset,
     };
 
     use super::*;
@@ -818,7 +818,7 @@ mod tests {
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
             assert!(constraints
@@ -906,7 +906,7 @@ mod tests {
             assert_eq!(c.aromatic().to_rust(), GraphIrBooleanAst::Lit(true));
             assert_eq!(
                 c.ring_count(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(2)
+                GraphIrNumForm::Lit(2)
             );
         });
     }
@@ -1088,10 +1088,10 @@ mod tests {
     fn test_bond_constraints_ast_set_ring_count() {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
-            constraints.set_ring_count(py, ValueLike::Lit(2));
+            constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(2)
+                GraphIrNumForm::Lit(2)
             );
         });
     }
@@ -1239,10 +1239,10 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueLike::Lit(3));
+            proxy.__setitem__(py, 6, NumLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(3)
+                GraphIrNumForm::Lit(3)
             );
             proxy.__delitem__(py, 6);
             assert!(proxy.__getitem__(py, 6).unwrap().is_none());
@@ -1256,8 +1256,7 @@ mod tests {
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
-            view.ring_size_count(py)
-                .__setitem__(py, 5, ValueLike::Lit(1));
+            view.ring_size_count(py).__setitem__(py, 5, NumLike::Lit(1));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond),
             };
@@ -1268,7 +1267,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
         });
     }
@@ -1278,8 +1277,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueLike::Lit(3));
-            proxy.__setitem__(py, 5, ValueLike::Lit(1));
+            proxy.__setitem__(py, 6, NumLike::Lit(3));
+            proxy.__setitem__(py, 5, NumLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());
@@ -1301,7 +1300,7 @@ mod tests {
                 id: GraphIrBondId(0),
             };
             assert_eq!(view.id(), 0);
-            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrValueAst::Lit(2));
+            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(2));
         });
     }
 
@@ -1324,15 +1323,12 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrBondId(0),
             };
-            view.set_order(py, ValueLike::Lit(1));
+            view.set_order(py, NumLike::Lit(1));
             let fresh = BondView {
                 owner,
                 id: GraphIrBondId(0),
             };
-            assert_eq!(
-                fresh.order(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(1)
-            );
+            assert_eq!(fresh.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(1));
         });
     }
 
@@ -1344,14 +1340,14 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrBondId(0),
             };
-            view.set_charge(py, ValueLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1));
             let fresh = BondView {
                 owner,
                 id: GraphIrBondId(0),
             };
             assert_eq!(
                 fresh.charge(py).unwrap().to_rust(py),
-                GraphIrValueAst::Lit(-1)
+                GraphIrNumForm::Lit(-1)
             );
         });
     }
@@ -1414,8 +1410,7 @@ mod tests {
                     id: GraphIrBondId(0),
                 },
             };
-            view.ring_size_count(py)
-                .__setitem__(py, 6, ValueLike::Lit(1));
+            view.ring_size_count(py).__setitem__(py, 6, NumLike::Lit(1));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner,
@@ -1429,7 +1424,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
         });
     }
@@ -1457,7 +1452,7 @@ mod tests {
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, endpoints preserved
-            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrValueAst::Lit(1));
+            assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(1));
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
         });
     }

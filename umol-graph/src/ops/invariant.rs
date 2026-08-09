@@ -11,8 +11,7 @@ use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
-    AtomId, ElementAst, Lattice, MoleculeAst, MulticenterValenceAst, UnpairedElectronsAst,
-    ValueAst,
+    AtomId, ElementAst, Lattice, MoleculeAst, MulticenterValenceAst, NumForm, UnpairedElectronsAst,
 };
 use umol_utils::solution::Solution;
 
@@ -64,31 +63,27 @@ impl ValenceInvariants {
         else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom
-            .constraints
-            .valence()
-            .unwrap_or(&ValueAst::Undetermined)
-        {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => 0,
+        let valence = match atom.constraints.valence().unwrap_or(&NumForm::Undetermined) {
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
         let donated = match atom
             .constraints
             .donated_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => 0,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
         let accepted = match atom
             .constraints
             .accepted_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => 0,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
         let aromatic_constraint = atom
@@ -167,11 +162,11 @@ impl ValenceInvariants {
         let valence = match atom
             .constraints()
             .valence()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => match atom.valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => match atom.valence() {
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -179,11 +174,11 @@ impl ValenceInvariants {
         let donated = match atom
             .constraints()
             .donated_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => match atom.donated_pairs() {
-                ValueAst::Lit(t) if t >= 0 => t,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => match atom.donated_pairs() {
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -191,11 +186,11 @@ impl ValenceInvariants {
         let accepted = match atom
             .constraints()
             .accepted_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => match atom.accepted_pairs() {
-                ValueAst::Lit(t) if t >= 0 => t,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => match atom.accepted_pairs() {
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -210,7 +205,7 @@ impl ValenceInvariants {
         {
             Some(valence) if valence >= 0 => valence,
             None if aromatic_constraint.is_undetermined() => match atom.aromatic_valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -225,7 +220,7 @@ impl ValenceInvariants {
         {
             Some(valence) if valence >= 0 => valence,
             None if multicenter_constraint.is_undetermined() => match atom.multicenter_valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -280,11 +275,11 @@ impl ValenceInvariants {
         let valence = match atom
             .constraints()
             .valence()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => match atom.valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => match atom.valence() {
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -292,11 +287,11 @@ impl ValenceInvariants {
         let donated = match atom
             .constraints()
             .donated_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => match atom.donated_pairs() {
-                ValueAst::Lit(t) if t >= 0 => t,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => match atom.donated_pairs() {
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -304,11 +299,11 @@ impl ValenceInvariants {
         let accepted = match atom
             .constraints()
             .accepted_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
+            .unwrap_or(&NumForm::Undetermined)
         {
-            ValueAst::Lit(v) if *v >= 0 => *v,
-            ValueAst::Undetermined => match atom.accepted_pairs() {
-                ValueAst::Lit(t) if t >= 0 => t,
+            NumForm::Lit(v) if *v >= 0 => *v,
+            NumForm::Undetermined => match atom.accepted_pairs() {
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -323,7 +318,7 @@ impl ValenceInvariants {
         {
             Some(valence) if valence >= 0 => valence,
             None if aromatic_constraint.is_undetermined() => match atom.aromatic_valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -338,7 +333,7 @@ impl ValenceInvariants {
         {
             Some(valence) if valence >= 0 => valence,
             None if multicenter_constraint.is_undetermined() => match atom.multicenter_valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
+                NumForm::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -391,15 +386,15 @@ impl ValenceInvariants {
                         };
                         let assignment = AtomAst {
                             element: ElementAst::Lit(element),
-                            charge: ValueAst::Lit(charge),
-                            implicit_hydrogens: ValueAst::Lit(implicit_h),
-                            lone_pairs: ValueAst::Lit(lone_pairs),
+                            charge: NumForm::Lit(charge),
+                            implicit_hydrogens: NumForm::Lit(implicit_h),
+                            lone_pairs: NumForm::Lit(lone_pairs),
                             unpaired_electrons: UnpairedElectronsAst {
-                                count: ValueAst::Lit(unpaired_electrons),
-                                multiplicity: ValueAst::Lit(multiplicity),
+                                count: NumForm::Lit(unpaired_electrons),
+                                multiplicity: NumForm::Lit(multiplicity),
                             },
                             constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(
-                                ValueAst::Lit(valence),
+                                NumForm::Lit(valence),
                             )),
                             ..Default::default()
                         };
@@ -418,8 +413,8 @@ impl ValenceInvariants {
 
 fn enumerate_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) -> Option<i64> {
     let multiplicity = match unpaired_electrons.multiplicity {
-        ValueAst::Lit(m) => m,
-        ValueAst::Undetermined => count + 1,
+        NumForm::Lit(m) => m,
+        NumForm::Undetermined => count + 1,
         _ => return None,
     };
     SpinState::try_from(UnpairedElectrons {
@@ -476,12 +471,12 @@ fn element_charge_range(element: Element) -> RangeInclusive<i64> {
     (lo as i64)..=(hi as i64)
 }
 
-fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> {
+fn enumeration_values(field: &NumForm, bound: RangeInclusive<i64>) -> Vec<i64> {
     match field {
-        ValueAst::Lit(n) => vec![*n],
-        ValueAst::Undetermined => bound.collect(),
+        NumForm::Lit(n) => vec![*n],
+        NumForm::Undetermined => bound.collect(),
         _ => bound
-            .filter(|value| field.matches(&ValueAst::Lit(*value)))
+            .filter(|value| field.matches(&NumForm::Lit(*value)))
             .collect(),
     }
 }
@@ -492,7 +487,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst, IsotopeMassAst,
-        MoleculeAst, MoleculeEntries, UnpairedElectronsAst, ValueAst,
+        MoleculeAst, MoleculeEntries, NumForm, UnpairedElectronsAst,
     };
 
     use super::*;
@@ -502,9 +497,9 @@ mod tests {
     #[case::ground_methane(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -514,8 +509,8 @@ mod tests {
     #[case::undetermined_h(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -525,9 +520,9 @@ mod tests {
     #[case::orbital_count_mismatch(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(99),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(99),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -547,9 +542,9 @@ mod tests {
     #[case::ground_methane(
         AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         },
@@ -558,9 +553,9 @@ mod tests {
     #[case::not_aromatic(
         AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
                 AromaticValenceAst::NotAromatic,
@@ -572,12 +567,12 @@ mod tests {
     #[case::aromatic_zero(
         AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
-                AromaticValenceAst::Aromatic(ValueAst::Lit(0)),
+                AromaticValenceAst::Aromatic(NumForm::Lit(0)),
             )),
             ..Default::default()
         },
@@ -586,9 +581,9 @@ mod tests {
     #[case::undetermined_charge(
         AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Undetermined,
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
+            charge: NumForm::Undetermined,
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         },
@@ -597,9 +592,9 @@ mod tests {
     #[case::orbital_count_mismatch(
         AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(99),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(99),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         },
@@ -616,9 +611,9 @@ mod tests {
     #[case::ground_methane(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -631,8 +626,8 @@ mod tests {
     #[case::methane(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -640,19 +635,19 @@ mod tests {
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     #[case::infeasible_h(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(99),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(99),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -664,9 +659,9 @@ mod tests {
     #[case::all_fields_ground(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::O),
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(2),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(2),
             unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -674,11 +669,11 @@ mod tests {
         vec![AtomAst {
             element: ElementAst::Lit(Element::O),
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(2),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(2),
             unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     // Unpaired electrons fully ground to a non-maximal but valid coupling (3 electrons as a
@@ -686,8 +681,8 @@ mod tests {
     #[case::ground_unpaired_electrons(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::N),
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((3_u8, 2_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -695,11 +690,11 @@ mod tests {
         vec![AtomAst {
             element: ElementAst::Lit(Element::N),
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(1),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(1),
             unpaired_electrons: UnpairedElectronsAst::from((3_u8, 2_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     // Multiplicity is ground (singlet), unpaired-electron count open: conservation fixes the
@@ -707,12 +702,12 @@ mod tests {
     #[case::ground_multiplicity(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(2),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst {
-                count: ValueAst::Undetermined,
-                multiplicity: ValueAst::Lit(1),
+                count: NumForm::Undetermined,
+                multiplicity: NumForm::Lit(1),
             },
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -720,11 +715,11 @@ mod tests {
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(2),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((2_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     // Unpaired electrons pinned to a physically impossible pair (count 2, multiplicity 2):
@@ -732,9 +727,9 @@ mod tests {
     #[case::inconsistent_unpaired_electrons(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(2),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -746,40 +741,40 @@ mod tests {
     #[case::open_unpaired_electrons(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(2),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(0),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(2),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     // Nonzero (given) charge: oxide anion, 7 electrons, resolves to a doublet.
     #[case::nonzero_charge(
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::O),
-            charge: ValueAst::Lit(-1),
-            implicit_hydrogens: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(3),
+            charge: NumForm::Lit(-1),
+            implicit_hydrogens: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(3),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::O),
             isotope_mass: IsotopeMassAst::Natural,
-            charge: ValueAst::Lit(-1),
-            implicit_hydrogens: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(3),
+            charge: NumForm::Lit(-1),
+            implicit_hydrogens: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(3),
             unpaired_electrons: UnpairedElectronsAst::from((1_u8, 2_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
@@ -788,8 +783,8 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Lit(13),
-            charge: ValueAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
@@ -797,11 +792,11 @@ mod tests {
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Lit(13),
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ValueAst::Lit(4),
-            lone_pairs: ValueAst::Lit(0),
+            charge: NumForm::Lit(0),
+            implicit_hydrogens: NumForm::Lit(4),
+            lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
         }],
     )]
     fn test_valence_invariants_enumerate_atom(

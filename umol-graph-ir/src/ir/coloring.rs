@@ -222,7 +222,7 @@ mod tests {
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::spin::UnpairedElectronsAst;
     use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
-    use crate::ir::value::ValueAst;
+    use crate::ir::value::NumForm;
 
     #[fixture]
     fn ethanol_fragment() -> MoleculeAst {
@@ -326,7 +326,7 @@ mod tests {
     #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
     #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
     #[case::partial_vs_undetermined(
-        UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
         UnpairedElectronsAst::default(),
         ConstitutionFeatures::UNPAIRED_ELECTRONS,
         false,

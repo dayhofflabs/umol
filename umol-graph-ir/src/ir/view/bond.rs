@@ -12,7 +12,7 @@ use super::super::molecule::MoleculeAst;
 use super::super::spin::UnpairedElectronsAst;
 use super::super::stereo::{CisTransStereoAst, StereoKind};
 use super::super::traits::Lattice;
-use super::super::value::ValueAst;
+use super::super::value::NumForm;
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 use super::stereo::StereoBondView;
@@ -129,12 +129,12 @@ pub struct BondView<'a> {
 
 impl<'a> BondView<'a> {
     #[inline]
-    pub fn order(&self) -> &'a ValueAst {
+    pub fn order(&self) -> &'a NumForm {
         &self.ast.order
     }
 
     #[inline]
-    pub fn charge(&self) -> &'a ValueAst {
+    pub fn charge(&self) -> &'a NumForm {
         &self.ast.charge
     }
 

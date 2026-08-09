@@ -7,7 +7,7 @@ use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, 
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
-    ElementAst, IntoIr, UnpairedElectronsAst, ValueAst,
+    ElementAst, IntoIr, NumForm, UnpairedElectronsAst,
 };
 use umol_utils::solution::Solution;
 
@@ -216,7 +216,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
     let ElectronCountsAst::Lit(electrons) = system.electrons() else {
         panic!("fixture aromatic electron contributions are undetermined");
     };
-    let ValueAst::Lit(charge) = system.charge() else {
+    let NumForm::Lit(charge) = system.charge() else {
         panic!("fixture aromatic charge is undetermined");
     };
     let actual = KekulizationFixture {
@@ -233,8 +233,8 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
             .atoms()
             .iter()
             .filter_map(|atom| match atom.ast.charge {
-                ValueAst::Lit(0) => None,
-                ValueAst::Lit(charge) => Some((atom.id, charge)),
+                NumForm::Lit(0) => None,
+                NumForm::Lit(charge) => Some((atom.id, charge)),
                 _ => panic!("fixture atom charge is undetermined"),
             })
             .collect(),
@@ -242,8 +242,8 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
             .atoms()
             .iter()
             .filter_map(|atom| match atom.ast.lone_pairs {
-                ValueAst::Lit(0) => None,
-                ValueAst::Lit(lone_pairs) => Some((atom.id, lone_pairs)),
+                NumForm::Lit(0) => None,
+                NumForm::Lit(lone_pairs) => Some((atom.id, lone_pairs)),
                 _ => panic!("fixture atom lone-pair count is undetermined"),
             })
             .collect(),
@@ -336,13 +336,13 @@ fn test_kekulization_fixture_output(
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.ast.order == ValueAst::Lit(2))
+        .filter(|bond| bond.ast.order == NumForm::Lit(2))
         .map(|bond| bond.id)
         .collect();
     let covered_atoms: HashSet<AtomId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.ast.order == ValueAst::Lit(2))
+        .filter(|bond| bond.ast.order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
     let expected_covered_atoms: HashSet<AtomId> = first
@@ -354,7 +354,7 @@ fn test_kekulization_fixture_output(
         .atoms()
         .iter()
         .map(|atom| match atom.ast.charge {
-            ValueAst::Lit(charge) => charge,
+            NumForm::Lit(charge) => charge,
             _ => panic!("input atom charge is undetermined"),
         })
         .chain(
@@ -362,7 +362,7 @@ fn test_kekulization_fixture_output(
                 .aromatic_systems()
                 .iter()
                 .map(|system| match system.ast.charge {
-                    ValueAst::Lit(charge) => charge,
+                    NumForm::Lit(charge) => charge,
                     _ => panic!("input aromatic-system charge is undetermined"),
                 }),
         )
@@ -371,12 +371,12 @@ fn test_kekulization_fixture_output(
         .atoms()
         .iter()
         .map(|atom| match atom.ast.charge {
-            ValueAst::Lit(charge) => charge,
+            NumForm::Lit(charge) => charge,
             _ => panic!("output atom charge is undetermined"),
         })
         .sum();
     let system_charge = match input.aromatic_systems().iter().next().unwrap().ast.charge {
-        ValueAst::Lit(charge) => charge,
+        NumForm::Lit(charge) => charge,
         _ => panic!("input aromatic-system charge is undetermined"),
     };
 
@@ -399,15 +399,15 @@ fn test_kekulization_fixture_output(
     if let Some(exposed) = expected_exposed_atom {
         let before = input.atom(exposed).ast;
         let after = first.atom(exposed).ast;
-        let ValueAst::Lit(before_charge) = before.charge else {
+        let NumForm::Lit(before_charge) = before.charge else {
             panic!("input exposed-atom charge is undetermined");
         };
-        assert_eq!(after.charge, ValueAst::Lit(before_charge + system_charge));
-        let ValueAst::Lit(before_lone_pairs) = before.lone_pairs else {
+        assert_eq!(after.charge, NumForm::Lit(before_charge + system_charge));
+        let NumForm::Lit(before_lone_pairs) = before.lone_pairs else {
             panic!("input exposed-atom lone pairs are undetermined");
         };
         let expected_lone_pairs = before_lone_pairs + i64::from(system_charge == -1);
-        assert_eq!(after.lone_pairs, ValueAst::Lit(expected_lone_pairs));
+        assert_eq!(after.lone_pairs, NumForm::Lit(expected_lone_pairs));
         assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
         assert_eq!(after.unpaired_electrons, before.unpaired_electrons);
         if system_charge != 0 {
@@ -418,24 +418,24 @@ fn test_kekulization_fixture_output(
 
 #[rstest]
 #[case::localization(
-    ValueAst::Undetermined,
-    ValueAst::Lit(0),
+    NumForm::Undetermined,
+    NumForm::Lit(0),
     KekulizerError::UndeterminedExposedAtomCharge {
         system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
 #[case::lone_pair_localization(
-    ValueAst::Lit(0),
-    ValueAst::Undetermined,
+    NumForm::Lit(0),
+    NumForm::Undetermined,
     KekulizerError::UndeterminedExposedAtomLonePairs {
         system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
 #[case::valence_invariant(
-    ValueAst::Lit(0),
-    ValueAst::Lit(1),
+    NumForm::Lit(0),
+    NumForm::Lit(1),
     KekulizerError::PostLocalizationValenceInvariant(ValenceMismatch::OrbitalCount {
         atom_id: AtomId(4),
         orbital_count: 10,
@@ -443,8 +443,8 @@ fn test_kekulization_fixture_output(
     })
 )]
 fn test_kekulization_fixture_output_error(
-    #[case] exposed_charge: ValueAst,
-    #[case] exposed_lone_pairs: ValueAst,
+    #[case] exposed_charge: NumForm,
+    #[case] exposed_lone_pairs: NumForm,
     #[case] expected: KekulizerError,
 ) {
     let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")

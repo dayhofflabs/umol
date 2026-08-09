@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
 
 use crate::convert::{hash_rust, into_py_variant};
 use crate::lattice::impl_py_lattice;
-use crate::value::{ValueAst, ValueLike};
+use crate::value::{NumLike, ValueAst};
 
 /// Exact unpaired-electron count and spin multiplicity without physical validation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -117,7 +117,7 @@ pub struct UnpairedElectronsAst {
 #[pymethods]
 impl UnpairedElectronsAst {
     #[new]
-    fn new(py: Python<'_>, count: ValueLike, multiplicity: ValueLike) -> PyResult<Self> {
+    fn new(py: Python<'_>, count: NumLike, multiplicity: NumLike) -> PyResult<Self> {
         Ok(UnpairedElectronsAst {
             count: count.to_py(py)?,
             multiplicity: multiplicity.to_py(py)?,
@@ -196,8 +196,8 @@ impl UnpairedElectronsUpdate {
     #[pyo3(signature = (*, count=None, multiplicity=None))]
     fn new(
         py: Python<'_>,
-        count: Option<ValueLike>,
-        multiplicity: Option<ValueLike>,
+        count: Option<NumLike>,
+        multiplicity: Option<NumLike>,
     ) -> PyResult<Self> {
         Self::from_rust(
             py,
@@ -285,8 +285,8 @@ mod tests {
         SpinMultiplicity, SpinState as ChemSpinState, UnpairedElectrons as ChemUnpairedElectrons,
     };
     use umol_graph_ir::ir::{
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
-        UnpairedElectronsUpdate as GraphIrUnpairedElectronsUpdate, ValueAst as GraphIrValueAst,
+        NumForm as GraphIrNumForm, UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
+        UnpairedElectronsUpdate as GraphIrUnpairedElectronsUpdate,
     };
 
     use super::*;
@@ -314,29 +314,29 @@ mod tests {
     #[rstest]
     #[case::complete(
         GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(2),
-            multiplicity: GraphIrValueAst::Lit(3),
+            count: GraphIrNumForm::Lit(2),
+            multiplicity: GraphIrNumForm::Lit(3),
         },
         Some(ChemUnpairedElectrons { count: 2, multiplicity: 3 }),
     )]
     #[case::physics_invalid(
         GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(2),
-            multiplicity: GraphIrValueAst::Lit(2),
+            count: GraphIrNumForm::Lit(2),
+            multiplicity: GraphIrNumForm::Lit(2),
         },
         Some(ChemUnpairedElectrons { count: 2, multiplicity: 2 }),
     )]
     #[case::count_partial(
         GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Undetermined,
-            multiplicity: GraphIrValueAst::Lit(3),
+            count: GraphIrNumForm::Undetermined,
+            multiplicity: GraphIrNumForm::Lit(3),
         },
         None,
     )]
     #[case::multiplicity_partial(
         GraphIrUnpairedElectronsAst {
-            count: GraphIrValueAst::Lit(2),
-            multiplicity: GraphIrValueAst::Undetermined,
+            count: GraphIrNumForm::Lit(2),
+            multiplicity: GraphIrNumForm::Undetermined,
         },
         None,
     )]
@@ -352,16 +352,16 @@ mod tests {
 
     #[rstest]
     #[case::complete(GraphIrUnpairedElectronsAst {
-        count: GraphIrValueAst::Lit(1),
-        multiplicity: GraphIrValueAst::Lit(2),
+        count: GraphIrNumForm::Lit(1),
+        multiplicity: GraphIrNumForm::Lit(2),
     })]
     #[case::physics_invalid(GraphIrUnpairedElectronsAst {
-        count: GraphIrValueAst::Lit(2),
-        multiplicity: GraphIrValueAst::Lit(2),
+        count: GraphIrNumForm::Lit(2),
+        multiplicity: GraphIrNumForm::Lit(2),
     })]
     #[case::partial(GraphIrUnpairedElectronsAst {
-        count: GraphIrValueAst::Undetermined,
-        multiplicity: GraphIrValueAst::Undetermined,
+        count: GraphIrNumForm::Undetermined,
+        multiplicity: GraphIrNumForm::Undetermined,
     })]
     fn test_unpaired_electrons_ast_roundtrip(#[case] ast: GraphIrUnpairedElectronsAst) {
         Python::attach(|py| {
@@ -377,16 +377,16 @@ mod tests {
     #[rstest]
     #[case::empty(GraphIrUnpairedElectronsUpdate::default())]
     #[case::single(GraphIrUnpairedElectronsUpdate {
-        count: Some(GraphIrValueAst::Lit(2)),
+        count: Some(GraphIrNumForm::Lit(2)),
         multiplicity: None,
     })]
     #[case::both(GraphIrUnpairedElectronsUpdate {
-        count: Some(GraphIrValueAst::Lit(2)),
-        multiplicity: Some(GraphIrValueAst::Lit(3)),
+        count: Some(GraphIrNumForm::Lit(2)),
+        multiplicity: Some(GraphIrNumForm::Lit(3)),
     })]
     #[case::explicit_undetermined(GraphIrUnpairedElectronsUpdate {
-        count: Some(GraphIrValueAst::Undetermined),
-        multiplicity: Some(GraphIrValueAst::Undetermined),
+        count: Some(GraphIrNumForm::Undetermined),
+        multiplicity: Some(GraphIrNumForm::Undetermined),
     })]
     fn test_unpaired_electrons_update_roundtrip(#[case] update: GraphIrUnpairedElectronsUpdate) {
         Python::attach(|py| {

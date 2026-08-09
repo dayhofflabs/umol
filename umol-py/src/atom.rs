@@ -25,7 +25,7 @@ use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
-use crate::value::{MemOp, ValueAst, ValueLike};
+use crate::value::{MemOp, NumLike, ValueAst};
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable with an optional membership restriction.
@@ -260,9 +260,9 @@ impl AtomUpdate {
         py: Python<'_>,
         element: Option<ElementLike>,
         isotope_mass: Option<IsotopeMassLike>,
-        charge: Option<ValueLike>,
-        implicit_hydrogens: Option<ValueLike>,
-        lone_pairs: Option<ValueLike>,
+        charge: Option<NumLike>,
+        implicit_hydrogens: Option<NumLike>,
+        lone_pairs: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
@@ -380,9 +380,9 @@ impl AtomAst {
         py: Python<'_>,
         element: ElementLike,
         isotope_mass: Option<IsotopeMassLike>,
-        charge: Option<ValueLike>,
-        implicit_hydrogens: Option<ValueLike>,
-        lone_pairs: Option<ValueLike>,
+        charge: Option<NumLike>,
+        implicit_hydrogens: Option<NumLike>,
+        lone_pairs: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
@@ -439,7 +439,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&mut self, py: Python<'_>, value: NumLike) {
         self.0.charge = value.to_rust(py);
     }
 
@@ -449,7 +449,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: NumLike) {
         self.0.implicit_hydrogens = value.to_rust(py);
     }
 
@@ -459,7 +459,7 @@ impl AtomAst {
     }
 
     #[setter]
-    fn set_lone_pairs(&mut self, py: Python<'_>, value: ValueLike) {
+    fn set_lone_pairs(&mut self, py: Python<'_>, value: NumLike) {
         self.0.lone_pairs = value.to_rust(py);
     }
 
@@ -561,9 +561,9 @@ fn apply_fields(
     mut atom: GraphIrAtomAst,
     py: Python<'_>,
     isotope_mass: Option<IsotopeMassLike>,
-    charge: Option<ValueLike>,
-    implicit_hydrogens: Option<ValueLike>,
-    lone_pairs: Option<ValueLike>,
+    charge: Option<NumLike>,
+    implicit_hydrogens: Option<NumLike>,
+    lone_pairs: Option<NumLike>,
     unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
     constraints: Option<Py<AtomConstraintsAst>>,
 ) -> GraphIrAtomAst {
@@ -677,7 +677,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: ValueLike) {
+    fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -693,7 +693,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_implicit_hydrogens(&self, py: Python<'_>, value: ValueLike) {
+    fn set_implicit_hydrogens(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -709,7 +709,7 @@ impl AtomView {
     }
 
     #[setter]
-    fn set_lone_pairs(&self, py: Python<'_>, value: ValueLike) {
+    fn set_lone_pairs(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
             .inner_mut()
@@ -895,9 +895,10 @@ mod tests {
         AtomConstraintAst as GraphIrAtomConstraintAst,
         AtomConstraintKey as GraphIrAtomConstraintKey,
         AtomConstraintsAst as GraphIrAtomConstraintsAst, MemOp as GraphIrMemOp,
-        MoleculeEntries as GraphIrMoleculeEntries, RingScope as GraphIrRingScope,
-        StereoCoset as GraphIrStereoCoset, TetrahedralStereoAst as GraphIrTetrahedralStereoAst,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst, ValueAst as GraphIrValueAst,
+        MoleculeEntries as GraphIrMoleculeEntries, NumForm as GraphIrNumForm,
+        RingScope as GraphIrRingScope, StereoCoset as GraphIrStereoCoset,
+        TetrahedralStereoAst as GraphIrTetrahedralStereoAst,
+        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
     };
 
     use super::*;
@@ -1003,7 +1004,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrAtomId(0),
             };
-            view.set_charge(py, ValueLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1));
             let fresh = AtomView {
                 owner,
                 id: GraphIrAtomId(0),
@@ -1068,8 +1069,8 @@ mod tests {
                 UnpairedElectronsAst::from_rust(
                     py,
                     &GraphIrUnpairedElectronsAst {
-                        count: GraphIrValueAst::Lit(1),
-                        multiplicity: GraphIrValueAst::Lit(2),
+                        count: GraphIrNumForm::Lit(1),
+                        multiplicity: GraphIrNumForm::Lit(2),
                     },
                 )
                 .unwrap(),
@@ -1083,8 +1084,8 @@ mod tests {
             assert_eq!(
                 fresh.unpaired_electrons(py).unwrap().to_rust(py),
                 GraphIrUnpairedElectronsAst {
-                    count: GraphIrValueAst::Lit(1),
-                    multiplicity: GraphIrValueAst::Lit(2),
+                    count: GraphIrNumForm::Lit(1),
+                    multiplicity: GraphIrNumForm::Lit(2),
                 }
             );
         });
@@ -1202,7 +1203,7 @@ mod tests {
                     .valence()
                     .unwrap()
                     .clone(),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
         });
     }
@@ -1238,7 +1239,7 @@ mod tests {
                     .valence()
                     .unwrap()
                     .clone(),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
         });
     }
@@ -1407,11 +1408,11 @@ mod tests {
             let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
             assert_eq!(
                 constraints.degree(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(3)
+                GraphIrNumForm::Lit(3)
             );
             assert!(constraints.total_valence(py).unwrap().is_none());
             assert!(constraints.aromatic_valence(py).unwrap().is_none());
@@ -1434,7 +1435,7 @@ mod tests {
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
             assert!(constraints
@@ -1459,7 +1460,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
         });
     }
@@ -1481,7 +1482,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
@@ -1508,11 +1509,11 @@ mod tests {
             assert_eq!(c.__len__(), 2);
             assert_eq!(
                 c.valence(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
             assert_eq!(
                 c.degree(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(3)
+                GraphIrNumForm::Lit(3)
             );
         });
     }
@@ -1555,7 +1556,7 @@ mod tests {
                 .unwrap()
             {
                 AtomConstraintAst::Valence(v) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
             }
@@ -1589,7 +1590,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
@@ -1670,7 +1671,7 @@ mod tests {
                 .unwrap()
             {
                 AtomConstraintAst::Valence(v) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
             }
@@ -1699,7 +1700,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
@@ -1742,10 +1743,10 @@ mod tests {
     fn test_atom_constraints_ast_set_valence() {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
-            constraints.set_valence(py, ValueLike::Lit(4));
+            constraints.set_valence(py, NumLike::Lit(4));
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
         });
     }
@@ -1754,10 +1755,10 @@ mod tests {
     fn test_atom_constraints_ast_set_ring_count() {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
-            constraints.set_ring_count(py, ValueLike::Lit(2));
+            constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(2)
+                GraphIrNumForm::Lit(2)
             );
         });
     }
@@ -1767,11 +1768,11 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             constraints
-                .set_aromatic_valence(py, AromaticValenceLike::Value(ValueLike::Lit(1)))
+                .set_aromatic_valence(py, AromaticValenceLike::Value(NumLike::Lit(1)))
                 .unwrap();
             match constraints.aromatic_valence(py).unwrap().unwrap() {
                 AromaticValenceAst::Aromatic(v) => {
-                    assert_eq!(v.to_rust(py), GraphIrValueAst::Lit(1))
+                    assert_eq!(v.to_rust(py), GraphIrNumForm::Lit(1))
                 }
                 _ => panic!("expected Aromatic"),
             }
@@ -1834,7 +1835,7 @@ mod tests {
                     id: GraphIrAtomId(0),
                 },
             };
-            view.set_aromatic_valence(py, AromaticValenceLike::Value(ValueLike::Lit(1)))
+            view.set_aromatic_valence(py, AromaticValenceLike::Value(NumLike::Lit(1)))
                 .unwrap();
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Molecule {
@@ -1844,7 +1845,7 @@ mod tests {
             };
             match fresh.aromatic_valence(py).unwrap().unwrap() {
                 AromaticValenceAst::Aromatic(v) => {
-                    assert_eq!(v.to_rust(py), GraphIrValueAst::Lit(1))
+                    assert_eq!(v.to_rust(py), GraphIrNumForm::Lit(1))
                 }
                 _ => panic!("expected Aromatic"),
             }
@@ -1856,10 +1857,10 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueLike::Lit(3));
+            proxy.__setitem__(py, 6, NumLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
-                GraphIrValueAst::Lit(3)
+                GraphIrNumForm::Lit(3)
             );
             proxy.__delitem__(py, 6);
             assert!(proxy.__getitem__(py, 6).unwrap().is_none());
@@ -1883,8 +1884,7 @@ mod tests {
                     id: GraphIrAtomId(0),
                 },
             };
-            view.ring_size_count(py)
-                .__setitem__(py, 5, ValueLike::Lit(1));
+            view.ring_size_count(py).__setitem__(py, 5, NumLike::Lit(1));
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Molecule {
                     owner,
@@ -1898,7 +1898,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(1)
+                GraphIrNumForm::Lit(1)
             );
         });
     }
@@ -1952,7 +1952,7 @@ mod tests {
                     .unwrap()
                     .unwrap()
                     .to_rust(py),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
         });
     }
@@ -1990,7 +1990,7 @@ mod tests {
                     .valence()
                     .unwrap()
                     .clone(),
-                GraphIrValueAst::Lit(4)
+                GraphIrNumForm::Lit(4)
             );
         });
     }
@@ -2018,8 +2018,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, ValueLike::Lit(3));
-            proxy.__setitem__(py, 5, ValueLike::Lit(1));
+            proxy.__setitem__(py, 6, NumLike::Lit(3));
+            proxy.__setitem__(py, 5, NumLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());

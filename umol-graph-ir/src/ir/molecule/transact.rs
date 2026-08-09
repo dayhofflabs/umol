@@ -2338,7 +2338,7 @@ mod tests {
         CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCoset,
         StereoKind,
     };
-    use super::super::super::value::ValueAst;
+    use super::super::super::value::NumForm;
     use super::super::{MoleculeAst, MoleculeEntries};
     use super::*;
     use crate::ir::BooleanAst;
@@ -2456,8 +2456,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             }]))
             .unwrap();
@@ -2466,15 +2466,12 @@ mod tests {
             &[Undo::ModifyAtomField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::default(),
+                    old: NumForm::Lit(1),
+                    new: NumForm::default(),
                 },
             }],
         );
-        assert_eq!(
-            one_atom.build().atom(AtomId(0)).ast.charge,
-            ValueAst::Lit(1)
-        );
+        assert_eq!(one_atom.build().atom(AtomId(0)).ast.charge, NumForm::Lit(1));
     }
 
     #[rstest]
@@ -2483,8 +2480,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(99),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::Lit(99),
+                    new: NumForm::Lit(1),
                 },
             }]))
             .unwrap_err();
@@ -2537,8 +2534,8 @@ mod tests {
             Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             },
         ]),
@@ -2556,8 +2553,8 @@ mod tests {
             Edit::ModifyAtomField {
                 id: AtomHandle::New(0),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             },
         ]),
@@ -2631,8 +2628,8 @@ mod tests {
         edits.push(Edit::ModifyAtomField {
             id: atoms[1].clone(),
             change: AtomFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(1),
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
             },
         });
 
@@ -2644,7 +2641,7 @@ mod tests {
                 editor.atom(AtomId(0)).ast.element.clone(),
                 editor.atom(AtomId(0)).ast.charge.clone(),
             ),
-            (ElementAst::Lit(Element::N), ValueAst::Lit(1))
+            (ElementAst::Lit(Element::N), NumForm::Lit(1))
         );
     }
 
@@ -2658,8 +2655,8 @@ mod tests {
         edits.push(Edit::ModifyAtomField {
             id: surviving,
             change: AtomFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(-1),
+                old: NumForm::default(),
+                new: NumForm::Lit(-1),
             },
         });
 
@@ -2671,7 +2668,7 @@ mod tests {
                 editor.atom(AtomId(0)).ast.element.clone(),
                 editor.atom(AtomId(0)).ast.charge.clone(),
             ),
-            (ElementAst::Lit(Element::N), ValueAst::Lit(-1))
+            (ElementAst::Lit(Element::N), NumForm::Lit(-1))
         );
     }
 
@@ -2736,36 +2733,36 @@ mod tests {
         edits.push(Edit::ModifyAtomField {
             id: atoms[0].clone(),
             change: AtomFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(1),
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
             },
         });
         edits.push(Edit::ModifyBondField {
             id: bonds[0].clone(),
             change: BondFieldChange::Order {
-                old: ValueAst::Lit(1),
-                new: ValueAst::Lit(2),
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
             },
         });
         edits.push(Edit::ModifyDativeBondField {
             id: dative,
             change: DativeBondFieldChange::Order {
-                old: ValueAst::Lit(1),
-                new: ValueAst::Lit(2),
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
             },
         });
         edits.push(Edit::ModifyAromaticSystemField {
             id: aromatic,
             change: AromaticSystemFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(1),
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
             },
         });
         edits.push(Edit::ModifyMulticenterBondField {
             id: multicenter,
             change: MulticenterBondFieldChange::Charge {
-                old: ValueAst::default(),
-                new: ValueAst::Lit(-1),
+                old: NumForm::default(),
+                new: NumForm::Lit(-1),
             },
         });
         edits.push(Edit::ModifyNoncovalentBondField {
@@ -2792,19 +2789,19 @@ mod tests {
 
         let transaction = editor.transact(edits).unwrap();
 
-        assert_eq!(editor.atom(AtomId(0)).ast.charge, ValueAst::Lit(1));
-        assert_eq!(editor.bond(BondId(0)).ast.order, ValueAst::Lit(2));
+        assert_eq!(editor.atom(AtomId(0)).ast.charge, NumForm::Lit(1));
+        assert_eq!(editor.bond(BondId(0)).ast.order, NumForm::Lit(2));
         assert_eq!(
             editor.dative_bond(DativeBondId(0)).ast.order,
-            ValueAst::Lit(2)
+            NumForm::Lit(2)
         );
         assert_eq!(
             editor.aromatic_system(AromaticSystemId(0)).ast.charge,
-            ValueAst::Lit(1)
+            NumForm::Lit(1)
         );
         assert_eq!(
             editor.multicenter_bond(MulticenterBondId(0)).ast.charge,
-            ValueAst::Lit(-1)
+            NumForm::Lit(-1)
         );
         assert_eq!(
             editor.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
@@ -2924,11 +2921,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::singleton_set(ValueAst::Lit(1), ValueAst::lit_set([1]))]
+    #[case::singleton_set(NumForm::Lit(1), NumForm::lit_set([1]))]
     fn test_molecule_editor_transact_modify_atom_field_canonical(
         mut one_atom: MoleculeEditor,
-        #[case] current: ValueAst,
-        #[case] old: ValueAst,
+        #[case] current: NumForm,
+        #[case] old: NumForm,
     ) {
         // The modify's recorded `old` is canonically equal to — but structurally distinct from — the
         // stored charge, so the old-state check passes (structural `!=` would raise `OldStateMismatch`).
@@ -2938,11 +2935,11 @@ mod tests {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
                     old,
-                    new: ValueAst::Lit(2),
+                    new: NumForm::Lit(2),
                 },
             }]))
             .unwrap();
-        assert_eq!(one_atom.atom_mut(AtomId(0)).ast.charge, ValueAst::Lit(2));
+        assert_eq!(one_atom.atom_mut(AtomId(0)).ast.charge, NumForm::Lit(2));
     }
 
     #[rstest]
@@ -2960,18 +2957,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::introduce(None, Some(AtomConstraintAst::valence(4)), Some(ValueAst::Lit(4)))]
+    #[case::introduce(None, Some(AtomConstraintAst::valence(4)), Some(NumForm::Lit(4)))]
     #[case::replace(
         Some(AtomConstraintAst::valence(3)),
         Some(AtomConstraintAst::valence(4)),
-        Some(ValueAst::Lit(4))
+        Some(NumForm::Lit(4))
     )]
     #[case::remove(Some(AtomConstraintAst::valence(3)), None, None)]
     fn test_molecule_editor_transact_set_atom_constraint(
         mut one_atom: MoleculeEditor,
         #[case] old: Option<AtomConstraintAst>,
         #[case] new: Option<AtomConstraintAst>,
-        #[case] expected: Option<ValueAst>,
+        #[case] expected: Option<NumForm>,
     ) {
         if let Some(c) = old.clone() {
             one_atom.atom_mut(AtomId(0)).ast.constraints.set(c);
@@ -3039,7 +3036,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
                 constraint: Constraint::Molecule(MoleculeConstraint::ChargeSum {
                     atoms: None,
-                    sum: ValueAst::Lit(0),
+                    sum: NumForm::Lit(0),
                 })
                 .into(),
             }]))
@@ -3393,12 +3390,12 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyBondField {
                 id: BondHandle::Id(BondId(0)),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
                 },
             }]))
             .unwrap();
-        assert_eq!(diatomic.bond(BondId(0)).ast.order, ValueAst::Lit(2));
+        assert_eq!(diatomic.bond(BondId(0)).ast.order, NumForm::Lit(2));
     }
 
     #[rstest]
@@ -3407,8 +3404,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyBondField {
                 id: BondHandle::Id(BondId(0)),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(99),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(99),
+                    new: NumForm::Lit(2),
                 },
             }]))
             .unwrap_err();
@@ -4163,8 +4160,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyDativeBondField {
                 id: DativeBondHandle::Id(DativeBondId(0)),
                 change: DativeBondFieldChange::Order {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
                 },
             }]))
             .unwrap();
@@ -4173,7 +4170,7 @@ mod tests {
                 .dative_bond(DativeBondId(0))
                 .ast
                 .order,
-            ValueAst::Lit(2),
+            NumForm::Lit(2),
         );
     }
 
@@ -4185,8 +4182,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAromaticSystemField {
                 id: AromaticSystemHandle::Id(AromaticSystemId(0)),
                 change: AromaticSystemFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             }]))
             .unwrap();
@@ -4195,7 +4192,7 @@ mod tests {
                 .aromatic_system(AromaticSystemId(0))
                 .ast
                 .charge,
-            ValueAst::Lit(1),
+            NumForm::Lit(1),
         );
     }
 
@@ -4207,8 +4204,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 change: MulticenterBondFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(-1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(-1),
                 },
             }]))
             .unwrap();
@@ -4217,7 +4214,7 @@ mod tests {
                 .multicenter_bond(MulticenterBondId(0))
                 .ast
                 .charge,
-            ValueAst::Lit(-1),
+            NumForm::Lit(-1),
         );
     }
 
@@ -4314,7 +4311,7 @@ mod tests {
                     DativeBondHandle::Id(DativeBondId(0)),
                     vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     DativeBondAst {
-                        order: ValueAst::Lit(1),
+                        order: NumForm::Lit(1),
                         constraints: Default::default(),
                     },
                 )],
@@ -4335,7 +4332,7 @@ mod tests {
                     DativeBondHandle::Id(DativeBondId(0)),
                     vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))], // wrong order
                     DativeBondAst {
-                        order: ValueAst::Lit(1),
+                        order: NumForm::Lit(1),
                         constraints: Default::default(),
                     },
                 )],
@@ -4424,7 +4421,7 @@ mod tests {
         b.transact(Edits::from_iter([Edit::AddMoleculeConstraint {
             constraint: Constraint::AromaticSystem(
                 constrained,
-                AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6)),
+                AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6)),
             )
             .into(),
         }]))
@@ -4590,7 +4587,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAromaticSystemConstraint {
                 id: AromaticSystemHandle::Id(AromaticSystemId(0)),
                 old: None,
-                new: Some(AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6))),
+                new: Some(AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6))),
             }]))
             .unwrap();
         assert_eq!(
@@ -4601,7 +4598,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6))],
+            vec![AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6))],
         );
     }
 
@@ -4613,9 +4610,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyMulticenterBondConstraint {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 old: None,
-                new: Some(MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(
-                    2,
-                ))),
+                new: Some(MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(2))),
             }]))
             .unwrap();
         assert_eq!(
@@ -4626,9 +4621,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(
-                2
-            ))],
+            vec![MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(2))],
         );
     }
 
@@ -4663,8 +4656,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             }]))
             .unwrap();
@@ -4672,8 +4665,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
                 },
             }]))
             .unwrap();
@@ -4695,8 +4688,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             }]))
             .unwrap();
@@ -4724,8 +4717,8 @@ mod tests {
         let mut rejected = Edits::from_iter([Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::Charge {
-                old: ValueAst::Lit(1),
-                new: ValueAst::Lit(2),
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
             },
         }]);
         rejected.remove_atom(AtomHandle::Id(AtomId(99)));
@@ -4825,8 +4818,8 @@ mod tests {
             RollbackCase::Field => Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::default(),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
                 },
             }]),
             RollbackCase::AddOverlay => Edits::from_iter([Edit::AddDativeBond {
@@ -4838,7 +4831,7 @@ mod tests {
                     DativeBondHandle::Id(DativeBondId(0)),
                     vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     DativeBondAst {
-                        order: ValueAst::Lit(1),
+                        order: NumForm::Lit(1),
                         constraints: Default::default(),
                     },
                 )],
@@ -4882,36 +4875,36 @@ mod tests {
             EntityKind::Atom => Undo::ModifyAtomField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::default(),
+                    old: NumForm::Lit(1),
+                    new: NumForm::default(),
                 },
             },
             EntityKind::Bond => Undo::ModifyBondField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
-                    old: ValueAst::Lit(2),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(1),
                 },
             },
             EntityKind::DativeBond => Undo::ModifyDativeBondField {
                 id: DativeBondId(0),
                 change: DativeBondFieldChange::Order {
-                    old: ValueAst::Lit(2),
-                    new: ValueAst::Lit(1),
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(1),
                 },
             },
             EntityKind::AromaticSystem => Undo::ModifyAromaticSystemField {
                 id: AromaticSystemId(0),
                 change: AromaticSystemFieldChange::Charge {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::default(),
+                    old: NumForm::Lit(1),
+                    new: NumForm::default(),
                 },
             },
             EntityKind::MulticenterBond => Undo::ModifyMulticenterBondField {
                 id: MulticenterBondId(0),
                 change: MulticenterBondFieldChange::Charge {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::default(),
+                    old: NumForm::Lit(1),
+                    new: NumForm::default(),
                 },
             },
             EntityKind::NoncovalentBond => Undo::ModifyNoncovalentBondField {

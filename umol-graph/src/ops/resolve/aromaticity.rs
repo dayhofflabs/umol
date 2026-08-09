@@ -315,8 +315,8 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, RingConfig, UnpairedElectronsAst,
-        ValueAst,
+        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, NumForm, RingConfig,
+        UnpairedElectronsAst,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -476,14 +476,14 @@ mod tests {
             Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
                 old: Some(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(2)),
+                    AromaticValenceAst::Aromatic(NumForm::Lit(2)),
                 )),
                 new: None,
             },
             Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(1)),
                 old: Some(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(0)),
+                    AromaticValenceAst::Aromatic(NumForm::Lit(0)),
                 )),
                 new: None,
             },
@@ -651,12 +651,12 @@ mod tests {
         AromaticityResolveConfig::default(),
         mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
-        ValueAst::Lit(0),
-        vec![ValueAst::Lit(0), ValueAst::Lit(0), ValueAst::Lit(1)],
+        NumForm::Lit(0),
+        vec![NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(1)],
         vec![
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(0))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(0))),
         ]
     )]
     #[case::heterogeneous_localized(
@@ -665,12 +665,12 @@ mod tests {
                                       "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
                                       [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
-        ValueAst::Lit(0),
+        NumForm::Lit(0),
         vec![
-            ValueAst::Lit(1), ValueAst::Lit(0), ValueAst::Lit(0),
-            ValueAst::Lit(0), ValueAst::Lit(0), ValueAst::Lit(0),
+            NumForm::Lit(1), NumForm::Lit(0), NumForm::Lit(0),
+            NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(0),
         ],
-        vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 6]
+        vec![Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))); 6]
     )]
     #[case::accepted_system_with_rejected_projections(
         AromaticityResolveConfig {
@@ -682,16 +682,16 @@ mod tests {
                     "C#h3#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
         }"#),
-        ValueAst::Lit(0),
-        vec![ValueAst::Lit(0); 7],
+        NumForm::Lit(0),
+        vec![NumForm::Lit(0); 7],
         vec![
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
         ]
     )]
     #[case::reset_source_constraints(
@@ -700,16 +700,16 @@ mod tests {
             ..AromaticityResolveConfig::default()
         },
         benzene(),
-        ValueAst::Lit(0),
-        vec![ValueAst::Lit(0); 6],
+        NumForm::Lit(0),
+        vec![NumForm::Lit(0); 6],
         vec![None; 6]
     )]
     fn test_aromaticity_resolver_resolve(
         aromaticity_model: AromaticityModel,
         #[case] config: AromaticityResolveConfig,
         #[case] mut molecule: MoleculeAst,
-        #[case] expected_system_charge: ValueAst,
-        #[case] expected_atom_charges: Vec<ValueAst>,
+        #[case] expected_system_charge: NumForm,
+        #[case] expected_atom_charges: Vec<NumForm>,
         #[case] expected_aromatic_valences: Vec<Option<AromaticValenceAst>>,
     ) {
         assert_eq!(

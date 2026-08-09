@@ -1584,7 +1584,7 @@ mod tests {
     use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::super::validate::{DpoContradiction, EntityStructureContradiction};
-    use super::super::value::ValueAst;
+    use super::super::value::NumForm;
     use super::*;
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
@@ -1597,8 +1597,8 @@ mod tests {
         Delta::Atom(AtomDelta::ModifyField {
             id: AtomId(id),
             change: AtomFieldChange::Charge {
-                old: ValueAst::Lit(old),
-                new: ValueAst::Lit(new),
+                old: NumForm::Lit(old),
+                new: NumForm::Lit(new),
             },
         })
     }
@@ -1631,8 +1631,8 @@ mod tests {
                 Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit(1),
-                        new: ValueAst::Lit(2),
+                        old: NumForm::Lit(1),
+                        new: NumForm::Lit(2),
                     },
                 })]),
             )),
@@ -1661,7 +1661,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
@@ -1984,7 +1984,7 @@ mod tests {
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
                 Constraint::Molecule(MoleculeConstraint::ChargeSum {
                     atoms: Some(vec![AtomId(0), AtomId(1)]),
-                    sum: ValueAst::Lit(0),
+                    sum: NumForm::Lit(0),
                 }),
             ))]),
         );
@@ -2011,7 +2011,7 @@ mod tests {
             result.rhs().constraints(),
             &Constraints::from(Constraint::Molecule(MoleculeConstraint::ChargeSum {
                 atoms: Some(vec![AtomId(1), AtomId(2)]),
-                sum: ValueAst::Lit(0),
+                sum: NumForm::Lit(0),
             })),
         );
     }
@@ -2489,7 +2489,7 @@ mod tests {
     #[case::bond_order(
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })]),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) } })]),
         ),
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
         vec![MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() })],
@@ -2507,7 +2507,7 @@ mod tests {
             MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C)], ..Default::default() }),
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
-                change: AtomFieldChange::Charge { old: ValueAst::Undetermined, new: ValueAst::Lit(1) },
+                change: AtomFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(1) },
             })]),
         ),
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C).with_charge(0_i64)], ..Default::default() }),
@@ -2565,14 +2565,14 @@ mod tests {
                 atoms: vec![AtomAst::from_element(Element::C)],
                 constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::ChargeSum {
                     atoms: Some(vec![AtomId(0)]),
-                    sum: ValueAst::Lit(0),
+                    sum: NumForm::Lit(0),
                 })),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
                 Constraint::Molecule(MoleculeConstraint::ChargeSum {
                     atoms: Some(vec![AtomId(0)]),
-                    sum: ValueAst::Lit(0),
+                    sum: NumForm::Lit(0),
                 }),
             ))]),
         ),
