@@ -33,7 +33,7 @@ use super::multicenter::MulticenterBondForm;
 use super::noncovalent::NoncovalentBondForm;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
-use super::stereo::{StereoAtomAst, StereoBondAst};
+use super::stereo::{StereoAtomForm, StereoBondForm};
 use super::traits::{BiEquiv, Canonicalize, Equiv, Lattice};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
@@ -65,9 +65,9 @@ pub struct MoleculeAst {
     multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
     noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
     stereo_atoms:
-        Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>>,
+        Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
     stereo_bonds:
-        Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>>,
+        Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
     constraints: Constraints,
 }
 
@@ -80,8 +80,8 @@ pub struct MoleculeEntries {
     pub aromatic: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     pub multicenter: Vec<(Vec<AtomId>, MulticenterBondForm)>,
     pub noncovalent: Vec<(AtomId, AtomId, NoncovalentBondForm)>,
-    pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
-    pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
+    pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
+    pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
     pub constraints: Constraints,
 }
 
@@ -480,10 +480,10 @@ impl MoleculeAst {
         multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
         noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
         stereo_atoms: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
+            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
         >,
         stereo_bonds: Arc<
-            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>,
+            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
         >,
         constraints: Constraints,
     ) -> Self {
@@ -1393,7 +1393,7 @@ impl MoleculeAst {
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
-    pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomAst) -> StereoAtomAst) {
+    pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm) {
         for stereo_atom in Arc::make_mut(&mut self.stereo_atoms).data_iter_mut() {
             *stereo_atom = f(mem::take(stereo_atom));
         }
@@ -1414,7 +1414,7 @@ impl MoleculeAst {
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
-    pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondAst) -> StereoBondAst) {
+    pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondForm) -> StereoBondForm) {
         for stereo_bond in Arc::make_mut(&mut self.stereo_bonds).data_iter_mut() {
             *stereo_bond = f(mem::take(stereo_bond));
         }

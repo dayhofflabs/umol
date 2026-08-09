@@ -18,9 +18,9 @@ use umol_graph_ir::ir::{
     CisTransStereoForm as GraphIrCisTransStereoForm, LigandPermutation as GraphIrLigandPermutation,
     MoleculeAst as GraphIrMoleculeAst,
     OrientedLigandPermutation as GraphIrOrientedLigandPermutation,
-    StereoAtomAst as GraphIrStereoAtomAst, StereoAtomId as GraphIrStereoAtomId,
+    StereoAtomForm as GraphIrStereoAtomForm, StereoAtomId as GraphIrStereoAtomId,
     StereoAtomUpdate as GraphIrStereoAtomUpdate, StereoAtomView as GraphIrStereoAtomView,
-    StereoBondAst as GraphIrStereoBondAst, StereoBondId as GraphIrStereoBondId,
+    StereoBondForm as GraphIrStereoBondForm, StereoBondId as GraphIrStereoBondId,
     StereoBondUpdate as GraphIrStereoBondUpdate, StereoBondView as GraphIrStereoBondView,
     StereoConfigurationForm as GraphIrStereoConfigurationForm,
     StereoConfigurationUpdate as GraphIrStereoConfigurationUpdate,
@@ -1300,12 +1300,12 @@ macro_rules! stereo_value {
 }
 
 stereo_value! {
-    StereoAtomAst, GraphIrStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
+    StereoAtomAst, GraphIrStereoAtomForm, StereoAtomConstraintAst, StereoAtomConstraintsAst,
     StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoAtomConstraintsBacking, production,
 }
 
 stereo_value! {
-    StereoBondAst, GraphIrStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
+    StereoBondAst, GraphIrStereoBondForm, StereoBondConstraintAst, StereoBondConstraintsAst,
     StereoBondConstraintsLike, StereoBondConstraintsView, StereoBondConstraintsBacking, production,
 }
 
@@ -2591,7 +2591,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2628,7 +2628,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2661,7 +2661,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2712,7 +2712,7 @@ mod tests {
             ]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2750,7 +2750,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2797,7 +2797,7 @@ mod tests {
             ]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2827,7 +2827,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2862,7 +2862,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2894,7 +2894,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2921,7 +2921,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoBondAst::from_inner(GraphIrStereoBondAst::new(
+                StereoBondAst::from_inner(GraphIrStereoBondForm::new(
                     GraphIrStereoKind::CisTrans,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2952,15 +2952,15 @@ mod tests {
     #[rstest]
     #[case::ccw(
         StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
-        GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0))
+        GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0))
     )]
     #[case::cw(
         StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
-        GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(1))
+        GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(1))
     )]
     fn test_stereo_atom_ast_new(
         #[case] configuration: StereoConfigurationLike,
-        #[case] expected: GraphIrStereoAtomAst,
+        #[case] expected: GraphIrStereoAtomForm,
     ) {
         Python::attach(|py| {
             let value = StereoAtomAst::new(py, configuration, None);
@@ -2986,7 +2986,7 @@ mod tests {
             expected_cs.extend([stereogenicity]);
             assert_eq!(
                 *value.inner(),
-                GraphIrStereoAtomAst {
+                GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0)
@@ -3027,21 +3027,21 @@ mod tests {
 
     #[rstest]
     #[case::ccw(
-        GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
         "Th0"
     )]
     #[case::square_planar(
-        GraphIrStereoAtomAst::new(GraphIrStereoKind::SquarePlanar, GraphIrStereoCoset::Lit(2)),
+        GraphIrStereoAtomForm::new(GraphIrStereoKind::SquarePlanar, GraphIrStereoCoset::Lit(2)),
         "Sp2"
     )]
-    fn test_stereo_atom_ast_str(#[case] ast: GraphIrStereoAtomAst, #[case] expected: &str) {
+    fn test_stereo_atom_ast_str(#[case] ast: GraphIrStereoAtomForm, #[case] expected: &str) {
         let value = StereoAtomAst::from_inner(ast);
         assert_eq!(value.__str__(), expected);
     }
 
     #[rstest]
     fn test_stereo_atom_ast_repr() {
-        let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+        let value = StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Lit(0),
         ));
@@ -3051,7 +3051,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_configuration() {
         Python::attach(|py| {
-            let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+            let value = StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ));
@@ -3068,7 +3068,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_set_configuration() {
         Python::attach(|py| {
-            let mut value = StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+            let mut value = StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ));
@@ -3091,7 +3091,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -3123,7 +3123,7 @@ mod tests {
             );
             let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([stereogenicity]);
-            let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst {
+            let value = StereoAtomAst::from_inner(GraphIrStereoAtomForm {
                 configuration: GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
@@ -3160,7 +3160,7 @@ mod tests {
             );
             assert_eq!(
                 *value.inner(),
-                GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
+                GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
             );
             assert_eq!(value.__str__(), "Ct0");
         });
@@ -3169,20 +3169,20 @@ mod tests {
     #[rstest]
     #[case::z(
         "Ct0",
-        GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
+        GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
     )]
     #[case::e(
         "Ct1",
-        GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1))
+        GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1))
     )]
-    fn test_stereo_bond_ast_parse(#[case] input: &str, #[case] expected: GraphIrStereoBondAst) {
+    fn test_stereo_bond_ast_parse(#[case] input: &str, #[case] expected: GraphIrStereoBondForm) {
         let value = StereoBondAst::parse(input).unwrap();
         assert_eq!(*value.inner(), expected);
     }
 
     #[rstest]
     fn test_stereo_bond_ast_str() {
-        let value = StereoBondAst::from_inner(GraphIrStereoBondAst::new(
+        let value = StereoBondAst::from_inner(GraphIrStereoBondForm::new(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Lit(1),
         ));
@@ -3200,7 +3200,7 @@ mod tests {
                     GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
                     GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 ],
-                GraphIrStereoAtomAst::new(
+                GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 ),
@@ -3236,7 +3236,7 @@ mod tests {
                     GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
                     GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
                 ],
-                GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+                GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -3505,7 +3505,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                StereoAtomAst::from_inner(GraphIrStereoAtomAst::new(
+                StereoAtomAst::from_inner(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1),
                 )),

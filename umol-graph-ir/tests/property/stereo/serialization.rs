@@ -110,7 +110,7 @@ proptest! {
     fn test_stereo_atom_dsl_keyword_to_edn_from_edn_roundtrip(
         coset in prop_oneof![Just(0u32), Just(1u32)],
     ) {
-        let dsl = StereoAtomDsl(StereoAtomAst::new(
+        let dsl = StereoAtomDsl(StereoAtomForm::new(
             StereoKind::Tetrahedral,
             StereoCoset::Lit(coset),
         ));
@@ -130,7 +130,7 @@ proptest! {
     fn test_stereo_bond_dsl_keyword_to_edn_from_edn_roundtrip(
         coset in prop_oneof![Just(0u32), Just(1u32)],
     ) {
-        let dsl = StereoBondDsl(StereoBondAst::new(
+        let dsl = StereoBondDsl(StereoBondForm::new(
             StereoKind::CisTrans,
             StereoCoset::Lit(coset),
         ));

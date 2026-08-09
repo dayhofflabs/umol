@@ -221,7 +221,7 @@ mod tests {
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
+    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
     use crate::ir::value::NumForm;
 
     #[fixture]
@@ -279,7 +279,7 @@ mod tests {
                         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
                 (
                     AtomId(3),
@@ -287,7 +287,7 @@ mod tests {
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
                 ),
             ],
             stereo_bonds: vec![(
@@ -296,7 +296,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })

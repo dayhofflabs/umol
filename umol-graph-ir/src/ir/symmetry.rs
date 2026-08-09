@@ -580,7 +580,7 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::coloring::ConstitutionColoring;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
-    use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind};
+    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
 
     fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
         GraphSymmetryConfig {
@@ -622,7 +622,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         })
@@ -765,7 +765,7 @@ mod tests {
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         });

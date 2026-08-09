@@ -639,12 +639,12 @@ mod tests {
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
         ReactionSpanAst as GraphIrReactionSpanAst,
-        ReactionSpanEntries as GraphIrReactionSpanEntries, StereoAtomAst as GraphIrStereoAtomAst,
-        StereoAtomDelta as GraphIrStereoAtomDelta, StereoAtomId as GraphIrStereoAtomId,
-        StereoBondAst as GraphIrStereoBondAst, StereoBondDelta as GraphIrStereoBondDelta,
-        StereoBondId as GraphIrStereoBondId, StereoCoset as GraphIrStereoCoset,
-        StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
-        StereoLigandKind as GraphIrStereoLigandKind,
+        ReactionSpanEntries as GraphIrReactionSpanEntries,
+        StereoAtomDelta as GraphIrStereoAtomDelta, StereoAtomForm as GraphIrStereoAtomForm,
+        StereoAtomId as GraphIrStereoAtomId, StereoBondDelta as GraphIrStereoBondDelta,
+        StereoBondForm as GraphIrStereoBondForm, StereoBondId as GraphIrStereoBondId,
+        StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
+        StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -1392,7 +1392,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             ],
-            ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(1)),
+            ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(1)),
         })],
     )]
     #[case::stereo_bond(
@@ -1406,7 +1406,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
             ],
-            ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1)),
+            ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1)),
         })],
     )]
     #[case::molecule_constraint(

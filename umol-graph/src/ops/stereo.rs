@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, MoleculeAst, StereoAtomAst, StereoAtomId,
-    StereoBondAst, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, MoleculeAst, StereoAtomForm, StereoAtomId,
+    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     TetrahedralStereoForm,
 };
 
@@ -19,9 +19,9 @@ use crate::ops::model::StereoModel;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StereoDerivation {
     /// Realizable tetrahedral stereo atoms.
-    pub atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
+    pub atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
     /// Realizable cis-trans stereo bonds.
-    pub bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
+    pub bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
     /// Constraint failures, entity failures, and independently valid mismatches.
     pub inconsistencies: Vec<StereoInconsistency>,
 }
@@ -107,7 +107,7 @@ impl StereoPerception {
                         self.derive_stereo_atom(ast, atom, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;
-                                Some((ligands, StereoAtomAst::new(StereoKind::Tetrahedral, coset)))
+                                Some((ligands, StereoAtomForm::new(StereoKind::Tetrahedral, coset)))
                             })
                     } else {
                         None
@@ -184,7 +184,7 @@ impl StereoPerception {
                         self.derive_stereo_bond(ast, bond, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;
-                                Some((ligands, StereoBondAst::new(StereoKind::CisTrans, coset)))
+                                Some((ligands, StereoBondForm::new(StereoKind::CisTrans, coset)))
                             })
                     } else {
                         None
@@ -241,7 +241,7 @@ impl StereoPerception {
         ast: &MoleculeAst,
         atom: AtomId,
         coset: &StereoCoset,
-    ) -> Option<(Vec<StereoLigand>, StereoAtomAst)> {
+    ) -> Option<(Vec<StereoLigand>, StereoAtomForm)> {
         let view = ast.atom(atom);
         if view.is_in_aromatic_system() {
             return None;
@@ -271,7 +271,7 @@ impl StereoPerception {
             return None;
         }
 
-        Some((ligands, StereoAtomAst::new(kind, coset.clone())))
+        Some((ligands, StereoAtomForm::new(kind, coset.clone())))
     }
 
     /// Derive a cis-trans stereo bond in the canonical endpoint and side frames.
@@ -280,7 +280,7 @@ impl StereoPerception {
         ast: &MoleculeAst,
         bond: BondId,
         coset: &StereoCoset,
-    ) -> Option<(Vec<StereoLigand>, StereoBondAst)> {
+    ) -> Option<(Vec<StereoLigand>, StereoBondForm)> {
         let view = ast.bond(bond);
         let kind = StereoKind::CisTrans;
         let model = self.model.kind_model(kind)?;
@@ -294,7 +294,7 @@ impl StereoPerception {
         let first_side = self.bond_side_ligands(ast, first, second)?;
         let second_side = self.bond_side_ligands(ast, second, first)?;
         let ligands = vec![first_side[0], first_side[1], second_side[0], second_side[1]];
-        Some((ligands, StereoBondAst::new(kind, coset.clone())))
+        Some((ligands, StereoBondForm::new(kind, coset.clone())))
     }
 
     fn bond_side_ligands(
@@ -353,7 +353,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             bonds: vec![(
                 BondId(4),
@@ -363,7 +363,7 @@ mod tests {
                     StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             inconsistencies: vec![],
         },
@@ -394,7 +394,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             bonds: vec![(
                 BondId(4),
@@ -404,7 +404,7 @@ mod tests {
                     StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             inconsistencies: vec![],
         },
@@ -450,7 +450,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             bonds: vec![(
                 BondId(4),
@@ -460,7 +460,7 @@ mod tests {
                     StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             inconsistencies: vec![
                 StereoInconsistency::TetrahedralStereoMismatch {
@@ -541,7 +541,7 @@ mod tests {
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
             ],
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         )),
     )]
     #[case::disabled_kind(
@@ -591,7 +591,7 @@ mod tests {
     fn test_stereo_perception_derive_stereo_atom(
         #[case] model: StereoModel,
         #[case] ast: MoleculeAst,
-        #[case] expected: Option<(Vec<StereoLigand>, StereoAtomAst)>,
+        #[case] expected: Option<(Vec<StereoLigand>, StereoAtomForm)>,
     ) {
         assert_eq!(
             StereoPerception::new(&model)
@@ -614,7 +614,7 @@ mod tests {
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         )),
     )]
     #[case::disabled_kind(
@@ -655,7 +655,7 @@ mod tests {
     fn test_stereo_perception_derive_stereo_bond(
         #[case] model: StereoModel,
         #[case] ast: MoleculeAst,
-        #[case] expected: Option<(Vec<StereoLigand>, StereoBondAst)>,
+        #[case] expected: Option<(Vec<StereoLigand>, StereoBondForm)>,
     ) {
         assert_eq!(
             StereoPerception::new(&model)

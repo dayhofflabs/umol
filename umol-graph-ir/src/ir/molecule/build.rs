@@ -14,7 +14,7 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
-use super::super::stereo::{StereoAtomAst, StereoBondAst};
+use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::{MoleculeAst, MoleculeEditor};
 
 /// Build a molecule from scratch. `atom` adds an atom and hands back its handle; the
@@ -165,7 +165,7 @@ impl MoleculeBuilder {
         &mut self,
         site: AtomId,
         ligands: impl IntoIterator<Item = StereoLigand>,
-        ast: impl Into<StereoAtomAst>,
+        ast: impl Into<StereoAtomForm>,
     ) -> StereoAtomId {
         self.editor
             .add_stereo_atom(site, ligands.into_iter().collect(), ast.into())
@@ -177,7 +177,7 @@ impl MoleculeBuilder {
         &mut self,
         site: BondId,
         ligands: impl IntoIterator<Item = StereoLigand>,
-        ast: impl Into<StereoBondAst>,
+        ast: impl Into<StereoBondForm>,
     ) -> StereoBondId {
         self.editor
             .add_stereo_bond(site, ligands.into_iter().collect(), ast.into())
@@ -388,7 +388,7 @@ mod tests {
                 StereoLigand::new(br, StereoLigandKind::Atom),
                 StereoLigand::new(i, StereoLigandKind::Atom),
             ],
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         );
         let mol = builder.build();
 
@@ -401,7 +401,7 @@ mod tests {
         );
         assert_eq!(
             mol.stereo_atom(stereo).ast,
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+            &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
 
@@ -419,7 +419,7 @@ mod tests {
                 StereoLigand::new(f, StereoLigandKind::Atom),
                 StereoLigand::new(h, StereoLigandKind::Atom),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
         let mol = builder.build();
 
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(mol.stereo_bond(stereo).site_id(), bond);
         assert_eq!(
             mol.stereo_bond(stereo).ast,
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1))
+            &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }
 }

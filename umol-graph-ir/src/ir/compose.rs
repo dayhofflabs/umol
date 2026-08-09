@@ -133,7 +133,7 @@ mod tests {
     use super::super::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
-    use super::super::stereo::{StereoAtomAst, StereoConfigurationForm, StereoCoset, StereoKind};
+    use super::super::stereo::{StereoAtomForm, StereoConfigurationForm, StereoCoset, StereoKind};
     use super::super::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use super::super::value::NumForm;
     use super::*;
@@ -932,7 +932,7 @@ mod tests {
                         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
                 )],
                 constraints: Constraints::new(),
                 ..Default::default()
@@ -972,7 +972,7 @@ mod tests {
                         .iter()
                         .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
                         .collect(),
-                    StereoAtomAst::new(StereoKind::Tetrahedral, b_old),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, b_old),
                 )],
                 constraints: Constraints::new(),
                 ..Default::default()

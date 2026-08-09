@@ -17,7 +17,7 @@ use super::super::id::{AtomId, BondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
-use super::super::stereo::{StereoAtomAst, StereoBondAst};
+use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::{MoleculeAst, MoleculeBuilder};
 
 /// An atom argument to a spec term: create a fresh atom (optionally named) or reference
@@ -158,12 +158,12 @@ pub enum MoleculeSpecTerm {
     StereoAtom {
         site: AtomArg,
         ligands: Vec<StereoLigandArg>,
-        ast: StereoAtomAst,
+        ast: StereoAtomForm,
     },
     StereoBond {
         site: BondArg,
         ligands: Vec<StereoLigandArg>,
-        ast: StereoBondAst,
+        ast: StereoBondForm,
     },
     Ground,
 }
@@ -315,7 +315,7 @@ pub fn noncovalent_bond(
 pub fn stereo_atom(
     site: impl Into<AtomArg>,
     ligands: impl IntoIterator<Item = impl Into<StereoLigandArg>>,
-    ast: impl Into<StereoAtomAst>,
+    ast: impl Into<StereoAtomForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::StereoAtom {
         site: site.into(),
@@ -328,7 +328,7 @@ pub fn stereo_atom(
 pub fn stereo_bond(
     site: impl Into<BondArg>,
     ligands: impl IntoIterator<Item = impl Into<StereoLigandArg>>,
-    ast: impl Into<StereoBondAst>,
+    ast: impl Into<StereoBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::StereoBond {
         site: site.into(),
@@ -746,7 +746,7 @@ mod tests {
                     StereoLigandArg::Atom(3_u32.into()),
                     StereoLigandArg::ImplicitHydrogen,
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             );
         let mol = spec.build();
 
@@ -760,7 +760,7 @@ mod tests {
         );
         assert_eq!(
             mol.stereo_atom(StereoAtomId(0)).ast,
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+            &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
 
@@ -778,7 +778,7 @@ mod tests {
                     StereoLigandArg::Atom(3_u32.into()),
                     StereoLigandArg::ImplicitHydrogen,
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             );
         let mol = spec.build();
 
@@ -791,7 +791,7 @@ mod tests {
         );
         assert_eq!(
             mol.stereo_bond(StereoBondId(0)).ast,
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1))
+            &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }
 

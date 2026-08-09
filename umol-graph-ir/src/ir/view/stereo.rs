@@ -10,7 +10,7 @@ use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandP
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::super::stereo::{
-    coset_apply_permutation, StereoAtomAst, StereoBondAst, StereoKind, Stereogenicity, Topicity,
+    coset_apply_permutation, StereoAtomForm, StereoBondForm, StereoKind, Stereogenicity, Topicity,
 };
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
@@ -20,9 +20,9 @@ use super::ligand::StereoLigandView;
 use crate::ir::{StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoCoset};
 
 type StereoAtomSet =
-    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>;
+    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>;
 type StereoBondSet =
-    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>;
+    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>;
 
 /// Namespace accessor for stereo-atom views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
@@ -209,7 +209,7 @@ pub struct StereoAtomView<'a> {
     pub id: StereoAtomId,
     site: NodeId,
     ligands: &'a [StereoLigand],
-    pub ast: &'a StereoAtomAst,
+    pub ast: &'a StereoAtomForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -561,7 +561,7 @@ pub struct StereoBondView<'a> {
     pub id: StereoBondId,
     site: EdgeId,
     ligands: &'a [StereoLigand],
-    pub ast: &'a StereoBondAst,
+    pub ast: &'a StereoBondForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -801,7 +801,7 @@ pub struct StereoAtomViewMut<'a> {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: &'a mut StereoAtomAst,
+    pub ast: &'a mut StereoAtomForm,
 }
 
 /// Mutable borrowed view of a stereo bond: its id, site bond + ligand frame
@@ -811,7 +811,7 @@ pub struct StereoBondViewMut<'a> {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: &'a mut StereoBondAst,
+    pub ast: &'a mut StereoBondForm,
 }
 
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
@@ -822,28 +822,28 @@ pub struct StereoAtomEditorView<'a> {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a StereoAtomAst,
+    pub ast: &'a StereoAtomForm,
 }
 
 pub struct StereoAtomEditorViewMut<'a> {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a mut StereoAtomAst,
+    pub ast: &'a mut StereoAtomForm,
 }
 
 pub struct StereoBondEditorView<'a> {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a StereoBondAst,
+    pub ast: &'a StereoBondForm,
 }
 
 pub struct StereoBondEditorViewMut<'a> {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a mut StereoBondAst,
+    pub ast: &'a mut StereoBondForm,
 }
 
 #[cfg(test)]
@@ -862,7 +862,7 @@ mod tests {
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::stereo::{
-        StereoAtomAst, StereoBondAst, StereoCoset, StereoKind, Stereogenicity, Topicity,
+        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity, Topicity,
     };
     use crate::ir::symmetry::GraphSymmetryConfig;
 
@@ -884,7 +884,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(1),
@@ -894,7 +894,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -917,7 +917,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(1),
@@ -927,7 +927,7 @@ mod tests {
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -955,7 +955,7 @@ mod tests {
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(0),
@@ -965,7 +965,7 @@ mod tests {
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -1030,7 +1030,7 @@ mod tests {
         );
         assert_eq!(
             view.ast,
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
     }
 
@@ -1121,7 +1121,7 @@ mod tests {
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         });
@@ -1178,7 +1178,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -1474,7 +1474,7 @@ mod tests {
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert_eq!(
             view.ast,
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
     }
 
@@ -1585,7 +1585,7 @@ mod tests {
             stereo_bonds: vec![(
                 BondId(0),
                 vec![],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         });

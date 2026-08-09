@@ -111,7 +111,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
                         id: StereoAtomId(id),
                         site: AtomId(0),
                         ligands: vec![],
-                        ast: StereoAtomAst::default(),
+                        ast: StereoAtomForm::default(),
                     })]),
                 ),
                 ApplyPreconditionError::InvalidReactionReference {
@@ -127,7 +127,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
                         id: StereoBondId(id),
                         site: BondId(0),
                         ligands: vec![],
-                        ast: StereoBondAst::default(),
+                        ast: StereoBondForm::default(),
                     })]),
                 ),
                 ApplyPreconditionError::InvalidReactionReference {
@@ -233,7 +233,7 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, App
                         id: StereoAtomId(0),
                         site: AtomId(missing),
                         ligands: vec![],
-                        ast: StereoAtomAst::default(),
+                        ast: StereoAtomForm::default(),
                     })]),
                 ),
                 ApplyPreconditionError::InvalidReactionReference {
@@ -247,7 +247,7 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, App
                         id: StereoAtomId(0),
                         site: AtomId(0),
                         ligands: vec![StereoLigand::new(AtomId(missing), StereoLigandKind::Atom,)],
-                        ast: StereoAtomAst::default(),
+                        ast: StereoAtomForm::default(),
                     })]),
                 ),
                 ApplyPreconditionError::InvalidReactionReference {
@@ -261,7 +261,7 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, App
                         id: StereoBondId(0),
                         site: BondId(missing),
                         ligands: vec![],
-                        ast: StereoBondAst::default(),
+                        ast: StereoBondForm::default(),
                     })]),
                 ),
                 ApplyPreconditionError::InvalidReactionReference {
@@ -355,7 +355,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
                         (1..=4)
                             .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
                             .collect(),
-                        StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
                     )],
                     ..Default::default()
                 }),
@@ -366,7 +366,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
                         .into_iter()
                         .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
                         .collect(),
-                    ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                    ast: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
                 })]),
             ),
             ApplyPreconditionError::ReactionIncidenceMismatch {
@@ -383,7 +383,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
                         (2..=5)
                             .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
                             .collect(),
-                        StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                        StereoBondForm::new(StereoKind::CisTrans, 0u32),
                     )],
                     ..Default::default()
                 }),
@@ -394,7 +394,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
                         .into_iter()
                         .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
                         .collect(),
-                    ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                    ast: StereoBondForm::new(StereoKind::CisTrans, 0u32),
                 })]),
             ),
             ApplyPreconditionError::ReactionIncidenceMismatch {
@@ -441,7 +441,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); kind.degree() + 1],
-                stereo_atoms: vec![(AtomId(0), ligands, StereoAtomAst::new(kind, 0u32))],
+                stereo_atoms: vec![(AtomId(0), ligands, StereoAtomForm::new(kind, 0u32))],
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
@@ -464,7 +464,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
                     (2..=5)
                         .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
                         .collect(),
-                    StereoBondAst::new(kind, 0u32),
+                    StereoBondForm::new(kind, 0u32),
                 )],
                 ..Default::default()
             }),

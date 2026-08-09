@@ -4394,7 +4394,7 @@ mod tests {
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
     use crate::ir::stereo::{
-        StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind, Stereogenicity,
+        StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, Stereogenicity,
     };
     use crate::ir::value::NumForm;
     use crate::mol_dsl;
@@ -5098,7 +5098,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::LonePair),
                 (AtomHandle::New(3), StereoLigandKind::Atom),
             ],
-            ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0_u32),
+            ast: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
         },
     )]
     #[case::stereo_atom_remove(
@@ -5113,7 +5113,7 @@ mod tests {
                     (AtomHandle::New(0), StereoLigandKind::LonePair),
                     (AtomHandle::Id(AtomId(4)), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
             ),
             (
                 StereoAtomHandle::New(1),
@@ -5124,7 +5124,7 @@ mod tests {
                     (AtomHandle::Id(AtomId(7)), StereoLigandKind::Atom),
                     (AtomHandle::Id(AtomId(8)), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, 0_u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
             ),
         ] },
     )]
@@ -5166,7 +5166,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::LonePair),
                 (AtomHandle::New(3), StereoLigandKind::Atom),
             ],
-            ast: StereoBondAst::new(StereoKind::CisTrans, 0_u32),
+            ast: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
         },
     )]
     #[case::stereo_bond_remove(
@@ -5181,7 +5181,7 @@ mod tests {
                     (AtomHandle::Id(AtomId(4)), StereoLigandKind::Atom),
                     (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
             ),
             (
                 StereoBondHandle::New(1),
@@ -5192,7 +5192,7 @@ mod tests {
                     (AtomHandle::New(0), StereoLigandKind::LonePair),
                     (AtomHandle::Id(AtomId(8)), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, 0_u32),
+                StereoBondForm::new(StereoKind::CisTrans, 0_u32),
             ),
         ] },
     )]

@@ -1582,7 +1582,7 @@ mod tests {
     use super::super::ligand::StereoLigandKind;
     use super::super::molecule::transact::TransactionError;
     use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
+    use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::super::validate::{DpoContradiction, EntityStructureContradiction};
     use super::super::value::NumForm;
@@ -1832,7 +1832,7 @@ mod tests {
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
         ],
-        ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+        ast: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
     }))]
     fn test_reaction_ast_apply_at_stereo_atom_error(#[case] delta: Delta) {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
@@ -1845,7 +1845,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             )],
             ..Default::default()
         });
@@ -1859,7 +1859,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             )],
             ..Default::default()
         });
@@ -1908,7 +1908,7 @@ mod tests {
             StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
         ],
-        ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+        ast: StereoBondForm::new(StereoKind::CisTrans, 0u32),
     }))]
     fn test_reaction_ast_apply_at_stereo_bond_error(#[case] delta: Delta) {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
@@ -1922,7 +1922,7 @@ mod tests {
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                StereoBondForm::new(StereoKind::CisTrans, 0u32),
             )],
             ..Default::default()
         });
@@ -1937,7 +1937,7 @@ mod tests {
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                StereoBondForm::new(StereoKind::CisTrans, 0u32),
             )],
             ..Default::default()
         });
@@ -2091,7 +2091,7 @@ mod tests {
                     id: StereoAtomId(0),
                     site: AtomId(0),
                     ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
-                    ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 }),
                 Delta::StereoBond(StereoBondDelta::Add {
                     id: StereoBondId(0),
@@ -2100,7 +2100,7 @@ mod tests {
                         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     ],
-                    ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 }),
                 Delta::Constraint(ConstraintDelta::Add(constraint.clone())),
             ]),
@@ -2248,11 +2248,11 @@ mod tests {
         Entity::NoncovalentBond(NoncovalentBondId(0)),
     )]
     #[case::stereo_atom(
-        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], ast: StereoAtomAst::default() }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], ast: StereoAtomForm::default() }),
         Entity::StereoAtom(StereoAtomId(0)),
     )]
     #[case::stereo_bond(
-        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(0), site: BondId(0), ligands: vec![], ast: StereoBondAst::default() }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(0), site: BondId(0), ligands: vec![], ast: StereoBondForm::default() }),
         Entity::StereoBond(StereoBondId(0)),
     )]
     fn test_reaction_ast_validate_application_rejects_missing_delta_target(
@@ -2318,13 +2318,13 @@ mod tests {
         id: StereoAtomId(0),
         site: AtomId(1),
         ligands: vec![],
-        ast: StereoAtomAst::default(),
+        ast: StereoAtomForm::default(),
     }))]
     #[case::stereo_atom_ligand(Delta::StereoAtom(StereoAtomDelta::Add {
         id: StereoAtomId(0),
         site: AtomId(0),
         ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
-        ast: StereoAtomAst::default(),
+        ast: StereoAtomForm::default(),
     }))]
     fn test_reaction_ast_validate_application_rejects_missing_structural_reference(
         #[case] delta: Delta,
@@ -2354,7 +2354,7 @@ mod tests {
                 id: StereoBondId(0),
                 site: BondId(0),
                 ligands: vec![],
-                ast: StereoBondAst::default(),
+                ast: StereoBondForm::default(),
             })]),
         );
         assert_eq!(
@@ -2439,7 +2439,7 @@ mod tests {
             stereo_atoms: vec![(
                 AtomId(0),
                 stored_ligands.clone(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             )],
             ..Default::default()
         });
@@ -2451,7 +2451,7 @@ mod tests {
                 id: StereoAtomId(0),
                 site: AtomId(0),
                 ligands: removed_ligands,
-                ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                ast: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             })]),
         );
         assert_eq!(
@@ -2641,7 +2641,7 @@ mod tests {
                         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
                 )],
                 constraints: Constraints::new(),
                 ..Default::default()
@@ -2696,7 +2696,7 @@ mod tests {
                     .iter()
                     .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, host_coset),
+                StereoAtomForm::new(StereoKind::Tetrahedral, host_coset),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -2721,7 +2721,7 @@ mod tests {
                     .iter()
                     .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, product_coset),
+                StereoAtomForm::new(StereoKind::Tetrahedral, product_coset),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -2767,7 +2767,7 @@ mod tests {
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                     ],
-                    ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                    ast: StereoBondForm::new(StereoKind::CisTrans, 0u32),
                 }),
             ]),
         );
@@ -2790,7 +2790,7 @@ mod tests {
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, coset),
+                StereoBondForm::new(StereoKind::CisTrans, coset),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -2827,7 +2827,7 @@ mod tests {
                         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                         StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, coset.clone()),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, coset.clone()),
                 ),
                 (
                     AtomId(1),
@@ -2837,7 +2837,7 @@ mod tests {
                         StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                         StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, coset.clone()),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, coset.clone()),
                 ),
             ],
             constraints: Constraints::new(),

@@ -36,7 +36,7 @@ use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, Noncovale
 use super::remap::{IdCompaction, IdRemapping, UndoCompaction};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
-    StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate, StereoConfigurationForm,
+    StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
     StereoKind,
 };
 use super::traits::{Canonicalize, Lattice};
@@ -47,14 +47,14 @@ pub type StereoAtomRemoval = (
     StereoAtomHandle,
     AtomHandle,
     Vec<(AtomHandle, StereoLigandKind)>,
-    StereoAtomAst,
+    StereoAtomForm,
 );
 /// One stereo-bond removal in a batched `RemoveStereoBonds`: id, site (a bond), ligand frame, ast.
 pub type StereoBondRemoval = (
     StereoBondHandle,
     BondHandle,
     Vec<(AtomHandle, StereoLigandKind)>,
-    StereoBondAst,
+    StereoBondForm,
 );
 
 /// Handle to an atom within an edit batch: either an initial-host `AtomId` or a
@@ -361,7 +361,7 @@ pub enum Edit {
     AddStereoAtom {
         site: AtomHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoAtomAst,
+        ast: StereoAtomForm,
     },
     RemoveStereoAtoms {
         removes: Vec<StereoAtomRemoval>,
@@ -373,7 +373,7 @@ pub enum Edit {
     AddStereoBond {
         site: BondHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoBondAst,
+        ast: StereoBondForm,
     },
     RemoveStereoBonds {
         removes: Vec<StereoBondRemoval>,
@@ -621,7 +621,7 @@ impl Edits {
         &mut self,
         site: AtomHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoAtomAst,
+        ast: StereoAtomForm,
     ) -> StereoAtomHandle {
         let handle = StereoAtomHandle::New(self.created_stereo_atoms);
         self.push(Edit::AddStereoAtom { site, ligands, ast });
@@ -634,7 +634,7 @@ impl Edits {
             Item = (
                 AtomHandle,
                 Vec<(AtomHandle, StereoLigandKind)>,
-                StereoAtomAst,
+                StereoAtomForm,
             ),
         >,
     ) -> Vec<StereoAtomHandle> {
@@ -648,7 +648,7 @@ impl Edits {
         &mut self,
         site: BondHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoBondAst,
+        ast: StereoBondForm,
     ) -> StereoBondHandle {
         let handle = StereoBondHandle::New(self.created_stereo_bonds);
         self.push(Edit::AddStereoBond { site, ligands, ast });
@@ -661,7 +661,7 @@ impl Edits {
             Item = (
                 BondHandle,
                 Vec<(AtomHandle, StereoLigandKind)>,
-                StereoBondAst,
+                StereoBondForm,
             ),
         >,
     ) -> Vec<StereoBondHandle> {
@@ -1095,7 +1095,7 @@ impl Edits {
     pub fn update_stereo_atom(
         &mut self,
         id: StereoAtomHandle,
-        current: &StereoAtomAst,
+        current: &StereoAtomForm,
         update: &StereoAtomUpdate,
     ) {
         let updated = current.update(update);
@@ -1136,7 +1136,7 @@ impl Edits {
     pub fn update_stereo_bond(
         &mut self,
         id: StereoBondHandle,
-        current: &StereoBondAst,
+        current: &StereoBondForm,
         update: &StereoBondUpdate,
     ) {
         let updated = current.update(update);
@@ -1746,7 +1746,7 @@ pub struct AddedStereoAtom {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoAtomAst,
+    pub ast: StereoAtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1754,7 +1754,7 @@ pub struct RemovedStereoAtom {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoAtomAst,
+    pub ast: StereoAtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1762,7 +1762,7 @@ pub struct AddedStereoBond {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoBondAst,
+    pub ast: StereoBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1770,7 +1770,7 @@ pub struct RemovedStereoBond {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoBondAst,
+    pub ast: StereoBondForm,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2028,8 +2028,8 @@ mod tests {
         let aromatic = AromaticSystemForm::default();
         let multicenter = MulticenterBondForm::default();
         let noncovalent = NoncovalentBondForm::default();
-        let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0));
-        let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0));
+        let stereo_atom = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0));
+        let stereo_bond = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0));
         let mut edits = Edits::new();
 
         assert_eq!(edits.add_atom(atom.clone()), AtomHandle::New(0));
@@ -2235,12 +2235,12 @@ mod tests {
                 (
                     AtomHandle::Id(AtomId(0)),
                     Vec::new(),
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 ),
                 (
                     AtomHandle::Id(AtomId(1)),
                     Vec::new(),
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
             ]),
             vec![StereoAtomHandle::New(0), StereoAtomHandle::New(1)],
@@ -2250,12 +2250,12 @@ mod tests {
                 (
                     BondHandle::Id(BondId(0)),
                     Vec::new(),
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 ),
                 (
                     BondHandle::Id(BondId(1)),
                     Vec::new(),
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 ),
             ]),
             vec![StereoBondHandle::New(0), StereoBondHandle::New(1)],
@@ -2299,22 +2299,22 @@ mod tests {
                 Edit::AddStereoAtom {
                     site: AtomHandle::Id(AtomId(0)),
                     ligands: Vec::new(),
-                    ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 },
                 Edit::AddStereoAtom {
                     site: AtomHandle::Id(AtomId(1)),
                     ligands: Vec::new(),
-                    ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 },
                 Edit::AddStereoBond {
                     site: BondHandle::Id(BondId(0)),
                     ligands: Vec::new(),
-                    ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 },
                 Edit::AddStereoBond {
                     site: BondHandle::Id(BondId(1)),
                     ligands: Vec::new(),
-                    ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 },
             ],
         );
@@ -2373,13 +2373,13 @@ mod tests {
             StereoAtomHandle::Id(StereoAtomId(0)),
             AtomHandle::Id(AtomId(0)),
             vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         )]);
         edits.remove_stereo_bonds(vec![(
             StereoBondHandle::New(0),
             BondHandle::Id(BondId(0)),
             vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
         )]);
 
         assert_eq!(
@@ -2418,7 +2418,7 @@ mod tests {
                         StereoAtomHandle::Id(StereoAtomId(0)),
                         AtomHandle::Id(AtomId(0)),
                         vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
-                        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                     )],
                 },
                 Edit::RemoveStereoBonds {
@@ -2426,7 +2426,7 @@ mod tests {
                         StereoBondHandle::New(0),
                         BondHandle::Id(BondId(0)),
                         vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
-                        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                     )],
                 },
             ],
@@ -2511,12 +2511,12 @@ mod tests {
             Edit::AddStereoAtom {
                 site: AtomHandle::Id(AtomId(0)),
                 ligands: Vec::new(),
-                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             },
             Edit::AddStereoBond {
                 site: BondHandle::Id(BondId(0)),
                 ligands: Vec::new(),
-                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             },
         ];
         let mut edits: Edits = entries.clone().into_iter().collect();
@@ -2554,7 +2554,7 @@ mod tests {
             edits.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
                 Vec::new(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             ),
             StereoAtomHandle::New(1),
         );
@@ -2562,7 +2562,7 @@ mod tests {
             edits.add_stereo_bond(
                 BondHandle::Id(BondId(0)),
                 Vec::new(),
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             ),
             StereoBondHandle::New(1),
         );
@@ -3133,7 +3133,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoAtomAst { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
@@ -3152,7 +3152,7 @@ mod tests {
         ],
     )]
     fn test_edits_update_stereo_atom(
-        #[case] current: StereoAtomAst,
+        #[case] current: StereoAtomForm,
         #[case] update: StereoAtomUpdate,
         #[case] expected: Vec<Edit>,
     ) {
@@ -3193,11 +3193,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
-    #[case::relative(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
-    #[case::absent_constraint_removal(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    #[case::empty(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
+    #[case::relative(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
+    #[case::absent_constraint_removal(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
     fn test_edits_update_stereo_atom_identity(
-        #[case] current: StereoAtomAst,
+        #[case] current: StereoAtomForm,
         #[case] update: StereoAtomUpdate,
     ) {
         let mut edits = Edits::new();
@@ -3213,7 +3213,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoBondAst { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
@@ -3232,7 +3232,7 @@ mod tests {
         ],
     )]
     fn test_edits_update_stereo_bond(
-        #[case] current: StereoBondAst,
+        #[case] current: StereoBondForm,
         #[case] update: StereoBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
@@ -3274,11 +3274,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
-    #[case::relative(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
-    #[case::absent_constraint_removal(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    #[case::empty(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
+    #[case::relative(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
+    #[case::absent_constraint_removal(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
     fn test_edits_update_stereo_bond_identity(
-        #[case] current: StereoBondAst,
+        #[case] current: StereoBondForm,
         #[case] update: StereoBondUpdate,
     ) {
         let mut edits = Edits::new();

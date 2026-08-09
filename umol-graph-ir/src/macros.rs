@@ -182,42 +182,42 @@ macro_rules! noncovalent_dsl_ground {
     }};
 }
 
-/// Parse a compact stereo-atom-string into a `StereoAtomAst`.
+/// Parse a compact stereo-atom-string into a `StereoAtomForm`.
 #[macro_export]
 macro_rules! stereo_atom_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::StereoAtomAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::StereoAtomForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse a stereo-atom DSL string into a `StereoAtomAst` with `StereoAtomDefaults::ground()` applied.
+/// Parse a stereo-atom DSL string into a `StereoAtomForm` with `StereoAtomDefaults::ground()` applied.
 #[macro_export]
 macro_rules! stereo_atom_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoAtomDsl =
             <$crate::dsl::StereoAtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::StereoAtomDsl as $crate::ir::IntoIr<$crate::ir::StereoAtomAst>>::into_ir(
+        <$crate::dsl::StereoAtomDsl as $crate::ir::IntoIr<$crate::ir::StereoAtomForm>>::into_ir(
             dsl,
             &$crate::dsl::StereoAtomDefaults::ground(),
         )
     }};
 }
 
-/// Parse a compact stereo-bond-string into a `StereoBondAst`.
+/// Parse a compact stereo-bond-string into a `StereoBondForm`.
 #[macro_export]
 macro_rules! stereo_bond_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::StereoBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::StereoBondForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse a stereo-bond DSL string into a `StereoBondAst` with `StereoBondDefaults::ground()` applied.
+/// Parse a stereo-bond DSL string into a `StereoBondForm` with `StereoBondDefaults::ground()` applied.
 #[macro_export]
 macro_rules! stereo_bond_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoBondDsl =
             <$crate::dsl::StereoBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::StereoBondDsl as $crate::ir::IntoIr<$crate::ir::StereoBondAst>>::into_ir(
+        <$crate::dsl::StereoBondDsl as $crate::ir::IntoIr<$crate::ir::StereoBondForm>>::into_ir(
             dsl,
             &$crate::dsl::StereoBondDefaults::ground(),
         )
@@ -237,7 +237,7 @@ mod tests {
         AtomForm, AtomId, AtomUpdate, BondConstraintAst, BondConstraintsAst, BondForm, BondUpdate,
         BooleanForm, DativeBondConstraintAst, DativeBondForm, ElementForm, Entity, MoleculeAst,
         MoleculeEntries, MulticenterBondForm, NoncovalentBondForm, NoncovalentBondKind, NumForm,
-        StereoAtomAst, StereoBondAst, StereoCoset, StereoKind,
+        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
     };
 
     #[rustfmt::skip]
@@ -468,10 +468,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
-    #[case::undetermined("Th*", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
-    #[case::square_planar("Sp2", StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Lit(2)))]
-    fn test_stereo_atom_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
+    #[case::ccw("Th0", StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
+    #[case::undetermined("Th*", StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
+    #[case::square_planar("Sp2", StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(2)))]
+    fn test_stereo_atom_macro(#[case] input: &str, #[case] expected: StereoAtomForm) {
         assert_eq!(stereo_atom_dsl!(input), expected);
     }
 
@@ -483,16 +483,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
-    fn test_stereo_atom_ground_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
+    #[case::ccw("Th0", StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
+    fn test_stereo_atom_ground_macro(#[case] input: &str, #[case] expected: StereoAtomForm) {
         assert_eq!(stereo_atom_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
-    #[case::undetermined("Ct*", StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Undetermined))]
-    fn test_stereo_bond_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
+    #[case::z("Ct1", StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
+    #[case::undetermined("Ct*", StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined))]
+    fn test_stereo_bond_macro(#[case] input: &str, #[case] expected: StereoBondForm) {
         assert_eq!(stereo_bond_dsl!(input), expected);
     }
 
@@ -504,8 +504,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
-    fn test_stereo_bond_ground_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
+    #[case::z("Ct1", StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
+    fn test_stereo_bond_ground_macro(#[case] input: &str, #[case] expected: StereoBondForm) {
         assert_eq!(stereo_bond_dsl_ground!(input), expected);
     }
 }

@@ -211,7 +211,7 @@ mod tests {
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
+    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
 
     // Six carbons; chain bonds 0-1-2-3 (BondId 0,1,2); a dative 0→3; an aromatic
     // system {0,1,2}; a multicenter {3,4,5}; a noncovalent 0···5; a stereo atom on
@@ -245,7 +245,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(1),
@@ -253,7 +253,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })

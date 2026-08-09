@@ -363,7 +363,7 @@ impl StereoResolver {
 mod tests {
     use rstest::{fixture, rstest};
     use umol_graph_ir::ir::{
-        AtomId, BondId, Edit, Edits, StereoAtomAst, StereoAtomId, StereoBondAst, StereoBondId,
+        AtomId, BondId, Edit, Edits, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
         StereoCoset, StereoKind, StereoLigandKind,
     };
     use umol_graph_ir::mol_dsl_ground;
@@ -447,7 +447,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
             ],
-            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         }])
     )]
     #[case::cis_trans(
@@ -461,7 +461,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
             ],
-            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         }])
     )]
     fn test_stereo_resolver_plan(
@@ -605,7 +605,7 @@ mod tests {
                 StereoAtomHandle::Id(StereoAtomId(0)),
                 AtomHandle::Id(AtomId(1)),
                 vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
         }]))
     )]
@@ -645,7 +645,7 @@ mod tests {
                 StereoBondHandle::Id(StereoBondId(0)),
                 BondHandle::Id(BondId(1)),
                 vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
         }]))
     )]
@@ -705,7 +705,7 @@ mod tests {
                             StereoLigandKind::ImplicitHydrogen,
                         ),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 )],
             },
             Edit::AddStereoAtom {
@@ -719,7 +719,7 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         ]))
     )]
@@ -739,7 +739,7 @@ mod tests {
                             StereoLigandKind::ImplicitHydrogen,
                         ),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 )],
             },
             Edit::ModifyAtomConstraint {
@@ -810,7 +810,7 @@ mod tests {
                             StereoLigandKind::ImplicitHydrogen,
                         ),
                     ],
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 )],
             },
             Edit::AddStereoBond {
@@ -827,7 +827,7 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             },
         ]))
     )]
@@ -850,7 +850,7 @@ mod tests {
                             StereoLigandKind::ImplicitHydrogen,
                         ),
                     ],
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 )],
             },
             Edit::ModifyBondConstraint {
@@ -901,7 +901,7 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
         }])
     )]
@@ -927,7 +927,7 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
         }])
     )]

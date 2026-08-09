@@ -47,8 +47,8 @@ use crate::ir::ligand::StereoLigand;
 use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::{
     AromaticSystemForm, Constraint, ConstraintSpan, DativeBondForm, EntitySpan,
-    MulticenterBondForm, NoncovalentBondForm, ReactionSpanAst, ReactionSpanEntries, StereoAtomAst,
-    StereoBondAst,
+    MulticenterBondForm, NoncovalentBondForm, ReactionSpanAst, ReactionSpanEntries, StereoAtomForm,
+    StereoBondForm,
 };
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the
@@ -393,13 +393,13 @@ pub(crate) struct SpanInput {
         Option<String>,
         AtomRef,
         Vec<StereoLigandRef>,
-        EntitySpan<StereoAtomAst>,
+        EntitySpan<StereoAtomForm>,
     )>,
     stereo_bonds: Vec<(
         Option<String>,
         BondRef,
         Vec<StereoLigandRef>,
-        EntitySpan<StereoBondAst>,
+        EntitySpan<StereoBondForm>,
     )>,
     constraints: Vec<ConstraintSpanInput>,
     atom_aliases: Vec<(String, Box<AtomDsl>)>,
@@ -755,11 +755,11 @@ fn parse_stereo_atom_span_entry(
         Option<String>,
         AtomRef,
         Vec<StereoLigandRef>,
-        EntitySpan<StereoAtomAst>,
+        EntitySpan<StereoAtomForm>,
     ),
     DeError,
 > {
-    let full = |p: &Edn<'_>, wrap: fn(StereoAtomAst) -> EntitySpan<StereoAtomAst>| {
+    let full = |p: &Edn<'_>, wrap: fn(StereoAtomForm) -> EntitySpan<StereoAtomForm>| {
         let e = parse_stereo_atom_entry(p)?;
         Ok::<_, DeError>((e.keyword, e.site, e.ligands, wrap(e.stereo.0)))
     };
@@ -809,11 +809,11 @@ fn parse_stereo_bond_span_entry(
         Option<String>,
         BondRef,
         Vec<StereoLigandRef>,
-        EntitySpan<StereoBondAst>,
+        EntitySpan<StereoBondForm>,
     ),
     DeError,
 > {
-    let full = |p: &Edn<'_>, wrap: fn(StereoBondAst) -> EntitySpan<StereoBondAst>| {
+    let full = |p: &Edn<'_>, wrap: fn(StereoBondForm) -> EntitySpan<StereoBondForm>| {
         let e = parse_stereo_bond_entry(p)?;
         Ok::<_, DeError>((e.keyword, e.site, e.ligands, wrap(e.stereo.0)))
     };
@@ -1360,10 +1360,10 @@ fn render_stereo_atom_span_entry(
     id: StereoAtomId,
     site: AtomId,
     ligands: &[StereoLigand],
-    span: &EntitySpan<StereoAtomAst>,
+    span: &EntitySpan<StereoAtomForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
-    let value = |s: &StereoAtomAst| StereoAtomDsl::from_ref(s).to_edn();
+    let value = |s: &StereoAtomForm| StereoAtomDsl::from_ref(s).to_edn();
     let ligand_edns: Vec<Edn<'static>> = ligands
         .iter()
         .map(|&l| render_stereo_ligand(l, meta))
@@ -1389,10 +1389,10 @@ fn render_stereo_bond_span_entry(
     id: StereoBondId,
     site: BondId,
     ligands: &[StereoLigand],
-    span: &EntitySpan<StereoBondAst>,
+    span: &EntitySpan<StereoBondForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
-    let value = |s: &StereoBondAst| StereoBondDsl::from_ref(s).to_edn();
+    let value = |s: &StereoBondForm| StereoBondDsl::from_ref(s).to_edn();
     let ligand_edns: Vec<Edn<'static>> = ligands
         .iter()
         .map(|&l| render_stereo_ligand(l, meta))
@@ -2042,7 +2042,7 @@ mod tests {
             Option<String>,
             AtomRef,
             Vec<StereoLigandRef>,
-            EntitySpan<StereoAtomAst>,
+            EntitySpan<StereoAtomForm>,
         ),
     ) {
         assert_eq!(
@@ -2074,7 +2074,7 @@ mod tests {
             Option<String>,
             BondRef,
             Vec<StereoLigandRef>,
-            EntitySpan<StereoBondAst>,
+            EntitySpan<StereoBondForm>,
         ),
     ) {
         assert_eq!(
@@ -2568,7 +2568,7 @@ mod tests {
         metadata
     }, r#"{:id :s1 :site 0 :ligands [1 2 3 4] :type :cw}"#)]
     fn test_render_stereo_atom_span_entry(
-        #[case] span: EntitySpan<StereoAtomAst>,
+        #[case] span: EntitySpan<StereoAtomForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {
@@ -2593,7 +2593,7 @@ mod tests {
         metadata
     }, r#"{:id :sb1 :site 1 :ligands [0 3] :type :e}"#)]
     fn test_render_stereo_bond_span_entry(
-        #[case] span: EntitySpan<StereoBondAst>,
+        #[case] span: EntitySpan<StereoBondForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {

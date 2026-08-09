@@ -60,7 +60,7 @@ proptest! {
                 (1..=4)
                     .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, coset),
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
             )],
             ..Default::default()
         });
@@ -100,7 +100,7 @@ proptest! {
                 (1..=4)
                     .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, coset),
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
             )],
             ..Default::default()
         });
@@ -130,7 +130,7 @@ proptest! {
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         let after = permutation.act(&before);
-        let ast = StereoAtomAst::new(kind, coset);
+        let ast = StereoAtomForm::new(kind, coset);
         let transformed = ast.transform_frame(&before, &after);
 
         prop_assert_eq!(transformed.as_ref(), Some(&ast.apply(permutation)));
@@ -149,7 +149,7 @@ proptest! {
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         let after = permutation.act(&before);
-        let ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+        let ast = StereoBondForm::new(StereoKind::CisTrans, coset);
         let transformed = ast.transform_frame(&before, &after);
 
         prop_assert_eq!(transformed.as_ref(), Some(&ast.apply(permutation)));

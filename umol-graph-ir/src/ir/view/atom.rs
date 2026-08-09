@@ -485,7 +485,7 @@ mod tests {
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use crate::ir::stereo::{StereoAtomAst, StereoCoset, StereoKind, TetrahedralStereoForm};
+    use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind, TetrahedralStereoForm};
     use crate::ir::value::NumForm;
     use crate::mol_dsl;
 
@@ -888,7 +888,7 @@ mod tests {
                         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
                 (
                     AtomId(5),
@@ -898,7 +898,7 @@ mod tests {
                         StereoLigand::new(AtomId(8), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(9), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
                 ),
             ],
             ..Default::default()

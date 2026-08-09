@@ -22,11 +22,11 @@ use umol_graph_ir::ir::{
     NoncovalentBondDelta as GraphIrNoncovalentBondDelta,
     NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
     NoncovalentBondForm as GraphIrNoncovalentBondForm,
-    NoncovalentBondId as GraphIrNoncovalentBondId, StereoAtomAst as GraphIrStereoAtomAst,
-    StereoAtomDelta as GraphIrStereoAtomDelta,
-    StereoAtomFieldChange as GraphIrStereoAtomFieldChange, StereoAtomId as GraphIrStereoAtomId,
-    StereoBondAst as GraphIrStereoBondAst, StereoBondDelta as GraphIrStereoBondDelta,
-    StereoBondFieldChange as GraphIrStereoBondFieldChange, StereoBondId as GraphIrStereoBondId,
+    NoncovalentBondId as GraphIrNoncovalentBondId, StereoAtomDelta as GraphIrStereoAtomDelta,
+    StereoAtomFieldChange as GraphIrStereoAtomFieldChange, StereoAtomForm as GraphIrStereoAtomForm,
+    StereoAtomId as GraphIrStereoAtomId, StereoBondDelta as GraphIrStereoBondDelta,
+    StereoBondFieldChange as GraphIrStereoBondFieldChange, StereoBondForm as GraphIrStereoBondForm,
+    StereoBondId as GraphIrStereoBondId,
 };
 
 use crate::aromatic::AromaticSystemAst;
@@ -1423,11 +1423,11 @@ impl<'py> IntoPyObject<'py> for &StereoAtomDeltaAstValue {
 }
 
 impl StereoAtomDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrStereoAtomAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrStereoAtomForm) -> PyResult<Self> {
         Ok(Self(Py::new(py, StereoAtomAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrStereoAtomAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrStereoAtomForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1655,10 +1655,10 @@ impl<'py> IntoPyObject<'py> for &StereoBondDeltaAstValue {
 }
 
 impl StereoBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrStereoBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrStereoBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(py, StereoBondAst::from_inner(ast.clone()))?))
     }
-    fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -4132,7 +4132,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::remove(GraphIrStereoAtomDelta::Remove {
         id: GraphIrStereoAtomId(5),
@@ -4142,7 +4142,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::modify_field(GraphIrStereoAtomDelta::ModifyField {
         id: GraphIrStereoAtomId(5),
@@ -4224,7 +4224,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             ],
-            ast: GraphIrStereoAtomAst::new(
+            ast: GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4236,7 +4236,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             ],
-            ast: GraphIrStereoAtomAst::new(
+            ast: GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4277,7 +4277,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: GraphIrStereoAtomAst::new(
+            ast: GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4292,7 +4292,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: GraphIrStereoAtomAst::new(
+            ast: GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4370,7 +4370,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::remove(GraphIrStereoAtomDelta::Remove {
         id: GraphIrStereoAtomId(5),
@@ -4379,7 +4379,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::modify_field(GraphIrStereoAtomDelta::ModifyField {
         id: GraphIrStereoAtomId(5),
@@ -4451,7 +4451,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::remove(GraphIrStereoBondDelta::Remove {
         id: GraphIrStereoBondId(5),
@@ -4461,7 +4461,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::modify_field(GraphIrStereoBondDelta::ModifyField {
         id: GraphIrStereoBondId(5),
@@ -4543,7 +4543,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             ],
-            ast: GraphIrStereoBondAst::new(
+            ast: GraphIrStereoBondForm::new(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4555,7 +4555,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             ],
-            ast: GraphIrStereoBondAst::new(
+            ast: GraphIrStereoBondForm::new(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4596,7 +4596,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: GraphIrStereoBondAst::new(
+            ast: GraphIrStereoBondForm::new(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4611,7 +4611,7 @@ mod tests {
                 GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::LonePair),
             ],
-            ast: GraphIrStereoBondAst::new(
+            ast: GraphIrStereoBondForm::new(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4689,7 +4689,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::remove(GraphIrStereoBondDelta::Remove {
         id: GraphIrStereoBondId(5),
@@ -4698,7 +4698,7 @@ mod tests {
             GraphIrStereoLigand::new(GraphIrAtomId(4), GraphIrStereoLigandKind::Atom),
             GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
         ],
-        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     })]
     #[case::modify_field(GraphIrStereoBondDelta::ModifyField {
         id: GraphIrStereoBondId(5),
@@ -4916,7 +4916,7 @@ mod tests {
             GraphIrAtomId(4),
             GraphIrStereoLigandKind::Atom,
         )],
-        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     }))]
     #[case::stereo_bond(GraphIrDelta::StereoBond(GraphIrStereoBondDelta::Add {
         id: GraphIrStereoBondId(5),
@@ -4925,7 +4925,7 @@ mod tests {
             GraphIrAtomId(4),
             GraphIrStereoLigandKind::Atom,
         )],
-        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     }))]
     #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
         GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
@@ -4999,7 +4999,7 @@ mod tests {
                 GraphIrAtomId(4),
                 GraphIrStereoLigandKind::Atom,
             )],
-            ast: GraphIrStereoAtomAst::new(
+            ast: GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -5067,7 +5067,7 @@ mod tests {
             GraphIrAtomId(4),
             GraphIrStereoLigandKind::Atom,
         )],
-        ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::Lit(0)),
     }))]
     #[case::stereo_bond(GraphIrDelta::StereoBond(GraphIrStereoBondDelta::Add {
         id: GraphIrStereoBondId(5),
@@ -5076,7 +5076,7 @@ mod tests {
             GraphIrAtomId(4),
             GraphIrStereoLigandKind::Atom,
         )],
-        ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
+        ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     }))]
     #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
         GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),

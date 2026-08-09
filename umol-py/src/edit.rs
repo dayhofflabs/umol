@@ -1816,10 +1816,10 @@ mod tests {
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
         NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm, NumForm as GraphIrNumForm,
-        StereoAtomAst as GraphIrStereoAtomAst,
         StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
-        StereoBondAst as GraphIrStereoBondAst,
+        StereoAtomForm as GraphIrStereoAtomForm,
         StereoBondFieldChange as GraphIrStereoBondFieldChange,
+        StereoBondForm as GraphIrStereoBondForm,
         StereoConfigurationForm as GraphIrStereoConfigurationForm, StereoKind as GraphIrStereoKind,
         StereoLigandKind as GraphIrStereoLigandKind,
     };
@@ -2017,13 +2017,13 @@ mod tests {
         GraphIrEdit::AddStereoAtom {
             site: GraphIrAtomHandle::New(0),
             ligands: vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::Atom)],
-            ast: GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, 0_u32),
+            ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, 0_u32),
         },
         GraphIrEdit::RemoveStereoAtoms { removes: vec![(
             GraphIrStereoAtomHandle::Id(GraphIrStereoAtomId(0)),
             GraphIrAtomHandle::New(0),
             vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::ImplicitHydrogen)],
-            GraphIrStereoAtomAst::new(GraphIrStereoKind::Tetrahedral, 1_u32),
+            GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, 1_u32),
         )] },
         GraphIrEdit::ModifyStereoAtomField {
             id: GraphIrStereoAtomHandle::New(0),
@@ -2035,13 +2035,13 @@ mod tests {
         GraphIrEdit::AddStereoBond {
             site: GraphIrBondHandle::Id(GraphIrBondId(0)),
             ligands: vec![(GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::LonePair)],
-            ast: GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, 0_u32),
+            ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, 0_u32),
         },
         GraphIrEdit::RemoveStereoBonds { removes: vec![(
             GraphIrStereoBondHandle::New(0),
             GraphIrBondHandle::Id(GraphIrBondId(0)),
             vec![(GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::Atom)],
-            GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, 1_u32),
+            GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, 1_u32),
         )] },
         GraphIrEdit::ModifyStereoBondField {
             id: GraphIrStereoBondHandle::Id(GraphIrStereoBondId(0)),

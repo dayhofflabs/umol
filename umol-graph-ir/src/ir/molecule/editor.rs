@@ -35,7 +35,7 @@ use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::{IdCompaction, UndoCompaction};
-use super::super::stereo::{StereoAtomAst, StereoBondAst};
+use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::super::traits::{BiEquiv, Equiv};
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
@@ -637,8 +637,8 @@ pub struct MoleculeEditor {
     aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemForm>,
     multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondForm>,
     noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondForm, 2>,
-    stereo_atoms: FixedVarSetStorage<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
-    stereo_bonds: FixedVarSetStorage<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>,
+    stereo_atoms: FixedVarSetStorage<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
+    stereo_bonds: FixedVarSetStorage<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
     constraints: Constraints,
 }
 
@@ -655,10 +655,10 @@ impl MoleculeEditor {
         multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
         noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
         stereo_atoms: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
+            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
         >,
         stereo_bonds: Arc<
-            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>,
+            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
         >,
         constraints: Constraints,
     ) -> Self {
@@ -754,7 +754,7 @@ impl MoleculeEditor {
         &mut self,
         site: AtomId,
         ligands: Vec<StereoLigand>,
-        ast: StereoAtomAst,
+        ast: StereoAtomForm,
     ) -> StereoAtomId {
         StereoAtomId(self.stereo_atoms.push([NodeId::from(site)], ligands, ast))
     }
@@ -764,7 +764,7 @@ impl MoleculeEditor {
         &mut self,
         site: BondId,
         ligands: Vec<StereoLigand>,
-        ast: StereoBondAst,
+        ast: StereoBondForm,
     ) -> StereoBondId {
         StereoBondId(self.stereo_bonds.push([EdgeId::from(site)], ligands, ast))
     }
@@ -1030,7 +1030,7 @@ impl MoleculeEditor {
         id: StereoAtomId,
         site: AtomId,
         ligands: &[StereoLigand],
-        ast: &StereoAtomAst,
+        ast: &StereoAtomForm,
     ) -> bool {
         self.stereo_atoms
             .participant_permutation(id.index(), &[NodeId::from(site)], ligands)
@@ -1043,7 +1043,7 @@ impl MoleculeEditor {
         id: StereoBondId,
         site: BondId,
         ligands: &[StereoLigand],
-        ast: &StereoBondAst,
+        ast: &StereoBondForm,
     ) -> bool {
         self.stereo_bonds
             .participant_permutation(id.index(), &[EdgeId::from(site)], ligands)

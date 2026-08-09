@@ -309,8 +309,8 @@ mod tests {
         MulticenterBondForm as GraphIrMulticenterBondForm,
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
-        ReactionAst as GraphIrReactionAst, StereoAtomAst as GraphIrStereoAtomAst,
-        StereoBondAst as GraphIrStereoBondAst, StereoCoset as GraphIrStereoCoset,
+        ReactionAst as GraphIrReactionAst, StereoAtomForm as GraphIrStereoAtomForm,
+        StereoBondForm as GraphIrStereoBondForm, StereoCoset as GraphIrStereoCoset,
         StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
         StereoLigandKind as GraphIrStereoLigandKind,
     };
@@ -532,16 +532,16 @@ mod tests {
             let removed_multicenter = GraphIrMulticenterBondForm::from_electrons(vec![1, 1]);
             let unchanged_noncovalent =
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond);
-            let stereo_atom_lhs = GraphIrStereoAtomAst::new(
+            let stereo_atom_lhs = GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(1),
             );
-            let stereo_atom_rhs = GraphIrStereoAtomAst::new(
+            let stereo_atom_rhs = GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(2),
             );
             let added_stereo_bond =
-                GraphIrStereoBondAst::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1));
+                GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1));
             let ligand = GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom);
             let unchanged_constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });

@@ -40,7 +40,7 @@ use super::super::noncovalent::{
 };
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
+use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
 use super::super::value::NumForm;
 use super::{MoleculeAst, MoleculeEntries, MoleculeEntriesError, TransactionError};
 use crate::{mol_dsl, mol_dsl_ground};
@@ -134,7 +134,7 @@ fn test_molecule_ast_builder() {
 #[case::stereo_atom_ground_coset(
     MoleculeAst::from_entries(MoleculeEntries {
         atoms: vec![ground_atom()],
-        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))],
+        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))],
         constraints: Constraints::new(),
         ..Default::default()
     }),
@@ -143,7 +143,7 @@ fn test_molecule_ast_builder() {
 #[case::stereo_atom_undetermined_coset(
     MoleculeAst::from_entries(MoleculeEntries {
         atoms: vec![ground_atom()],
-        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))],
+        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))],
         constraints: Constraints::new(),
         ..Default::default()
     }),
@@ -295,7 +295,7 @@ fn equiv_molecule_entries() -> MoleculeEntries {
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
-            StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
         stereo_bonds: vec![(
             BondId(1),
@@ -303,7 +303,7 @@ fn equiv_molecule_entries() -> MoleculeEntries {
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, 1u32),
+            StereoBondForm::new(StereoKind::CisTrans, 1u32),
         )],
         constraints: constraints_with_molecule(Constraint::Molecule(
             MoleculeConstraint::Connected {
@@ -650,11 +650,11 @@ fn test_molecule_ast_equiv_entity_data(#[from(equiv_molecule_entries)] entries: 
     differences.push(MoleculeAst::from_entries(noncovalent));
 
     let mut stereo_atom = entries.clone();
-    stereo_atom.stereo_atoms[0].2 = StereoAtomAst::new(StereoKind::Tetrahedral, 0u32);
+    stereo_atom.stereo_atoms[0].2 = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
     differences.push(MoleculeAst::from_entries(stereo_atom));
 
     let mut stereo_bond = entries.clone();
-    stereo_bond.stereo_bonds[0].2 = StereoBondAst::new(StereoKind::CisTrans, 0u32);
+    stereo_bond.stereo_bonds[0].2 = StereoBondForm::new(StereoKind::CisTrans, 0u32);
     differences.push(MoleculeAst::from_entries(stereo_bond));
 
     let mut constraint = entries;
@@ -3297,7 +3297,7 @@ fn test_molecule_ast_combine_stereo() {
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             ],
-            StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
         constraints: Constraints::new(),
         ..Default::default()
@@ -3472,7 +3472,7 @@ fn test_molecule_ast_split_stereo() {
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             ],
-            StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
         constraints: Constraints::new(),
         ..Default::default()

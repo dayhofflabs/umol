@@ -336,11 +336,11 @@ proptest! {
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
         ];
-        let pattern_atom = StereoAtomAst::new(
+        let pattern_atom = StereoAtomForm::new(
             StereoKind::Tetrahedral,
             StereoCoset::Undetermined,
         );
-        let host_atom = StereoAtomAst::new(StereoKind::Tetrahedral, host_coset)
+        let host_atom = StereoAtomForm::new(StereoKind::Tetrahedral, host_coset)
             .with_constraints(host_constraints);
         let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
         let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
@@ -398,11 +398,11 @@ proptest! {
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
         ];
-        let pattern_bond = StereoBondAst::new(
+        let pattern_bond = StereoBondForm::new(
             StereoKind::CisTrans,
             StereoCoset::Undetermined,
         );
-        let host_bond = StereoBondAst::new(StereoKind::CisTrans, host_coset)
+        let host_bond = StereoBondForm::new(StereoKind::CisTrans, host_coset)
             .with_constraints(host_constraints);
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
@@ -501,8 +501,8 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let old_ast = StereoAtomAst::new(StereoKind::Tetrahedral, old);
-        let new_ast = StereoAtomAst::new(StereoKind::Tetrahedral, new);
+        let old_ast = StereoAtomForm::new(StereoKind::Tetrahedral, old);
+        let new_ast = StereoAtomForm::new(StereoKind::Tetrahedral, new);
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -526,7 +526,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 host_frame.clone(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, old).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, old).apply(permutation),
             )],
             ..Default::default()
         });
@@ -536,7 +536,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 host_frame,
-                StereoAtomAst::new(StereoKind::Tetrahedral, new).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, new).apply(permutation),
             )],
             ..Default::default()
         });
@@ -571,7 +571,7 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let rule_ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
+        let rule_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -593,7 +593,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 permutation.act(&rule_frame),
-                StereoAtomAst::new(StereoKind::Tetrahedral, coset).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset).apply(permutation),
             )],
             ..Default::default()
         });
@@ -639,8 +639,8 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let old_ast = StereoBondAst::new(StereoKind::CisTrans, old);
-        let new_ast = StereoBondAst::new(StereoKind::CisTrans, new);
+        let old_ast = StereoBondForm::new(StereoKind::CisTrans, old);
+        let new_ast = StereoBondForm::new(StereoKind::CisTrans, new);
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -664,7 +664,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 host_frame.clone(),
-                StereoBondAst::new(StereoKind::CisTrans, old).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, old).apply(permutation),
             )],
             ..Default::default()
         });
@@ -674,7 +674,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 host_frame,
-                StereoBondAst::new(StereoKind::CisTrans, new).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, new).apply(permutation),
             )],
             ..Default::default()
         });
@@ -714,7 +714,7 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let rule_ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+        let rule_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -736,7 +736,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 permutation.act(&rule_frame),
-                StereoBondAst::new(StereoKind::CisTrans, coset).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, coset).apply(permutation),
             )],
             ..Default::default()
         });

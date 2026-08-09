@@ -32,7 +32,7 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
+        let left_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
         let left = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -79,7 +79,7 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
+        let left_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
         let left = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -125,7 +125,7 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+        let left_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
         let left = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
@@ -177,7 +177,7 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+        let left_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
         let left = MoleculeAst::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),

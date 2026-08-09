@@ -103,8 +103,8 @@ pub use ring::{
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
-    CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomAst, StereoAtomUpdate,
-    StereoBondAst, StereoBondUpdate, StereoConfiguration, StereoConfigurationForm,
+    CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate,
+    StereoBondForm, StereoBondUpdate, StereoConfiguration, StereoConfigurationForm,
     StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
     TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
 };

@@ -575,7 +575,7 @@ pub(crate) fn overlay_term(
         } => {
             let site = overlay_atom(site, labels)?;
             let ligands = overlay_ligands(ligands, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoAtomAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoAtomForm });
             Ok(quote! { stereo_atom(#site, [ #(#ligands),* ], #ast) })
         }
         Overlay::StereoBond {
@@ -592,7 +592,7 @@ pub(crate) fn overlay_term(
             resolve_bond_ref(labels, name)?;
             let site = name.to_string();
             let ligands = overlay_ligands(ligands, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoBondForm });
             Ok(quote! { stereo_bond(#site, [ #(#ligands),* ], #ast) })
         }
     }

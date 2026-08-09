@@ -118,7 +118,7 @@ fn apply_noncovalent_bond_diff(
     ast
 }
 
-fn apply_stereo_atom_diff(mut ast: StereoAtomAst, diff: Vec<StereoAtomDelta>) -> StereoAtomAst {
+fn apply_stereo_atom_diff(mut ast: StereoAtomForm, diff: Vec<StereoAtomDelta>) -> StereoAtomForm {
     for delta in diff {
         match delta {
             StereoAtomDelta::ModifyField { change, .. } => {
@@ -133,7 +133,7 @@ fn apply_stereo_atom_diff(mut ast: StereoAtomAst, diff: Vec<StereoAtomDelta>) ->
     ast
 }
 
-fn apply_stereo_bond_diff(mut ast: StereoBondAst, diff: Vec<StereoBondDelta>) -> StereoBondAst {
+fn apply_stereo_bond_diff(mut ast: StereoBondForm, diff: Vec<StereoBondDelta>) -> StereoBondForm {
     for delta in diff {
         match delta {
             StereoBondDelta::ModifyField { change, .. } => {

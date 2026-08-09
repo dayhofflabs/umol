@@ -255,7 +255,7 @@ mod tests {
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use crate::ir::stereo::{CisTransStereoForm, StereoBondAst, StereoCoset, StereoKind};
+    use crate::ir::stereo::{CisTransStereoForm, StereoBondForm, StereoCoset, StereoKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -397,7 +397,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })

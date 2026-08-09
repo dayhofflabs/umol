@@ -53,7 +53,7 @@ use crate::ir::ligand::{StereoLigand, StereoLigandKind};
 use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
 use crate::ir::multicenter::MulticenterBondForm;
 use crate::ir::noncovalent::NoncovalentBondForm;
-use crate::ir::stereo::{StereoAtomAst, StereoBondAst};
+use crate::ir::stereo::{StereoAtomForm, StereoBondForm};
 use crate::ir::traits::{FromIr, IntoIr};
 
 /// Surface DSL for a whole molecule. Pairs `MoleculeAst` with `MoleculeMetadata`;
@@ -1232,7 +1232,7 @@ impl MoleculeInput {
         }
 
         // Stereo atoms.
-        let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> =
+        let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> =
             Vec::with_capacity(stereo_atom_entries.len());
         for entry in stereo_atom_entries {
             let site = entry.site.resolve(&context)?;
@@ -1246,7 +1246,7 @@ impl MoleculeInput {
         }
 
         // Stereo bonds.
-        let mut stereo_bond_list: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> =
+        let mut stereo_bond_list: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> =
             Vec::with_capacity(stereo_bond_entries.len());
         for entry in stereo_bond_entries {
             let site = entry.site.resolve(&context)?;

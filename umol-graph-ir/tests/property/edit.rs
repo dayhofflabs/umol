@@ -106,12 +106,12 @@ proptest! {
                     direct.add_stereo_atom(
                         AtomHandle::Id(AtomId(0)),
                         Vec::new(),
-                        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                     );
                     entries.push(Edit::AddStereoAtom {
                         site: AtomHandle::Id(AtomId(0)),
                         ligands: Vec::new(),
-                        ast: StereoAtomAst::new(
+                        ast: StereoAtomForm::new(
                             StereoKind::Tetrahedral,
                             StereoCoset::Lit(0),
                         ),
@@ -122,12 +122,12 @@ proptest! {
                     direct.add_stereo_bond(
                         BondHandle::Id(BondId(0)),
                         Vec::new(),
-                        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                     );
                     entries.push(Edit::AddStereoBond {
                         site: BondHandle::Id(BondId(0)),
                         ligands: Vec::new(),
-                        ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                        ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                     });
                 }
             }
@@ -169,12 +169,12 @@ proptest! {
             direct.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
                 Vec::new(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             ),
             direct.add_stereo_bond(
                 BondHandle::Id(BondId(0)),
                 Vec::new(),
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             ),
         );
         let pushed_next = (
@@ -194,12 +194,12 @@ proptest! {
             pushed.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
                 Vec::new(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             ),
             pushed.add_stereo_bond(
                 BondHandle::Id(BondId(0)),
                 Vec::new(),
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             ),
         );
         let collected_next = (
@@ -219,12 +219,12 @@ proptest! {
             collected.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
                 Vec::new(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             ),
             collected.add_stereo_bond(
                 BondHandle::Id(BondId(0)),
                 Vec::new(),
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             ),
         );
         prop_assert_eq!(&direct_next, &expected);
@@ -326,7 +326,7 @@ proptest! {
                                 (AtomHandle::Id(AtomId(index)), StereoLigandKind::Atom)
                             })
                             .collect(),
-                        StereoAtomAst::new(
+                        StereoAtomForm::new(
                             StereoKind::Tetrahedral,
                             StereoCoset::Lit(1),
                         ),
@@ -340,7 +340,7 @@ proptest! {
                                 (AtomHandle::Id(AtomId(index)), StereoLigandKind::Atom)
                             })
                             .collect(),
-                        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                     );
                 }
             }

@@ -45,13 +45,13 @@ pub(crate) use umol_graph_ir::ir::{
     NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
     NumForm, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst, RelOp,
-    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst, StereoAtomConstraintAst,
-    StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomHandle,
-    StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
-    StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondHandle,
-    StereoBondId, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
-    StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
+    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomConstraintAst,
+    StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
+    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintAst,
+    StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
+    StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationForm,
+    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
     TetrahedralStereoForm, Topicity, TopicityAst, TopicityRelationAst, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
@@ -1301,10 +1301,10 @@ pub(crate) fn stereo_bond_constraints_strategy(
     })
 }
 
-pub(crate) fn stereo_atom_form_strategy() -> impl Strategy<Value = StereoAtomAst> {
+pub(crate) fn stereo_atom_form_strategy() -> impl Strategy<Value = StereoAtomForm> {
     (stereo_atom_kind_strategy(), stereo_coset_strategy()).prop_flat_map(|(kind, coset)| {
         stereo_atom_constraints_strategy(kind)
-            .prop_map(move |cs| StereoAtomAst::new(kind, coset.clone()).with_constraints(cs))
+            .prop_map(move |cs| StereoAtomForm::new(kind, coset.clone()).with_constraints(cs))
     })
 }
 
@@ -1347,10 +1347,10 @@ pub(crate) fn stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomU
     ]
 }
 
-pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondAst> {
+pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondForm> {
     stereo_coset_strategy().prop_flat_map(|coset| {
         stereo_bond_constraints_strategy(StereoKind::CisTrans).prop_map(move |cs| {
-            StereoBondAst::new(StereoKind::CisTrans, coset.clone()).with_constraints(cs)
+            StereoBondForm::new(StereoKind::CisTrans, coset.clone()).with_constraints(cs)
         })
     })
 }
@@ -1397,7 +1397,7 @@ pub(crate) fn stereo_bond_update_strategy() -> impl Strategy<Value = StereoBondU
 pub(crate) fn stereo_atom_entries_strategy(
     atom_count: usize,
     max: usize,
-) -> BoxedStrategy<Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>> {
+) -> BoxedStrategy<Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>> {
     if atom_count == 0 || max == 0 {
         return Just(Vec::new()).boxed();
     }
@@ -1434,7 +1434,7 @@ pub(crate) fn stereo_bond_entries_strategy(
     atom_count: usize,
     bond_count: usize,
     max: usize,
-) -> BoxedStrategy<Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>> {
+) -> BoxedStrategy<Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>> {
     if atom_count == 0 || bond_count == 0 || max == 0 {
         return Just(Vec::new()).boxed();
     }
@@ -2925,7 +2925,7 @@ impl InvalidTransactionBatch {
                         AtomId((index * 2 + 1) as u32),
                         StereoLigandKind::Atom,
                     )],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )
             })
             .collect();
@@ -2937,7 +2937,7 @@ impl InvalidTransactionBatch {
                         StereoLigand::new(AtomId((index * 2) as u32), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId((index * 2 + 1) as u32), StereoLigandKind::Atom),
                     ],
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 )
             })
             .collect();
@@ -3068,7 +3068,7 @@ impl InvalidTransactionBatch {
                                 AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                                 StereoLigandKind::Atom,
                             )],
-                            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                         )
                     })
                     .collect(),
@@ -3095,7 +3095,7 @@ impl InvalidTransactionBatch {
                                     StereoLigandKind::Atom,
                                 ),
                             ],
-                            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                         )
                     })
                     .collect(),
@@ -3310,12 +3310,12 @@ fn transaction_all_entities_molecule() -> MoleculeAst {
         stereo_atoms: vec![(
             AtomId(0),
             ligands.clone(),
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         )],
         stereo_bonds: vec![(
             BondId(0),
             ligands,
-            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         )],
         ..Default::default()
     })
@@ -3572,7 +3572,7 @@ fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
                     .into_iter()
                     .map(|atom| (atom, StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
         },
         Edit::RemoveStereoBonds {
@@ -3583,7 +3583,7 @@ fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
                     .into_iter()
                     .map(|atom| (atom, StereoLigandKind::Atom))
                     .collect(),
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
         },
     ]
@@ -3623,12 +3623,12 @@ fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, 
     let stereo_atom = edits.add_stereo_atom(
         AtomHandle::Id(AtomId(1)),
         ligands.clone(),
-        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
     );
     let stereo_bond = edits.add_stereo_bond(
         BondHandle::Id(BondId(1)),
         ligands,
-        StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
     );
     let source = Constraint::And(vec![
         Constraint::Atom(AtomId(7), AtomConstraintAst::degree(3)),
@@ -3761,7 +3761,7 @@ fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
             (
                 AtomId(*a),
                 vec![StereoLigand::new(AtomId(*b), StereoLigandKind::Atom)],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )
         })
         .collect();
@@ -3775,7 +3775,7 @@ fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
                     StereoLigand::new(AtomId(*a), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(*b), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )
         })
         .collect();
@@ -3891,7 +3891,7 @@ impl ConstraintCompactionCase {
                     StereoAtomHandle::Id(StereoAtomId(0)),
                     AtomHandle::Id(AtomId(0)),
                     vec![(AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom)],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )],
             },
             EntityKind::StereoBond => Edit::RemoveStereoBonds {
@@ -3902,7 +3902,7 @@ impl ConstraintCompactionCase {
                         (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                         (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
                     ],
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 )],
             },
         };
@@ -4538,7 +4538,7 @@ fn unique_ligand_frame(
 /// whose atoms need not be graph neighbors (tier-1 requires only the ligand count for the kind).
 fn stereo_atom_overlay_strategy(
     atom_count: usize,
-) -> BoxedStrategy<Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>> {
+) -> BoxedStrategy<Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>> {
     let degree = StereoKind::Tetrahedral.degree();
     if atom_count * 3 < degree {
         return Just(Vec::new()).boxed();
@@ -4555,7 +4555,7 @@ fn stereo_atom_overlay_strategy(
         entries
             .into_iter()
             .map(|(site, ligands, coset)| {
-                let ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
+                let ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
                 (AtomId(site), ligands, ast)
             })
             .collect()
@@ -4568,7 +4568,7 @@ fn stereo_atom_overlay_strategy(
 fn stereo_bond_overlay_strategy(
     atom_count: usize,
     bond_count: usize,
-) -> BoxedStrategy<Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>> {
+) -> BoxedStrategy<Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>> {
     let degree = StereoKind::CisTrans.degree();
     if bond_count == 0 || atom_count * 3 < degree {
         return Just(Vec::new()).boxed();
@@ -4585,7 +4585,7 @@ fn stereo_bond_overlay_strategy(
         entries
             .into_iter()
             .map(|(site, ligands, coset)| {
-                let ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+                let ast = StereoBondForm::new(StereoKind::CisTrans, coset);
                 (BondId(site), ligands, ast)
             })
             .collect()

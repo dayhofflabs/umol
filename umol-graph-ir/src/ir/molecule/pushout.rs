@@ -17,7 +17,7 @@ use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
 use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::IdRemapping;
-use super::super::stereo::{StereoAtomAst, StereoBondAst};
+use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::super::traits::Lattice;
 use super::{MoleculeAst, MoleculeEntries};
 
@@ -171,7 +171,7 @@ impl MoleculeAst {
             .stereo_atoms
             .pushout(&stereo_atom_right, |a, b| a.meet(b))?;
         let sa_object = &stereo_atom_merged.object;
-        let stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = sa_object
+        let stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> = sa_object
             .relation_ids()
             .map(|id| {
                 (
@@ -192,7 +192,7 @@ impl MoleculeAst {
             .stereo_bonds
             .pushout(&stereo_bond_right, |a, b| a.meet(b))?;
         let sb_object = &stereo_bond_merged.object;
-        let stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = sb_object
+        let stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> = sb_object
             .relation_ids()
             .map(|id| {
                 (
@@ -666,7 +666,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -679,7 +679,7 @@ mod tests {
                     .into_iter()
                     .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomAst::new(StereoKind::Tetrahedral, other_coset),
+                StereoAtomForm::new(StereoKind::Tetrahedral, other_coset),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -753,7 +753,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                StereoBondForm::new(StereoKind::CisTrans, 0u32),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -764,7 +764,7 @@ mod tests {
             stereo_bonds: vec![(
                 BondId(0),
                 other_ligands.to_vec(),
-                StereoBondAst::new(StereoKind::CisTrans, other_coset),
+                StereoBondForm::new(StereoKind::CisTrans, other_coset),
             )],
             constraints: Constraints::new(),
             ..Default::default()

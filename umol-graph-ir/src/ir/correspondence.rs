@@ -533,7 +533,7 @@ mod tests {
     use crate::ir::dative::DativeBondForm;
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::NoncovalentBondForm;
-    use crate::ir::stereo::{StereoAtomAst, StereoBondAst};
+    use crate::ir::stereo::{StereoAtomForm, StereoBondForm};
 
     #[fixture]
     fn correspondence() -> MoleculeCorrespondence {
@@ -815,14 +815,14 @@ mod tests {
                 MoleculeEntries {
                     atoms: atoms.clone(),
                     stereo_atoms: vec![
-                        (AtomId(0), Vec::new(), StereoAtomAst::default()),
-                        (AtomId(0), Vec::new(), StereoAtomAst::default()),
+                        (AtomId(0), Vec::new(), StereoAtomForm::default()),
+                        (AtomId(0), Vec::new(), StereoAtomForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    stereo_atoms: vec![(AtomId(0), Vec::new(), StereoAtomAst::default())],
+                    stereo_atoms: vec![(AtomId(0), Vec::new(), StereoAtomForm::default())],
                     ..Default::default()
                 },
             ),
@@ -831,15 +831,15 @@ mod tests {
                     atoms: atoms.clone(),
                     bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
                     stereo_bonds: vec![
-                        (BondId(0), Vec::new(), StereoBondAst::default()),
-                        (BondId(0), Vec::new(), StereoBondAst::default()),
+                        (BondId(0), Vec::new(), StereoBondForm::default()),
+                        (BondId(0), Vec::new(), StereoBondForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms,
                     bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
-                    stereo_bonds: vec![(BondId(0), Vec::new(), StereoBondAst::default())],
+                    stereo_bonds: vec![(BondId(0), Vec::new(), StereoBondForm::default())],
                     ..Default::default()
                 },
             ),
