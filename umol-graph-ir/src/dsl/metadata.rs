@@ -167,7 +167,7 @@ impl Metadata for MoleculeMetadata {
     }
 }
 
-/// Persistent surface-form metadata paired with a `ReactionAst`.
+/// Persistent surface-form metadata paired with a `Reaction`.
 ///
 /// Contains lhs molecule metadata, entity keywords introduced by deltas, and
 /// reaction-scope atom aliases. Combined lookups search the delta scope before

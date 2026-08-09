@@ -44,7 +44,7 @@ pub(crate) use umol_graph_ir::ir::{
     MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm,
     NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
-    NumForm, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst, RelOp,
+    NumForm, OrientedLigandPermutation, PredExpr, Reaction, ReactionSpanAst, RelOp,
     RelationalConstraint, RingMembershipForm, RingScope, StereoAtomConstraintForm,
     StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
     StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
@@ -2508,7 +2508,7 @@ pub(crate) fn molecule_metadata_with_atom_subset_strategy(
     })
 }
 
-fn added_entities(reaction: &ReactionAst) -> Vec<Entity> {
+fn added_entities(reaction: &Reaction) -> Vec<Entity> {
     reaction
         .deltas
         .iter()
@@ -2565,7 +2565,7 @@ pub(crate) fn reaction_dsl_strategy() -> impl Strategy<Value = ReactionDsl> {
 }
 
 pub(crate) fn invalid_reaction_dsl_parts_strategy(
-) -> impl Strategy<Value = (ReactionAst, ReactionMetadata, MetadataError)> {
+) -> impl Strategy<Value = (Reaction, ReactionMetadata, MetadataError)> {
     prop_oneof![
         comprehensive_reaction_strategy().prop_flat_map(|reaction| {
             invalid_metadata_for(ConstraintCounts::from_ir(&reaction.lhs)).prop_map(
@@ -4264,21 +4264,21 @@ fn simple_molecule_strategy() -> impl Strategy<Value = Molecule> {
         })
 }
 
-pub(crate) fn reaction_strategy() -> impl Strategy<Value = ReactionAst> {
+pub(crate) fn reaction_strategy() -> impl Strategy<Value = Reaction> {
     reaction_over(simple_molecule_strategy())
 }
 
-pub(crate) fn replacement_reaction_strategy() -> impl Strategy<Value = ReactionAst> {
+pub(crate) fn replacement_reaction_strategy() -> impl Strategy<Value = Reaction> {
     (molecule_ast_strategy(), molecule_ast_strategy()).prop_map(|(lhs, rhs)| {
         let correspondence =
             Correspondence::new(Vec::new(), lhs.atoms().count(), rhs.atoms().count())
                 .expect("correspondence producer preserves partial-bijection invariants");
-        ReactionAst::from_sides(lhs, rhs, correspondence)
+        Reaction::from_sides(lhs, rhs, correspondence)
             .expect("an empty atom correspondence uniquely relates replacement sides")
     })
 }
 
-pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<ReactionAst> {
+pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<Reaction> {
     prop_oneof![
         2 => overlay_reaction_strategy(),
         1 => replacement_reaction_strategy(),
@@ -4597,7 +4597,7 @@ fn stereo_bond_overlay_strategy(
 
 /// A reaction whose `lhs` carries DAMN overlays — exercises overlay carry, correspondence, and
 /// co-deletion through compose.
-pub(crate) fn overlay_reaction_strategy() -> impl Strategy<Value = ReactionAst> {
+pub(crate) fn overlay_reaction_strategy() -> impl Strategy<Value = Reaction> {
     reaction_over(overlay_molecule_strategy())
 }
 
@@ -4640,7 +4640,7 @@ fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp
 /// incident bonds, overlays, and stereo entities), per-surviving-entity optional field / relative
 /// edits (the absolute `old` read from `lhs`, so apply's precondition holds), plus up to two new
 /// atoms bonded to the lowest survivor. No dangling by construction.
-fn reaction_over(molecule: impl Strategy<Value = Molecule>) -> impl Strategy<Value = ReactionAst> {
+fn reaction_over(molecule: impl Strategy<Value = Molecule>) -> impl Strategy<Value = Reaction> {
     molecule
         .prop_flat_map(|lhs| {
             let atom_count = lhs.atoms().count();
@@ -4714,7 +4714,7 @@ fn build_reaction(
     additions: Vec<Element>,
     overlay_ops: OverlayOps,
     stereo_ops: StereoOps,
-) -> ReactionAst {
+) -> Reaction {
     let atom_count = lhs.atoms().count();
     let bond_count = lhs.bonds().count();
     let removed_atoms: HashSet<AtomId> = removals
@@ -5044,5 +5044,5 @@ fn build_reaction(
             },
         }));
     }
-    ReactionAst::new(lhs, deltas)
+    Reaction::new(lhs, deltas)
 }

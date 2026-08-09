@@ -17,7 +17,7 @@ pub struct Contradiction;
 #[error("no join: elements have no least upper bound")]
 pub struct NoJoin;
 
-/// Error from applying a reaction onto a host molecule (`ReactionAst::apply_at`).
+/// Error from applying a reaction onto a host molecule (`Reaction::apply_at`).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ApplyError {
     /// DPO gluing condition is violated.

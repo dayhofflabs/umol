@@ -3,7 +3,7 @@
 //! The two concrete molecule sides of a single rule application plus the correspondence between them:
 //! `lhs` is an owned snapshot of the molecule the rule matched, `rhs` is the molecule produced, and
 //! `comap` maps `lhs` → `rhs` (preserved entities matched, deleted `lhs` entities left-unmatched,
-//! created entities right-unmatched). It is the *instance* of a `ReactionAst` (rule : derivation ∷
+//! created entities right-unmatched). It is the *instance* of a `Reaction` (rule : derivation ∷
 //! function : one evaluation) and carries the ground-truth atom correspondence — `apply` created
 //! the atoms, so no post-hoc diff is needed to recover it; `to_reaction` abstracts back to the rule
 //! layer.
@@ -15,7 +15,7 @@ use super::id::AtomId;
 use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
-use super::reaction::ReactionAst;
+use super::reaction::Reaction;
 
 /// A reaction fired once at a match: its two concrete molecule sides (`lhs` ⇒ `rhs`) plus the
 /// correspondence between them.
@@ -53,9 +53,9 @@ impl ReactionDerivation {
     }
 
     /// Abstract back to the rule layer: `lhs` as the reaction's `lhs` plus the deltas taking it to
-    /// `rhs` under the known comap. Inverse of `ReactionAst::apply`, up to delta normal form.
-    pub fn to_reaction(&self) -> ReactionAst {
-        ReactionAst::new(
+    /// `rhs` under the known comap. Inverse of `Reaction::apply`, up to delta normal form.
+    pub fn to_reaction(&self) -> Reaction {
+        Reaction::new(
             self.lhs.clone(),
             self.lhs
                 .difference_to(&self.rhs, &self.comap)
@@ -200,7 +200,7 @@ mod tests {
         let derivation = ReactionDerivation::new(lhs, rhs, comap);
         assert_eq!(
             derivation.to_reaction(),
-            ReactionAst::new(
+            Reaction::new(
                 expected_lhs,
                 Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),

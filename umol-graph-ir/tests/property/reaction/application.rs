@@ -41,7 +41,7 @@ proptest! {
         let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
         let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
         let atom_deltas = AtomDelta::for_update(AtomId(0), &pattern_atom, &effective_update);
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::default()],
                 ..Default::default()
@@ -80,7 +80,7 @@ proptest! {
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
         let bond_deltas = BondDelta::for_update(BondId(0), &pattern_bond, &effective_update);
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
@@ -126,7 +126,7 @@ proptest! {
             &pattern_bond,
             &effective_update,
         );
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
@@ -173,7 +173,7 @@ proptest! {
             &pattern_system,
             &effective_update,
         );
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -232,7 +232,7 @@ proptest! {
             &pattern_bond,
             &effective_update,
         );
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -290,7 +290,7 @@ proptest! {
             &pattern_bond,
             &effective_update,
         );
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
@@ -352,7 +352,7 @@ proptest! {
             AtomForm::from_element(Element::O),
             AtomForm::from_element(Element::F),
         ];
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
                 stereo_atoms: vec![(AtomId(0), ligands.clone(), pattern_atom.clone())],
@@ -415,7 +415,7 @@ proptest! {
             AtomForm::from_element(Element::F),
         ];
         let bonds = vec![(AtomId(0), AtomId(1), BondForm::from_order(2))];
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
                 bonds: bonds.clone(),
@@ -509,7 +509,7 @@ proptest! {
             stereo_atoms: vec![(AtomId(0), rule_frame.clone(), old_ast.clone())],
             ..Default::default()
         });
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             lhs,
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
@@ -578,7 +578,7 @@ proptest! {
             stereo_atoms: vec![(AtomId(0), rule_frame.clone(), rule_ast.clone())],
             ..Default::default()
         });
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             lhs,
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
                 id: StereoAtomId(0),
@@ -647,7 +647,7 @@ proptest! {
             stereo_bonds: vec![(BondId(0), rule_frame.clone(), old_ast.clone())],
             ..Default::default()
         });
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             lhs,
             Deltas::from_iter([Delta::StereoBond(StereoBondDelta::ModifyField {
                 id: StereoBondId(0),
@@ -721,7 +721,7 @@ proptest! {
             stereo_bonds: vec![(BondId(0), rule_frame.clone(), rule_ast.clone())],
             ..Default::default()
         });
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             lhs,
             Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Remove {
                 id: StereoBondId(0),

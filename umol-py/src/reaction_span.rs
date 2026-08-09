@@ -309,7 +309,7 @@ mod tests {
         MulticenterBondForm as GraphIrMulticenterBondForm,
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
-        ReactionAst as GraphIrReactionAst, StereoAtomForm as GraphIrStereoAtomForm,
+        Reaction as GraphIrReaction, StereoAtomForm as GraphIrStereoAtomForm,
         StereoBondForm as GraphIrStereoBondForm, StereoCoset as GraphIrStereoCoset,
         StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
         StereoLigandKind as GraphIrStereoLigandKind,
@@ -975,7 +975,7 @@ mod tests {
                 r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
                     .parse()
                     .unwrap();
-            let expected: GraphIrReactionAst = span.to_reaction();
+            let expected: GraphIrReaction = span.to_reaction();
 
             assert_eq!(
                 ReactionSpanAst::from_rust(span)

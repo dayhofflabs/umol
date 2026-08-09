@@ -1674,7 +1674,7 @@ mod tests {
     use crate::ir::edit::BondFieldChange;
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::molecule::{Molecule, MoleculeEntries};
-    use crate::ir::reaction::ReactionAst;
+    use crate::ir::reaction::Reaction;
     use crate::ir::value::NumForm;
     use crate::ir::MoleculeCorrespondence;
 
@@ -1758,7 +1758,7 @@ mod tests {
 
     // Modified bond + Unchanged atoms + Unchanged molecule-constraint.
     #[rstest]
-    #[case::modify(ReactionAst::new(
+    #[case::modify(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -1771,7 +1771,7 @@ mod tests {
         })]),
     ))]
     // Unchanged / Removed / Added atoms and bonds + an Added constraint.
-    #[case::add_remove(ReactionAst::new(
+    #[case::add_remove(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -1795,7 +1795,7 @@ mod tests {
             )),
         ]),
     ))]
-    fn test_reaction_span_dsl_from_ast(#[case] reaction: ReactionAst) {
+    fn test_reaction_span_dsl_from_ast(#[case] reaction: Reaction) {
         let span = reaction.to_reaction_span().unwrap();
         let cfg = MoleculeDefaults::default();
         assert_eq!(ReactionSpanDsl::from_ir(&span, &cfg).into_ir(&cfg), span);

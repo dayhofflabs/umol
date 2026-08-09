@@ -10,7 +10,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, Molecule, NumForm,
-    ReactionAst, RingConfig,
+    Reaction, RingConfig,
 };
 use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -25,10 +25,10 @@ fn benzene() -> Molecule {
 }
 
 #[fixture]
-fn ethanol_deoxygenation(ethanol: Molecule) -> ReactionAst {
+fn ethanol_deoxygenation(ethanol: Molecule) -> Reaction {
     let oxygen = ethanol.atom(AtomId(2)).ast.clone();
     let bond = ethanol.bond(BondId(1)).ast.clone();
-    ReactionAst::new(
+    Reaction::new(
         ethanol,
         Deltas::from_iter([
             Delta::Atom(AtomDelta::Remove {
@@ -269,7 +269,7 @@ fn test_substructure_featurizer_featurize_error() {
 }
 
 #[rstest]
-fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
+fn test_featurize_reaction_difference(ethanol_deoxygenation: Reaction) {
     let fingerprint = featurize_reaction(
         &ethanol_deoxygenation,
         &Featurizer::Morgan(MorganFeaturizer {
@@ -301,11 +301,11 @@ fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
 
 #[rstest]
 #[case::non_ground(
-    ReactionAst::new(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Deltas::new()),
+    Reaction::new(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Deltas::new()),
     FingerprintError::NotGround
 )]
 #[case::inconsistent(
-    ReactionAst::new(
+    Reaction::new(
         mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
         Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
             id: AtomId(0),
@@ -317,10 +317,7 @@ fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
     ),
     FingerprintError::Inconsistent
 )]
-fn test_featurize_reaction_error(
-    #[case] reaction: ReactionAst,
-    #[case] expected: FingerprintError,
-) {
+fn test_featurize_reaction_error(#[case] reaction: Reaction, #[case] expected: FingerprintError) {
     assert_eq!(
         featurize_reaction(
             &reaction,
@@ -333,7 +330,7 @@ fn test_featurize_reaction_error(
 }
 
 #[rstest]
-fn test_featurize_reaction_disjoint_union(ethanol_deoxygenation: ReactionAst) {
+fn test_featurize_reaction_disjoint_union(ethanol_deoxygenation: Reaction) {
     let fingerprint = featurize_reaction(
         &ethanol_deoxygenation,
         &Featurizer::Morgan(MorganFeaturizer::new(1)),

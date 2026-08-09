@@ -49,7 +49,7 @@ pub enum DpoContradiction {
 pub enum DpoError {}
 
 impl DpoValidator {
-    /// Over a `ReactionAst`: every lhs bond/overlay incident to a deleted atom must also be deleted.
+    /// Over a `Reaction`: every lhs bond/overlay incident to a deleted atom must also be deleted.
     /// Over a reaction's LHS and deltas: every LHS bond or overlay incident to a deleted atom must
     /// also be deleted.
     pub fn validate_reaction(
@@ -145,11 +145,11 @@ mod tests {
     use super::super::super::molecule::{Molecule, MoleculeEntries};
     use super::super::super::multicenter::MulticenterBondForm;
     use super::super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use super::super::super::reaction::ReactionAst;
+    use super::super::super::reaction::Reaction;
     use super::*;
 
     #[rstest]
-    #[case::co_deleted(ReactionAst::new(
+    #[case::co_deleted(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -164,7 +164,7 @@ mod tests {
             }),
         ]),
     ))]
-    #[case::no_deletion(ReactionAst::new(
+    #[case::no_deletion(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -172,7 +172,7 @@ mod tests {
         }),
         Deltas::new(),
     ))]
-    #[case::isolated_atom(ReactionAst::new(
+    #[case::isolated_atom(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             bonds: vec![],
@@ -183,7 +183,7 @@ mod tests {
             ast: AtomForm::from_element(Element::C),
         })]),
     ))]
-    fn test_dpo_validator_validate_reaction(#[case] reaction: ReactionAst) {
+    fn test_dpo_validator_validate_reaction(#[case] reaction: Reaction) {
         assert_eq!(
             DpoValidator
                 .validate_reaction(&reaction.lhs, &reaction.deltas)
@@ -194,7 +194,7 @@ mod tests {
 
     #[rstest]
     #[case::bond(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -208,7 +208,7 @@ mod tests {
         DpoContradiction::DanglingBond { atom: AtomId(0), bond: BondId(0) }
     )]
     #[case::dative(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::B)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
@@ -223,7 +223,7 @@ mod tests {
         DpoContradiction::DanglingDativeBond { atom: AtomId(0), dative: DativeBondId(0) }
     )]
     #[case::aromatic(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
                 aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::from_electrons(vec![1, 2]))],
@@ -238,7 +238,7 @@ mod tests {
         DpoContradiction::DanglingAromaticSystem { atom: AtomId(0), system: AromaticSystemId(0) }
     )]
     #[case::multicenter(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::B),
@@ -257,7 +257,7 @@ mod tests {
         DpoContradiction::DanglingMulticenterBond { atom: AtomId(0), multicenter: MulticenterBondId(0) }
     )]
     #[case::noncovalent(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
@@ -272,7 +272,7 @@ mod tests {
         DpoContradiction::DanglingNoncovalentBond { atom: AtomId(0), noncovalent: NoncovalentBondId(0) }
     )]
     fn test_dpo_validator_validate_reaction_error(
-        #[case] reaction: ReactionAst,
+        #[case] reaction: Reaction,
         #[case] expected: DpoContradiction,
     ) {
         assert_eq!(

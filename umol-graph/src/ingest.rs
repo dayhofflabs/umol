@@ -4,7 +4,7 @@ use std::any::Any;
 
 use thiserror::Error;
 use umol_graph_core::Correspondence;
-use umol_graph_ir::ir::{AtomId, Molecule, ReactionAst, TryIntoIr};
+use umol_graph_ir::ir::{AtomId, Molecule, Reaction, TryIntoIr};
 use umol_io::smiles::{ParseError as SmilesParseError, ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
 use umol_io::table_ir::Molecule as TableMolecule;
@@ -64,7 +64,7 @@ pub enum ReactionInterpretationError {
         reactant_count: usize,
         product_count: usize,
     },
-    #[error("reaction agents cannot be represented in ReactionAst")]
+    #[error("reaction agents cannot be represented in Reaction")]
     AgentsUnsupported,
 }
 
@@ -148,7 +148,7 @@ impl Interpret for Smiles {
 }
 
 impl Interpret for ReactionSmiles {
-    type Output = ReactionAst;
+    type Output = Reaction;
     type Error = ReactionInterpretationError;
 
     fn interpret(
@@ -183,7 +183,7 @@ impl Interpret for ReactionSmiles {
             Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count())
                 .expect("correspondence producer preserves partial-bijection invariants");
 
-        Ok(ReactionAst::from_sides(lhs, rhs, atom_correspondence)
+        Ok(Reaction::from_sides(lhs, rhs, atom_correspondence)
             .expect("interpreted reaction sides preserve unique entity incidence"))
     }
 }
@@ -227,12 +227,12 @@ pub fn ingest_smiles_bytes_with(
 }
 
 /// Ingest reaction SMILES text with the OpenSMILES configuration and default model.
-pub fn ingest_reaction_smiles(input: &str) -> Result<ReactionAst, ReactionSmilesInputError> {
+pub fn ingest_reaction_smiles(input: &str) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes(input.as_bytes())
 }
 
 /// Ingest reaction SMILES bytes with the OpenSMILES configuration and default model.
-pub fn ingest_reaction_smiles_bytes(input: &[u8]) -> Result<ReactionAst, ReactionSmilesInputError> {
+pub fn ingest_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes_with(
         input,
         &SmilesIoConfig::opensmiles(),
@@ -247,7 +247,7 @@ pub fn ingest_reaction_smiles_with(
     io_config: &SmilesIoConfig,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<ReactionAst, ReactionSmilesInputError> {
+) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes_with(input.as_bytes(), io_config, model, resolve_config)
 }
 
@@ -257,7 +257,7 @@ pub fn ingest_reaction_smiles_bytes_with(
     io_config: &SmilesIoConfig,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<ReactionAst, ReactionSmilesInputError> {
+) -> Result<Reaction, ReactionSmilesInputError> {
     let reaction_smiles = ReactionSmiles::parse_bytes_with(input, io_config)?;
     reaction_smiles
         .interpret(model, resolve_config)
@@ -347,7 +347,7 @@ mod tests {
     )]
     #[case::agents_unsupported(
         ReactionInterpretationError::AgentsUnsupported,
-        "reaction agents cannot be represented in ReactionAst",
+        "reaction agents cannot be represented in Reaction",
         None
     )]
     fn test_reaction_interpretation_error(
@@ -476,8 +476,8 @@ mod tests {
         ReactionSmilesInputError::Interpretation(
             ReactionInterpretationError::AgentsUnsupported,
         ),
-        "reaction agents cannot be represented in ReactionAst",
-        vec!["reaction agents cannot be represented in ReactionAst"],
+        "reaction agents cannot be represented in Reaction",
+        vec!["reaction agents cannot be represented in Reaction"],
     )]
     fn test_reaction_smiles_input_error(
         #[case] error: ReactionSmilesInputError,
@@ -564,7 +564,7 @@ mod tests {
         "[CH4:1].[OH2:2]>>[OH2:2].[CH4:1]",
         r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!" "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
     )]
-    fn test_reaction_smiles_interpret(#[case] input: &str, #[case] expected: ReactionAst) {
+    fn test_reaction_smiles_interpret(#[case] input: &str, #[case] expected: Reaction) {
         let reaction = ReactionSmiles::parse(input).unwrap();
 
         assert_eq!(
@@ -1279,7 +1279,7 @@ mod tests {
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Result<ReactionAst, ReactionSmilesInputError>,
+        #[case] expected: Result<Reaction, ReactionSmilesInputError>,
     ) {
         assert_eq!(
             ingest_reaction_smiles_with(input, &io_config, &model, &resolve_config),

@@ -4,7 +4,7 @@
 //! computes counts difference (product minus reactant); `DisjointUnion` side-tags
 //! each feature and unions both sides.
 
-use umol_graph_ir::ir::ReactionAst;
+use umol_graph_ir::ir::Reaction;
 
 use super::feature_set::{FeatureSet, SignedFeatureSet};
 use super::featurizer::{Featurizer, FingerprintError};
@@ -34,7 +34,7 @@ pub enum ReactionFingerprint {
 /// product (`to_reaction_span().rhs()`), then combining per `combinator`.
 /// `Inconsistent` if the deltas cannot be resolved to a product.
 pub fn featurize_reaction(
-    reaction: &ReactionAst,
+    reaction: &Reaction,
     featurizer: &Featurizer,
     combinator: ReactionCombinator,
 ) -> Result<ReactionFingerprint, FingerprintError> {
@@ -64,7 +64,7 @@ pub fn featurize_reaction(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, ReactionAst};
+    use umol_graph_ir::ir::{AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, Reaction};
 
     use super::*;
     use crate::fingerprint::{Featurizer, MorganFeaturizer};
@@ -76,7 +76,7 @@ mod tests {
     // Identity reaction (no deltas): every feature count cancels, so the difference is empty.
     #[rstest]
     fn test_featurize_reaction_difference_identity() {
-        let reaction = ReactionAst::new(ingest_smiles("CCO").unwrap(), Deltas::new());
+        let reaction = Reaction::new(ingest_smiles("CCO").unwrap(), Deltas::new());
         let featurizer = Featurizer::Morgan(MorganFeaturizer::new(1));
         let fingerprint =
             featurize_reaction(&reaction, &featurizer, ReactionCombinator::Difference).unwrap();
@@ -93,7 +93,7 @@ mod tests {
         let lhs = ingest_smiles("CCO").unwrap();
         let oxygen = lhs.atom(AtomId(2)).ast.clone();
         let bond = lhs.bond(BondId(1)).ast.clone();
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             lhs,
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove {
@@ -122,7 +122,7 @@ mod tests {
     // exactly the molecule's features once as Reactant and once as Product.
     #[rstest]
     fn test_featurize_reaction_disjoint_union() {
-        let reaction = ReactionAst::new(ingest_smiles("CCO").unwrap(), Deltas::new());
+        let reaction = Reaction::new(ingest_smiles("CCO").unwrap(), Deltas::new());
         let featurizer = Featurizer::Morgan(MorganFeaturizer::new(1));
         let single = featurizer
             .featurize(&ingest_smiles("CCO").unwrap())

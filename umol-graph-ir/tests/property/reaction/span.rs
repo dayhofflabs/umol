@@ -11,7 +11,7 @@ use umol_chem::element::Element;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondId, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries,
-    ReactionAst, ReactionSpanAst, ReactionSpanEntries, StereoLigand,
+    Reaction, ReactionSpanAst, ReactionSpanEntries, StereoLigand,
 };
 
 use crate::strategies::{
@@ -389,7 +389,7 @@ proptest! {
     /// reindexed into that frame; a total induced correspondence establishes framed equivalence.
     #[test]
     fn test_reaction_ast_from_sides_partial(sides in crossing_reaction_sides_strategy()) {
-        let reaction = ReactionAst::from_sides(
+        let reaction = Reaction::from_sides(
             sides.lhs.clone(),
             sides.rhs.clone(),
             sides.atom_correspondence,

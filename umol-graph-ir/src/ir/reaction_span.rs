@@ -41,7 +41,7 @@ use super::molecule::{
 };
 use super::multicenter::MulticenterBondForm;
 use super::noncovalent::NoncovalentBondForm;
-use super::reaction::ReactionAst;
+use super::reaction::Reaction;
 use super::remap::IdRemapping;
 use super::stereo::{StereoAtomForm, StereoBondForm};
 use super::traits::{Canonicalize, EntityPatch};
@@ -1090,11 +1090,11 @@ impl ReactionSpanAst {
         self.project(Side::Right)
     }
 
-    /// Recover the operational `ReactionAst` from the span — the inverse of
-    /// `ReactionAst::to_reaction_span`, up to delta normal form. The reaction's `lhs` is `self.lhs()`
+    /// Recover the operational `Reaction` from the span — the inverse of
+    /// `Reaction::to_reaction_span`, up to delta normal form. The reaction's `lhs` is `self.lhs()`
     /// (which preserves the original lhs id space); each entity's `EntitySpan` yields its delta, a
     /// `Modified` one via an AST-diff of its left/right values.
-    pub fn to_reaction(&self) -> ReactionAst {
+    pub fn to_reaction(&self) -> Reaction {
         let mut deltas = Deltas::new();
         AtomDelta::append_deltas_from_states(&self.atoms, |_| (), &mut deltas);
         BondDelta::append_deltas_from_states(
@@ -1243,7 +1243,7 @@ impl ReactionSpanAst {
                 ConstraintSpan::Unchanged(_) => {}
             }
         }
-        ReactionAst::new(self.lhs(), deltas)
+        Reaction::new(self.lhs(), deltas)
     }
 
     /// Project one `Side` into flat molecule entries. Every selected entity is retained. References
@@ -1442,7 +1442,7 @@ fn entity_side<T>(span: &EntitySpan<T>, side: Side) -> Option<&T> {
     }
 }
 
-impl ReactionAst {
+impl Reaction {
     /// Materialize the superimposed reaction span. Canonicalizes the deltas, then annotates
     /// each `lhs` entity (in its own id space) with its before/after state — `Removed` /
     /// `Added` / `Modified` / `Unchanged` — appending created entities. A `Modified` entity's
@@ -1950,7 +1950,7 @@ impl ReactionAst {
     /// The reverse reaction: the product becomes the reactant and every delta is inverted and
     /// re-anchored to the product's (compacted) id space. `reverse().to_reaction_span()` swaps the
     /// sides of `self`'s span. `Err(Contradiction)` if the deltas are inconsistent.
-    pub fn reverse(&self) -> Result<ReactionAst, Contradiction> {
+    pub fn reverse(&self) -> Result<Reaction, Contradiction> {
         let deltas = self.deltas.clone().canonicalize()?;
         let new_lhs = self.to_reaction_span()?.rhs();
         let atom_count = self.lhs.atoms().count();
@@ -2052,7 +2052,7 @@ impl ReactionAst {
             .iter()
             .map(|delta| remap_delta(delta.clone().inverse(), &remapping))
             .collect();
-        Ok(ReactionAst::new(new_lhs, reversed))
+        Ok(Reaction::new(new_lhs, reversed))
     }
 }
 
@@ -2819,7 +2819,7 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_to_reaction_span() {
         assert_eq!(
-            ReactionAst::new(
+            Reaction::new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![
                         AtomForm::from_element(Element::C),
@@ -3106,7 +3106,7 @@ mod tests {
 
     #[rstest]
     #[case::constraint(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -3156,7 +3156,7 @@ mod tests {
         }),
     )]
     fn test_reaction_ast_to_reaction_span_constraint(
-        #[case] reaction: ReactionAst,
+        #[case] reaction: Reaction,
         #[case] expected: ReactionSpanAst,
     ) {
         assert_eq!(reaction.to_reaction_span(), Ok(expected));
@@ -3167,7 +3167,7 @@ mod tests {
         let constraint = Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),
         });
-        let reaction = ReactionAst::new(
+        let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -3196,7 +3196,7 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_to_reaction_span_error() {
         assert_eq!(
-            ReactionAst::new(
+            Reaction::new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![
                         AtomForm::from_element(Element::C),
@@ -3219,7 +3219,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_right(substitution_reaction: ReactionAst) {
+    fn test_reaction_span_ast_right(substitution_reaction: Reaction) {
         let span = substitution_reaction.to_reaction_span().unwrap();
         assert_eq!(
             span.atoms(),
@@ -3250,7 +3250,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_left(substitution_reaction: ReactionAst) {
+    fn test_reaction_span_ast_left(substitution_reaction: Reaction) {
         let span = substitution_reaction.to_reaction_span().unwrap();
         assert_eq!(
             span.lhs(),
@@ -3267,7 +3267,7 @@ mod tests {
 
     #[rstest]
     #[case::order_change(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -3302,7 +3302,7 @@ mod tests {
         }),
     )]
     #[case::substitution(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -3350,7 +3350,7 @@ mod tests {
         }),
     )]
     #[case::stereo_atom(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -3418,7 +3418,7 @@ mod tests {
         }),
     )]
     fn test_reaction_ast_reverse(
-        #[case] forward: ReactionAst,
+        #[case] forward: Reaction,
         #[case] expected_reactant: Molecule,
         #[case] expected_product: Molecule,
     ) {
@@ -3480,7 +3480,7 @@ mod tests {
 
     #[rstest]
     #[case::unchanged(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -3492,7 +3492,7 @@ mod tests {
         vec![ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
     )]
     #[case::added(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -3505,7 +3505,7 @@ mod tests {
         vec![ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
     )]
     #[case::removed(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -3519,7 +3519,7 @@ mod tests {
         vec![ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
     )]
     fn test_reaction_span_ast_constraints(
-        #[case] reaction: ReactionAst,
+        #[case] reaction: Reaction,
         #[case] expected: Vec<ConstraintSpan>,
     ) {
         assert_eq!(
@@ -3529,7 +3529,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add(ReactionAst::new(
+    #[case::add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -3539,7 +3539,7 @@ mod tests {
             Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
         ))]),
     ))]
-    #[case::remove(ReactionAst::new(
+    #[case::remove(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -3550,7 +3550,7 @@ mod tests {
             Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
         ))]),
     ))]
-    #[case::dative_add(ReactionAst::new(
+    #[case::dative_add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
@@ -3567,7 +3567,7 @@ mod tests {
             ast: DativeBondForm::from_order(1),
         })]),
     ))]
-    #[case::aromatic_add(ReactionAst::new(
+    #[case::aromatic_add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
             bonds: vec![],
@@ -3579,7 +3579,7 @@ mod tests {
             ast: AromaticSystemForm::from_electrons(vec![1, 2]),
         })]),
     ))]
-    #[case::multicenter_add(ReactionAst::new(
+    #[case::multicenter_add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::B),
@@ -3595,7 +3595,7 @@ mod tests {
             ast: MulticenterBondForm::from_electrons(vec![3, 5, 7]),
         })]),
     ))]
-    #[case::noncovalent_add(ReactionAst::new(
+    #[case::noncovalent_add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
             bonds: vec![],
@@ -3607,7 +3607,7 @@ mod tests {
             ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         })]),
     ))]
-    #[case::noncovalent_remove(ReactionAst::new(
+    #[case::noncovalent_remove(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
             noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
@@ -3620,7 +3620,7 @@ mod tests {
             ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         })]),
     ))]
-    #[case::noncovalent_modify(ReactionAst::new(
+    #[case::noncovalent_modify(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
             noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
@@ -3635,7 +3635,7 @@ mod tests {
             },
         })]),
     ))]
-    #[case::stereo_atom_add(ReactionAst::new(
+    #[case::stereo_atom_add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -3659,7 +3659,7 @@ mod tests {
             ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         })]),
     ))]
-    #[case::stereo_atom_remove(ReactionAst::new(
+    #[case::stereo_atom_remove(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -3693,7 +3693,7 @@ mod tests {
             ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         })]),
     ))]
-    #[case::stereo_atom_modify(ReactionAst::new(
+    #[case::stereo_atom_modify(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -3723,7 +3723,7 @@ mod tests {
             },
         })]),
     ))]
-    #[case::stereo_bond_add(ReactionAst::new(
+    #[case::stereo_bond_add(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -3748,7 +3748,7 @@ mod tests {
             ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         })]),
     ))]
-    fn test_reaction_span_ast_to_reaction(#[case] reaction: ReactionAst) {
+    fn test_reaction_span_ast_to_reaction(#[case] reaction: Reaction) {
         assert_eq!(
             reaction.clone().to_reaction_span().unwrap().to_reaction(),
             reaction,
@@ -3757,7 +3757,7 @@ mod tests {
 
     #[rstest]
     #[case::unchanged(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
@@ -3780,7 +3780,7 @@ mod tests {
         }),
     )]
     #[case::added(
-        ReactionAst::new(
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
                 bonds: vec![],
@@ -3805,7 +3805,7 @@ mod tests {
         }),
     )]
     fn test_reaction_span_ast_project_overlay(
-        #[case] reaction: ReactionAst,
+        #[case] reaction: Reaction,
         #[case] expected_left: Molecule,
         #[case] expected_right: Molecule,
     ) {
@@ -3818,8 +3818,8 @@ mod tests {
 
     // C-O with atom 1 (O) and its bond removed, replaced by a new N (atom 2) bonded to C.
     #[fixture]
-    fn substitution_reaction() -> ReactionAst {
-        ReactionAst::new(
+    fn substitution_reaction() -> Reaction {
+        Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),

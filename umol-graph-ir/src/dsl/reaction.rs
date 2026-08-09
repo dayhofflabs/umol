@@ -1,6 +1,6 @@
 //! Reaction DSL.
 //!
-//! `ReactionDsl` wraps a `ReactionAst` together with the `ReactionMetadata` that records
+//! `ReactionDsl` wraps a `Reaction` together with the `ReactionMetadata` that records
 //! the surface-form bindings (the lhs molecule metadata plus created-entity keywords and
 //! atom-alias bindings). The EDN form is a map keyed by `:lhs` (a molecule map) and
 //! `:deltas` (a vector of `:add` / `:remove` / `:modify` / `:constraint` operations). Each
@@ -68,7 +68,7 @@ use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ir::reaction::ReactionAst;
+use crate::ir::reaction::Reaction;
 use crate::ir::stereo::{StereoConfigurationForm, StereoConfigurationUpdate};
 use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::{
@@ -76,17 +76,17 @@ use crate::ir::{
     StereoAtomUpdate, StereoBondUpdate, StereoKind, StereoLigand,
 };
 
-/// Surface DSL for a reaction. Pairs `ReactionAst` with `ReactionMetadata`; fields are
+/// Surface DSL for a reaction. Pairs `Reaction` with `ReactionMetadata`; fields are
 /// private so metadata cannot drift onto a different AST.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionDsl {
-    ast: ReactionAst,
+    ast: Reaction,
     metadata: ReactionMetadata,
 }
 
 impl ReactionDsl {
     /// Pair a reaction AST with coherent lhs and delta surface metadata.
-    pub fn new(ast: ReactionAst, metadata: ReactionMetadata) -> Result<Self, MetadataError> {
+    pub fn new(ast: Reaction, metadata: ReactionMetadata) -> Result<Self, MetadataError> {
         for (entity, _) in metadata.lhs().iter_keywords() {
             let contains = match entity {
                 Entity::Atom(id) => ast.lhs.atoms().contains(id),
@@ -141,11 +141,11 @@ impl ReactionDsl {
         Ok(Self::from_parts(ast, metadata))
     }
 
-    fn from_parts(ast: ReactionAst, metadata: ReactionMetadata) -> Self {
+    fn from_parts(ast: Reaction, metadata: ReactionMetadata) -> Self {
         Self { ast, metadata }
     }
 
-    pub fn ast(&self) -> &ReactionAst {
+    pub fn ast(&self) -> &Reaction {
         &self.ast
     }
 
@@ -153,15 +153,15 @@ impl ReactionDsl {
         &self.metadata
     }
 
-    pub fn into_parts(self) -> (ReactionAst, ReactionMetadata) {
+    pub fn into_parts(self) -> (Reaction, ReactionMetadata) {
         (self.ast, self.metadata)
     }
 }
 
-impl FromIr<ReactionAst> for ReactionDsl {
+impl FromIr<Reaction> for ReactionDsl {
     type Ctx = ReactionDefaults;
 
-    fn from_ir(ast: &ReactionAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &Reaction, cfg: &Self::Ctx) -> Self {
         let lhs = MoleculeDsl::from_ir(&ast.lhs, &cfg.molecule_defaults())
             .into_parts()
             .0;
@@ -171,17 +171,17 @@ impl FromIr<ReactionAst> for ReactionDsl {
             lower_delta(delta, &delta_cfg);
         }
         ReactionDsl {
-            ast: ReactionAst { lhs, deltas },
+            ast: Reaction { lhs, deltas },
             metadata: ReactionMetadata::default(),
         }
     }
 }
 
-impl IntoIr<ReactionAst> for ReactionDsl {
+impl IntoIr<Reaction> for ReactionDsl {
     type Ctx = ReactionDefaults;
 
-    fn into_ir(self, cfg: &Self::Ctx) -> ReactionAst {
-        let ReactionAst { lhs, mut deltas } = self.ast;
+    fn into_ir(self, cfg: &Self::Ctx) -> Reaction {
+        let Reaction { lhs, mut deltas } = self.ast;
         let lhs = MoleculeDsl::new(lhs, MoleculeMetadata::default())
             .expect("empty metadata is coherent")
             .into_ir(&cfg.molecule_defaults());
@@ -189,7 +189,7 @@ impl IntoIr<ReactionAst> for ReactionDsl {
         for delta in deltas.iter_mut() {
             raise_delta(delta, &delta_cfg);
         }
-        ReactionAst { lhs, deltas }
+        Reaction { lhs, deltas }
     }
 }
 
@@ -287,7 +287,7 @@ impl ReactionContext {
     /// The context of an already-resolved reaction: the lhs molecule context plus every entity
     /// an `Add` delta introduces, registered anonymously with its participants in delta order (which
     /// reproduces the per-kind delta ids). Refs resolve against it as they did at parse time.
-    pub fn from_ir(reaction: &ReactionAst) -> Self {
+    pub fn from_ir(reaction: &Reaction) -> Self {
         let free = "anonymous delta entity registration never collides";
         let mut context = Self::new(MoleculeContext::from_ir(&reaction.lhs));
         for delta in reaction.deltas.iter() {
@@ -670,7 +670,7 @@ pub(crate) enum DeltaInput {
 }
 
 /// Raw parse target for a reaction: the lhs molecule input plus the unresolved
-/// deltas. Resolution (`into_ir`, R7) lifts this to `(ReactionAst, ReactionMetadata)`.
+/// deltas. Resolution (`into_ir`, R7) lifts this to `(Reaction, ReactionMetadata)`.
 #[derive(Debug, PartialEq)]
 pub(crate) struct ReactionInput {
     lhs: MoleculeInput,
@@ -679,7 +679,7 @@ pub(crate) struct ReactionInput {
 }
 
 impl ReactionInput {
-    pub(crate) fn into_ir(self) -> Result<(ReactionAst, ReactionMetadata), ParseError> {
+    pub(crate) fn into_ir(self) -> Result<(Reaction, ReactionMetadata), ParseError> {
         let ReactionInput {
             lhs,
             atom_aliases,
@@ -1126,7 +1126,7 @@ impl ReactionInput {
         }
         let metadata = context.into_metadata();
         Ok((
-            ReactionAst {
+            Reaction {
                 lhs,
                 deltas: resolved,
             },
@@ -1173,7 +1173,7 @@ impl Display for ReactionDsl {
     }
 }
 
-impl<'de> FromEdn<'de> for ReactionAst {
+impl<'de> FromEdn<'de> for Reaction {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         ReactionDsl::from_edn(edn).map(|dsl| dsl.into_parts().0)
     }
@@ -1183,7 +1183,7 @@ impl<'de> FromEdn<'de> for ReactionAst {
     }
 }
 
-impl FromStr for ReactionAst {
+impl FromStr for Reaction {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -1191,16 +1191,16 @@ impl FromStr for ReactionAst {
     }
 }
 
-impl Display for ReactionAst {
+impl Display for Reaction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_edn())
     }
 }
 
-/// Direct EDN rendering for `ReactionAst`. The lhs and refs emit canonical positional
+/// Direct EDN rendering for `Reaction`. The lhs and refs emit canonical positional
 /// form (no entity keywords, no aliases) since the AST carries no metadata. For keyword/alias-bearing
 /// surface output, wrap in [`ReactionDsl`] with the appropriate [`ReactionMetadata`].
-impl ToEdn for ReactionAst {
+impl ToEdn for Reaction {
     fn to_edn(&self) -> Edn<'static> {
         render_reaction_edn(self, &ReactionMetadata::default())
     }
@@ -1981,7 +1981,7 @@ fn parse_delta_constraint_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
 
 /// Render a reaction to its EDN map: `:lhs` (the molecule via the molecule renderer), `:deltas`, and
 /// `:atom-aliases` (reaction-level, when present). Aliases render last, as in the molecule surface.
-fn render_reaction_edn(ast: &ReactionAst, meta: &ReactionMetadata) -> Edn<'static> {
+fn render_reaction_edn(ast: &Reaction, meta: &ReactionMetadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(3);
     map.insert(
         Edn::keyword("lhs"),
@@ -2942,7 +2942,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::sn2(ReactionAst::new(
+    #[case::sn2(Reaction::new(
         mol_dsl!(r##"{:atoms ["C" "Br"] :bonds [[0 1 "1"]]}"##),
         Deltas::from_iter([
             Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomForm::from_element(Element::O) }),
@@ -2964,7 +2964,7 @@ mod tests {
     #[case::noncovalent(r##"{:lhs {:atoms ["N" "H"]} :deltas [{:noncovalent-bond {:add {:atoms [0 1] :type "Hbd"}}}]}"##.parse().unwrap())]
     #[case::stereo_atom(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :type "Th1"}}}]}"##.parse().unwrap())]
     #[case::stereo_bond(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##.parse().unwrap())]
-    fn test_reaction_dsl_from_ast_roundtrip(#[case] reaction: ReactionAst) {
+    fn test_reaction_dsl_from_ast_roundtrip(#[case] reaction: Reaction) {
         let cfg = ReactionDefaults::ground();
         let dsl = ReactionDsl::new(reaction, ReactionMetadata::default()).unwrap();
         let lowered = ReactionDsl::from_ir(&dsl.clone().into_ir(&cfg), &cfg);
@@ -4037,7 +4037,7 @@ mod tests {
     #[rstest]
     #[case::atom_modify(
         r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##,
-        ReactionAst {
+        Reaction {
             lhs: Molecule::from_edn_str(r##"{:atoms [[:br "Br#c0"]]}"##).unwrap(),
             deltas: Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
@@ -4047,7 +4047,7 @@ mod tests {
     )]
     #[case::atom_add_bond_add(
         r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##,
-        ReactionAst {
+        Reaction {
             lhs: Molecule::from_edn_str(r##"{:atoms ["C"]}"##).unwrap(),
             deltas: Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
@@ -4062,7 +4062,7 @@ mod tests {
             ]),
         }
     )]
-    fn test_reaction_dsl_from_edn(#[case] input: &str, #[case] expected: ReactionAst) {
+    fn test_reaction_dsl_from_edn(#[case] input: &str, #[case] expected: Reaction) {
         let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
         assert_eq!(dsl.ast(), &expected);
     }
@@ -4421,8 +4421,8 @@ mod tests {
     #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:connected {}}}}]}"##)]
     #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:constraint {:add {:atom [1 {:valence 2}]}}}]}"##)]
     fn test_reaction_ast_to_edn(#[case] input: &str) {
-        let ast = ReactionAst::from_edn(&read_string(input).unwrap()).unwrap();
-        let reparsed = ReactionAst::from_edn(&ast.to_edn()).unwrap();
+        let ast = Reaction::from_edn(&read_string(input).unwrap()).unwrap();
+        let reparsed = Reaction::from_edn(&ast.to_edn()).unwrap();
         assert_eq!(reparsed, ast);
     }
 
@@ -4478,7 +4478,7 @@ mod tests {
     #[fixture]
     fn add_bond_reaction() -> ReactionContext {
         let input = r##"{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"]]} :deltas [{:atom {:add [:x "N"]}} {:bond {:add [1 :x "1"]}}]}"##;
-        let reaction = ReactionAst::from_edn(&read_string(input).unwrap()).unwrap();
+        let reaction = Reaction::from_edn(&read_string(input).unwrap()).unwrap();
         ReactionContext::from_ir(&reaction)
     }
 

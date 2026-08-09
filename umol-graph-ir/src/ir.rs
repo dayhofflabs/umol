@@ -95,7 +95,7 @@ pub use noncovalent::{
     NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
 };
 pub use operators::{MemOp, RelOp};
-pub use reaction::ReactionAst;
+pub use reaction::Reaction;
 pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::{ReactionSpanAst, ReactionSpanEntries, ReactionSpanEntriesError};
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};

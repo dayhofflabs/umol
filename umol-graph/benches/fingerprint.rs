@@ -20,9 +20,7 @@ use umol_graph::fingerprint::{
 };
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
-use umol_graph_ir::ir::{
-    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, Molecule, ReactionAst,
-};
+use umol_graph_ir::ir::{AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, Molecule, Reaction};
 use walkdir::WalkDir;
 
 /// Circular fingerprint radius (ECFP4 / Morgan radius 2).
@@ -62,8 +60,8 @@ fn load_corpus() -> Vec<Molecule> {
     molecules
 }
 
-fn ethanol_deoxygenation(molecule: &Molecule) -> ReactionAst {
-    ReactionAst::new(
+fn ethanol_deoxygenation(molecule: &Molecule) -> Reaction {
+    Reaction::new(
         molecule.clone(),
         Deltas::from_iter([
             Delta::Atom(AtomDelta::Remove {
