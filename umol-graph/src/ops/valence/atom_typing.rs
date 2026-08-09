@@ -155,7 +155,7 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomFieldChange, Edit, Edits, MoleculeEntries, NumForm,
+        AtomConstraintForm, AtomFieldChange, Edit, Edits, MoleculeEntries, NumForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
@@ -184,7 +184,7 @@ mod tests {
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraintAst::valence(0_i64)),
+                    new: Some(AtomConstraintForm::valence(0_i64)),
                 },
             ]))
         );

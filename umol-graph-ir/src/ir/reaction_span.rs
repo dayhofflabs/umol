@@ -2082,8 +2082,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
-        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
+        AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
+        Constraints, DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
         NoncovalentBondConstraintAst, StereoAtomConstraintAst, StereoBondConstraintAst,
         StereogenicityAst,
     };
@@ -2407,7 +2407,7 @@ mod tests {
             atoms: vec![EntitySpan::Removed(AtomForm::from_element(Element::C))],
             constraints: vec![ConstraintSpan::Removed(Constraint::Atom(
                 AtomId(0),
-                AtomConstraintAst::valence(NumForm::Lit(4)),
+                AtomConstraintForm::valence(NumForm::Lit(4)),
             ))],
             ..Default::default()
         },
@@ -2416,7 +2416,7 @@ mod tests {
         Vec::new(),
         vec![ConstraintSpan::Removed(Constraint::Atom(
             AtomId(0),
-            AtomConstraintAst::valence(NumForm::Lit(4)),
+            AtomConstraintForm::valence(NumForm::Lit(4)),
         ))],
     )]
     fn test_reaction_span_ast_try_from_entries(
@@ -2726,7 +2726,7 @@ mod tests {
             atoms: vec![EntitySpan::Added(AtomForm::default())],
             constraints: vec![ConstraintSpan::Unchanged(Constraint::Atom(
                 AtomId(0),
-                AtomConstraintAst::valence(NumForm::Lit(4)),
+                AtomConstraintForm::valence(NumForm::Lit(4)),
             ))],
             ..Default::default()
         },
@@ -2741,11 +2741,11 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(NumForm::Lit(4))),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(NumForm::Lit(4))),
         Entity::Atom(AtomId(0))
     )]
     #[case::bond(
-        Constraint::Bond(BondId(0), BondConstraintAst::aromatic(false)),
+        Constraint::Bond(BondId(0), BondConstraintForm::aromatic(false)),
         Entity::Bond(BondId(0))
     )]
     #[case::dative_bond(

@@ -18,7 +18,7 @@ use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
-    AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
+    AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
     DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
     NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
     StereoBondConstraintAst,
@@ -387,13 +387,13 @@ pub enum Edit {
     // (old → new) covers add (old None), remove (new None), and replace.
     ModifyAtomConstraint {
         id: AtomHandle,
-        old: Option<AtomConstraintAst>,
-        new: Option<AtomConstraintAst>,
+        old: Option<AtomConstraintForm>,
+        new: Option<AtomConstraintForm>,
     },
     ModifyBondConstraint {
         id: BondHandle,
-        old: Option<BondConstraintAst>,
-        new: Option<BondConstraintAst>,
+        old: Option<BondConstraintForm>,
+        new: Option<BondConstraintForm>,
     },
     ModifyDativeBondConstraint {
         id: DativeBondHandle,
@@ -1920,10 +1920,11 @@ mod tests {
 
     use super::super::boolean::BooleanForm;
     use super::super::constraint::{
-        AromaticSystemConstraintsAst, AromaticValenceAst, AtomConstraintsAst, BondConstraintsAst,
-        DativeBondConstraintsAst, MoleculeConstraint, MulticenterBondConstraintsAst,
-        NoncovalentBondConstraintsAst, RelationalConstraint, RingScope, StereoAtomConstraintsAst,
-        StereoBondConstraintsAst, StereogenicityAst, SubPatternAnchor,
+        AromaticSystemConstraintsAst, AromaticValenceForm, AtomConstraintsForm,
+        BondConstraintsForm, DativeBondConstraintsAst, MoleculeConstraint,
+        MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, RelationalConstraint,
+        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereogenicityAst,
+        SubPatternAnchor,
     };
     use super::super::molecule::{MoleculeAst, MoleculeEntries};
     use super::super::noncovalent::NoncovalentBondKind;
@@ -2597,7 +2598,7 @@ mod tests {
             .with_implicit_hydrogens(4_i64)
             .with_lone_pairs(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
-            .with_constraint(AtomConstraintAst::valence(4_i64));
+            .with_constraint(AtomConstraintForm::valence(4_i64));
         let update = AtomUpdate {
             element: Some(ElementForm::Lit(Element::N)),
             isotope_mass: Some(IsotopeMassForm::Lit(13)),
@@ -2608,9 +2609,9 @@ mod tests {
                 count: None,
                 multiplicity: Some(NumForm::Lit(1)),
             },
-            constraints: AtomConstraintsAst::from_iter([
-                AtomConstraintAst::valence(NumForm::Undetermined),
-                AtomConstraintAst::degree(2_i64),
+            constraints: AtomConstraintsForm::from_iter([
+                AtomConstraintForm::valence(NumForm::Undetermined),
+                AtomConstraintForm::degree(2_i64),
             ]),
         };
         let mut edits = Edits::new();
@@ -2663,13 +2664,13 @@ mod tests {
                 },
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(7)),
-                    old: Some(AtomConstraintAst::valence(4_i64)),
+                    old: Some(AtomConstraintForm::valence(4_i64)),
                     new: None,
                 },
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(7)),
                     old: None,
-                    new: Some(AtomConstraintAst::degree(2_i64)),
+                    new: Some(AtomConstraintForm::degree(2_i64)),
                 },
             ]
         );
@@ -2693,7 +2694,7 @@ mod tests {
     #[rstest]
     #[case::empty(AtomForm::from_element(Element::C), AtomUpdate::default())]
     #[case::canonical_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_atom_identity(#[case] current: AtomForm, #[case] update: AtomUpdate) {
         let mut edits = Edits::new();
         edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
@@ -2706,7 +2707,7 @@ mod tests {
         let current = BondForm::from_order(1)
             .with_charge(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
-            .with_constraint(BondConstraintAst::ring_membership(
+            .with_constraint(BondConstraintForm::ring_membership(
                 RingScope::Size(6),
                 1_i64,
             ));
@@ -2717,9 +2718,9 @@ mod tests {
                 count: None,
                 multiplicity: Some(NumForm::Lit(1)),
             },
-            constraints: BondConstraintsAst::from_iter([
-                BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
-                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+            constraints: BondConstraintsForm::from_iter([
+                BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined),
+                BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             ]),
         };
         let mut edits = Edits::new();
@@ -2752,11 +2753,11 @@ mod tests {
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(7)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(7)),
-                    old: Some(BondConstraintAst::ring_membership(
+                    old: Some(BondConstraintForm::ring_membership(
                         RingScope::Size(6),
                         1_i64,
                     )),
@@ -2785,7 +2786,7 @@ mod tests {
     #[rstest]
     #[case::empty(BondForm::from_order(1), BondUpdate::default())]
     #[case::canonical_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsForm::from(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_bond_identity(#[case] current: BondForm, #[case] update: BondUpdate) {
         let mut edits = Edits::new();
         edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
@@ -3341,10 +3342,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_leaf(
-        Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+        Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
         vec![(Entity::Atom(AtomId(7)), EntityHandle::Atom(AtomHandle::New(2)))],
         ConstraintEdit {
-            constraint: Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
+            constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
             atoms: vec![AtomHandle::New(2)], bonds: vec![], dative_bonds: vec![], aromatic_systems: vec![],
             multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],
         },
@@ -3352,12 +3353,12 @@ mod tests {
     #[case::logical_shared_handle(
         Constraint::Or(vec![
             Constraint::And(vec![
-                Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
-                Constraint::Atom(AtomId(7), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(2)))),
+                Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
+                Constraint::Atom(AtomId(7), AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(NumForm::Lit(2)))),
             ]),
             Constraint::And(vec![
-                Constraint::Atom(AtomId(9), AtomConstraintAst::valence(2_i64)),
-                Constraint::Not(Box::new(Constraint::Atom(AtomId(9), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))))),
+                Constraint::Atom(AtomId(9), AtomConstraintForm::valence(2_i64)),
+                Constraint::Not(Box::new(Constraint::Atom(AtomId(9), AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(NumForm::Lit(1)))))),
             ]),
         ]),
         vec![
@@ -3367,12 +3368,12 @@ mod tests {
         ConstraintEdit {
             constraint: Constraint::Or(vec![
                 Constraint::And(vec![
-                    Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
-                    Constraint::Atom(AtomId(0), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(2)))),
+                    Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
+                    Constraint::Atom(AtomId(0), AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(NumForm::Lit(2)))),
                 ]),
                 Constraint::And(vec![
-                    Constraint::Atom(AtomId(0), AtomConstraintAst::valence(2_i64)),
-                    Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))))),
+                    Constraint::Atom(AtomId(0), AtomConstraintForm::valence(2_i64)),
+                    Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(NumForm::Lit(1)))))),
                 ]),
             ]),
             atoms: vec![AtomHandle::New(0)], bonds: vec![], dative_bonds: vec![], aromatic_systems: vec![],
@@ -3397,12 +3398,12 @@ mod tests {
     )]
     #[case::relational_quantified(
         Constraint::Relational(RelationalConstraint::DativeBondAllDonors {
-            bond: DativeBondId(5), predicate: Box::new(AtomConstraintAst::valence(3_i64)),
+            bond: DativeBondId(5), predicate: Box::new(AtomConstraintForm::valence(3_i64)),
         }),
         vec![(Entity::DativeBond(DativeBondId(5)), EntityHandle::DativeBond(DativeBondHandle::New(1)))],
         ConstraintEdit {
             constraint: Constraint::Relational(RelationalConstraint::DativeBondAllDonors {
-                bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::valence(3_i64)),
+                bond: DativeBondId(0), predicate: Box::new(AtomConstraintForm::valence(3_i64)),
             }),
             atoms: vec![], bonds: vec![], dative_bonds: vec![DativeBondHandle::New(1)], aromatic_systems: vec![],
             multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],
@@ -3410,8 +3411,8 @@ mod tests {
     )]
     #[case::all_entity_leaves(
         Constraint::And(vec![
-            Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
-            Constraint::Bond(BondId(8), BondConstraintAst::aromatic(true)),
+            Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
+            Constraint::Bond(BondId(8), BondConstraintForm::aromatic(true)),
             Constraint::DativeBond(DativeBondId(9), DativeBondConstraintAst::aromatic(true)),
             Constraint::AromaticSystem(AromaticSystemId(10), AromaticSystemConstraintAst::electron_count(6_i64)),
             Constraint::MulticenterBond(MulticenterBondId(11), MulticenterBondConstraintAst::electron_count(2_i64)),
@@ -3431,8 +3432,8 @@ mod tests {
         ],
         ConstraintEdit {
             constraint: Constraint::And(vec![
-                Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
-                Constraint::Bond(BondId(0), BondConstraintAst::aromatic(true)),
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
+                Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
                 Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
                 Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintAst::electron_count(6_i64)),
                 Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintAst::electron_count(2_i64)),
@@ -3537,7 +3538,7 @@ mod tests {
 
     #[rstest]
     #[case::atom_as_bond(
-        Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+        Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
         Some(EntityHandle::Bond(BondHandle::New(0))),
         ConstraintEditError::HandleKindMismatch {
             entity: Entity::Atom(AtomId(7)),
@@ -3545,7 +3546,7 @@ mod tests {
         },
     )]
     #[case::missing(
-        Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+        Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
         None,
         ConstraintEditError::MissingHandle {
             entity: Entity::Atom(AtomId(7)),
@@ -3565,9 +3566,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_leaf(
-        Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+        Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
         ConstraintEdit {
-            constraint: Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
+            constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
             atoms: vec![AtomHandle::Id(AtomId(7))], bonds: vec![], dative_bonds: vec![], aromatic_systems: vec![],
             multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],
         },

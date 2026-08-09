@@ -5,7 +5,7 @@
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
-use super::super::constraint::BondConstraintAst;
+use super::super::constraint::BondConstraintForm;
 use super::super::dative::DativeBondForm;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -87,7 +87,7 @@ impl MoleculeBuilder {
         self.editor.add_bond(
             first,
             second,
-            BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
+            BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true)),
         )
     }
 
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(bond, BondId(0));
         assert_eq!(
             mol.bond(bond).ast,
-            &BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
+            &BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true))
         );
     }
 

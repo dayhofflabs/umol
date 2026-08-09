@@ -396,7 +396,7 @@ mod tests {
         NoncovalentBondConstraintAst::intramolecular(true),
         NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Lit(true))
     )]
-    fn test_noncovalent_bond_constraint_ast_constructors(
+    fn test_noncovalent_bond_constraint_form_constructors(
         #[case] actual: NoncovalentBondConstraintAst,
         #[case] expected: NoncovalentBondConstraintAst,
     ) {
@@ -408,7 +408,7 @@ mod tests {
         NoncovalentBondConstraintAst::intramolecular(true),
         NoncovalentBondConstraintKey::Intramolecular
     )]
-    fn test_noncovalent_bond_constraint_ast_key(
+    fn test_noncovalent_bond_constraint_form_key(
         #[case] c: NoncovalentBondConstraintAst,
         #[case] expected: NoncovalentBondConstraintKey,
     ) {
@@ -420,7 +420,7 @@ mod tests {
         NoncovalentBondConstraintAst::intramolecular(true),
         NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)
     )]
-    fn test_noncovalent_bond_constraint_ast_as_undetermined(
+    fn test_noncovalent_bond_constraint_form_as_undetermined(
         #[case] c: NoncovalentBondConstraintAst,
         #[case] expected: NoncovalentBondConstraintAst,
     ) {
@@ -432,7 +432,7 @@ mod tests {
         NoncovalentBondConstraintAst::intramolecular(true),
         Ok(NoncovalentBondConstraintAst::intramolecular(true))
     )]
-    fn test_noncovalent_bond_constraint_ast_canonicalize(
+    fn test_noncovalent_bond_constraint_form_canonicalize(
         #[case] constraint: NoncovalentBondConstraintAst,
         #[case] expected: Result<NoncovalentBondConstraintAst, Contradiction>,
     ) {
@@ -445,7 +445,7 @@ mod tests {
         NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined),
         true
     )]
-    fn test_noncovalent_bond_constraint_ast_is_undetermined(
+    fn test_noncovalent_bond_constraint_form_is_undetermined(
         #[case] c: NoncovalentBondConstraintAst,
         #[case] expected: bool,
     ) {
@@ -457,7 +457,7 @@ mod tests {
     #[case::narrows_undetermined(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined), Some(NoncovalentBondConstraintAst::intramolecular(true)))]
     #[case::same_value(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(true), Some(NoncovalentBondConstraintAst::intramolecular(true)))]
     #[case::incompatible(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(false), None)]
-    fn test_noncovalent_bond_constraint_ast_meet(#[case] a: NoncovalentBondConstraintAst, #[case] b: NoncovalentBondConstraintAst, #[case] expected: Option<NoncovalentBondConstraintAst>) {
+    fn test_noncovalent_bond_constraint_form_meet(#[case] a: NoncovalentBondConstraintAst, #[case] b: NoncovalentBondConstraintAst, #[case] expected: Option<NoncovalentBondConstraintAst>) {
         assert_eq!(a.meet(&b), expected);
     }
 
@@ -465,7 +465,7 @@ mod tests {
     #[rstest]
     #[case::same_value(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(true), Ok(NoncovalentBondConstraintAst::intramolecular(true)))]
     #[case::differ_widens(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(false), Ok(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)))]
-    fn test_noncovalent_bond_constraint_ast_join(#[case] a: NoncovalentBondConstraintAst, #[case] b: NoncovalentBondConstraintAst, #[case] expected: Result<NoncovalentBondConstraintAst, NoJoin>) {
+    fn test_noncovalent_bond_constraint_form_join(#[case] a: NoncovalentBondConstraintAst, #[case] b: NoncovalentBondConstraintAst, #[case] expected: Result<NoncovalentBondConstraintAst, NoJoin>) {
         assert_eq!(a.join(&b), expected);
     }
 
@@ -473,12 +473,12 @@ mod tests {
     #[rstest]
     #[case::same_value(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(true), true)]
     #[case::incompatible(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(false), false)]
-    fn test_noncovalent_bond_constraint_ast_is_compatible(#[case] a: NoncovalentBondConstraintAst, #[case] b: NoncovalentBondConstraintAst, #[case] expected: bool) {
+    fn test_noncovalent_bond_constraint_form_is_compatible(#[case] a: NoncovalentBondConstraintAst, #[case] b: NoncovalentBondConstraintAst, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_new() {
+    fn test_noncovalent_bond_constraints_form_new() {
         let cs = NoncovalentBondConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
@@ -490,7 +490,7 @@ mod tests {
         BooleanForm::Lit(true)
     )]
     #[case::absent(NoncovalentBondConstraintsAst::new(), BooleanForm::Undetermined)]
-    fn test_noncovalent_bond_constraints_ast_intramolecular(
+    fn test_noncovalent_bond_constraints_form_intramolecular(
         #[case] cs: NoncovalentBondConstraintsAst,
         #[case] expected: BooleanForm,
     ) {
@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_iter() {
+    fn test_noncovalent_bond_constraints_form_iter() {
         let cs =
             NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let collected: Vec<_> = cs.iter().cloned().collect();
@@ -513,7 +513,7 @@ mod tests {
     #[case::fresh(vec![NoncovalentBondConstraintAst::intramolecular(true)], vec![NoncovalentBondConstraintAst::intramolecular(true)])]
     #[case::overwrite_same_key(vec![NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::intramolecular(false)], vec![NoncovalentBondConstraintAst::intramolecular(false)])]
     #[case::vacuous_stores(vec![NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)], vec![NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)])]
-    fn test_noncovalent_bond_constraints_ast_set(#[case] sequence: Vec<NoncovalentBondConstraintAst>, #[case] expected: Vec<NoncovalentBondConstraintAst>) {
+    fn test_noncovalent_bond_constraints_form_set(#[case] sequence: Vec<NoncovalentBondConstraintAst>, #[case] expected: Vec<NoncovalentBondConstraintAst>) {
         let mut cs = NoncovalentBondConstraintsAst::new();
         for c in sequence {
             cs.set(c);
@@ -526,7 +526,7 @@ mod tests {
     #[case::overwrite(vec![NoncovalentBondConstraintAst::intramolecular(true)], vec![NoncovalentBondConstraintAst::intramolecular(false)], vec![NoncovalentBondConstraintAst::intramolecular(false)])]
     #[case::adds_from_empty(vec![], vec![NoncovalentBondConstraintAst::intramolecular(true)], vec![NoncovalentBondConstraintAst::intramolecular(true)])]
     #[case::vacuous_removes(vec![NoncovalentBondConstraintAst::intramolecular(true)], vec![NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)], vec![])]
-    fn test_noncovalent_bond_constraints_ast_update(#[case] initial: Vec<NoncovalentBondConstraintAst>, #[case] other: Vec<NoncovalentBondConstraintAst>, #[case] expected: Vec<NoncovalentBondConstraintAst>) {
+    fn test_noncovalent_bond_constraints_form_update(#[case] initial: Vec<NoncovalentBondConstraintAst>, #[case] other: Vec<NoncovalentBondConstraintAst>, #[case] expected: Vec<NoncovalentBondConstraintAst>) {
         let mut cs = NoncovalentBondConstraintsAst::from_iter(initial);
         cs.update(&NoncovalentBondConstraintsAst::from_iter(other));
         assert_eq!(cs, NoncovalentBondConstraintsAst::from_iter(expected));
@@ -538,7 +538,7 @@ mod tests {
     #[case::remove(vec![NoncovalentBondConstraintAst::intramolecular(true)], Some(NoncovalentBondConstraintAst::intramolecular(true)), None, Ok(()), vec![])]
     #[case::add_from_absent(vec![], None, Some(NoncovalentBondConstraintAst::intramolecular(true)), Ok(()), vec![NoncovalentBondConstraintAst::intramolecular(true)])]
     #[case::old_mismatch(vec![NoncovalentBondConstraintAst::intramolecular(true)], Some(NoncovalentBondConstraintAst::intramolecular(false)), None, Err(Contradiction), vec![NoncovalentBondConstraintAst::intramolecular(true)])]
-    fn test_noncovalent_bond_constraints_ast_compare_and_set(
+    fn test_noncovalent_bond_constraints_form_compare_and_set(
         #[case] initial: Vec<NoncovalentBondConstraintAst>,
         #[case] old: Option<NoncovalentBondConstraintAst>,
         #[case] new: Option<NoncovalentBondConstraintAst>,
@@ -556,7 +556,7 @@ mod tests {
         true
     )]
     #[case::absent(NoncovalentBondConstraintsAst::new(), false)]
-    fn test_noncovalent_bond_constraints_ast_contains(
+    fn test_noncovalent_bond_constraints_form_contains(
         #[case] cs: NoncovalentBondConstraintsAst,
         #[case] expected: bool,
     ) {
@@ -572,7 +572,7 @@ mod tests {
         Some(NoncovalentBondConstraintAst::intramolecular(true))
     )]
     #[case::absent(NoncovalentBondConstraintsAst::new(), None)]
-    fn test_noncovalent_bond_constraints_ast_get(
+    fn test_noncovalent_bond_constraints_form_get(
         #[case] cs: NoncovalentBondConstraintsAst,
         #[case] expected: Option<NoncovalentBondConstraintAst>,
     ) {
@@ -593,7 +593,7 @@ mod tests {
         None,
         NoncovalentBondConstraintsAst::new()
     )]
-    fn test_noncovalent_bond_constraints_ast_remove(
+    fn test_noncovalent_bond_constraints_form_remove(
         #[case] mut cs: NoncovalentBondConstraintsAst,
         #[case] expected_removed: Option<NoncovalentBondConstraintAst>,
         #[case] expected_state: NoncovalentBondConstraintsAst,
@@ -609,7 +609,7 @@ mod tests {
     #[rstest]
     #[case::partial(|c: &NoncovalentBondConstraintAst| matches!(c, NoncovalentBondConstraintAst::Intramolecular(_)), vec![NoncovalentBondConstraintAst::intramolecular(true)])]
     #[case::all_dropped(|_: &NoncovalentBondConstraintAst| false, vec![])]
-    fn test_noncovalent_bond_constraints_ast_retain(
+    fn test_noncovalent_bond_constraints_form_retain(
         #[case] predicate: impl FnMut(&NoncovalentBondConstraintAst) -> bool,
         #[case] expected: Vec<NoncovalentBondConstraintAst>,
     ) {
@@ -621,7 +621,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_clear() {
+    fn test_noncovalent_bond_constraints_form_clear() {
         let mut cs =
             NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         cs.clear();
@@ -629,7 +629,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_take() {
+    fn test_noncovalent_bond_constraints_form_take() {
         let mut empty = NoncovalentBondConstraintsAst::new();
         let mut empty_taken = empty.take();
         assert_eq!(empty_taken.len(), 0);
@@ -653,7 +653,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_compact() {
+    fn test_noncovalent_bond_constraints_form_compact() {
         let cs =
             NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let compaction = IdCompaction::new(
@@ -676,7 +676,7 @@ mod tests {
     #[case::keeps_lit(
         NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)),
         Ok(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true))))]
-    fn test_noncovalent_bond_constraints_ast_canonicalize(
+    fn test_noncovalent_bond_constraints_form_canonicalize(
         #[case] constraints: NoncovalentBondConstraintsAst,
         #[case] expected: Result<NoncovalentBondConstraintsAst, Contradiction>,
     ) {
@@ -692,7 +692,7 @@ mod tests {
     #[case::shared_key_meets(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)),
         Some(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true))))]
     #[case::shared_key_contradicts(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)), None)]
-    fn test_noncovalent_bond_constraints_ast_meet(#[case] a: NoncovalentBondConstraintsAst, #[case] b: NoncovalentBondConstraintsAst, #[case] expected: Option<NoncovalentBondConstraintsAst>) {
+    fn test_noncovalent_bond_constraints_form_meet(#[case] a: NoncovalentBondConstraintsAst, #[case] b: NoncovalentBondConstraintsAst, #[case] expected: Option<NoncovalentBondConstraintsAst>) {
         assert_eq!(a.meet(&b), expected);
     }
 
@@ -704,7 +704,7 @@ mod tests {
         NoncovalentBondConstraintsAst::new())]
     #[case::shared_same_kept(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)),
         NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)))]
-    fn test_noncovalent_bond_constraints_ast_join(#[case] a: NoncovalentBondConstraintsAst, #[case] b: NoncovalentBondConstraintsAst, #[case] expected: NoncovalentBondConstraintsAst) {
+    fn test_noncovalent_bond_constraints_form_join(#[case] a: NoncovalentBondConstraintsAst, #[case] b: NoncovalentBondConstraintsAst, #[case] expected: NoncovalentBondConstraintsAst) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
@@ -715,7 +715,7 @@ mod tests {
     #[case::required_absent(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::new(), false)]
     #[case::wildcard_matches_lit(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), true)]
     #[case::lit_mismatch(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)), false)]
-    fn test_noncovalent_bond_constraints_ast_matches(
+    fn test_noncovalent_bond_constraints_form_matches(
         #[case] pattern: NoncovalentBondConstraintsAst,
         #[case] target: NoncovalentBondConstraintsAst,
         #[case] expected: bool,
@@ -728,7 +728,7 @@ mod tests {
     #[case::disjoint_one_empty(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::new(), true)]
     #[case::shared_key_compatible(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), true)]
     #[case::shared_key_incompatible(NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)), false)]
-    fn test_noncovalent_bond_constraints_ast_is_compatible(#[case] a: NoncovalentBondConstraintsAst, #[case] b: NoncovalentBondConstraintsAst, #[case] expected: bool) {
+    fn test_noncovalent_bond_constraints_form_is_compatible(#[case] a: NoncovalentBondConstraintsAst, #[case] b: NoncovalentBondConstraintsAst, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
@@ -737,7 +737,7 @@ mod tests {
     #[case::single(vec![NoncovalentBondConstraintAst::intramolecular(true)], vec![NoncovalentBondConstraintAst::intramolecular(true)])]
     #[case::same_key_last_wins(vec![NoncovalentBondConstraintAst::intramolecular(false), NoncovalentBondConstraintAst::intramolecular(true)], vec![NoncovalentBondConstraintAst::intramolecular(true)])]
     #[case::empty(vec![], vec![])]
-    fn test_noncovalent_bond_constraints_ast_from_iter(
+    fn test_noncovalent_bond_constraints_form_from_iter(
         #[case] input: Vec<NoncovalentBondConstraintAst>,
         #[case] expected: Vec<NoncovalentBondConstraintAst>,
     ) {
@@ -746,7 +746,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_into_iter() {
+    fn test_noncovalent_bond_constraints_form_into_iter() {
         let cs =
             NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let collected: Vec<_> = cs.into_iter().collect();
@@ -757,7 +757,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_from_noncovalent_bond_constraint() {
+    fn test_noncovalent_bond_constraints_form_from_noncovalent_bond_constraint() {
         let cs: NoncovalentBondConstraintsAst =
             NoncovalentBondConstraintAst::intramolecular(true).into();
         assert_eq!(
@@ -769,7 +769,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_from_vec() {
+    fn test_noncovalent_bond_constraints_form_from_vec() {
         let cs: NoncovalentBondConstraintsAst =
             vec![NoncovalentBondConstraintAst::intramolecular(true)].into();
         assert_eq!(

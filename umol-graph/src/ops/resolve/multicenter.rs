@@ -90,8 +90,8 @@ impl MulticenterBondsResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomId, Edit, Edits, MulticenterBondFieldChange, MulticenterBondId,
-        MulticenterValenceAst,
+        AtomConstraintForm, AtomId, Edit, Edits, MulticenterBondFieldChange, MulticenterBondId,
+        MulticenterValenceForm,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -158,8 +158,8 @@ mod tests {
         Solution::Contradictory(MulticenterBondsContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(0),
-                constraint: AtomConstraintAst::multicenter_valence(
-                    MulticenterValenceAst::multicenter(1),
+                constraint: AtomConstraintForm::multicenter_valence(
+                    MulticenterValenceForm::multicenter(1),
                 ),
             },
         )),

@@ -17,7 +17,7 @@ use umol_graph_core::{
 
 use super::atom::AtomForm;
 use super::bond::BondForm;
-use super::constraint::{AtomConstraintAst, BondConstraintAst, RingScope};
+use super::constraint::{AtomConstraintForm, BondConstraintForm, RingScope};
 use super::correspondence::{
     induced_aromatic_systems, induced_bonds, induced_dative_bonds, induced_multicenter_bonds,
     induced_noncovalent_bonds, map_atom, map_ligands, MoleculeCorrespondence,
@@ -123,9 +123,9 @@ impl MoleculeAst {
             .flat_map(|atom| atom.constraints().iter())
         {
             match constraint {
-                AtomConstraintAst::RingDegree(_) => derive_ring_degree = true,
-                AtomConstraintAst::RingValence(_) => derive_ring_valence = true,
-                AtomConstraintAst::RingMembership(membership) => {
+                AtomConstraintForm::RingDegree(_) => derive_ring_degree = true,
+                AtomConstraintForm::RingValence(_) => derive_ring_valence = true,
+                AtomConstraintForm::RingMembership(membership) => {
                     atom_ring_scopes.push(membership.scope);
                 }
                 _ => {}
@@ -139,7 +139,7 @@ impl MoleculeAst {
             .iter()
             .flat_map(|bond| bond.constraints().iter())
             .filter_map(|constraint| match constraint {
-                BondConstraintAst::RingMembership(membership) => Some(membership.scope),
+                BondConstraintForm::RingMembership(membership) => Some(membership.scope),
                 _ => None,
             })
             .collect();
@@ -172,13 +172,13 @@ impl MoleculeAst {
                     if let Some(rings) = rings.as_ref() {
                         let ring = rings.atom(a.id);
                         if derive_ring_degree {
-                            constraints.set(AtomConstraintAst::ring_degree(ring.ring_degree()));
+                            constraints.set(AtomConstraintForm::ring_degree(ring.ring_degree()));
                         }
                         if derive_ring_valence {
-                            constraints.set(AtomConstraintAst::ring_valence(ring.ring_valence()));
+                            constraints.set(AtomConstraintForm::ring_valence(ring.ring_valence()));
                         }
                         for &scope in &atom_ring_scopes {
-                            constraints.set(AtomConstraintAst::ring_membership(
+                            constraints.set(AtomConstraintForm::ring_membership(
                                 scope,
                                 ring.ring_membership(scope),
                             ));
@@ -200,7 +200,7 @@ impl MoleculeAst {
                     if let Some(rings) = rings.as_ref() {
                         let ring = rings.bond(b.id);
                         for &scope in &bond_ring_scopes {
-                            constraints.set(BondConstraintAst::ring_membership(
+                            constraints.set(BondConstraintForm::ring_membership(
                                 scope,
                                 ring.ring_membership(scope),
                             ));

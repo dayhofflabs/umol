@@ -1692,8 +1692,8 @@ impl MoleculeEditor {
     fn apply_modify_atom_constraint(
         &mut self,
         id: AtomId,
-        old: Option<super::super::constraint::AtomConstraintAst>,
-        new: Option<super::super::constraint::AtomConstraintAst>,
+        old: Option<super::super::constraint::AtomConstraintForm>,
+        new: Option<super::super::constraint::AtomConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1707,8 +1707,8 @@ impl MoleculeEditor {
     fn apply_modify_bond_constraint(
         &mut self,
         id: BondId,
-        old: Option<super::super::constraint::BondConstraintAst>,
-        new: Option<super::super::constraint::BondConstraintAst>,
+        old: Option<super::super::constraint::BondConstraintForm>,
+        new: Option<super::super::constraint::BondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -2321,7 +2321,7 @@ mod tests {
     use super::super::super::atom::{AtomForm, ElementForm};
     use super::super::super::bond::BondForm;
     use super::super::super::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
+        AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
         DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
         NoncovalentBondConstraintAst, RelationalConstraint, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst, SubPatternAnchor,
@@ -2894,12 +2894,12 @@ mod tests {
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
+                    new: Some(AtomConstraintForm::ring_membership(RingScope::Size(5), 1)),
                 },
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraintAst::ring_membership(RingScope::Size(6), 1)),
+                    new: Some(AtomConstraintForm::ring_membership(RingScope::Size(6), 1)),
                 },
             ]))
             .unwrap();
@@ -2914,8 +2914,8 @@ mod tests {
         assert_eq!(
             cs,
             vec![
-                AtomConstraintAst::ring_membership(RingScope::Size(5), 1),
-                AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
+                AtomConstraintForm::ring_membership(RingScope::Size(5), 1),
+                AtomConstraintForm::ring_membership(RingScope::Size(6), 1),
             ]
         );
     }
@@ -2949,7 +2949,7 @@ mod tests {
         let err = one_atom
             .transact(Edits::from_iter([Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
-                old: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
+                old: Some(AtomConstraintForm::ring_membership(RingScope::Size(5), 1)),
                 new: None,
             }]))
             .unwrap_err();
@@ -2957,17 +2957,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::introduce(None, Some(AtomConstraintAst::valence(4)), Some(NumForm::Lit(4)))]
+    #[case::introduce(None, Some(AtomConstraintForm::valence(4)), Some(NumForm::Lit(4)))]
     #[case::replace(
-        Some(AtomConstraintAst::valence(3)),
-        Some(AtomConstraintAst::valence(4)),
+        Some(AtomConstraintForm::valence(3)),
+        Some(AtomConstraintForm::valence(4)),
         Some(NumForm::Lit(4))
     )]
-    #[case::remove(Some(AtomConstraintAst::valence(3)), None, None)]
+    #[case::remove(Some(AtomConstraintForm::valence(3)), None, None)]
     fn test_molecule_editor_transact_set_atom_constraint(
         mut one_atom: MoleculeEditor,
-        #[case] old: Option<AtomConstraintAst>,
-        #[case] new: Option<AtomConstraintAst>,
+        #[case] old: Option<AtomConstraintForm>,
+        #[case] new: Option<AtomConstraintForm>,
         #[case] expected: Option<NumForm>,
     ) {
         if let Some(c) = old.clone() {
@@ -2992,7 +2992,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
             }]))
             .unwrap();
         assert!(diatomic
@@ -3000,7 +3000,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraintAst::Aromatic(BooleanForm::Lit(true))));
+            .any(|c| *c == BondConstraintForm::Aromatic(BooleanForm::Lit(true))));
     }
 
     #[rstest]
@@ -3050,8 +3050,8 @@ mod tests {
         mut batched_overlays: MoleculeEditor,
     ) {
         let constraint = Constraint::And(vec![
-            Constraint::Atom(AtomId(1), AtomConstraintAst::valence(3_i64)),
-            Constraint::Bond(BondId(1), BondConstraintAst::aromatic(true)),
+            Constraint::Atom(AtomId(1), AtomConstraintForm::valence(3_i64)),
+            Constraint::Bond(BondId(1), BondConstraintForm::aromatic(true)),
             Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(1),
@@ -3120,8 +3120,8 @@ mod tests {
             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
         let source = Constraint::And(vec![
-            Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
-            Constraint::Bond(BondId(7), BondConstraintAst::aromatic(true)),
+            Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
+            Constraint::Bond(BondId(7), BondConstraintForm::aromatic(true)),
             Constraint::DativeBond(DativeBondId(7), DativeBondConstraintAst::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(7),
@@ -3185,8 +3185,8 @@ mod tests {
             ConstraintEdit::new(source, |entity| mappings.get(&entity).cloned()).unwrap(),
         );
         let expected = Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
-            Constraint::Bond(BondId(0), BondConstraintAst::aromatic(true)),
+            Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
+            Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
             Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(0),
@@ -3265,7 +3265,7 @@ mod tests {
         0,
         Edits::from_iter([Edit::AddMoleculeConstraint {
             constraint: ConstraintEdit::new(
-                Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+                Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
                 |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
             ).unwrap(),
         }]),
@@ -3280,7 +3280,7 @@ mod tests {
             },
             Edit::AddMoleculeConstraint {
                 constraint: ConstraintEdit::new(
-                    Constraint::Atom(AtomId(7), AtomConstraintAst::valence(3_i64)),
+                    Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
                     |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
                 ).unwrap(),
             },
@@ -4510,7 +4510,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraintAst::cis_trans_stereo(
+                new: Some(BondConstraintForm::cis_trans_stereo(
                     CisTransStereoForm::NotStereo,
                 )),
             }]))
@@ -4523,7 +4523,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![BondConstraintAst::cis_trans_stereo(
+            vec![BondConstraintForm::cis_trans_stereo(
                 CisTransStereoForm::NotStereo
             )],
         );
@@ -4535,7 +4535,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraintAst::ring_membership(RingScope::Size(5), 1)),
+                new: Some(BondConstraintForm::ring_membership(RingScope::Size(5), 1)),
             }]))
             .unwrap();
         assert!(diatomic
@@ -4543,7 +4543,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraintAst::ring_membership(RingScope::Size(5), 1)));
+            .any(|c| *c == BondConstraintForm::ring_membership(RingScope::Size(5), 1)));
     }
 
     #[rstest]
@@ -4553,7 +4553,7 @@ mod tests {
         let err = diatomic
             .transact(Edits::from_iter([Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
-                old: Some(BondConstraintAst::ring_membership(RingScope::Size(5), 1)),
+                old: Some(BondConstraintForm::ring_membership(RingScope::Size(5), 1)),
                 new: None,
             }]))
             .unwrap_err();
@@ -4697,7 +4697,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
                 old: None,
-                new: Some(AtomConstraintAst::degree(1)),
+                new: Some(AtomConstraintForm::degree(1)),
             }]))
             .unwrap();
         let third = diatomic
@@ -4786,7 +4786,7 @@ mod tests {
                 let mut b = MoleculeAst::default().edit();
                 b.add_atom(AtomForm::from_element(Element::C));
                 b.add_atom(AtomForm::from_element(Element::N));
-                b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3)));
+                b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintForm::degree(3)));
                 b
             }
             RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => triatomic_with_overlays(),
@@ -4839,7 +4839,7 @@ mod tests {
             RollbackCase::Constraint => Edits::from_iter([Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
                 old: None,
-                new: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
+                new: Some(AtomConstraintForm::ring_membership(RingScope::Size(5), 1)),
             }]),
             RollbackCase::CascadedConstraints => Edits::from_iter([Edit::RemoveTopology {
                 atoms: vec![AtomHandle::Id(AtomId(1))],
@@ -5075,8 +5075,8 @@ mod tests {
 
     #[rstest]
     fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEditor) {
-        let repeated = Constraint::Atom(AtomId(0), AtomConstraintAst::degree(1));
-        let middle = Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4));
+        let repeated = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        let middle = Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4));
         one_atom.push_constraint(repeated.clone());
         one_atom.push_constraint(middle.clone());
         one_atom.push_constraint(repeated.clone());

@@ -5,8 +5,8 @@
 use std::collections::BTreeSet;
 
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
-    AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
+    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm,
+    AtomConstraintForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle, BondUpdate,
     BooleanForm, Edits, MoleculeAst,
 };
 use umol_utils::solution::Solution;
@@ -190,8 +190,8 @@ impl AromaticityResolver {
 
                 for atom in remove_constraints {
                     let mut update = AtomUpdate::default();
-                    update.constraints.set(AtomConstraintAst::AromaticValence(
-                        AromaticValenceAst::Undetermined,
+                    update.constraints.set(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Undetermined,
                     ));
                     edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).ast, &update);
                 }
@@ -199,7 +199,7 @@ impl AromaticityResolver {
                     let mut update = BondUpdate::default();
                     update
                         .constraints
-                        .set(BondConstraintAst::Aromatic(BooleanForm::Undetermined));
+                        .set(BondConstraintForm::Aromatic(BooleanForm::Undetermined));
                     edits.update_bond(BondHandle::Id(bond), ast.bond(bond).ast, &update);
                 }
 
@@ -268,8 +268,8 @@ impl AromaticityResolver {
         if self.config.reset_aromatic_valence {
             for &atom_id in &atoms {
                 let mut update = AtomUpdate::default();
-                update.constraints.set(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Undetermined,
+                update.constraints.set(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Undetermined,
                 ));
                 atom_updates.push((atom_id, update));
             }
@@ -300,7 +300,7 @@ impl AromaticityResolver {
             let mut update = BondUpdate::default();
             update
                 .constraints
-                .set(BondConstraintAst::Aromatic(BooleanForm::Lit(true)));
+                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
             edits.update_bond(BondHandle::Id(bond_id), ast.bond(bond_id).ast, &update);
         }
         edits
@@ -412,32 +412,32 @@ mod tests {
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(0)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(1)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(2)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(3)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(4)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(5)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
             ])))
         );
@@ -475,15 +475,15 @@ mod tests {
         Solution::Determined(Edits::from_iter([
             Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
-                old: Some(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(NumForm::Lit(2)),
+                old: Some(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Lit(2)),
                 )),
                 new: None,
             },
             Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(1)),
-                old: Some(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(NumForm::Lit(0)),
+                old: Some(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Lit(0)),
                 )),
                 new: None,
             },
@@ -574,7 +574,7 @@ mod tests {
         AromaticBondConstraintMismatchPolicy::RemoveConstraint,
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(0)),
-            old: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(false))),
+            old: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(false))),
             new: None,
         }]))
     )]
@@ -654,9 +654,9 @@ mod tests {
         NumForm::Lit(0),
         vec![NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(1)],
         vec![
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(0))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(0))),
         ]
     )]
     #[case::heterogeneous_localized(
@@ -670,7 +670,7 @@ mod tests {
             NumForm::Lit(1), NumForm::Lit(0), NumForm::Lit(0),
             NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(0),
         ],
-        vec![Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))); 6]
+        vec![Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))); 6]
     )]
     #[case::accepted_system_with_rejected_projections(
         AromaticityResolveConfig {
@@ -685,13 +685,13 @@ mod tests {
         NumForm::Lit(0),
         vec![NumForm::Lit(0); 7],
         vec![
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
         ]
     )]
     #[case::reset_source_constraints(
@@ -710,7 +710,7 @@ mod tests {
         #[case] mut molecule: MoleculeAst,
         #[case] expected_system_charge: NumForm,
         #[case] expected_atom_charges: Vec<NumForm>,
-        #[case] expected_aromatic_valences: Vec<Option<AromaticValenceAst>>,
+        #[case] expected_aromatic_valences: Vec<Option<AromaticValenceForm>>,
     ) {
         assert_eq!(
             AromaticityResolver::with_config(&aromaticity_model, config).resolve(&mut molecule),
@@ -739,7 +739,7 @@ mod tests {
         );
         assert!(molecule.bonds().iter().all(|bond| matches!(
             bond.ast.constraints.get(BondConstraintKey::Aromatic),
-            Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true)))
+            Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
         )));
     }
 

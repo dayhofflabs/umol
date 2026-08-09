@@ -356,8 +356,8 @@ mod tests {
     use rstest::{fixture, rstest};
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomId, EntityKind, IncidenceConstraintContradiction,
-        MulticenterValenceAst,
+        AtomConstraintForm, AtomId, EntityKind, IncidenceConstraintContradiction,
+        MulticenterValenceForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
@@ -712,8 +712,8 @@ mod tests {
             MulticenterBondsContradiction::Constraint(
                 IncidenceConstraintContradiction::Atom {
                     atom: AtomId(0),
-                    constraint: AtomConstraintAst::multicenter_valence(
-                        MulticenterValenceAst::multicenter(1),
+                    constraint: AtomConstraintForm::multicenter_valence(
+                        MulticenterValenceForm::multicenter(1),
                     ),
                 },
             ),

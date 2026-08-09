@@ -1048,7 +1048,7 @@ mod tests {
     use super::super::metadata::MoleculeMetadata;
     use super::super::namespace::MoleculeContext;
     use super::*;
-    use crate::ir::constraint::AtomConstraintAst;
+    use crate::ir::constraint::AtomConstraintForm;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
@@ -1096,35 +1096,35 @@ mod tests {
         "{:dative-bond-donors [0 [1 2]]}")]
     #[case::dative_contains_all_donors(RelationalConstraint::DativeBondContainsAllDonors { bond: DativeBondId(0), atoms: vec![AtomId(1), AtomId(2)] },
         "{:dative-bond-contains-all-donors [0 [1 2]]}")]
-    #[case::dative_all_donors(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(3))) },
+    #[case::dative_all_donors(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::Lit(3))) },
         "{:dative-bond-all-donors [0 {:valence 3}]}")]
-    #[case::dative_any_donor(RelationalConstraint::DativeBondAnyDonor { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(3))) },
+    #[case::dative_any_donor(RelationalConstraint::DativeBondAnyDonor { bond: DativeBondId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::Lit(3))) },
         "{:dative-bond-any-donor [0 {:valence 3}]}")]
     #[case::dative_acceptor_satisfies(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::Degree(NumForm::Lit(2))) }, "{:dative-bond-acceptor-satisfies [0 {:degree 2}]}")]
+        predicate: Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))) }, "{:dative-bond-acceptor-satisfies [0 {:degree 2}]}")]
     #[case::aromatic_system_atoms(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0), atoms: vec![AtomId(0), AtomId(1)] },
         "{:aromatic-system-atoms [0 [0 1]]}")]
     #[case::aromatic_system_contains(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(2) }, "{:aromatic-system-contains [0 2]}")]
     #[case::aromatic_system_contains_all(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0), atoms: vec![AtomId(2), AtomId(5)] },
         "{:aromatic-system-contains-all [0 [2 5]]}")]
-    #[case::aromatic_system_all_atoms(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))) },
+    #[case::aromatic_system_all_atoms(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))) },
         "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
-    #[case::aromatic_system_any_atom(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(0), predicate: Box::new(AtomConstraintAst::Degree(NumForm::Lit(3))) },
+    #[case::aromatic_system_any_atom(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(0), predicate: Box::new(AtomConstraintForm::Degree(NumForm::Lit(3))) },
         "{:aromatic-system-any-atom [0 {:degree 3}]}")]
     #[case::multicenter_atoms(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0), atoms: vec![AtomId(0), AtomId(1), AtomId(2)] },
         "{:multicenter-bond-atoms [0 [0 1 2]]}")]
     #[case::multicenter_contains(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondId(0), atom: AtomId(3) }, "{:multicenter-bond-contains [0 3]}")]
     #[case::multicenter_contains_all(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0), atoms: vec![AtomId(0), AtomId(1)] },
         "{:multicenter-bond-contains-all [0 [0 1]]}")]
-    #[case::multicenter_all_atoms(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))) },
+    #[case::multicenter_all_atoms(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))) },
         "{:multicenter-bond-all-atoms [0 {:valence 4}]}")]
-    #[case::multicenter_any_atom(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(0), predicate: Box::new(AtomConstraintAst::Degree(NumForm::Lit(3))) },
+    #[case::multicenter_any_atom(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(0), predicate: Box::new(AtomConstraintForm::Degree(NumForm::Lit(3))) },
         "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
     #[case::noncovalent_ends(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(3)] },
         "{:noncovalent-bond-ends [0 [0 3]]}")]
     #[case::noncovalent_contains(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(0), atom: AtomId(2) }, "{:noncovalent-bond-contains [0 2]}")]
     #[case::noncovalent_ends_satisfy(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-        predicates: [Box::new(AtomConstraintAst::Valence(NumForm::Lit(2))), Box::new(AtomConstraintAst::Valence(NumForm::Lit(3)))] },
+        predicates: [Box::new(AtomConstraintForm::Valence(NumForm::Lit(2))), Box::new(AtomConstraintForm::Valence(NumForm::Lit(3)))] },
         "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}")]
     #[case::stereo_atom_site(RelationalConstraint::StereoAtomSite { stereo_atom: StereoAtomId(0), atom: AtomId(2) },
         "{:stereo-atom-site [0 2]}")]
@@ -1132,9 +1132,9 @@ mod tests {
         "{:stereo-atom-contains [0 3]}")]
     #[case::stereo_atom_ligands(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(0), atoms: vec![AtomId(0), AtomId(1)] },
         "{:stereo-atom-ligands [0 [0 1]]}")]
-    #[case::stereo_atom_all_ligands(RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))) },
+    #[case::stereo_atom_all_ligands(RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))) },
         "{:stereo-atom-all-ligands [0 {:valence 4}]}")]
-    #[case::stereo_atom_any_ligand(RelationalConstraint::StereoAtomAnyLigand { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintAst::Degree(NumForm::Lit(3))) },
+    #[case::stereo_atom_any_ligand(RelationalConstraint::StereoAtomAnyLigand { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintForm::Degree(NumForm::Lit(3))) },
         "{:stereo-atom-any-ligand [0 {:degree 3}]}")]
     #[case::stereo_bond_site(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(0), bond: BondId(2) },
         "{:stereo-bond-site [0 2]}")]
@@ -1142,9 +1142,9 @@ mod tests {
         "{:stereo-bond-contains [0 3]}")]
     #[case::stereo_bond_ligands(RelationalConstraint::StereoBondLigands { stereo_bond: StereoBondId(0), atoms: vec![AtomId(0), AtomId(1)] },
         "{:stereo-bond-ligands [0 [0 1]]}")]
-    #[case::stereo_bond_all_ligands(RelationalConstraint::StereoBondAllLigands { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraintAst::Valence(NumForm::Lit(4))) },
+    #[case::stereo_bond_all_ligands(RelationalConstraint::StereoBondAllLigands { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))) },
         "{:stereo-bond-all-ligands [0 {:valence 4}]}")]
-    #[case::stereo_bond_any_ligand(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraintAst::Degree(NumForm::Lit(3))) },
+    #[case::stereo_bond_any_ligand(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraintForm::Degree(NumForm::Lit(3))) },
         "{:stereo-bond-any-ligand [0 {:degree 3}]}")]
     fn test_relational_constraint_dsl_roundtrip(
         meta: MoleculeMetadata,

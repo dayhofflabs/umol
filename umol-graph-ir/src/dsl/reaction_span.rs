@@ -1669,7 +1669,7 @@ mod tests {
 
     use super::*;
     use crate::ir::boolean::BooleanForm;
-    use crate::ir::constraint::{BondConstraintAst, Constraint, Constraints, MoleculeConstraint};
+    use crate::ir::constraint::{BondConstraintForm, Constraint, Constraints, MoleculeConstraint};
     use crate::ir::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ir::edit::BondFieldChange;
     use crate::ir::ligand::StereoLigandKind;
@@ -1866,7 +1866,7 @@ mod tests {
     }))]
     #[case::triple("[0 1 :triple]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondForm::from_order(3))))]
     #[case::aromatic("[0 1 :aromatic]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(
-        BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        BondForm::from_order(1).with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     )))]
     fn test_parse_bond_span_entry(
         #[case] input: &str,
@@ -2298,7 +2298,7 @@ mod tests {
             ast.constraints().to_vec(),
             vec![ConstraintSpan::Unchanged(Constraint::Bond(
                 BondId(0),
-                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+                BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             ))]
         );
     }
@@ -2446,7 +2446,7 @@ mod tests {
         metadata.set_keyword(Entity::Bond(BondId(0)), "b1").unwrap();
         metadata
     }, "{:id :b1 :atoms [0 1] :type :single}")]
-    #[case::aromatic(EntitySpan::Unchanged(BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
+    #[case::aromatic(EntitySpan::Unchanged(BondForm::from_order(1).with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
     fn test_render_bond_span_entry(
         #[case] span: EntitySpan<BondForm>,
         #[case] meta: MoleculeMetadata,

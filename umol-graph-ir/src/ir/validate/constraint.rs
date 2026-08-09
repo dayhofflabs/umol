@@ -23,8 +23,8 @@ pub use relational::{RelationalConstraintContradiction, RelationalConstraintVali
 pub use ring::{RingConstraintContradiction, RingConstraintValidator};
 
 use super::super::constraint::{
-    AtomConstraintAst, BondConstraintAst, Constraint, DativeBondConstraintAst, MoleculeConstraint,
-    StereoAtomConstraintAst, StereoBondConstraintAst,
+    AtomConstraintForm, BondConstraintForm, Constraint, DativeBondConstraintAst,
+    MoleculeConstraint, StereoAtomConstraintAst, StereoBondConstraintAst,
 };
 use super::super::entity::Entity;
 use super::super::id::{
@@ -286,7 +286,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_atom(
         &mut self,
         id: AtomId,
-        constraint: &AtomConstraintAst,
+        constraint: &AtomConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::Atom(id))?;
         if is_atom_ring_constraint(constraint) {
@@ -295,9 +295,9 @@ impl<'a> ConstraintEvaluation<'a> {
             }
             let ring_atom = self.rings().atom(id);
             let (asserted, derived) = match constraint {
-                AtomConstraintAst::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
-                AtomConstraintAst::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
-                AtomConstraintAst::RingMembership(membership) => (
+                AtomConstraintForm::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
+                AtomConstraintForm::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
+                AtomConstraintForm::RingMembership(membership) => (
                     &membership.count,
                     ring_atom.ring_membership(membership.scope),
                 ),
@@ -319,10 +319,10 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_bond(
         &mut self,
         id: BondId,
-        constraint: &BondConstraintAst,
+        constraint: &BondConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::Bond(id))?;
-        if let BondConstraintAst::RingMembership(membership) = constraint {
+        if let BondConstraintForm::RingMembership(membership) = constraint {
             if membership.is_undetermined() {
                 return Ok(Solution::Determined(()));
             }
@@ -530,12 +530,12 @@ impl<'a> ConstraintEvaluation<'a> {
     }
 }
 
-fn is_atom_ring_constraint(constraint: &AtomConstraintAst) -> bool {
+fn is_atom_ring_constraint(constraint: &AtomConstraintForm) -> bool {
     matches!(
         constraint,
-        AtomConstraintAst::RingDegree(_)
-            | AtomConstraintAst::RingValence(_)
-            | AtomConstraintAst::RingMembership(_)
+        AtomConstraintForm::RingDegree(_)
+            | AtomConstraintForm::RingValence(_)
+            | AtomConstraintForm::RingMembership(_)
     )
 }
 
@@ -601,7 +601,7 @@ mod tests {
 
     use super::*;
     use crate::ir::constraint::{
-        AtomConstraintAst, BondConstraintAst, MoleculeConstraint, RelationalConstraint, RingScope,
+        AtomConstraintForm, BondConstraintForm, MoleculeConstraint, RelationalConstraint, RingScope,
     };
     use crate::ir::id::{AtomId, BondId, DativeBondId};
     use crate::ir::substructure::SubstructureMatchAlgorithm;
@@ -623,21 +623,21 @@ mod tests {
     #[case::incidence(
         IncidenceConstraintContradiction::Atom {
             atom: AtomId(2),
-            constraint: AtomConstraintAst::valence(4),
+            constraint: AtomConstraintForm::valence(4),
         },
         ConstraintContradiction::Incidence(IncidenceConstraintContradiction::Atom {
             atom: AtomId(2),
-            constraint: AtomConstraintAst::valence(4),
+            constraint: AtomConstraintForm::valence(4),
         })
     )]
     #[case::ring(
         RingConstraintContradiction::Bond {
             bond: BondId(3),
-            constraint: BondConstraintAst::ring_membership(RingScope::Size(6), 1),
+            constraint: BondConstraintForm::ring_membership(RingScope::Size(6), 1),
         },
         ConstraintContradiction::Ring(RingConstraintContradiction::Bond {
             bond: BondId(3),
-            constraint: BondConstraintAst::ring_membership(RingScope::Size(6), 1),
+            constraint: BondConstraintForm::ring_membership(RingScope::Size(6), 1),
         })
     )]
     #[case::relational(
@@ -694,23 +694,23 @@ mod tests {
 
     #[rstest]
     #[case::and_determined(Constraint::And(vec![
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(0)),
-        Constraint::Atom(AtomId(0), AtomConstraintAst::degree(0)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(0)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::degree(0)),
     ]), Solution::Determined(()))]
     #[case::and_underdetermined(Constraint::And(vec![
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(0)),
-        Constraint::Atom(AtomId(0), AtomConstraintAst::total_hydrogens(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(0)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::total_hydrogens(1)),
     ]), Solution::Underdetermined(()))]
     #[case::or_determined(Constraint::Or(vec![
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)),
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(0)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(0)),
     ]), Solution::Determined(()))]
     #[case::or_underdetermined(Constraint::Or(vec![
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)),
-        Constraint::Atom(AtomId(0), AtomConstraintAst::total_hydrogens(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::total_hydrogens(1)),
     ]), Solution::Underdetermined(()))]
     #[case::not_contradictory(Constraint::Not(Box::new(
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)),
     )), Solution::Determined(()))]
     fn test_constraint_validator_logical_outcomes(
         mut molecule: MoleculeAst,
@@ -727,12 +727,12 @@ mod tests {
 
     #[rstest]
     #[case::or(Constraint::Or(vec![
-        Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)),
-        Constraint::Atom(AtomId(0), AtomConstraintAst::degree(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
     ]))]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(
         AtomId(0),
-        AtomConstraintAst::valence(0)
+        AtomConstraintForm::valence(0)
     ),)))]
     fn test_constraint_validator_logical_contradiction(
         mut molecule: MoleculeAst,
@@ -749,12 +749,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::determined(AtomConstraintAst::valence(0))]
-    #[case::underdetermined(AtomConstraintAst::total_hydrogens(1))]
-    #[case::contradictory(AtomConstraintAst::valence(1))]
+    #[case::determined(AtomConstraintForm::valence(0))]
+    #[case::underdetermined(AtomConstraintForm::total_hydrogens(1))]
+    #[case::contradictory(AtomConstraintForm::valence(1))]
     fn test_constraint_validator_inline_top_level_agreement(
         molecule: MoleculeAst,
-        #[case] constraint: AtomConstraintAst,
+        #[case] constraint: AtomConstraintForm,
     ) {
         let mut inline = molecule.clone().edit();
         inline

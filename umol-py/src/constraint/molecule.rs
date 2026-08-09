@@ -1219,8 +1219,8 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
-        AtomConstraintAst as GraphIrAtomConstraintAst,
-        BondConstraintAst as GraphIrBondConstraintAst,
+        AtomConstraintForm as GraphIrAtomConstraintForm,
+        BondConstraintForm as GraphIrBondConstraintForm,
         DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
         MoleculeAst as GraphIrMoleculeAst,
         MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
@@ -1286,11 +1286,11 @@ mod tests {
     })]
     #[case::all_donors(GraphIrRelationalConstraint::DativeBondAllDonors {
         bond: GraphIrDativeBondId(9),
-        predicate: Box::new(GraphIrAtomConstraintAst::degree(2)),
+        predicate: Box::new(GraphIrAtomConstraintForm::degree(2)),
     })]
     #[case::any_donor(GraphIrRelationalConstraint::DativeBondAnyDonor {
         bond: GraphIrDativeBondId(10),
-        predicate: Box::new(GraphIrAtomConstraintAst::valence(3)),
+        predicate: Box::new(GraphIrAtomConstraintForm::valence(3)),
     })]
     #[case::acceptor(GraphIrRelationalConstraint::DativeBondAcceptor {
         bond: GraphIrDativeBondId(11),
@@ -1298,7 +1298,7 @@ mod tests {
     })]
     #[case::acceptor_satisfies(GraphIrRelationalConstraint::DativeBondAcceptorSatisfies {
         bond: GraphIrDativeBondId(13),
-        predicate: Box::new(GraphIrAtomConstraintAst::total_degree(4)),
+        predicate: Box::new(GraphIrAtomConstraintForm::total_degree(4)),
     })]
     #[case::parallels(GraphIrRelationalConstraint::DativeBondParallels {
         dative: GraphIrDativeBondId(14),
@@ -1318,11 +1318,11 @@ mod tests {
     })]
     #[case::aromatic_all_atoms(GraphIrRelationalConstraint::AromaticSystemAllAtoms {
         system: GraphIrAromaticSystemId(24),
-        predicate: Box::new(GraphIrAtomConstraintAst::degree(5)),
+        predicate: Box::new(GraphIrAtomConstraintForm::degree(5)),
     })]
     #[case::aromatic_any_atom(GraphIrRelationalConstraint::AromaticSystemAnyAtom {
         system: GraphIrAromaticSystemId(25),
-        predicate: Box::new(GraphIrAtomConstraintAst::valence(6)),
+        predicate: Box::new(GraphIrAtomConstraintForm::valence(6)),
     })]
     #[case::multicenter_atoms(GraphIrRelationalConstraint::MulticenterBondAtoms {
         bond: GraphIrMulticenterBondId(26),
@@ -1338,11 +1338,11 @@ mod tests {
     })]
     #[case::multicenter_all_atoms(GraphIrRelationalConstraint::MulticenterBondAllAtoms {
         bond: GraphIrMulticenterBondId(34),
-        predicate: Box::new(GraphIrAtomConstraintAst::degree(7)),
+        predicate: Box::new(GraphIrAtomConstraintForm::degree(7)),
     })]
     #[case::multicenter_any_atom(GraphIrRelationalConstraint::MulticenterBondAnyAtom {
         bond: GraphIrMulticenterBondId(35),
-        predicate: Box::new(GraphIrAtomConstraintAst::valence(8)),
+        predicate: Box::new(GraphIrAtomConstraintForm::valence(8)),
     })]
     #[case::noncovalent_ends(GraphIrRelationalConstraint::NoncovalentBondEnds {
         bond: GraphIrNoncovalentBondId(36),
@@ -1355,8 +1355,8 @@ mod tests {
     #[case::noncovalent_ends_satisfy(GraphIrRelationalConstraint::NoncovalentBondEndsSatisfy {
         bond: GraphIrNoncovalentBondId(41),
         predicates: [
-            Box::new(GraphIrAtomConstraintAst::degree(9)),
-            Box::new(GraphIrAtomConstraintAst::valence(10)),
+            Box::new(GraphIrAtomConstraintForm::degree(9)),
+            Box::new(GraphIrAtomConstraintForm::valence(10)),
         ],
     })]
     #[case::stereo_atom_site(GraphIrRelationalConstraint::StereoAtomSite {
@@ -1373,11 +1373,11 @@ mod tests {
     })]
     #[case::stereo_atom_all_ligands(GraphIrRelationalConstraint::StereoAtomAllLigands {
         stereo_atom: GraphIrStereoAtomId(49),
-        predicate: Box::new(GraphIrAtomConstraintAst::degree(11)),
+        predicate: Box::new(GraphIrAtomConstraintForm::degree(11)),
     })]
     #[case::stereo_atom_any_ligand(GraphIrRelationalConstraint::StereoAtomAnyLigand {
         stereo_atom: GraphIrStereoAtomId(50),
-        predicate: Box::new(GraphIrAtomConstraintAst::valence(12)),
+        predicate: Box::new(GraphIrAtomConstraintForm::valence(12)),
     })]
     #[case::stereo_bond_site(GraphIrRelationalConstraint::StereoBondSite {
         stereo_bond: GraphIrStereoBondId(51),
@@ -1393,11 +1393,11 @@ mod tests {
     })]
     #[case::stereo_bond_all_ligands(GraphIrRelationalConstraint::StereoBondAllLigands {
         stereo_bond: GraphIrStereoBondId(58),
-        predicate: Box::new(GraphIrAtomConstraintAst::degree(13)),
+        predicate: Box::new(GraphIrAtomConstraintForm::degree(13)),
     })]
     #[case::stereo_bond_any_ligand(GraphIrRelationalConstraint::StereoBondAnyLigand {
         stereo_bond: GraphIrStereoBondId(59),
-        predicate: Box::new(GraphIrAtomConstraintAst::valence(14)),
+        predicate: Box::new(GraphIrAtomConstraintForm::valence(14)),
     })]
     fn test_relational_constraint_roundtrip(#[case] constraint: GraphIrRelationalConstraint) {
         Python::attach(|py| {
@@ -1442,10 +1442,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom(GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2),))]
+    #[case::atom(GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2),))]
     #[case::bond(GraphIrConstraint::Bond(
         GraphIrBondId(3),
-        GraphIrBondConstraintAst::aromatic(true),
+        GraphIrBondConstraintForm::aromatic(true),
     ))]
     #[case::dative_bond(GraphIrConstraint::DativeBond(
         GraphIrDativeBondId(4),
@@ -1492,7 +1492,7 @@ mod tests {
     #[case::or(GraphIrConstraint::Or(Vec::new()))]
     #[case::not(GraphIrConstraint::Not(Box::new(GraphIrConstraint::Atom(
         GraphIrAtomId(16),
-        GraphIrAtomConstraintAst::degree(3),
+        GraphIrAtomConstraintForm::degree(3),
     ))))]
     fn test_constraint_roundtrip(#[case] constraint: GraphIrConstraint) {
         Python::attach(|py| {
@@ -1504,7 +1504,7 @@ mod tests {
     #[rstest]
     fn test_constraint_roundtrip_recursive() {
         let constraint = GraphIrConstraint::And(vec![
-            GraphIrConstraint::Atom(GraphIrAtomId(17), GraphIrAtomConstraintAst::valence(4)),
+            GraphIrConstraint::Atom(GraphIrAtomId(17), GraphIrAtomConstraintForm::valence(4)),
             GraphIrConstraint::Or(vec![
                 GraphIrConstraint::Relational(GraphIrRelationalConstraint::DativeBondDonor {
                     bond: GraphIrDativeBondId(18),
@@ -1609,7 +1609,7 @@ match node:
 
     #[rstest]
     fn test_constraint_iter() {
-        let first = GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2));
+        let first = GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2));
         let second =
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
         let mut constraints = GraphIrConstraints::from(vec![first.clone(), second.clone()]);
@@ -1674,7 +1674,7 @@ match node:
     #[rstest]
     #[case::empty(Vec::new())]
     #[case::populated(vec![
-        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2)),
+        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2)),
         GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
     ])]
     fn test_constraints_new(#[case] entries: Vec<GraphIrConstraint>) {
@@ -1717,7 +1717,7 @@ match node:
     fn test_constraints_repr() {
         Python::attach(|py| {
             let constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
-                GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2)),
+                GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2)),
                 GraphIrConstraint::Or(Vec::new()),
             ]));
 
@@ -1847,7 +1847,7 @@ match node:
     #[rstest]
     #[case::positive(
         0,
-        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2),)
+        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2),)
     )]
     #[case::negative(-1, GraphIrConstraint::Molecule(
         GraphIrMoleculeConstraint::Connected { atoms: None },
@@ -1855,7 +1855,7 @@ match node:
     fn test_constraints_getitem(#[case] index: isize, #[case] expected: GraphIrConstraint) {
         Python::attach(|py| {
             let constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
-                GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2)),
+                GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2)),
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
             ]));
             let actual = constraints.__getitem__(py, index).unwrap();
@@ -2078,7 +2078,7 @@ match node:
     #[rstest]
     #[case::positive(
         0,
-        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintAst::degree(2),)
+        GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2),)
     )]
     #[case::negative(-1, GraphIrConstraint::Molecule(
         GraphIrMoleculeConstraint::Connected { atoms: None },
@@ -2087,7 +2087,7 @@ match node:
         let mut molecule = GraphIrMoleculeAst::new();
         molecule.constraints_mut().push(GraphIrConstraint::Atom(
             GraphIrAtomId(1),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         ));
         molecule.constraints_mut().push(GraphIrConstraint::Molecule(
             GraphIrMoleculeConstraint::Connected { atoms: None },

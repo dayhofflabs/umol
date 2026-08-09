@@ -374,7 +374,7 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::super::super::aromatic::AromaticSystemForm;
-    use super::super::super::constraint::{AtomConstraintAst, Constraint};
+    use super::super::super::constraint::{AtomConstraintForm, Constraint};
     use super::super::super::ligand::StereoLigandKind;
     use super::super::super::multicenter::MulticenterBondForm;
     use super::super::super::stereo::StereoKind;
@@ -594,7 +594,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             constraints: Constraints::from(vec![Constraint::Atom(
                 AtomId(0),
-                AtomConstraintAst::valence(left_valence),
+                AtomConstraintForm::valence(left_valence),
             )]),
             ..Default::default()
         });
@@ -606,7 +606,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             constraints: Constraints::from(vec![Constraint::Atom(
                 AtomId(1),
-                AtomConstraintAst::valence(right_valence),
+                AtomConstraintForm::valence(right_valence),
             )]),
             ..Default::default()
         });
@@ -621,8 +621,8 @@ mod tests {
                 (AtomId(0), AtomId(2), BondForm::from_order(1)),
             ],
             constraints: Constraints::from(vec![
-                Constraint::Atom(AtomId(0), AtomConstraintAst::valence(left_valence)),
-                Constraint::Atom(AtomId(2), AtomConstraintAst::valence(right_valence)),
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(left_valence)),
+                Constraint::Atom(AtomId(2), AtomConstraintForm::valence(right_valence)),
             ]),
             ..Default::default()
         });

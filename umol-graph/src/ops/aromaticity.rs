@@ -25,9 +25,9 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AromaticValenceAst, AtomId, AtomView, BondConstraintAst,
-    BondId, BooleanForm, ElectronCountsForm, MoleculeAst, NumForm, RingConfig, RingModel,
-    RingSetKind, TransactionError,
+    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomId, AtomView,
+    BondConstraintForm, BondId, BooleanForm, ElectronCountsForm, MoleculeAst, NumForm, RingConfig,
+    RingModel, RingSetKind, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -195,7 +195,7 @@ impl AromaticityPerception {
         if ast.atoms().iter().any(|atom| {
             matches!(
                 atom.ast.constraints.aromatic_valence(),
-                Some(AromaticValenceAst::Aromatic(value))
+                Some(AromaticValenceForm::Aromatic(value))
                     if !matches!(value, NumForm::Lit(_))
             )
         }) || ast
@@ -208,13 +208,13 @@ impl AromaticityPerception {
 
         let systems = match self.find_systems(ast, config, |atom| {
             match atom.ast.constraints.aromatic_valence() {
-                Some(AromaticValenceAst::Aromatic(NumForm::Lit(value))) => {
+                Some(AromaticValenceForm::Aromatic(NumForm::Lit(value))) => {
                     u8::try_from(*value).ok()
                 }
-                Some(AromaticValenceAst::Aromatic(_)) | Some(AromaticValenceAst::NotAromatic) => {
+                Some(AromaticValenceForm::Aromatic(_)) | Some(AromaticValenceForm::NotAromatic) => {
                     None
                 }
-                Some(AromaticValenceAst::Undetermined) | None => match atom.aromatic_valence() {
+                Some(AromaticValenceForm::Undetermined) | None => match atom.aromatic_valence() {
                     NumForm::Lit(value) => u8::try_from(value).ok(),
                     _ => None,
                 },
@@ -239,7 +239,7 @@ impl AromaticityPerception {
         for atom in ast.atoms().iter() {
             if matches!(
                 atom.ast.constraints.aromatic_valence(),
-                Some(AromaticValenceAst::Aromatic(_))
+                Some(AromaticValenceForm::Aromatic(_))
             ) && !accepted_atoms.contains(&atom.id)
             {
                 inconsistencies
@@ -327,7 +327,7 @@ impl AromaticityPerception {
                     continue;
                 };
                 let mismatch = match constraint {
-                    AromaticValenceAst::Aromatic(NumForm::Lit(expected)) => {
+                    AromaticValenceForm::Aromatic(NumForm::Lit(expected)) => {
                         has_matching_candidate
                             && contributions
                                 .iter()
@@ -336,9 +336,9 @@ impl AromaticityPerception {
                                 })
                                 .is_some_and(|actual| actual != *expected)
                     }
-                    AromaticValenceAst::Aromatic(_)
-                    | AromaticValenceAst::NotAromatic
-                    | AromaticValenceAst::Undetermined => false,
+                    AromaticValenceForm::Aromatic(_)
+                    | AromaticValenceForm::NotAromatic
+                    | AromaticValenceForm::Undetermined => false,
                 };
                 if mismatch {
                     inconsistencies.insert(AromaticityInconsistency::AromaticValenceMismatch {
@@ -390,7 +390,7 @@ impl AromaticityPerception {
             let bond = ast.bond_mut(bond_id);
             bond.ast
                 .constraints
-                .set(BondConstraintAst::Aromatic(BooleanForm::Lit(true)));
+                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
         }
     }
 
@@ -413,7 +413,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomForm,
+        AromaticSystemId, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomForm,
         AtomId, BondConstraintKey, BondForm, ElectronCountsForm, MoleculeAst, MoleculeEntries,
         NumForm, UnpairedElectronsForm,
     };
@@ -451,7 +451,7 @@ mod tests {
             .constraints
             .get(AtomConstraintKey::AromaticValence)?
         {
-            AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(n))) => {
+            AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(NumForm::Lit(n))) => {
                 Some(*n)
             }
             _ => None,
@@ -462,8 +462,8 @@ mod tests {
         let mut atom = AtomForm::from_element(element);
         atom.charge = NumForm::Lit(0);
         atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
-        atom.constraints.set(AtomConstraintAst::AromaticValence(
-            AromaticValenceAst::Aromatic(NumForm::Lit(pi)),
+        atom.constraints.set(AtomConstraintForm::AromaticValence(
+            AromaticValenceForm::Aromatic(NumForm::Lit(pi)),
         ));
         atom
     }
@@ -508,9 +508,9 @@ mod tests {
                     .ast
                     .constraints
                     .aromatic_valence()
-                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                    .unwrap_or(&AromaticValenceForm::Undetermined)
                 {
-                    AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 }
             })
@@ -834,9 +834,9 @@ mod tests {
                     .ast
                     .constraints
                     .aromatic_valence()
-                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                    .unwrap_or(&AromaticValenceForm::Undetermined)
                 {
-                    AromaticValenceAst::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 }
             })

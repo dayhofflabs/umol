@@ -233,11 +233,11 @@ mod tests {
     use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
     use crate::ir::constraint::RingScope;
     use crate::ir::{
-        AromaticSystemConstraintAst, AromaticSystemForm, AtomConstraintAst, AtomConstraintsAst,
-        AtomForm, AtomId, AtomUpdate, BondConstraintAst, BondConstraintsAst, BondForm, BondUpdate,
-        BooleanForm, DativeBondConstraintAst, DativeBondForm, ElementForm, Entity, MoleculeAst,
-        MoleculeEntries, MulticenterBondForm, NoncovalentBondForm, NoncovalentBondKind, NumForm,
-        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
+        AromaticSystemConstraintAst, AromaticSystemForm, AtomConstraintForm, AtomConstraintsForm,
+        AtomForm, AtomId, AtomUpdate, BondConstraintForm, BondConstraintsForm, BondForm,
+        BondUpdate, BooleanForm, DativeBondConstraintAst, DativeBondForm, ElementForm, Entity,
+        MoleculeAst, MoleculeEntries, MulticenterBondForm, NoncovalentBondForm,
+        NoncovalentBondKind, NumForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
     };
 
     #[rustfmt::skip]
@@ -337,7 +337,7 @@ mod tests {
     #[rstest]
     #[case::carbon_h4("C #h4", AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
     #[case::carbon("C", AtomForm::from_element(Element::C).into_ground())]
-    #[case::carbon_v4("C #v4", AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground())]
+    #[case::carbon_v4("C #v4", AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)).into_ground())]
     fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomForm) {
         assert_eq!(atom_dsl_ground!(input), expected);
     }
@@ -347,7 +347,7 @@ mod tests {
     #[case::empty("", AtomUpdate::default())]
     #[case::element("C#h4", AtomUpdate { element: Some(ElementForm::Lit(Element::C)), implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
     #[case::field_only("#h4", AtomUpdate { implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
-    #[case::constraint_only("#v4", AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() })]
+    #[case::constraint_only("#v4", AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4_i64)), ..Default::default() })]
     fn test_atom_update_macro(#[case] input: &str, #[case] expected: AtomUpdate) {
         assert_eq!(atom_update_dsl!(input), expected);
     }
@@ -355,7 +355,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", BondForm::from_order(2))]
-    #[case::aromatic("1#a", BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
+    #[case::aromatic("1#a", BondForm::from_order(1).with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
     fn test_bond_macro(#[case] input: &str, #[case] expected: BondForm) {
         assert_eq!(bond_dsl!(input), expected);
     }
@@ -378,7 +378,7 @@ mod tests {
     #[case::empty("", BondUpdate::default())]
     #[case::order("1", BondUpdate { order: Some(NumForm::Lit(1)), ..Default::default() })]
     #[case::field_only("#c+", BondUpdate { charge: Some(NumForm::Lit(1)), ..Default::default() })]
-    #[case::constraint_only("#a", BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))), ..Default::default() })]
+    #[case::constraint_only("#a", BondUpdate { constraints: BondConstraintsForm::from(BondConstraintForm::Aromatic(BooleanForm::Lit(true))), ..Default::default() })]
     fn test_bond_update_macro(#[case] input: &str, #[case] expected: BondUpdate) {
         assert_eq!(bond_update_dsl!(input), expected);
     }

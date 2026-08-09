@@ -2204,8 +2204,8 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
         AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
-        AtomConstraintAst as GraphIrAtomConstraintAst,
-        BondConstraintAst as GraphIrBondConstraintAst, BooleanForm as GraphIrBooleanForm,
+        AtomConstraintForm as GraphIrAtomConstraintForm,
+        BondConstraintForm as GraphIrBondConstraintForm, BooleanForm as GraphIrBooleanForm,
         DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
         ElectronCountsForm as GraphIrElectronCountsForm, ElementForm as GraphIrElementForm,
         IsotopeMassForm as GraphIrIsotopeMassForm,
@@ -3061,17 +3061,17 @@ mod tests {
     #[case::constraint_added(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
         old: None,
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+        new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
     })]
     #[case::constraint_removed(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+        old: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(3))),
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+        old: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(3))),
+        new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
     })]
     fn test_atom_delta_roundtrip(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
@@ -3143,7 +3143,7 @@ mod tests {
         GraphIrAtomDelta::ModifyConstraint {
             id: GraphIrAtomId(3),
             old: None,
-            new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+            new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
         },
         "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
     )]
@@ -3182,17 +3182,17 @@ mod tests {
     #[case::constraint_added(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
         old: None,
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+        new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
     })]
     #[case::constraint_removed(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+        old: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAtomDelta::ModifyConstraint {
         id: GraphIrAtomId(3),
-        old: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(3))),
-        new: Some(GraphIrAtomConstraintAst::Valence(GraphIrNumForm::Lit(4))),
+        old: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(3))),
+        new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
     })]
     fn test_atom_delta_inverse(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
@@ -3228,17 +3228,17 @@ mod tests {
     #[case::constraint_added(GraphIrBondDelta::ModifyConstraint {
         id: GraphIrBondId(2),
         old: None,
-        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     #[case::constraint_removed(GraphIrBondDelta::ModifyConstraint {
         id: GraphIrBondId(2),
-        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrBondDelta::ModifyConstraint {
         id: GraphIrBondId(2),
-        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(false))),
-        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(false))),
+        new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     fn test_bond_delta_roundtrip(#[case] delta: GraphIrBondDelta) {
         Python::attach(|py| {
@@ -3316,7 +3316,7 @@ mod tests {
         GraphIrBondDelta::ModifyConstraint {
             id: GraphIrBondId(2),
             old: None,
-            new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+            new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         },
         "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
     )]
@@ -3357,17 +3357,17 @@ mod tests {
     #[case::constraint_added(GraphIrBondDelta::ModifyConstraint {
         id: GraphIrBondId(2),
         old: None,
-        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     #[case::constraint_removed(GraphIrBondDelta::ModifyConstraint {
         id: GraphIrBondId(2),
-        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrBondDelta::ModifyConstraint {
         id: GraphIrBondId(2),
-        old: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(false))),
-        new: Some(GraphIrBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(false))),
+        new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     fn test_bond_delta_inverse(#[case] delta: GraphIrBondDelta) {
         Python::attach(|py| {
@@ -4765,10 +4765,10 @@ mod tests {
     #[rstest]
     #[case::add_leaf(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
         GraphIrAtomId(3),
-        GraphIrAtomConstraintAst::degree(2),
+        GraphIrAtomConstraintForm::degree(2),
     )))]
     #[case::remove_recursive(GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
-        GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintAst::valence(4)),
+        GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintForm::valence(4)),
         GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
     ])))]
     fn test_constraint_delta_roundtrip(#[case] delta: GraphIrConstraintDelta) {
@@ -4782,33 +4782,33 @@ mod tests {
     #[case::equal(
         GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         )),
         GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         )),
         true
     )]
     #[case::variant(
         GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         )),
         GraphIrConstraintDelta::Remove(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         )),
         false
     )]
     #[case::constraint(
         GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         )),
         GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::valence(2),
+            GraphIrAtomConstraintForm::valence(2),
         )),
         false
     )]
@@ -4828,13 +4828,13 @@ mod tests {
     #[case::add_leaf(
         GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         )),
         "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2))))",
     )]
     #[case::remove_recursive(
         GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
-            GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintAst::valence(4)),
+            GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintForm::valence(4)),
             GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
         ])),
         "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
@@ -4859,10 +4859,10 @@ mod tests {
     #[rstest]
     #[case::add_leaf(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
         GraphIrAtomId(3),
-        GraphIrAtomConstraintAst::degree(2),
+        GraphIrAtomConstraintForm::degree(2),
     )))]
     #[case::remove_recursive(GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
-        GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintAst::valence(4)),
+        GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintForm::valence(4)),
         GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
     ])))]
     fn test_constraint_delta_inverse(#[case] delta: GraphIrConstraintDelta) {
@@ -4928,7 +4928,7 @@ mod tests {
         ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     }))]
     #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
     )))]
     fn test_delta_roundtrip(#[case] delta: GraphIrDelta) {
         Python::attach(|py| {
@@ -4956,7 +4956,7 @@ mod tests {
         }),
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         ))),
         false,
     )]
@@ -5009,7 +5009,7 @@ mod tests {
     #[case::constraint(
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         ))),
         "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))"
     )]
@@ -5079,7 +5079,7 @@ mod tests {
         ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
     }))]
     #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
     )))]
     fn test_delta_inverse(#[case] delta: GraphIrDelta) {
         Python::attach(|py| {
@@ -5127,7 +5127,7 @@ mod tests {
         }),
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
-            GraphIrAtomConstraintAst::degree(2),
+            GraphIrAtomConstraintForm::degree(2),
         ))),
     ])]
     fn test_deltas_new(#[case] entries: Vec<GraphIrDelta>) {
@@ -5188,7 +5188,7 @@ mod tests {
             }),
             GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                 GraphIrAtomId(3),
-                GraphIrAtomConstraintAst::degree(2),
+                GraphIrAtomConstraintForm::degree(2),
             ))),
         ],
         "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))])",
@@ -5203,7 +5203,7 @@ mod tests {
     #[rstest]
     fn test_deltas_append() {
         let appended = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-            GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+            GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
         ));
         Python::attach(|py| {
             let mut deltas = Deltas::from_rust(
@@ -5252,7 +5252,7 @@ mod tests {
                     vec![GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
                         GraphIrConstraint::Atom(
                             GraphIrAtomId(3),
-                            GraphIrAtomConstraintAst::degree(2),
+                            GraphIrAtomConstraintForm::degree(2),
                         ),
                     ))]
                     .into_iter()
@@ -5272,7 +5272,7 @@ mod tests {
                     }),
                     GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                         GraphIrAtomId(3),
-                        GraphIrAtomConstraintAst::degree(2),
+                        GraphIrAtomConstraintForm::degree(2),
                     ))),
                 ]
             );
@@ -5288,7 +5288,7 @@ mod tests {
                 ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             });
             let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
             ));
             let entries = vec![
                 into_py_variant(py, Delta::from_rust(py, &atom).unwrap()).unwrap(),
@@ -5312,7 +5312,7 @@ mod tests {
                 ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             });
             let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
             ));
             let target = Py::new(
                 py,
@@ -5479,7 +5479,7 @@ mod tests {
         ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     }))]
     #[case::negative(-1, GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
+        GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
     )))]
     fn test_deltas_getitem(#[case] index: isize, #[case] expected: GraphIrDelta) {
         Python::attach(|py| {
@@ -5491,7 +5491,7 @@ mod tests {
                     }),
                     GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                         GraphIrAtomId(3),
-                        GraphIrAtomConstraintAst::degree(2),
+                        GraphIrAtomConstraintForm::degree(2),
                     ))),
                 ]
                 .into_iter()
@@ -5514,7 +5514,7 @@ mod tests {
                     }),
                     GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                         GraphIrAtomId(3),
-                        GraphIrAtomConstraintAst::degree(2),
+                        GraphIrAtomConstraintForm::degree(2),
                     ))),
                 ]
                 .into_iter()
@@ -5534,7 +5534,7 @@ mod tests {
             }),
             GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                 GraphIrAtomId(3),
-                GraphIrAtomConstraintAst::degree(2),
+                GraphIrAtomConstraintForm::degree(2),
             ))),
         ];
         Python::attach(|py| {

@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondForm;
-use super::super::constraint::{BondConstraintAst, BondConstraintsAst};
+use super::super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::spin::UnpairedElectronsForm;
@@ -144,7 +144,7 @@ impl<'a> BondView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a BondConstraintsAst {
+    pub fn constraints(&self) -> &'a BondConstraintsForm {
         &self.ast.constraints
     }
 
@@ -193,7 +193,7 @@ impl<'a> BondView<'a> {
     /// See [`AtomView::derive_constraints`] for `include_missing`: with it, an
     /// absent overlay yields `NotStereo`; without it, the cis/trans stereo
     /// constraint is emitted only when the overlay is present.
-    pub fn derive_constraints(&self, include_missing: bool) -> BondConstraintsAst {
+    pub fn derive_constraints(&self, include_missing: bool) -> BondConstraintsForm {
         let cis_trans_stereo = match self
             .stereo_bond()
             .filter(|s| s.kind() == StereoKind::CisTrans)
@@ -202,7 +202,7 @@ impl<'a> BondView<'a> {
             None if include_missing => Some(CisTransStereoForm::NotStereo),
             None => None,
         };
-        BondConstraintsAst::from_iter(cis_trans_stereo.map(BondConstraintAst::cis_trans_stereo))
+        BondConstraintsForm::from_iter(cis_trans_stereo.map(BondConstraintForm::cis_trans_stereo))
     }
 
     /// Is bond ground
@@ -248,7 +248,7 @@ mod tests {
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::constraint::{BondConstraintAst, BondConstraintsAst};
+    use crate::ir::constraint::{BondConstraintForm, BondConstraintsForm};
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
@@ -435,16 +435,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::cis_trans_site(BondId(1), BondConstraintsAst::from_iter([
-        BondConstraintAst::cis_trans_stereo(CisTransStereoForm::stereo(StereoCoset::Lit(1))),
+    #[case::cis_trans_site(BondId(1), BondConstraintsForm::from_iter([
+        BondConstraintForm::cis_trans_stereo(CisTransStereoForm::stereo(StereoCoset::Lit(1))),
     ]))]
-    #[case::non_stereo(BondId(0), BondConstraintsAst::from_iter([
-        BondConstraintAst::cis_trans_stereo(CisTransStereoForm::NotStereo),
+    #[case::non_stereo(BondId(0), BondConstraintsForm::from_iter([
+        BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo),
     ]))]
     fn test_bond_view_derive_constraints(
         stereo_molecule: MoleculeAst,
         #[case] bond: BondId,
-        #[case] expected: BondConstraintsAst,
+        #[case] expected: BondConstraintsForm,
     ) {
         assert_eq!(stereo_molecule.bond(bond).derive_constraints(true), expected);
     }

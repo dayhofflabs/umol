@@ -9,8 +9,8 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 #[cfg(test)]
 use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
-    aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst,
-    AtomConstraintsAst, AtomForm, AtomHandle, AtomId, AtomView, BooleanForm, Edits,
+    aromatic_covalence, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
+    AtomConstraintsForm, AtomForm, AtomHandle, AtomId, AtomView, BooleanForm, Edits,
     IsotopeMassForm, Lattice, MoleculeAst, NumForm, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -225,11 +225,11 @@ impl<'a> CountsValence<'a> {
         let aromatic_constraint = atom
             .constraints
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined);
+            .unwrap_or(&AromaticValenceForm::Undetermined);
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
-                AromaticValenceAst::Aromatic(NumForm::Undetermined)
+                AromaticValenceForm::Aromatic(NumForm::Undetermined)
             )
         {
             return Err(CountsError::UndeterminedAromaticValence);
@@ -330,7 +330,7 @@ fn candidate_implicit_hydrogens(
 }
 
 fn candidate_aromatic_valences(
-    aromatic: &AromaticValenceAst,
+    aromatic: &AromaticValenceForm,
     is_aromatic: bool,
     table: Option<&[u8]>,
 ) -> Vec<i64> {
@@ -410,12 +410,12 @@ fn derive_atom(
             count: NumForm::Lit(unpaired_electrons),
             multiplicity: NumForm::Lit(multiplicity),
         },
-        constraints: AtomConstraintsAst::from_iter([
-            AtomConstraintAst::Valence(NumForm::Lit(valence)),
-            AtomConstraintAst::AromaticValence(if is_aromatic {
-                AromaticValenceAst::Aromatic(NumForm::Lit(aromatic_valence))
+        constraints: AtomConstraintsForm::from_iter([
+            AtomConstraintForm::Valence(NumForm::Lit(valence)),
+            AtomConstraintForm::AromaticValence(if is_aromatic {
+                AromaticValenceForm::Aromatic(NumForm::Lit(aromatic_valence))
             } else {
-                AromaticValenceAst::NotAromatic
+                AromaticValenceForm::NotAromatic
             }),
         ]),
         ..Default::default()
@@ -533,13 +533,13 @@ mod tests {
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraintAst::valence(0_i64)),
+                    new: Some(AtomConstraintForm::valence(0_i64)),
                 },
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraintAst::aromatic_valence(
-                        AromaticValenceAst::NotAromatic,
+                    new: Some(AtomConstraintForm::aromatic_valence(
+                        AromaticValenceForm::NotAromatic,
                     )),
                 },
             ]))

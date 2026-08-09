@@ -340,28 +340,28 @@ proptest! {
 
 proptest! {
     #[test]
-    fn test_atom_constraints_ast_iterators_exact_size(
+    fn test_atom_constraints_form_iterators_exact_size(
         mut constraints in atom_constraints_strategy(),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.iter().cloned(), &expected, prefix)?;
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, AtomConstraintsAst::new());
+        prop_assert_eq!(constraints, AtomConstraintsForm::new());
     }
 
     #[test]
-    fn test_bond_constraints_ast_take_exact_size(
+    fn test_bond_constraints_form_take_exact_size(
         mut constraints in bond_constraints_strategy(),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, BondConstraintsAst::new());
+        prop_assert_eq!(constraints, BondConstraintsForm::new());
     }
 
     #[test]
-    fn test_dative_bond_constraints_ast_take_exact_size(
+    fn test_dative_bond_constraints_form_take_exact_size(
         mut constraints in dative_bond_constraints_strategy(),
         prefix in any::<usize>(),
     ) {
@@ -381,7 +381,7 @@ proptest! {
     }
 
     #[test]
-    fn test_multicenter_bond_constraints_ast_take_exact_size(
+    fn test_multicenter_bond_constraints_form_take_exact_size(
         mut constraints in multicenter_bond_form_strategy().prop_map(|ast| ast.constraints),
         prefix in any::<usize>(),
     ) {
@@ -391,7 +391,7 @@ proptest! {
     }
 
     #[test]
-    fn test_noncovalent_bond_constraints_ast_take_exact_size(
+    fn test_noncovalent_bond_constraints_form_take_exact_size(
         mut constraints in noncovalent_bond_constraints_strategy(),
         prefix in any::<usize>(),
     ) {
@@ -401,7 +401,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_atom_constraints_ast_take_exact_size(
+    fn test_stereo_atom_constraints_form_take_exact_size(
         mut constraints in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
         prefix in any::<usize>(),
     ) {
@@ -411,7 +411,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_bond_constraints_ast_take_exact_size(
+    fn test_stereo_bond_constraints_form_take_exact_size(
         mut constraints in stereo_bond_constraints_strategy(StereoKind::CisTrans),
         prefix in any::<usize>(),
     ) {
@@ -421,36 +421,36 @@ proptest! {
     }
 }
 
-/// Vacuous-payload `AtomConstraintAst` variants render to nothing in the
+/// Vacuous-payload `AtomConstraintForm` variants render to nothing in the
 /// canonical entity-string form. The proptest generator excludes these from
 /// roundtrip strategies; this asserts the elision invariant directly so a
 /// regression in `fmt_value_field_required` / `fmt_ring_count` / the
 /// AromaticValence / MulticenterValence formatters can't slip through.
 #[rstest]
-#[case::valence(AtomConstraintAst::Valence(NumForm::Undetermined))]
-#[case::total_valence(AtomConstraintAst::TotalValence(NumForm::Undetermined))]
-#[case::donated_pairs(AtomConstraintAst::DonatedPairs(NumForm::Undetermined))]
-#[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(NumForm::Undetermined))]
-#[case::degree(AtomConstraintAst::Degree(NumForm::Undetermined))]
-#[case::total_degree(AtomConstraintAst::TotalDegree(NumForm::Undetermined))]
-#[case::ring_degree(AtomConstraintAst::RingDegree(NumForm::Undetermined))]
-#[case::ring_valence(AtomConstraintAst::RingValence(NumForm::Undetermined))]
-#[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(NumForm::Undetermined))]
-#[case::ring_membership_all(AtomConstraintAst::ring_membership(
+#[case::valence(AtomConstraintForm::Valence(NumForm::Undetermined))]
+#[case::total_valence(AtomConstraintForm::TotalValence(NumForm::Undetermined))]
+#[case::donated_pairs(AtomConstraintForm::DonatedPairs(NumForm::Undetermined))]
+#[case::accepted_pairs(AtomConstraintForm::AcceptedPairs(NumForm::Undetermined))]
+#[case::degree(AtomConstraintForm::Degree(NumForm::Undetermined))]
+#[case::total_degree(AtomConstraintForm::TotalDegree(NumForm::Undetermined))]
+#[case::ring_degree(AtomConstraintForm::RingDegree(NumForm::Undetermined))]
+#[case::ring_valence(AtomConstraintForm::RingValence(NumForm::Undetermined))]
+#[case::total_hydrogens(AtomConstraintForm::TotalHydrogens(NumForm::Undetermined))]
+#[case::ring_membership_all(AtomConstraintForm::ring_membership(
     RingScope::All,
     NumForm::Undetermined
 ))]
-#[case::ring_membership_size(AtomConstraintAst::ring_membership(
+#[case::ring_membership_size(AtomConstraintForm::ring_membership(
     RingScope::All,
     NumForm::Undetermined
 ))]
-#[case::aromatic_valence_undetermined(AtomConstraintAst::AromaticValence(
-    AromaticValenceAst::Undetermined
+#[case::aromatic_valence_undetermined(AtomConstraintForm::AromaticValence(
+    AromaticValenceForm::Undetermined
 ))]
-#[case::multicenter_valence_undetermined(AtomConstraintAst::MulticenterValence(
-    MulticenterValenceAst::Undetermined
+#[case::multicenter_valence_undetermined(AtomConstraintForm::MulticenterValence(
+    MulticenterValenceForm::Undetermined
 ))]
-fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraintAst) {
+fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraintForm) {
     let mut atom = AtomForm::default();
     atom.constraints.set(vacuous);
     let with_vacuous = AtomDsl(atom).to_string();

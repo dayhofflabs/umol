@@ -6,7 +6,7 @@ use thiserror::Error;
 use umol_graph_core::RelevantCycleEnumerationAlgorithm;
 use umol_utils::solution::Solution;
 
-use super::super::super::constraint::{AtomConstraintAst, RelationalConstraint};
+use super::super::super::constraint::{AtomConstraintForm, RelationalConstraint};
 use super::super::super::entity::Entity;
 use super::super::super::id::AtomId;
 use super::super::super::molecule::MoleculeAst;
@@ -345,7 +345,7 @@ impl Truth {
 fn evaluate_atom(
     ast: &MoleculeAst,
     atom_id: AtomId,
-    predicate: &AtomConstraintAst,
+    predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'_>>,
 ) -> Truth {
     if is_ring_predicate(predicate) {
@@ -354,9 +354,9 @@ fn evaluate_atom(
         };
         let ring_atom = rings.atom(atom_id);
         let (asserted, derived) = match predicate {
-            AtomConstraintAst::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
-            AtomConstraintAst::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
-            AtomConstraintAst::RingMembership(membership) => (
+            AtomConstraintForm::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
+            AtomConstraintForm::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
+            AtomConstraintForm::RingMembership(membership) => (
                 &membership.count,
                 ring_atom.ring_membership(membership.scope),
             ),
@@ -387,7 +387,7 @@ fn truth_from_solution<C>(outcome: Solution<(), C>) -> Truth {
 fn all_atoms<'a>(
     ast: &'a MoleculeAst,
     atoms: impl IntoIterator<Item = AtomId>,
-    predicate: &AtomConstraintAst,
+    predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'a>>,
 ) -> Truth {
     all_truth(
@@ -400,7 +400,7 @@ fn all_atoms<'a>(
 fn any_atom<'a>(
     ast: &'a MoleculeAst,
     atoms: impl IntoIterator<Item = AtomId>,
-    predicate: &AtomConstraintAst,
+    predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'a>>,
 ) -> Truth {
     let mut any_underdetermined = false;
@@ -459,12 +459,12 @@ fn uses_ring_predicate(constraint: &RelationalConstraint) -> bool {
     }
 }
 
-fn is_ring_predicate(predicate: &AtomConstraintAst) -> bool {
+fn is_ring_predicate(predicate: &AtomConstraintForm) -> bool {
     matches!(
         predicate,
-        AtomConstraintAst::RingDegree(_)
-            | AtomConstraintAst::RingValence(_)
-            | AtomConstraintAst::RingMembership(_)
+        AtomConstraintForm::RingDegree(_)
+            | AtomConstraintForm::RingValence(_)
+            | AtomConstraintForm::RingMembership(_)
     )
 }
 
@@ -551,11 +551,11 @@ mod tests {
     })]
     #[case::dative_all(RelationalConstraint::DativeBondAllDonors {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(2)),
+        predicate: Box::new(AtomConstraintForm::degree(2)),
     })]
     #[case::dative_any(RelationalConstraint::DativeBondAnyDonor {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(2)),
+        predicate: Box::new(AtomConstraintForm::degree(2)),
     })]
     #[case::dative_acceptor(RelationalConstraint::DativeBondAcceptor {
         bond: DativeBondId(0),
@@ -563,7 +563,7 @@ mod tests {
     })]
     #[case::dative_acceptor_satisfies(RelationalConstraint::DativeBondAcceptorSatisfies {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(2)),
+        predicate: Box::new(AtomConstraintForm::degree(2)),
     })]
     #[case::dative_parallels(RelationalConstraint::DativeBondParallels {
         dative: DativeBondId(0),
@@ -583,11 +583,11 @@ mod tests {
     })]
     #[case::aromatic_all(RelationalConstraint::AromaticSystemAllAtoms {
         system: AromaticSystemId(0),
-        predicate: Box::new(AtomConstraintAst::degree(2)),
+        predicate: Box::new(AtomConstraintForm::degree(2)),
     })]
     #[case::aromatic_any_ring(RelationalConstraint::AromaticSystemAnyAtom {
         system: AromaticSystemId(0),
-        predicate: Box::new(AtomConstraintAst::ring_membership(RingScope::Size(3), 1)),
+        predicate: Box::new(AtomConstraintForm::ring_membership(RingScope::Size(3), 1)),
     })]
     #[case::multicenter_atoms(RelationalConstraint::MulticenterBondAtoms {
         bond: MulticenterBondId(0),
@@ -603,11 +603,11 @@ mod tests {
     })]
     #[case::multicenter_all(RelationalConstraint::MulticenterBondAllAtoms {
         bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(NumForm::RangeFrom(1))),
+        predicate: Box::new(AtomConstraintForm::degree(NumForm::RangeFrom(1))),
     })]
     #[case::multicenter_any(RelationalConstraint::MulticenterBondAnyAtom {
         bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(1)),
+        predicate: Box::new(AtomConstraintForm::degree(1)),
     })]
     #[case::noncovalent_ends(RelationalConstraint::NoncovalentBondEnds {
         bond: NoncovalentBondId(0),
@@ -620,8 +620,8 @@ mod tests {
     #[case::noncovalent_satisfies(RelationalConstraint::NoncovalentBondEndsSatisfy {
         bond: NoncovalentBondId(0),
         predicates: [
-            Box::new(AtomConstraintAst::degree(2)),
-            Box::new(AtomConstraintAst::degree(1)),
+            Box::new(AtomConstraintForm::degree(2)),
+            Box::new(AtomConstraintForm::degree(1)),
         ],
     })]
     #[case::stereo_atom_site(RelationalConstraint::StereoAtomSite {
@@ -638,11 +638,11 @@ mod tests {
     })]
     #[case::stereo_atom_all(RelationalConstraint::StereoAtomAllLigands {
         stereo_atom: StereoAtomId(0),
-        predicate: Box::new(AtomConstraintAst::degree(NumForm::RangeFrom(1))),
+        predicate: Box::new(AtomConstraintForm::degree(NumForm::RangeFrom(1))),
     })]
     #[case::stereo_atom_any(RelationalConstraint::StereoAtomAnyLigand {
         stereo_atom: StereoAtomId(0),
-        predicate: Box::new(AtomConstraintAst::degree(1)),
+        predicate: Box::new(AtomConstraintForm::degree(1)),
     })]
     #[case::stereo_bond_site(RelationalConstraint::StereoBondSite {
         stereo_bond: StereoBondId(0),
@@ -658,15 +658,15 @@ mod tests {
     })]
     #[case::stereo_bond_all(RelationalConstraint::StereoBondAllLigands {
         stereo_bond: StereoBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(NumForm::RangeFrom(0))),
+        predicate: Box::new(AtomConstraintForm::degree(NumForm::RangeFrom(0))),
     })]
     #[case::stereo_bond_any(RelationalConstraint::StereoBondAnyLigand {
         stereo_bond: StereoBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(0)),
+        predicate: Box::new(AtomConstraintForm::degree(0)),
     })]
     #[case::vacuous_predicate(RelationalConstraint::DativeBondAllDonors {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::valence(NumForm::Undetermined)),
+        predicate: Box::new(AtomConstraintForm::valence(NumForm::Undetermined)),
     })]
     fn test_relational_constraint_validator_validate(
         relational_molecule: MoleculeAst,
@@ -685,11 +685,11 @@ mod tests {
     #[rstest]
     #[case::all(RelationalConstraint::MulticenterBondAllAtoms {
         bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraintAst::valence(2)),
+        predicate: Box::new(AtomConstraintForm::valence(2)),
     })]
     #[case::any(RelationalConstraint::MulticenterBondAnyAtom {
         bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraintAst::valence(3)),
+        predicate: Box::new(AtomConstraintForm::valence(3)),
     })]
     fn test_relational_constraint_validator_validate_partial(
         relational_molecule: MoleculeAst,
@@ -720,11 +720,11 @@ mod tests {
     })]
     #[case::all(RelationalConstraint::AromaticSystemAllAtoms {
         system: AromaticSystemId(0),
-        predicate: Box::new(AtomConstraintAst::degree(1)),
+        predicate: Box::new(AtomConstraintForm::degree(1)),
     })]
     #[case::any(RelationalConstraint::DativeBondAnyDonor {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(1)),
+        predicate: Box::new(AtomConstraintForm::degree(1)),
     })]
     #[case::acceptor(RelationalConstraint::DativeBondAcceptor {
         bond: DativeBondId(0),
@@ -732,7 +732,7 @@ mod tests {
     })]
     #[case::acceptor_predicate(RelationalConstraint::DativeBondAcceptorSatisfies {
         bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraintAst::degree(1)),
+        predicate: Box::new(AtomConstraintForm::degree(1)),
     })]
     #[case::parallel(RelationalConstraint::DativeBondParallels {
         dative: DativeBondId(0),
@@ -745,8 +745,8 @@ mod tests {
     #[case::ordered_endpoints(RelationalConstraint::NoncovalentBondEndsSatisfy {
         bond: NoncovalentBondId(0),
         predicates: [
-            Box::new(AtomConstraintAst::degree(1)),
-            Box::new(AtomConstraintAst::degree(2)),
+            Box::new(AtomConstraintForm::degree(1)),
+            Box::new(AtomConstraintForm::degree(2)),
         ],
     })]
     #[case::atom_site(RelationalConstraint::StereoAtomSite {

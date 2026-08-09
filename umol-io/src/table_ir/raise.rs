@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AromaticValenceAst, AtomConstraintAst, AtomForm, AtomId, BondConstraintAst, BondForm,
+    AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm,
     BooleanForm, CisTransStereoForm, Constraints, DativeBondForm, ElementForm, IsotopeMassForm,
     Lattice, MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondForm,
     NoncovalentBondForm, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
@@ -172,8 +172,8 @@ impl TryIntoIr<AtomForm> for &TableAtom {
         };
         match self.aromatic {
             Some(true) => {
-                atom.constraints.set(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(NumForm::Undetermined),
+                atom.constraints.set(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Undetermined),
                 ));
                 // A bare aromatic heteroatom specifies zero H; any H must be bracketed
                 // ([nH]), which arrives above as an explicit count.
@@ -184,8 +184,8 @@ impl TryIntoIr<AtomForm> for &TableAtom {
                 }
             }
             Some(false) => {
-                atom.constraints.set(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::NotAromatic,
+                atom.constraints.set(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::NotAromatic,
                 ));
             }
             None => {}
@@ -217,7 +217,7 @@ impl TryIntoIr<BondForm> for &TableBond {
         };
         if matches!(self.order, TableBondOrder::Aromatic) {
             bond.constraints
-                .set(BondConstraintAst::Aromatic(BooleanForm::Lit(true)));
+                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
         }
         Ok(bond)
     }
@@ -233,7 +233,7 @@ fn raise_bond_order(order: TableBondOrder) -> NumForm {
         TableBondOrder::Quintuple => NumForm::Lit(5),
         TableBondOrder::Sextuple => NumForm::Lit(6),
         // Definite-aromatic: localized bond order is 1 by Kekulé convention;
-        // the aromatic flag is added separately as `BondConstraintAst::Aromatic`.
+        // the aromatic flag is added separately as `BondConstraintForm::Aromatic`.
         // Renders as `1#a`.
         TableBondOrder::Aromatic => NumForm::Lit(1),
         // Fuzzy orders: no concrete bond order can be assigned; raise to
@@ -251,12 +251,12 @@ fn raise_bond_order(order: TableBondOrder) -> NumForm {
 fn raise_tetrahedral_stereo(
     mol: &TableMolecule,
     atom_idx: usize,
-) -> Result<Option<AtomConstraintAst>, RaiseError> {
+) -> Result<Option<AtomConstraintForm>, RaiseError> {
     let chirality = mol.atoms[atom_idx].chirality;
     let (relabeling, source_coset): (Permutation, usize) = match chirality {
         Some(Chirality::Unspecified) => {
             validate_tetrahedral_geometry(mol, atom_idx)?;
-            return Ok(Some(AtomConstraintAst::TetrahedralStereo(
+            return Ok(Some(AtomConstraintForm::TetrahedralStereo(
                 TetrahedralStereoForm::stereo(StereoCoset::Undetermined),
             )));
         }
@@ -337,7 +337,7 @@ fn raise_tetrahedral_stereo(
         .space()
         .reindex(source_coset as u32, relabeling)
         .expect("tetrahedral coset reindex");
-    Ok(Some(AtomConstraintAst::TetrahedralStereo(
+    Ok(Some(AtomConstraintForm::TetrahedralStereo(
         TetrahedralStereoForm::stereo(StereoCoset::Lit(coset)),
     )))
 }
@@ -346,13 +346,13 @@ fn raise_tetrahedral_stereo(
 fn raise_cis_trans_stereo(
     mol: &TableMolecule,
     bond_idx: usize,
-) -> Result<Option<BondConstraintAst>, RaiseError> {
+) -> Result<Option<BondConstraintForm>, RaiseError> {
     let bond = &mol.bonds[bond_idx];
     if bond.order != TableBondOrder::Double {
         return Ok(None);
     }
     if bond.stereo == Some(BondStereo::Either) {
-        return Ok(Some(BondConstraintAst::CisTransStereo(
+        return Ok(Some(BondConstraintForm::CisTransStereo(
             CisTransStereoForm::stereo(StereoCoset::Undetermined),
         )));
     }
@@ -387,7 +387,7 @@ fn raise_cis_trans_stereo(
                 .expect("validated cis/trans frames contain the same ligands"),
         )
         .expect("cis/trans coset index");
-    Ok(Some(BondConstraintAst::CisTransStereo(
+    Ok(Some(BondConstraintForm::CisTransStereo(
         CisTransStereoForm::stereo(StereoCoset::Lit(coset)),
     )))
 }
@@ -397,7 +397,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_chem::spin::SpinMultiplicity;
-    use umol_graph_ir::ir::{AtomConstraintsAst, BondId, Entity};
+    use umol_graph_ir::ir::{AtomConstraintsForm, BondId, Entity};
 
     use super::*;
     use crate::ctfile::parse_mol_to_ast;
@@ -482,7 +482,7 @@ mod tests {
                         count: NumForm::Lit(0),
                         multiplicity: NumForm::Undetermined,
                     },
-                    constraints: AtomConstraintsAst::new(),
+                    constraints: AtomConstraintsForm::new(),
                 }],
                 ..Default::default()
             })
@@ -531,7 +531,7 @@ mod tests {
                 count: NumForm::Lit(0),
                 multiplicity: NumForm::Undetermined,
             },
-            constraints: AtomConstraintsAst::new(),
+            constraints: AtomConstraintsForm::new(),
         }
     )]
     #[case::bracket_fields(
@@ -551,7 +551,7 @@ mod tests {
                 count: NumForm::Lit(2),
                 multiplicity: NumForm::Lit(1),
             },
-            constraints: AtomConstraintsAst::new(),
+            constraints: AtomConstraintsForm::new(),
         }
     )]
     fn test_table_atom_try_into_ir(
@@ -593,8 +593,8 @@ mod tests {
                     count: NumForm::Lit(0),
                     multiplicity: NumForm::Undetermined,
                 },
-                constraints: AtomConstraintsAst::from(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(NumForm::Undetermined),
+                constraints: AtomConstraintsForm::from(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Undetermined),
                 )),
             })
         );
@@ -602,15 +602,15 @@ mod tests {
 
     #[rstest]
     #[case::table_aromatic_none(None, None)]
-    #[case::table_aromatic_false(Some(false), Some(AromaticValenceAst::NotAromatic))]
+    #[case::table_aromatic_false(Some(false), Some(AromaticValenceForm::NotAromatic))]
     #[case::table_aromatic_true(
         Some(true),
-        Some(AromaticValenceAst::Aromatic(NumForm::Undetermined))
+        Some(AromaticValenceForm::Aromatic(NumForm::Undetermined))
     )]
     fn test_table_molecule_try_into_ir_aromatic(
         mut carbon: TableMolecule,
         #[case] aromatic: Option<bool>,
-        #[case] expected: Option<AromaticValenceAst>,
+        #[case] expected: Option<AromaticValenceForm>,
     ) {
         carbon.atoms[0].aromatic = aromatic;
         let ast: MoleculeAst = (&carbon).try_into_ir(&()).unwrap();
@@ -662,7 +662,7 @@ mod tests {
         assert!(bond
             .constraints
             .iter()
-            .any(|c| matches!(c, BondConstraintAst::Aromatic(BooleanForm::Lit(true)))));
+            .any(|c| matches!(c, BondConstraintForm::Aromatic(BooleanForm::Lit(true)))));
         for i in 0..2 {
             assert!(ast
                 .atom(AtomId(i))
@@ -695,7 +695,7 @@ mod tests {
         assert!(matches!(atom.implicit_hydrogens, NumForm::Undetermined));
         assert!(matches!(
             atom.constraints.aromatic_valence(),
-            Some(AromaticValenceAst::NotAromatic)
+            Some(AromaticValenceForm::NotAromatic)
         ));
         assert_eq!(atom.to_string(), expected_atom);
     }
@@ -717,7 +717,7 @@ mod tests {
                     count: NumForm::Lit(0),
                     multiplicity: NumForm::Undetermined,
                 },
-                constraints: AtomConstraintsAst::new(),
+                constraints: AtomConstraintsForm::new(),
             }
         );
     }
@@ -750,7 +750,7 @@ mod tests {
         #[case] expected: Option<StereoCoset>,
     ) {
         let expected = expected.map(|coset| {
-            AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::stereo(coset))
+            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo(coset))
         });
         assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Ok(expected));
     }
@@ -808,7 +808,7 @@ mod tests {
         #[case] expected: Option<StereoCoset>,
     ) {
         let expected = expected
-            .map(|coset| BondConstraintAst::CisTransStereo(CisTransStereoForm::stereo(coset)));
+            .map(|coset| BondConstraintForm::CisTransStereo(CisTransStereoForm::stereo(coset)));
         assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Ok(expected));
     }
 

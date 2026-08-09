@@ -4,7 +4,7 @@ use std::convert::Infallible;
 use std::iter::once;
 
 use umol_graph_ir::ir::{
-    AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomId, ElectronCountsForm,
+    AromaticSystemId, AromaticValenceForm, AtomConstraintForm, AtomId, ElectronCountsForm,
     ElementForm, MoleculeAst, NumForm,
 };
 
@@ -83,8 +83,8 @@ impl DelocalizationPlan {
         for (atom_id, contribution) in self.atoms {
             let atom = &mut ast.atom_mut(atom_id).ast;
             atom.charge = NumForm::Lit(0);
-            atom.constraints.set(AtomConstraintAst::AromaticValence(
-                AromaticValenceAst::Aromatic(NumForm::Lit(contribution)),
+            atom.constraints.set(AtomConstraintForm::AromaticValence(
+                AromaticValenceForm::Aromatic(NumForm::Lit(contribution)),
             ));
         }
         let system = &mut ast.aromatic_system_mut(self.system).ast;

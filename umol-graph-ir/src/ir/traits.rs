@@ -89,7 +89,7 @@ pub trait Lattice: Canonicalize {
 
     /// Least upper bound. `Err(NoJoin)` when `self` and `other` have no common
     /// generalization — a top-less (meet-semilattice) type whose operands lie in
-    /// different fibers (e.g. two `AtomConstraintAst`s of different kind). Bounded
+    /// different fibers (e.g. two `AtomConstraintForm`s of different kind). Bounded
     /// lattices always return `Ok`.
     fn join(&self, other: &Self) -> Result<Self, NoJoin>;
 

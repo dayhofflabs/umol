@@ -8,8 +8,8 @@ use umol_graph_core::{
     ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
-    AtomConstraintAst, AtomForm, AtomId, Constraint, ConstraintValidateConfig, ConstraintValidator,
-    Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
+    AtomConstraintForm, AtomForm, AtomId, Constraint, ConstraintValidateConfig,
+    ConstraintValidator, Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
 };
 
 use super::REGRESSION_FILE;
@@ -39,7 +39,7 @@ proptest! {
     fn test_constraint_and_permutation_invariant(values in prop::collection::vec(0i64..=3, 0..=8)) {
         let constraints: Vec<_> = values
             .iter()
-            .map(|&value| Constraint::Atom(AtomId(0), AtomConstraintAst::valence(value)))
+            .map(|&value| Constraint::Atom(AtomId(0), AtomConstraintForm::valence(value)))
             .collect();
         let mut reversed = constraints.clone();
         reversed.reverse();
@@ -56,7 +56,7 @@ proptest! {
     fn test_constraint_or_permutation_invariant(values in prop::collection::vec(0i64..=3, 0..=8)) {
         let constraints: Vec<_> = values
             .iter()
-            .map(|&value| Constraint::Atom(AtomId(0), AtomConstraintAst::valence(value)))
+            .map(|&value| Constraint::Atom(AtomId(0), AtomConstraintForm::valence(value)))
             .collect();
         let mut reversed = constraints.clone();
         reversed.reverse();
@@ -71,7 +71,7 @@ proptest! {
 
     #[test]
     fn test_constraint_double_negation(value in 0i64..=3) {
-        let constraint = Constraint::Atom(AtomId(0), AtomConstraintAst::valence(value));
+        let constraint = Constraint::Atom(AtomId(0), AtomConstraintForm::valence(value));
         let double_negation = Constraint::Not(Box::new(Constraint::Not(Box::new(
             constraint.clone(),
         ))));
@@ -86,7 +86,7 @@ proptest! {
 
     #[test]
     fn test_constraint_inline_top_level_leaf_agreement(value in 0i64..=3) {
-        let constraint = AtomConstraintAst::valence(value);
+        let constraint = AtomConstraintForm::valence(value);
         let inline = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C).with_constraint(constraint.clone())],
             ..MoleculeEntries::default()

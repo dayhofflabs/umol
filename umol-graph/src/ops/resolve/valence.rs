@@ -104,7 +104,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomFieldChange, AtomHandle, AtomId, Edit, Edits, IsotopeMassForm,
+        AtomConstraintForm, AtomFieldChange, AtomHandle, AtomId, Edit, Edits, IsotopeMassForm,
         NumForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
@@ -163,7 +163,7 @@ mod tests {
         Solution::Contradictory(ValenceContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(0),
-                constraint: AtomConstraintAst::valence(1),
+                constraint: AtomConstraintForm::valence(1),
             },
         )),
     )]
@@ -175,7 +175,7 @@ mod tests {
         Solution::Contradictory(ValenceContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(0),
-                constraint: AtomConstraintAst::valence(1),
+                constraint: AtomConstraintForm::valence(1),
             },
         )),
     )]
@@ -201,7 +201,7 @@ mod tests {
         Solution::Contradictory(ValenceContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(0),
-                constraint: AtomConstraintAst::donated_pairs(0),
+                constraint: AtomConstraintForm::donated_pairs(0),
             },
         )),
     )]
@@ -213,7 +213,7 @@ mod tests {
         Solution::Contradictory(ValenceContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(1),
-                constraint: AtomConstraintAst::accepted_pairs(0),
+                constraint: AtomConstraintForm::accepted_pairs(0),
             },
         )),
     )]
@@ -231,8 +231,8 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v*#a!"]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(0)),
-            old: Some(AtomConstraintAst::valence(NumForm::Undetermined)),
-            new: Some(AtomConstraintAst::valence(0)),
+            old: Some(AtomConstraintForm::valence(NumForm::Undetermined)),
+            new: Some(AtomConstraintForm::valence(0)),
         }])),
     )]
     fn test_valence_resolver_plan_constraints(

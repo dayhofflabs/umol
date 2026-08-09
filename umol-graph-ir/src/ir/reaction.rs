@@ -1572,8 +1572,8 @@ mod tests {
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
     use super::super::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
-        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
+        AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
+        Constraints, DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
         NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
     };
@@ -2020,8 +2020,8 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_apply_at_molecule_constraint_created() {
         let constraint = Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraintAst::valence(3_i64)),
-            Constraint::Bond(BondId(0), BondConstraintAst::aromatic(true)),
+            Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
+            Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
             Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(0),

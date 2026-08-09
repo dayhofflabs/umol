@@ -69,19 +69,19 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_valence_ast_lattice_laws_raw(
-        a in raw_aromatic_valence_ast_strategy(),
-        b in raw_aromatic_valence_ast_strategy(),
-        c in raw_aromatic_valence_ast_strategy(),
+    fn test_aromatic_valence_form_lattice_laws_raw(
+        a in raw_aromatic_valence_form_strategy(),
+        b in raw_aromatic_valence_form_strategy(),
+        c in raw_aromatic_valence_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_multicenter_valence_ast_lattice_laws_raw(
-        a in raw_multicenter_valence_ast_strategy(),
-        b in raw_multicenter_valence_ast_strategy(),
-        c in raw_multicenter_valence_ast_strategy(),
+    fn test_multicenter_valence_form_lattice_laws_raw(
+        a in raw_multicenter_valence_form_strategy(),
+        b in raw_multicenter_valence_form_strategy(),
+        c in raw_multicenter_valence_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }
@@ -142,9 +142,9 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_valence_ast_as_lit_laws(
-        a in raw_aromatic_valence_ast_strategy(),
-        b in raw_aromatic_valence_ast_strategy(),
+    fn test_aromatic_valence_form_as_lit_laws(
+        a in raw_aromatic_valence_form_strategy(),
+        b in raw_aromatic_valence_form_strategy(),
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
@@ -156,19 +156,19 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_valence_ast_aromatic_covalence(
+    fn test_aromatic_valence_form_aromatic_covalence(
         valence in any::<i64>(),
     ) {
-        let ast = AromaticValenceAst::from(AromaticValence::Aromatic(valence));
+        let ast = AromaticValenceForm::from(AromaticValence::Aromatic(valence));
         let expected = if valence == 1 { 1 } else { 0 };
         prop_assert_eq!(aromatic_covalence(valence), expected);
         prop_assert_eq!(ast.aromatic_covalence(), NumForm::Lit(expected));
     }
 
     #[test]
-    fn test_multicenter_valence_ast_as_lit_laws(
-        a in raw_multicenter_valence_ast_strategy(),
-        b in raw_multicenter_valence_ast_strategy(),
+    fn test_multicenter_valence_form_as_lit_laws(
+        a in raw_multicenter_valence_form_strategy(),
+        b in raw_multicenter_valence_form_strategy(),
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
@@ -256,20 +256,20 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_valence_ast_lattice_laws(
-        a in aromatic_valence_ast_strategy(),
-        b in aromatic_valence_ast_strategy(),
-        c in aromatic_valence_ast_strategy(),
+    fn test_aromatic_valence_form_lattice_laws(
+        a in aromatic_valence_form_strategy(),
+        b in aromatic_valence_form_strategy(),
+        c in aromatic_valence_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_multicenter_valence_ast_lattice_laws(
-        a in multicenter_valence_ast_strategy(),
-        b in multicenter_valence_ast_strategy(),
-        c in multicenter_valence_ast_strategy(),
+    fn test_multicenter_valence_form_lattice_laws(
+        a in multicenter_valence_form_strategy(),
+        b in multicenter_valence_form_strategy(),
+        c in multicenter_valence_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -409,7 +409,7 @@ proptest! {
     }
 
     #[test]
-    fn test_atom_constraint_ast_lattice_laws(
+    fn test_atom_constraint_form_lattice_laws(
         a in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
         b in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
         c in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
@@ -429,7 +429,7 @@ proptest! {
     }
 
     #[test]
-    fn test_bond_constraint_ast_lattice_laws(
+    fn test_bond_constraint_form_lattice_laws(
         a in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
         b in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
         c in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
@@ -469,7 +469,7 @@ proptest! {
     }
 
     #[test]
-    fn test_dative_bond_constraint_ast_lattice_laws(
+    fn test_dative_bond_constraint_form_lattice_laws(
         a in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
         b in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
         c in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
@@ -489,7 +489,7 @@ proptest! {
     }
 
     #[test]
-    fn test_multicenter_bond_constraint_ast_lattice_laws(
+    fn test_multicenter_bond_constraint_form_lattice_laws(
         a in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
         b in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
         c in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
@@ -509,7 +509,7 @@ proptest! {
     }
 
     #[test]
-    fn test_noncovalent_bond_constraint_ast_lattice_laws(
+    fn test_noncovalent_bond_constraint_form_lattice_laws(
         a in noncovalent_bond_constraint_strategy(),
         b in noncovalent_bond_constraint_strategy(),
         c in noncovalent_bond_constraint_strategy(),
@@ -529,7 +529,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_atom_constraint_ast_lattice_laws(
+    fn test_stereo_atom_constraint_form_lattice_laws(
         a in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
         b in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
         c in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
@@ -549,7 +549,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_bond_constraint_ast_lattice_laws(
+    fn test_stereo_bond_constraint_form_lattice_laws(
         a in stereo_bond_constraint_strategy(StereoKind::CisTrans),
         b in stereo_bond_constraint_strategy(StereoKind::CisTrans),
         c in stereo_bond_constraint_strategy(StereoKind::CisTrans),

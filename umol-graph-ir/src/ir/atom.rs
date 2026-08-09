@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
-use super::constraint::{AtomConstraintAst, AtomConstraintsAst};
+use super::constraint::{AtomConstraintForm, AtomConstraintsForm};
 use super::error::{Contradiction, NoJoin};
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
@@ -24,7 +24,7 @@ pub struct AtomForm {
     pub implicit_hydrogens: NumForm,
     pub lone_pairs: NumForm,
     pub unpaired_electrons: UnpairedElectronsForm,
-    pub constraints: AtomConstraintsAst,
+    pub constraints: AtomConstraintsForm,
 }
 
 /// Attribute update for an atom. `None` leaves an ordinary scalar field unchanged;
@@ -39,7 +39,7 @@ pub struct AtomUpdate {
     pub implicit_hydrogens: Option<NumForm>,
     pub lone_pairs: Option<NumForm>,
     pub unpaired_electrons: UnpairedElectronsUpdate,
-    pub constraints: AtomConstraintsAst,
+    pub constraints: AtomConstraintsForm,
 }
 
 impl AtomForm {
@@ -88,20 +88,20 @@ impl AtomForm {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `AtomConstraintsAst::add`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<AtomConstraintAst>) -> Self {
+    /// kind (last-wins per `AtomConstraintsForm::add`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<AtomConstraintForm>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `AtomConstraintsAst::add`). Does not
+    /// of the same kind (last-wins per `AtomConstraintsForm::add`). Does not
     /// clear existing constraints; use `atom.constraints.clear()` or direct
     /// field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<AtomConstraintAst>,
+        I::Item: Into<AtomConstraintForm>,
     {
         self.constraints
             .extend(constraints.into_iter().map(Into::into));
@@ -137,7 +137,7 @@ impl AtomForm {
 
     /// Derive the minimal canonical attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> AtomUpdate {
-        let mut constraints = AtomConstraintsAst::new();
+        let mut constraints = AtomConstraintsForm::new();
         for new in other.constraints.iter() {
             if self
                 .constraints
@@ -728,7 +728,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ir::constraint::{AtomConstraintAst, RingScope};
+    use crate::ir::constraint::{AtomConstraintForm, RingScope};
 
     #[rstest]
     fn test_atom_form_from_element() {
@@ -760,12 +760,12 @@ mod tests {
     #[case::with_implicit_hydrogens(AtomForm::default().with_implicit_hydrogens(3_i64), AtomForm { implicit_hydrogens: NumForm::Lit(3), ..Default::default() })]
     #[case::with_lone_pairs(AtomForm::default().with_lone_pairs(2_i64), AtomForm { lone_pairs: NumForm::Lit(2), ..Default::default() })]
     #[case::with_unpaired_electrons_tuple(AtomForm::default().with_unpaired_electrons((0_u8, 1_u8)), AtomForm { unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() })]
-    #[case::with_constraint(AtomForm::default().with_constraint(AtomConstraintAst::valence(4_i64)),
-        AtomForm { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)),..Default::default() })]
-    #[case::with_constraints_extends(AtomForm::default().with_constraint(AtomConstraintAst::valence(4_i64)).with_constraints([AtomConstraintAst::donated_pairs(1_i64), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
-        AtomForm { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::donated_pairs(1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
-    #[case::with_constraint_replaces_same_kind(AtomForm::default().with_constraint(AtomConstraintAst::valence(3_i64)).with_constraint(AtomConstraintAst::valence(4_i64)),
-        AtomForm { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)), ..Default::default() })]
+    #[case::with_constraint(AtomForm::default().with_constraint(AtomConstraintForm::valence(4_i64)),
+        AtomForm { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4)),..Default::default() })]
+    #[case::with_constraints_extends(AtomForm::default().with_constraint(AtomConstraintForm::valence(4_i64)).with_constraints([AtomConstraintForm::donated_pairs(1_i64), AtomConstraintForm::ring_membership(RingScope::Size(6), 1)]),
+        AtomForm { constraints: AtomConstraintsForm::from_iter([AtomConstraintForm::valence(4), AtomConstraintForm::donated_pairs(1), AtomConstraintForm::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
+    #[case::with_constraint_replaces_same_kind(AtomForm::default().with_constraint(AtomConstraintForm::valence(3_i64)).with_constraint(AtomConstraintForm::valence(4_i64)),
+        AtomForm { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4)), ..Default::default() })]
     fn test_atom_form_with_methods(#[case] actual: AtomForm, #[case] expected: AtomForm) {
         assert_eq!(actual, expected);
     }
@@ -787,15 +787,15 @@ mod tests {
     #[case::unpaired_electrons_multiplicity(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 1_u8)))]
     #[case::unpaired_electrons_count_undetermined(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
     #[case::unpaired_electrons_multiplicity_undetermined(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
-    #[case::constraint_set(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
-    #[case::constraint_replace(AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
-    #[case::constraint_remove(AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() }, AtomForm::from_element(Element::C))]
+    #[case::constraint_set(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4_i64)), ..Default::default() }, AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)))]
+    #[case::constraint_replace(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4_i64)), ..Default::default() }, AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)))]
+    #[case::constraint_remove(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(NumForm::Undetermined)), ..Default::default() }, AtomForm::from_element(Element::C))]
     fn test_atom_form_update(#[case] atom: AtomForm, #[case] update: AtomUpdate, #[case] expected: AtomForm) {
         assert_eq!(atom.update(&update), expected);
     }
 
     #[rstest]
-    #[case::empty(AtomForm::from_element(Element::C).with_charge(1_i64).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    #[case::empty(AtomForm::from_element(Element::C).with_charge(1_i64).with_constraint(AtomConstraintForm::valence(4_i64)))]
     fn test_atom_form_update_identity(#[case] atom: AtomForm) {
         assert_eq!(atom.update(&AtomUpdate::default()), atom);
     }
@@ -809,16 +809,16 @@ mod tests {
             .with_lone_pairs(0_i64)
             .with_unpaired_electrons((0_u8, 1_u8))
             .with_constraints([
-                AtomConstraintAst::valence(4_i64),
-                AtomConstraintAst::donated_pairs(1_i64),
+                AtomConstraintForm::valence(4_i64),
+                AtomConstraintForm::donated_pairs(1_i64),
             ]);
         let other = AtomForm::from_element(Element::N)
             .with_isotope_mass(13_u32)
             .with_implicit_hydrogens(3_i64)
             .with_lone_pairs(1_i64)
             .with_constraints([
-                AtomConstraintAst::valence(3_i64),
-                AtomConstraintAst::degree(2_i64),
+                AtomConstraintForm::valence(3_i64),
+                AtomConstraintForm::degree(2_i64),
             ]);
         assert_eq!(
             atom.difference_to(&other),
@@ -832,10 +832,10 @@ mod tests {
                     count: Some(NumForm::Undetermined),
                     multiplicity: Some(NumForm::Undetermined),
                 },
-                constraints: AtomConstraintsAst::from_iter([
-                    AtomConstraintAst::valence(3_i64),
-                    AtomConstraintAst::donated_pairs(NumForm::Undetermined),
-                    AtomConstraintAst::degree(2_i64),
+                constraints: AtomConstraintsForm::from_iter([
+                    AtomConstraintForm::valence(3_i64),
+                    AtomConstraintForm::donated_pairs(NumForm::Undetermined),
+                    AtomConstraintForm::degree(2_i64),
                 ]),
             }
         );
@@ -851,13 +851,13 @@ mod tests {
     #[rstest]
     #[case::from_element(AtomForm::from_element(Element::C).into_ground(),
         AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
-        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
+        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsForm::new() })]
     #[case::with_charge(AtomForm::from_element(Element::C).with_charge(1_i64).into_ground(),
         AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(0),
-        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
-    #[case::constraint(AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground(),
+        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsForm::new() })]
+    #[case::constraint(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)).into_ground(),
         AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
-        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
+        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4)) })]
     fn test_atom_form_into_ground(#[case] actual: AtomForm, #[case] expected: AtomForm) {
         assert_eq!(actual, expected);
     }
@@ -867,25 +867,25 @@ mod tests {
     #[case::default_(AtomForm::default(), false)]
     #[case::all_ground(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-        constraints: AtomConstraintsAst::new() }, true)]
+        constraints: AtomConstraintsForm::new() }, true)]
     #[case::element_undetermined(AtomForm { element: ElementForm::Undetermined, isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-        constraints: AtomConstraintsAst::new() }, false)]
+        constraints: AtomConstraintsForm::new() }, false)]
     #[case::isotope_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Undetermined, charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-        constraints: AtomConstraintsAst::new() }, false)]
+        constraints: AtomConstraintsForm::new() }, false)]
     #[case::charge_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Undetermined,
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-        constraints: AtomConstraintsAst::new() }, false)]
+        constraints: AtomConstraintsForm::new() }, false)]
     #[case::hydrogens_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Undetermined, lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-        constraints: AtomConstraintsAst::new() }, false)]
+        constraints: AtomConstraintsForm::new() }, false)]
     #[case::lone_pairs_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-        constraints: AtomConstraintsAst::new() }, false)]
+        constraints: AtomConstraintsForm::new() }, false)]
     #[case::unpaired_electrons_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(),
-        constraints: AtomConstraintsAst::new() }, false)]
+        constraints: AtomConstraintsForm::new() }, false)]
     fn test_atom_form_is_ground(#[case] ast: AtomForm, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -920,16 +920,16 @@ mod tests {
     #[case::lone_pairs_mismatch(AtomForm::from_element(Element::C).with_lone_pairs(1_i64), AtomForm::from_element(Element::C).with_lone_pairs(2_i64), false)]
     #[case::unpaired_electrons_mismatch(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomForm::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)), false)]
     #[case::constraint_required_present(
-        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
-        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
         true)]
     #[case::constraint_required_absent(
-        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
         AtomForm::from_element(Element::C),
         false)]
     #[case::constraint_value_mismatch(
-        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
-        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(3)),
         false)]
     fn test_atom_form_matches(
         #[case] pattern: AtomForm,

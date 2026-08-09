@@ -5,7 +5,7 @@ use umol_graph_core::RelevantCycleEnumerationAlgorithm;
 use umol_utils::solution::Solution;
 
 use super::super::super::constraint::{
-    AtomConstraintAst, BondConstraintAst, DativeBondConstraintAst,
+    AtomConstraintForm, BondConstraintForm, DativeBondConstraintAst,
 };
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId, DativeBondId};
@@ -166,13 +166,13 @@ impl RingAtomView<'_> {
     fn validate_constraints(
         &self,
         atom_id: AtomId,
-        constraints: &super::super::super::constraint::AtomConstraintsAst,
+        constraints: &super::super::super::constraint::AtomConstraintsForm,
     ) -> Solution<(), RingConstraintContradiction> {
         conjunction(constraints.iter().filter_map(|constraint| {
             let (asserted, derived) = match constraint {
-                AtomConstraintAst::RingDegree(asserted) => (asserted, self.ring_degree()),
-                AtomConstraintAst::RingValence(asserted) => (asserted, self.ring_valence()),
-                AtomConstraintAst::RingMembership(membership) => {
+                AtomConstraintForm::RingDegree(asserted) => (asserted, self.ring_degree()),
+                AtomConstraintForm::RingValence(asserted) => (asserted, self.ring_valence()),
+                AtomConstraintForm::RingMembership(membership) => {
                     (&membership.count, self.ring_membership(membership.scope))
                 }
                 _ => return None,
@@ -193,10 +193,10 @@ impl RingBondView<'_> {
     fn validate_constraints(
         &self,
         bond_id: BondId,
-        constraints: &super::super::super::constraint::BondConstraintsAst,
+        constraints: &super::super::super::constraint::BondConstraintsForm,
     ) -> Solution<(), RingConstraintContradiction> {
         conjunction(constraints.iter().filter_map(|constraint| {
-            let BondConstraintAst::RingMembership(membership) = constraint else {
+            let BondConstraintForm::RingMembership(membership) = constraint else {
                 return None;
             };
             Some(evaluate(
@@ -216,12 +216,12 @@ pub enum RingConstraintContradiction {
     #[error("atom {atom:?} does not satisfy ring constraint {constraint:?}")]
     Atom {
         atom: AtomId,
-        constraint: AtomConstraintAst,
+        constraint: AtomConstraintForm,
     },
     #[error("bond {bond:?} does not satisfy ring constraint {constraint:?}")]
     Bond {
         bond: BondId,
-        constraint: BondConstraintAst,
+        constraint: BondConstraintForm,
     },
 }
 
@@ -290,21 +290,21 @@ fn uses_ring_constraints(ast: &MoleculeAst) -> bool {
         })
 }
 
-fn is_atom_ring_constraint(constraint: &AtomConstraintAst) -> bool {
+fn is_atom_ring_constraint(constraint: &AtomConstraintForm) -> bool {
     matches!(
         constraint,
-        AtomConstraintAst::RingDegree(value) | AtomConstraintAst::RingValence(value)
+        AtomConstraintForm::RingDegree(value) | AtomConstraintForm::RingValence(value)
             if !value.is_undetermined()
     ) || matches!(
         constraint,
-        AtomConstraintAst::RingMembership(membership) if !membership.is_undetermined()
+        AtomConstraintForm::RingMembership(membership) if !membership.is_undetermined()
     )
 }
 
-fn is_bond_ring_constraint(constraint: &BondConstraintAst) -> bool {
+fn is_bond_ring_constraint(constraint: &BondConstraintForm) -> bool {
     matches!(
         constraint,
-        BondConstraintAst::RingMembership(membership) if !membership.is_undetermined()
+        BondConstraintForm::RingMembership(membership) if !membership.is_undetermined()
     )
 }
 
@@ -354,28 +354,28 @@ mod tests {
         r#"{:atoms ["C#x1" "C"] :bonds [[0 1 "1"]]}"#,
         Ok(Solution::Contradictory(RingConstraintContradiction::Atom {
             atom: AtomId(0),
-            constraint: AtomConstraintAst::ring_degree(1),
+            constraint: AtomConstraintForm::ring_degree(1),
         })),
     )]
     #[case::atom_ring_valence_contradiction(
         r#"{:atoms ["C#y3" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#,
         Ok(Solution::Contradictory(RingConstraintContradiction::Atom {
             atom: AtomId(0),
-            constraint: AtomConstraintAst::ring_valence(3),
+            constraint: AtomConstraintForm::ring_valence(3),
         })),
     )]
     #[case::atom_ring_membership_contradiction(
         r#"{:atoms ["C#R(6)" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#,
         Ok(Solution::Contradictory(RingConstraintContradiction::Atom {
             atom: AtomId(0),
-            constraint: AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
+            constraint: AtomConstraintForm::ring_membership(RingScope::Size(6), 1),
         })),
     )]
     #[case::bond_ring_membership_contradiction(
         r#"{:atoms ["C" "C"] :bonds [[0 1 "1#R"]]}"#,
         Ok(Solution::Contradictory(RingConstraintContradiction::Bond {
             bond: BondId(0),
-            constraint: BondConstraintAst::ring_membership(RingScope::All, 1),
+            constraint: BondConstraintForm::ring_membership(RingScope::All, 1),
         })),
     )]
     #[case::dative_ring_membership_error(

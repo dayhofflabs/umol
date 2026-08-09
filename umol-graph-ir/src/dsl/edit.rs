@@ -36,7 +36,7 @@ use crate::ir::aromatic::AromaticSystemUpdate;
 use crate::ir::atom::AtomUpdate;
 use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
-    AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
+    AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
     DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
     NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
     StereoBondConstraintAst, SubPatternAnchor,
@@ -1847,8 +1847,8 @@ fn validate_atom_update_pair(expect: &AtomUpdate, update: &AtomUpdate) -> Result
     let constraints_match = expect
         .constraints
         .iter()
-        .map(AtomConstraintAst::key)
-        .eq(update.constraints.iter().map(AtomConstraintAst::key));
+        .map(AtomConstraintForm::key)
+        .eq(update.constraints.iter().map(AtomConstraintForm::key));
     if !fields_match || !constraints_match {
         return Err(DeError::Custom(
             "atom :modify :expect and :update must address the same fields and constraints"
@@ -1873,8 +1873,8 @@ fn validate_bond_update_pair(expect: &BondUpdate, update: &BondUpdate) -> Result
     let constraints_match = expect
         .constraints
         .iter()
-        .map(BondConstraintAst::key)
-        .eq(update.constraints.iter().map(BondConstraintAst::key));
+        .map(BondConstraintForm::key)
+        .eq(update.constraints.iter().map(BondConstraintForm::key));
     if !fields_match || !constraints_match {
         return Err(DeError::Custom(
             "bond :modify :expect and :update must address the same fields and constraints"
@@ -2692,8 +2692,8 @@ fn stereo_bond_field_updates(
 }
 
 fn atom_constraint_updates(
-    old: &Option<AtomConstraintAst>,
-    new: &Option<AtomConstraintAst>,
+    old: &Option<AtomConstraintForm>,
+    new: &Option<AtomConstraintForm>,
 ) -> Result<(AtomUpdate, AtomUpdate), DeError> {
     let key_matches = match (old, new) {
         (Some(old), Some(new)) => old.key() == new.key(),
@@ -2726,8 +2726,8 @@ fn atom_constraint_updates(
 }
 
 fn bond_constraint_updates(
-    old: &Option<BondConstraintAst>,
-    new: &Option<BondConstraintAst>,
+    old: &Option<BondConstraintForm>,
+    new: &Option<BondConstraintForm>,
 ) -> Result<(BondUpdate, BondUpdate), DeError> {
     let key_matches = match (old, new) {
         (Some(old), Some(new)) => old.key() == new.key(),
@@ -4380,7 +4380,7 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintsAst, BondConstraintsAst, Constraint,
+        AromaticSystemConstraintAst, AtomConstraintsForm, BondConstraintsForm, Constraint,
         DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
         NoncovalentBondConstraintAst, RingMembershipAst, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
@@ -4442,7 +4442,7 @@ mod tests {
                 implicit_hydrogens: NumForm::Lit(0),
                 lone_pairs: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-                constraints: AtomConstraintsAst::new(),
+                constraints: AtomConstraintsForm::new(),
             }],
         }]),
     )]
@@ -4689,7 +4689,7 @@ mod tests {
                 implicit_hydrogens: NumForm::Lit(0),
                 lone_pairs: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-                constraints: AtomConstraintsAst::new(),
+                constraints: AtomConstraintsForm::new(),
             }],
         }]),
     )]
@@ -4718,7 +4718,7 @@ mod tests {
         Edits::from_iter([Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(0)),
             old: None,
-            new: Some(AtomConstraintAst::valence(4_i64)),
+            new: Some(AtomConstraintForm::valence(4_i64)),
         }]),
     )]
     #[case::atom_constraint_remove(
@@ -4726,7 +4726,7 @@ mod tests {
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(0)),
-            old: Some(AtomConstraintAst::valence(4_i64)),
+            old: Some(AtomConstraintForm::valence(4_i64)),
             new: None,
         }]),
     )]
@@ -4740,7 +4740,7 @@ mod tests {
                     order: NumForm::Lit(1),
                     charge: NumForm::Lit(0),
                     unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-                    constraints: BondConstraintsAst::new(),
+                    constraints: BondConstraintsForm::new(),
                 },
             }],
         }]),
@@ -4770,7 +4770,7 @@ mod tests {
         Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(0)),
             old: None,
-            new: Some(BondConstraintAst::RingMembership(RingMembershipAst::new(
+            new: Some(BondConstraintForm::RingMembership(RingMembershipAst::new(
                 RingScope::Size(6),
                 NumForm::Lit(1),
             ))),
@@ -4802,7 +4802,7 @@ mod tests {
         "{:constraint {:add {:atom [2 {:valence 4}]}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::Atom(AtomId(2), AtomConstraintAst::valence(4_i64)).into(),
+            constraint: Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4_i64)).into(),
         }]),
     )]
     fn test_edit_input_append_to(
@@ -4875,7 +4875,7 @@ mod tests {
         Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(0)),
             old: None,
-            new: Some(AtomConstraintAst::valence(4_i64)),
+            new: Some(AtomConstraintForm::valence(4_i64)),
         },
         MoleculeDefaults::new(),
         r##"{:atom {:modify [0 {:expect "#v*" :update "#v4"}]}}"##,

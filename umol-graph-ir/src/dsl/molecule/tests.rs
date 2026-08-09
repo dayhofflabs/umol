@@ -8,7 +8,7 @@ use umol_edn::read_string;
 use super::*;
 use crate::ir::atom::AtomForm;
 use crate::ir::boolean::BooleanForm;
-use crate::ir::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
+use crate::ir::constraint::{BondConstraintForm, Constraint, MoleculeConstraint};
 use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::value::NumForm;
@@ -505,7 +505,7 @@ fn test_molecule_ast_from_edn_structural_bond_ref() {
         constraints,
         vec![Constraint::Bond(
             BondId(0),
-            BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+            BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
         )]
     );
 }
@@ -700,7 +700,7 @@ fn test_molecule_dsl_required_field_missing_streaming(#[case] source: &str) {
 
 #[rustfmt::skip]
 #[rstest]
-// AtomConstraintAst variants via :constraints [{:atom [0 <form>]}]
+// AtomConstraintForm variants via :constraints [{:atom [0 <form>]}]
 #[case::atom_valence_lit(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:valence 4}]}]}"##)]
 #[case::atom_valence_set(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:valence [3 4]}]}]}"##)]
 #[case::atom_valence_undetermined(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:valence :undetermined}]}]}"##)]
@@ -721,7 +721,7 @@ fn test_molecule_dsl_required_field_missing_streaming(#[case] source: &str) {
 #[case::atom_aromatic_valence_value(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:aromatic-valence {:aromatic 6}}]}]}"##)]
 #[case::atom_multicenter_valence_not(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:multicenter-valence :not-multicenter}]}]}"##)]
 #[case::atom_multicenter_valence_value(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:multicenter-valence {:multicenter 3}}]}]}"##)]
-// BondConstraintAst variants
+// BondConstraintForm variants
 #[case::bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:aromatic true}]}]}"##)]
 #[case::bond_ring_count(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:count 1}}]}]}"##)]
 #[case::bond_ring_size(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:size 6 :count 1}}]}]}"##)]

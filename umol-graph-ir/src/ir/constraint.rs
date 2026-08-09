@@ -1,13 +1,13 @@
 //! AST constraints: per-scope predicates and their containers.
 //!
-//! Per-scope enums (`AtomConstraintAst`, `BondConstraintAst`, `DativeBondConstraintAst`,
+//! Per-scope enums (`AtomConstraintForm`, `BondConstraintForm`, `DativeBondConstraintAst`,
 //! `AromaticSystemConstraintAst`, `MulticenterBondConstraintAst`,
 //! `NoncovalentBondConstraintAst`, `MoleculeConstraint`) each carry the predicates
 //! admissible at that scope. `Constraint` is the tree node type admitting
 //! per-entity leaves, a molecule-scope leaf, and `And`/`Or`/`Not` combinators.
 //!
 //! Per-entity constraints live inline on the entity AST via the typed
-//! containers (`AtomConstraintsAst`, `BondConstraintsAst`, `DativeBondConstraintsAst`,
+//! containers (`AtomConstraintsForm`, `BondConstraintsForm`, `DativeBondConstraintsAst`,
 //! `AromaticSystemConstraintsAst`, `MulticenterBondConstraintsAst`,
 //! `NoncovalentBondConstraintsAst`). Each exposes a uniform `new`/`len`/`iter`/
 //! `add`/`retain`/`clear` surface; `add` enforces per-variant cardinality
@@ -30,10 +30,10 @@ pub use aromatic::{
     AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsAst,
 };
 pub use atom::{
-    aromatic_covalence, AromaticValence, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
-    AtomConstraintsAst, MulticenterValence, MulticenterValenceAst,
+    aromatic_covalence, AromaticValence, AromaticValenceForm, AtomConstraintForm,
+    AtomConstraintKey, AtomConstraintsForm, MulticenterValence, MulticenterValenceForm,
 };
-pub use bond::{BondConstraintAst, BondConstraintKey, BondConstraintsAst};
+pub use bond::{BondConstraintForm, BondConstraintKey, BondConstraintsForm};
 pub use dative::{DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 pub use multicenter::{

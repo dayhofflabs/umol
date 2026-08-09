@@ -5,9 +5,9 @@ use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_utils::solution::Solution;
 
 use super::super::super::constraint::{
-    AromaticSystemConstraintAst, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
-    BondConstraintAst, BondConstraintKey, DativeBondConstraintAst, MulticenterBondConstraintAst,
-    MulticenterValenceAst, NoncovalentBondConstraintAst,
+    AromaticSystemConstraintAst, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey,
+    BondConstraintForm, BondConstraintKey, DativeBondConstraintAst, MulticenterBondConstraintAst,
+    MulticenterValenceForm, NoncovalentBondConstraintAst,
 };
 use super::super::super::entity::Entity;
 use super::super::super::id::{
@@ -262,16 +262,16 @@ impl IncidenceConstraintValidator {
 pub fn validate_atom_constraint(
     ast: &MoleculeAst,
     atom_id: AtomId,
-    constraint: &AtomConstraintAst,
+    constraint: &AtomConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
     let atom = ast.atom(atom_id);
     match constraint {
-        AtomConstraintAst::Valence(_) => evaluate(
+        AtomConstraintForm::Valence(_) => evaluate(
             constraint,
-            &AtomConstraintAst::valence(atom.valence()),
+            &AtomConstraintForm::valence(atom.valence()),
             atom_contradiction(atom_id, constraint),
         ),
-        AtomConstraintAst::DonatedPairs(_) => {
+        AtomConstraintForm::DonatedPairs(_) => {
             // Multi-donor dative incidence has no defined per-atom projection pending the
             // coordination/haptic entity split in discussion doc 117.
             let unsupported = atom.dative_bonds().any(|bond| {
@@ -282,12 +282,12 @@ pub fn validate_atom_constraint(
             } else {
                 evaluate(
                     constraint,
-                    &AtomConstraintAst::donated_pairs(atom.donated_pairs()),
+                    &AtomConstraintForm::donated_pairs(atom.donated_pairs()),
                     atom_contradiction(atom_id, constraint),
                 )
             }
         }
-        AtomConstraintAst::AcceptedPairs(_) => {
+        AtomConstraintForm::AcceptedPairs(_) => {
             // Multi-donor dative incidence has no defined per-atom projection pending the
             // coordination/haptic entity split in discussion doc 117.
             let unsupported = atom
@@ -298,36 +298,36 @@ pub fn validate_atom_constraint(
             } else {
                 evaluate(
                     constraint,
-                    &AtomConstraintAst::accepted_pairs(atom.accepted_pairs()),
+                    &AtomConstraintForm::accepted_pairs(atom.accepted_pairs()),
                     atom_contradiction(atom_id, constraint),
                 )
             }
         }
-        AtomConstraintAst::AromaticValence(_) => {
+        AtomConstraintForm::AromaticValence(_) => {
             let derived = if atom.is_in_aromatic_system() {
-                AromaticValenceAst::aromatic(atom.aromatic_valence())
+                AromaticValenceForm::aromatic(atom.aromatic_valence())
             } else {
-                AromaticValenceAst::NotAromatic
+                AromaticValenceForm::NotAromatic
             };
             evaluate(
                 constraint,
-                &AtomConstraintAst::aromatic_valence(derived),
+                &AtomConstraintForm::aromatic_valence(derived),
                 atom_contradiction(atom_id, constraint),
             )
         }
-        AtomConstraintAst::MulticenterValence(_) => {
+        AtomConstraintForm::MulticenterValence(_) => {
             let derived = if atom.is_in_multicenter_bond() {
-                MulticenterValenceAst::multicenter(atom.multicenter_valence())
+                MulticenterValenceForm::multicenter(atom.multicenter_valence())
             } else {
-                MulticenterValenceAst::NotMulticenter
+                MulticenterValenceForm::NotMulticenter
             };
             evaluate(
                 constraint,
-                &AtomConstraintAst::multicenter_valence(derived),
+                &AtomConstraintForm::multicenter_valence(derived),
                 atom_contradiction(atom_id, constraint),
             )
         }
-        AtomConstraintAst::TetrahedralStereo(_) => {
+        AtomConstraintForm::TetrahedralStereo(_) => {
             let derived = match atom.stereo_atom() {
                 Some(stereo) => match (
                     stereo.ast.configuration.kind(),
@@ -343,33 +343,33 @@ pub fn validate_atom_constraint(
             };
             evaluate(
                 constraint,
-                &AtomConstraintAst::tetrahedral_stereo(derived),
+                &AtomConstraintForm::tetrahedral_stereo(derived),
                 atom_contradiction(atom_id, constraint),
             )
         }
-        AtomConstraintAst::Degree(_) => evaluate(
+        AtomConstraintForm::Degree(_) => evaluate(
             constraint,
-            &AtomConstraintAst::degree(atom.degree()),
+            &AtomConstraintForm::degree(atom.degree()),
             atom_contradiction(atom_id, constraint),
         ),
-        AtomConstraintAst::TotalDegree(_) => evaluate(
+        AtomConstraintForm::TotalDegree(_) => evaluate(
             constraint,
-            &AtomConstraintAst::total_degree(atom.total_degree()),
+            &AtomConstraintForm::total_degree(atom.total_degree()),
             atom_contradiction(atom_id, constraint),
         ),
-        AtomConstraintAst::TotalValence(_) => evaluate(
+        AtomConstraintForm::TotalValence(_) => evaluate(
             constraint,
-            &AtomConstraintAst::total_valence(atom.total_valence()),
+            &AtomConstraintForm::total_valence(atom.total_valence()),
             atom_contradiction(atom_id, constraint),
         ),
-        AtomConstraintAst::TotalHydrogens(_) => evaluate(
+        AtomConstraintForm::TotalHydrogens(_) => evaluate(
             constraint,
-            &AtomConstraintAst::total_hydrogens(atom.total_hydrogens()),
+            &AtomConstraintForm::total_hydrogens(atom.total_hydrogens()),
             atom_contradiction(atom_id, constraint),
         ),
-        AtomConstraintAst::RingDegree(_)
-        | AtomConstraintAst::RingValence(_)
-        | AtomConstraintAst::RingMembership(_) => Solution::Determined(()),
+        AtomConstraintForm::RingDegree(_)
+        | AtomConstraintForm::RingValence(_)
+        | AtomConstraintForm::RingMembership(_) => Solution::Determined(()),
     }
 }
 
@@ -378,12 +378,12 @@ pub enum IncidenceConstraintContradiction {
     #[error("atom {atom:?} does not satisfy incidence constraint {constraint:?}")]
     Atom {
         atom: AtomId,
-        constraint: AtomConstraintAst,
+        constraint: AtomConstraintForm,
     },
     #[error("bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
     Bond {
         bond: BondId,
-        constraint: BondConstraintAst,
+        constraint: BondConstraintForm,
     },
     #[error("dative bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
     DativeBond {
@@ -410,16 +410,16 @@ pub enum IncidenceConstraintContradiction {
 pub fn validate_bond_constraint(
     ast: &MoleculeAst,
     bond_id: BondId,
-    constraint: &BondConstraintAst,
+    constraint: &BondConstraintForm,
 ) -> Option<Solution<(), IncidenceConstraintContradiction>> {
     let bond = ast.bond(bond_id);
     Some(match constraint {
-        BondConstraintAst::Aromatic(_) => evaluate(
+        BondConstraintForm::Aromatic(_) => evaluate(
             constraint,
-            &BondConstraintAst::aromatic(bond.is_in_aromatic_system()),
+            &BondConstraintForm::aromatic(bond.is_in_aromatic_system()),
             bond_contradiction(bond_id, constraint),
         ),
-        BondConstraintAst::CisTransStereo(_) => {
+        BondConstraintForm::CisTransStereo(_) => {
             let derived = match bond.stereo_bond() {
                 Some(stereo) => match (
                     stereo.ast.configuration.kind(),
@@ -435,11 +435,11 @@ pub fn validate_bond_constraint(
             };
             evaluate(
                 constraint,
-                &BondConstraintAst::cis_trans_stereo(derived),
+                &BondConstraintForm::cis_trans_stereo(derived),
                 bond_contradiction(bond_id, constraint),
             )
         }
-        BondConstraintAst::RingMembership(_) => return None,
+        BondConstraintForm::RingMembership(_) => return None,
     })
 }
 
@@ -570,7 +570,7 @@ where
 
 fn atom_contradiction(
     atom: AtomId,
-    constraint: &AtomConstraintAst,
+    constraint: &AtomConstraintForm,
 ) -> IncidenceConstraintContradiction {
     IncidenceConstraintContradiction::Atom {
         atom,
@@ -580,7 +580,7 @@ fn atom_contradiction(
 
 fn bond_contradiction(
     bond: BondId,
-    constraint: &BondConstraintAst,
+    constraint: &BondConstraintForm,
 ) -> IncidenceConstraintContradiction {
     IncidenceConstraintContradiction::Bond {
         bond,
@@ -662,7 +662,7 @@ mod tests {
         AtomConstraintKey::Valence,
         Ok(Solution::Contradictory(IncidenceConstraintContradiction::Atom {
             atom: AtomId(0),
-            constraint: AtomConstraintAst::valence(1),
+            constraint: AtomConstraintForm::valence(1),
         })),
     )]
     #[case::underdetermined(
@@ -708,7 +708,7 @@ mod tests {
         BondConstraintKey::Aromatic,
         Ok(Solution::Contradictory(IncidenceConstraintContradiction::Bond {
             bond: BondId(0),
-            constraint: BondConstraintAst::aromatic(true),
+            constraint: BondConstraintForm::aromatic(true),
         })),
     )]
     #[case::invalid_reference(
@@ -774,14 +774,14 @@ mod tests {
         r#"{:atoms ["C#v2" "C"] :bonds [[0 1 "1"]]}"#,
         IncidenceConstraintContradiction::Atom {
             atom: AtomId(0),
-            constraint: AtomConstraintAst::valence(2),
+            constraint: AtomConstraintForm::valence(2),
         }
     )]
     #[case::bond(
         r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#,
         IncidenceConstraintContradiction::Bond {
             bond: BondId(0),
-            constraint: BondConstraintAst::aromatic(true),
+            constraint: BondConstraintForm::aromatic(true),
         }
     )]
     #[case::dative(

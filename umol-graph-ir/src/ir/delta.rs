@@ -20,8 +20,8 @@ use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate};
 use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
-    AromaticSystemConstraintAst, AromaticSystemConstraintKey, AtomConstraintAst, AtomConstraintKey,
-    BondConstraintAst, BondConstraintKey, Constraint, DativeBondConstraintAst,
+    AromaticSystemConstraintAst, AromaticSystemConstraintKey, AtomConstraintForm,
+    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintAst,
     DativeBondConstraintKey, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
     NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, StereoAtomConstraintAst,
     StereoAtomConstraintKey, StereoBondConstraintAst, StereoBondConstraintKey,
@@ -64,8 +64,8 @@ pub enum AtomDelta {
     },
     ModifyConstraint {
         id: AtomId,
-        old: Option<AtomConstraintAst>,
-        new: Option<AtomConstraintAst>,
+        old: Option<AtomConstraintForm>,
+        new: Option<AtomConstraintForm>,
     },
 }
 
@@ -190,8 +190,8 @@ pub enum BondDelta {
     },
     ModifyConstraint {
         id: BondId,
-        old: Option<BondConstraintAst>,
-        new: Option<BondConstraintAst>,
+        old: Option<BondConstraintForm>,
+        new: Option<BondConstraintForm>,
     },
 }
 
@@ -1375,7 +1375,7 @@ impl EntityPatch for AtomDelta {
     type Id = AtomId;
     type Ast = AtomForm;
     type FieldChange = AtomFieldChange;
-    type Constraint = AtomConstraintAst;
+    type Constraint = AtomConstraintForm;
 
     fn modify_field(id: AtomId, change: AtomFieldChange) -> Self {
         AtomDelta::ModifyField { id, change }
@@ -1383,8 +1383,8 @@ impl EntityPatch for AtomDelta {
 
     fn modify_constraint(
         id: AtomId,
-        old: Option<AtomConstraintAst>,
-        new: Option<AtomConstraintAst>,
+        old: Option<AtomConstraintForm>,
+        new: Option<AtomConstraintForm>,
     ) -> Self {
         AtomDelta::ModifyConstraint { id, old, new }
     }
@@ -1393,7 +1393,7 @@ impl EntityPatch for AtomDelta {
         Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
-    diff_field_ops!(AtomFieldChange, AtomForm, AtomConstraintAst, {
+    diff_field_ops!(AtomFieldChange, AtomForm, AtomConstraintForm, {
         Element => element,
         IsotopeMass => isotope_mass,
         Charge => charge,
@@ -1404,8 +1404,8 @@ impl EntityPatch for AtomDelta {
 
     fn apply_constraint(
         ast: &mut AtomForm,
-        old: Option<AtomConstraintAst>,
-        new: Option<AtomConstraintAst>,
+        old: Option<AtomConstraintForm>,
+        new: Option<AtomConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1450,7 +1450,7 @@ impl EntityFold for AtomDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &AtomConstraintAst) -> AtomConstraintKey {
+    fn constraint_key(constraint: &AtomConstraintForm) -> AtomConstraintKey {
         constraint.key()
     }
 
@@ -1468,7 +1468,7 @@ impl EntityPatch for BondDelta {
     type Id = BondId;
     type Ast = BondForm;
     type FieldChange = BondFieldChange;
-    type Constraint = BondConstraintAst;
+    type Constraint = BondConstraintForm;
 
     fn modify_field(id: BondId, change: BondFieldChange) -> Self {
         BondDelta::ModifyField { id, change }
@@ -1476,8 +1476,8 @@ impl EntityPatch for BondDelta {
 
     fn modify_constraint(
         id: BondId,
-        old: Option<BondConstraintAst>,
-        new: Option<BondConstraintAst>,
+        old: Option<BondConstraintForm>,
+        new: Option<BondConstraintForm>,
     ) -> Self {
         BondDelta::ModifyConstraint { id, old, new }
     }
@@ -1486,7 +1486,7 @@ impl EntityPatch for BondDelta {
         Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
-    diff_field_ops!(BondFieldChange, BondForm, BondConstraintAst, {
+    diff_field_ops!(BondFieldChange, BondForm, BondConstraintForm, {
         Order => order,
         Charge => charge,
         UnpairedElectrons => unpaired_electrons,
@@ -1494,8 +1494,8 @@ impl EntityPatch for BondDelta {
 
     fn apply_constraint(
         ast: &mut BondForm,
-        old: Option<BondConstraintAst>,
-        new: Option<BondConstraintAst>,
+        old: Option<BondConstraintForm>,
+        new: Option<BondConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1540,7 +1540,7 @@ impl EntityFold for BondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &BondConstraintAst) -> BondConstraintKey {
+    fn constraint_key(constraint: &BondConstraintForm) -> BondConstraintKey {
         constraint.key()
     }
 
@@ -3135,7 +3135,7 @@ mod tests {
     use super::super::value::NumForm;
     use super::*;
     use crate::ir::{
-        AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanForm,
+        AromaticSystemConstraintsAst, AtomConstraintsForm, BondConstraintsForm, BooleanForm,
         DativeBondConstraintsAst, ElectronCountsForm, ElementForm, IsotopeMassForm,
         MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindForm,
         RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationForm,
@@ -3161,13 +3161,13 @@ mod tests {
     #[case::set_constraint(
         AtomDelta::ModifyConstraint {
             id: AtomId(2),
-            old: Some(AtomConstraintAst::Valence(NumForm::Lit(4))),
-            new: Some(AtomConstraintAst::Valence(NumForm::Lit(3))),
+            old: Some(AtomConstraintForm::Valence(NumForm::Lit(4))),
+            new: Some(AtomConstraintForm::Valence(NumForm::Lit(3))),
         },
         AtomDelta::ModifyConstraint {
             id: AtomId(2),
-            old: Some(AtomConstraintAst::Valence(NumForm::Lit(3))),
-            new: Some(AtomConstraintAst::Valence(NumForm::Lit(4))),
+            old: Some(AtomConstraintForm::Valence(NumForm::Lit(3))),
+            new: Some(AtomConstraintForm::Valence(NumForm::Lit(4))),
         }
     )]
     fn test_atom_delta_inverse(#[case] input: AtomDelta, #[case] expected: AtomDelta) {
@@ -3183,7 +3183,7 @@ mod tests {
             .with_implicit_hydrogens(4_i64)
             .with_lone_pairs(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
-            .with_constraint(AtomConstraintAst::valence(4_i64));
+            .with_constraint(AtomConstraintForm::valence(4_i64));
         let update = AtomUpdate {
             element: Some(ElementForm::Lit(Element::N)),
             isotope_mass: Some(IsotopeMassForm::Lit(13)),
@@ -3194,9 +3194,9 @@ mod tests {
                 count: None,
                 multiplicity: Some(NumForm::Lit(1)),
             },
-            constraints: AtomConstraintsAst::from_iter([
-                AtomConstraintAst::valence(NumForm::Undetermined),
-                AtomConstraintAst::degree(2_i64),
+            constraints: AtomConstraintsForm::from_iter([
+                AtomConstraintForm::valence(NumForm::Undetermined),
+                AtomConstraintForm::degree(2_i64),
             ]),
         };
         assert_eq!(
@@ -3246,13 +3246,13 @@ mod tests {
                 },
                 AtomDelta::ModifyConstraint {
                     id: AtomId(7),
-                    old: Some(AtomConstraintAst::valence(4_i64)),
+                    old: Some(AtomConstraintForm::valence(4_i64)),
                     new: None,
                 },
                 AtomDelta::ModifyConstraint {
                     id: AtomId(7),
                     old: None,
-                    new: Some(AtomConstraintAst::degree(2_i64)),
+                    new: Some(AtomConstraintForm::degree(2_i64)),
                 },
             ]
         );
@@ -3262,7 +3262,7 @@ mod tests {
     #[rstest]
     #[case::empty(AtomForm::from_element(Element::C), AtomUpdate::default())]
     #[case::canonical_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(NumForm::Undetermined)), ..Default::default() })]
     fn test_atom_delta_for_update_identity(#[case] current: AtomForm, #[case] update: AtomUpdate) {
         assert_eq!(AtomDelta::for_update(AtomId(0), &current, &update), Vec::new());
     }
@@ -3303,11 +3303,11 @@ mod tests {
         BondDelta::ModifyConstraint {
             id: BondId(3),
             old: None,
-            new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+            new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         },
         BondDelta::ModifyConstraint {
             id: BondId(3),
-            old: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+            old: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
             new: None,
         }
     )]
@@ -3321,7 +3321,7 @@ mod tests {
         let current = BondForm::from_order(1)
             .with_charge(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
-            .with_constraint(BondConstraintAst::ring_membership(
+            .with_constraint(BondConstraintForm::ring_membership(
                 RingScope::Size(6),
                 1_i64,
             ));
@@ -3332,9 +3332,9 @@ mod tests {
                 count: None,
                 multiplicity: Some(NumForm::Lit(1)),
             },
-            constraints: BondConstraintsAst::from_iter([
-                BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
-                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+            constraints: BondConstraintsForm::from_iter([
+                BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined),
+                BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             ]),
         };
         assert_eq!(
@@ -3364,11 +3364,11 @@ mod tests {
                 BondDelta::ModifyConstraint {
                     id: BondId(7),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
                 },
                 BondDelta::ModifyConstraint {
                     id: BondId(7),
-                    old: Some(BondConstraintAst::ring_membership(
+                    old: Some(BondConstraintForm::ring_membership(
                         RingScope::Size(6),
                         1_i64,
                     )),
@@ -3382,7 +3382,7 @@ mod tests {
     #[rstest]
     #[case::empty(BondForm::from_order(1), BondUpdate::default())]
     #[case::canonical_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsForm::from(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_bond_delta_for_update_identity(#[case] current: BondForm, #[case] update: BondUpdate) {
         assert_eq!(BondDelta::for_update(BondId(0), &current, &update), Vec::new());
     }
@@ -4142,11 +4142,11 @@ mod tests {
     #[case::constraint_remove(
         Delta::Constraint(ConstraintDelta::Remove(Constraint::Atom(
             AtomId(0),
-            AtomConstraintAst::valence(3_i64),
+            AtomConstraintForm::valence(3_i64),
         ))),
         Delta::Constraint(ConstraintDelta::Remove(Constraint::Atom(
             AtomId(2),
-            AtomConstraintAst::valence(3_i64),
+            AtomConstraintForm::valence(3_i64),
         )))
     )]
     fn test_remap_delta(remapping: IdRemapping, #[case] input: Delta, #[case] expected: Delta) {
@@ -4259,12 +4259,12 @@ mod tests {
             Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
-                new: Some(AtomConstraintAst::Valence(NumForm::Lit(4))),
+                new: Some(AtomConstraintForm::Valence(NumForm::Lit(4))),
             }),
             Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
-                old: Some(AtomConstraintAst::Valence(NumForm::Lit(4))),
-                new: Some(AtomConstraintAst::Valence(NumForm::Lit(3))),
+                old: Some(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                new: Some(AtomConstraintForm::Valence(NumForm::Lit(3))),
             }),
         ]);
         assert_eq!(
@@ -4272,7 +4272,7 @@ mod tests {
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
-                new: Some(AtomConstraintAst::Valence(NumForm::Lit(3))),
+                new: Some(AtomConstraintForm::Valence(NumForm::Lit(3))),
             })]),
         );
     }

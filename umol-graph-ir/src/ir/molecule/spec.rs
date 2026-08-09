@@ -11,7 +11,7 @@ use umol_chem::element::Element;
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
-use super::super::constraint::BondConstraintAst;
+use super::super::constraint::BondConstraintForm;
 use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
@@ -246,7 +246,7 @@ pub fn aromatic_bond(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> M
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
+        ast: BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true)),
     }
 }
 
@@ -629,7 +629,7 @@ mod tests {
     #[case::triple(triple(0_u32, 1_u32), BondForm::from_order(3))]
     #[case::aromatic(
         aromatic_bond(0_u32, 1_u32),
-        BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
+        BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true))
     )]
     #[case::explicit(
         bond(0_u32, 1_u32, BondForm::from_order(2).with_charge(-1_i64)),

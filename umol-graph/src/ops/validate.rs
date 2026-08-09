@@ -265,7 +265,7 @@ mod tests {
         AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomForm, AtomId, Constraint, DativeBondId, ElementForm, Entity,
+        AtomConstraintForm, AtomForm, AtomId, Constraint, DativeBondId, ElementForm, Entity,
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
         MoleculeConstraintContradiction, MoleculeEntries, NumForm, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
@@ -357,12 +357,12 @@ mod tests {
     #[case::incidence(ConstraintContradiction::Incidence(
         IncidenceConstraintContradiction::Atom {
             atom: AtomId(0),
-            constraint: AtomConstraintAst::valence(1),
+            constraint: AtomConstraintForm::valence(1),
         }
     ))]
     #[case::ring(ConstraintContradiction::Ring(RingConstraintContradiction::Atom {
         atom: AtomId(0),
-        constraint: AtomConstraintAst::ring_membership(RingScope::All, 1),
+        constraint: AtomConstraintForm::ring_membership(RingScope::All, 1),
     }))]
     #[case::relational(ConstraintContradiction::Relational(
         RelationalConstraintContradiction {
@@ -493,13 +493,13 @@ mod tests {
     #[case::contradiction(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
-            constraints: Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)).into(),
+            constraints: Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)).into(),
             ..Default::default()
         }),
         Ok(Solution::Contradictory(ValidatorContradiction::Constraint(
             ConstraintContradiction::Incidence(IncidenceConstraintContradiction::Atom {
                 atom: AtomId(0),
-                constraint: AtomConstraintAst::valence(1),
+                constraint: AtomConstraintForm::valence(1),
             }),
         ))),
     )]
@@ -511,7 +511,7 @@ mod tests {
             });
             molecule
                 .constraints_mut()
-                .push(Constraint::Atom(AtomId(1), AtomConstraintAst::valence(0)));
+                .push(Constraint::Atom(AtomId(1), AtomConstraintForm::valence(0)));
             molecule
         },
         Err(ValidatorError::Constraint(ConstraintError::InvalidReference {
@@ -695,7 +695,7 @@ mod tests {
         atom.unpaired_electrons = unpaired_electrons;
         if let Some(v) = valence {
             atom.constraints
-                .set(AtomConstraintAst::Valence(NumForm::Lit(v)));
+                .set(AtomConstraintForm::Valence(NumForm::Lit(v)));
         }
         let model = ChemistryModel::default();
         assert_eq!(

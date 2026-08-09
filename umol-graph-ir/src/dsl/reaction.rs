@@ -2825,8 +2825,8 @@ mod tests {
     use crate::ir::atom::ElementForm;
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::{
-        AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintAst,
-        BondConstraintAst, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
+        AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintForm,
+        BondConstraintForm, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
         MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst,
         NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, RingScope,
         StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
@@ -3653,7 +3653,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
-                old: Some(AtomConstraintAst::valence(4)),
+                old: Some(AtomConstraintForm::valence(4)),
                 new: None,
             })]),
         );
@@ -3775,7 +3775,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyConstraint {
                 id: BondId(0),
-                old: Some(BondConstraintAst::ring_membership(
+                old: Some(BondConstraintForm::ring_membership(
                     RingScope::Size(6),
                     NumForm::Lit(1),
                 )),
@@ -4010,7 +4010,7 @@ mod tests {
                 }),
                 Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(
                     AtomId(1),
-                    AtomConstraintAst::Valence(NumForm::Lit(2)),
+                    AtomConstraintForm::Valence(NumForm::Lit(2)),
                 ))),
             ]),
         );
@@ -4029,7 +4029,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Bond(
                 BondId(0),
-                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+                BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             )))]),
         );
     }
@@ -4173,9 +4173,9 @@ mod tests {
     #[case::modify_field(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(-1) } })], r##"{:atom {:modify [:br "#c-"]}}"##)]
     #[case::modify_field_undetermined(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined } })], r##"{:atom {:modify [:br "#c*"]}}"##)]
     #[case::modify_unpaired_electrons(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) } })], r##"{:atom {:modify [:br "#u2#s"]}}"##)]
-    #[case::modify_set_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: Some(AtomConstraintAst::valence(4_i64)) })], r##"{:atom {:modify [:br "#v4"]}}"##)]
-    #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
-    #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
+    #[case::modify_set_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: Some(AtomConstraintForm::valence(4_i64)) })], r##"{:atom {:modify [:br "#v4"]}}"##)]
+    #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintForm::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
+    #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintForm::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
     fn test_render_deltas_atom(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
@@ -4188,8 +4188,8 @@ mod tests {
     #[case::modify_field_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Undetermined } })], r##"{:bond {:modify [:b1 "*"]}}"##)]
     #[case::modify_charge_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined } })], r##"{:bond {:modify [:b1 "#c*"]}}"##)]
     #[case::modify_unpaired_electrons(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) } })], r##"{:bond {:modify [:b1 "#u2#s"]}}"##)]
-    #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
-    #[case::modify_remove_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: Some(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Lit(1))), new: None })], r##"{:bond {:modify [:b1 "#R(6)*"]}}"##)]
+    #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
+    #[case::modify_remove_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Lit(1))), new: None })], r##"{:bond {:modify [:b1 "#R(6)*"]}}"##)]
     fn test_render_deltas_bond(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
@@ -4332,7 +4332,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
-    #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(NumForm::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
+    #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintForm::Valence(NumForm::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
     fn test_render_deltas_constraint(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);

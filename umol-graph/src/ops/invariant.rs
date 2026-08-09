@@ -10,8 +10,8 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::{
-    aromatic_covalence, AromaticValenceAst, AsLit, AtomConstraintAst, AtomConstraintsAst, AtomForm,
-    AtomId, ElementForm, Lattice, MoleculeAst, MulticenterValenceAst, NumForm,
+    aromatic_covalence, AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintsForm,
+    AtomForm, AtomId, ElementForm, Lattice, MoleculeAst, MulticenterValenceForm, NumForm,
     UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -90,7 +90,7 @@ impl ValenceInvariants {
         let aromatic_constraint = atom
             .constraints
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined);
+            .unwrap_or(&AromaticValenceForm::Undetermined);
         let aromatic_valence = match aromatic_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -102,7 +102,7 @@ impl ValenceInvariants {
         let multicenter_constraint = atom
             .constraints
             .multicenter_valence()
-            .unwrap_or(&MulticenterValenceAst::Undetermined);
+            .unwrap_or(&MulticenterValenceForm::Undetermined);
         let multicenter_valence = match multicenter_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -199,7 +199,7 @@ impl ValenceInvariants {
         let aromatic_constraint = atom
             .constraints()
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined);
+            .unwrap_or(&AromaticValenceForm::Undetermined);
         let aromatic_valence = match aromatic_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -214,7 +214,7 @@ impl ValenceInvariants {
         let multicenter_constraint = atom
             .constraints()
             .multicenter_valence()
-            .unwrap_or(&MulticenterValenceAst::Undetermined);
+            .unwrap_or(&MulticenterValenceForm::Undetermined);
         let multicenter_valence = match multicenter_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -312,7 +312,7 @@ impl ValenceInvariants {
         let aromatic_constraint = atom
             .constraints()
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceAst::Undetermined);
+            .unwrap_or(&AromaticValenceForm::Undetermined);
         let aromatic_valence = match aromatic_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -327,7 +327,7 @@ impl ValenceInvariants {
         let multicenter_constraint = atom
             .constraints()
             .multicenter_valence()
-            .unwrap_or(&MulticenterValenceAst::Undetermined);
+            .unwrap_or(&MulticenterValenceForm::Undetermined);
         let multicenter_valence = match multicenter_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -394,7 +394,7 @@ impl ValenceInvariants {
                                 count: NumForm::Lit(unpaired_electrons),
                                 multiplicity: NumForm::Lit(multiplicity),
                             },
-                            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(
+                            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(
                                 NumForm::Lit(valence),
                             )),
                             ..Default::default()
@@ -487,7 +487,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomConstraintsAst, AtomForm, AtomId, ElementForm, IsotopeMassForm,
+        AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId, ElementForm, IsotopeMassForm,
         MoleculeAst, MoleculeEntries, NumForm, UnpairedElectronsForm,
     };
 
@@ -558,8 +558,8 @@ mod tests {
             lone_pairs: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
-                AromaticValenceAst::NotAromatic,
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::aromatic_valence(
+                AromaticValenceForm::NotAromatic,
             )),
             ..Default::default()
         },
@@ -572,8 +572,8 @@ mod tests {
             lone_pairs: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(4),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::aromatic_valence(
-                AromaticValenceAst::Aromatic(NumForm::Lit(0)),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::aromatic_valence(
+                AromaticValenceForm::Aromatic(NumForm::Lit(0)),
             )),
             ..Default::default()
         },
@@ -640,7 +640,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(4),
             lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     #[case::infeasible_h(
@@ -674,7 +674,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(2),
             unpaired_electrons: UnpairedElectronsForm::from((2_u8, 3_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     // Unpaired electrons fully ground to a non-maximal but valid coupling (3 electrons as a
@@ -695,7 +695,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(1),
             unpaired_electrons: UnpairedElectronsForm::from((3_u8, 2_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     // Multiplicity is ground (singlet), unpaired-electron count open: conservation fixes the
@@ -720,7 +720,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(2),
             lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((2_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     // Unpaired electrons pinned to a physically impossible pair (count 2, multiplicity 2):
@@ -755,7 +755,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(2),
             lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((2_u8, 3_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     // Nonzero (given) charge: oxide anion, 7 electrons, resolves to a doublet.
@@ -775,7 +775,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(3),
             unpaired_electrons: UnpairedElectronsForm::from((1_u8, 2_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
@@ -797,7 +797,7 @@ mod tests {
             implicit_hydrogens: NumForm::Lit(4),
             lone_pairs: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(NumForm::Lit(0))),
+            constraints: AtomConstraintsForm::from(AtomConstraintForm::Valence(NumForm::Lit(0))),
         }],
     )]
     fn test_valence_invariants_enumerate_atom(

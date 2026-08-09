@@ -43,12 +43,12 @@ pub use boolean::BooleanForm;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{
     aromatic_covalence, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
-    AromaticSystemConstraintsAst, AromaticValence, AromaticValenceAst, AtomConstraintAst,
-    AtomConstraintKey, AtomConstraintsAst, BondConstraintAst, BondConstraintKey,
-    BondConstraintsAst, Constraint, Constraints, DativeBondConstraintAst, DativeBondConstraintKey,
+    AromaticSystemConstraintsAst, AromaticValence, AromaticValenceForm, AtomConstraintForm,
+    AtomConstraintKey, AtomConstraintsForm, BondConstraintForm, BondConstraintKey,
+    BondConstraintsForm, Constraint, Constraints, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, FluxionalityAst, LigandPermutation, LigandSymmetryAst,
     MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-    MulticenterBondConstraintsAst, MulticenterValence, MulticenterValenceAst,
+    MulticenterBondConstraintsAst, MulticenterValence, MulticenterValenceForm,
     NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, NoncovalentBondConstraintsAst,
     OrientedLigandPermutation, RelationalConstraint, RingMembershipAst, RingScope,
     StereoAtomConstraintAst, StereoAtomConstraintKey, StereoAtomConstraintsAst,

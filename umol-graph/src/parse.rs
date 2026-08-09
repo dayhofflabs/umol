@@ -58,7 +58,7 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AromaticValenceAst, AtomId, NumForm};
+    use umol_graph_ir::ir::{AromaticValenceForm, AtomId, NumForm};
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ast;
 
@@ -142,7 +142,7 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![Some(AromaticValenceAst::Aromatic(NumForm::Lit(1))); 6]
+        vec![Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))); 6]
     )]
     #[case::reset(
         CtfileIoConfig::basic(),
@@ -160,7 +160,7 @@ mod tests {
         #[case] io_config: CtfileIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Vec<Option<AromaticValenceAst>>,
+        #[case] expected: Vec<Option<AromaticValenceForm>>,
     ) {
         let ast = parse_mol_bytes_with(
             BENZENE_AROMATIC_MOL.as_bytes(),
