@@ -580,7 +580,7 @@ mod tests {
     use crate::ir::bond::BondAst;
     use crate::ir::coloring::ConstitutionColoring;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
-    use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
+    use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind};
 
     fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
         GraphSymmetryConfig {
@@ -702,7 +702,7 @@ mod tests {
         // is still computed.
         let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
         mol.stereo_atom_mut(StereoAtomId(0)).ast.configuration =
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
         let gs = mol.graph_symmetry(&config());
         assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
     }
@@ -711,7 +711,7 @@ mod tests {
     fn test_molecule_ast_observable_descriptor() {
         let mut mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
         mol.stereo_atom_mut(StereoAtomId(0)).ast.configuration =
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1);
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1);
         assert_eq!(
             mol.observable_descriptor(
                 Entity::StereoAtom(StereoAtomId(0)),

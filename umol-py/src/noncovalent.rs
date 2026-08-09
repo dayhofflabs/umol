@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
     AsLit, AtomId as GraphIrAtomId, MoleculeAst as GraphIrMoleculeAst,
     NoncovalentBondAst as GraphIrNoncovalentBondAst, NoncovalentBondId as GraphIrNoncovalentBondId,
     NoncovalentBondKind as GraphIrNoncovalentBondKind,
-    NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst,
+    NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm,
     NoncovalentBondUpdate as GraphIrNoncovalentBondUpdate,
     NoncovalentBondView as GraphIrNoncovalentBondView,
 };
@@ -65,7 +65,7 @@ impl NoncovalentBondKind {
 }
 
 /// A noncovalent bond's interaction kind: undetermined, or a concrete
-/// `NoncovalentBondKind`. Corresponds to `NoncovalentBondKindAst`.
+/// `NoncovalentBondKind`. Corresponds to the Rust `NoncovalentBondKindForm`.
 #[pyclass]
 pub enum NoncovalentBondKindAst {
     Undetermined(),
@@ -103,27 +103,27 @@ impl NoncovalentBondKindAst {
 
 impl_py_lattice!(
     NoncovalentBondKindAst,
-    GraphIrNoncovalentBondKindAst,
-    |value: &NoncovalentBondKindAst, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondKindAst> {
+    GraphIrNoncovalentBondKindForm,
+    |value: &NoncovalentBondKindAst, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondKindForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrNoncovalentBondKindAst| -> PyResult<NoncovalentBondKindAst> {
+    |_py: Python<'_>, value: GraphIrNoncovalentBondKindForm| -> PyResult<NoncovalentBondKindAst> {
         Ok(NoncovalentBondKindAst::from_rust(&value))
     }
 );
 
 impl NoncovalentBondKindAst {
-    pub(crate) fn from_rust(ast: &GraphIrNoncovalentBondKindAst) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrNoncovalentBondKindForm) -> Self {
         match ast {
-            GraphIrNoncovalentBondKindAst::Undetermined => Self::Undetermined(),
-            GraphIrNoncovalentBondKindAst::Lit(k) => Self::Lit(NoncovalentBondKind::from_rust(*k)),
+            GraphIrNoncovalentBondKindForm::Undetermined => Self::Undetermined(),
+            GraphIrNoncovalentBondKindForm::Lit(k) => Self::Lit(NoncovalentBondKind::from_rust(*k)),
         }
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrNoncovalentBondKindAst {
+    pub(crate) fn to_rust(&self) -> GraphIrNoncovalentBondKindForm {
         match self {
-            Self::Undetermined() => GraphIrNoncovalentBondKindAst::Undetermined,
-            Self::Lit(k) => GraphIrNoncovalentBondKindAst::Lit(k.to_rust()),
+            Self::Undetermined() => GraphIrNoncovalentBondKindForm::Undetermined,
+            Self::Lit(k) => GraphIrNoncovalentBondKindForm::Lit(k.to_rust()),
         }
     }
 }
@@ -138,9 +138,9 @@ pub(crate) enum NoncovalentBondKindLike {
 }
 
 impl NoncovalentBondKindLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondKindAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondKindForm {
         match self {
-            NoncovalentBondKindLike::Kind(k) => GraphIrNoncovalentBondKindAst::Lit(k.to_rust()),
+            NoncovalentBondKindLike::Kind(k) => GraphIrNoncovalentBondKindForm::Lit(k.to_rust()),
             NoncovalentBondKindLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
@@ -598,21 +598,21 @@ mod tests {
     use crate::convert::into_py_variant;
 
     #[rstest]
-    #[case(GraphIrNoncovalentBondKindAst::Undetermined)]
-    #[case(GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond))]
-    #[case(GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::VanDerWaals))]
-    fn test_noncovalent_bond_kind_ast_roundtrip(#[case] ast: GraphIrNoncovalentBondKindAst) {
+    #[case(GraphIrNoncovalentBondKindForm::Undetermined)]
+    #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond))]
+    #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::VanDerWaals))]
+    fn test_noncovalent_bond_kind_ast_roundtrip(#[case] ast: GraphIrNoncovalentBondKindForm) {
         assert_eq!(NoncovalentBondKindAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(GraphIrNoncovalentBondKindAst::Undetermined, None)]
+    #[case(GraphIrNoncovalentBondKindForm::Undetermined, None)]
     #[case(
-        GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic),
+        GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic),
         Some(NoncovalentBondKind::Ionic)
     )]
     fn test_noncovalent_bond_kind_ast_as_lit(
-        #[case] ast: GraphIrNoncovalentBondKindAst,
+        #[case] ast: GraphIrNoncovalentBondKindForm,
         #[case] expected: Option<NoncovalentBondKind>,
     ) {
         assert_eq!(NoncovalentBondKindAst::from_rust(&ast).as_lit(), expected);
@@ -631,13 +631,13 @@ mod tests {
             // a bare kind coerces to Lit
             assert_eq!(
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::HydrogenBond).to_rust(py),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             // a NoncovalentBondKindAst passes through
             let ast = Py::new(py, NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)).unwrap();
             assert_eq!(
                 NoncovalentBondKindLike::Ast(ast).to_rust(py),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
     }
@@ -950,7 +950,7 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().kind,
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             assert_eq!(bond.inner().constraints.len(), 0);
         });
@@ -1003,7 +1003,7 @@ mod tests {
             ));
             assert_eq!(
                 bond.kind().to_rust(),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             bond.set_kind(
                 py,
@@ -1011,7 +1011,7 @@ mod tests {
             );
             assert_eq!(
                 bond.kind().to_rust(),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
     }
@@ -1282,7 +1282,7 @@ mod tests {
             };
             assert_eq!(
                 view.kind(py).unwrap().to_rust(),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             view.set_kind(
                 py,
@@ -1295,7 +1295,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.kind(py).unwrap().to_rust(),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
     }
@@ -1482,7 +1482,7 @@ mod tests {
             // value replaced, endpoints preserved
             assert_eq!(
                 view.kind(py).unwrap().to_rust(),
-                GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic)
+                GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
         });

@@ -31,7 +31,7 @@ pub(crate) use umol_graph_ir::ir::{
     AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintKey,
     AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomHandle, AtomId, AtomUpdate, BondAst,
     BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta, BondFieldChange,
-    BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize, CisTransStereoAst, Constraint,
+    BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize, CisTransStereoForm, Constraint,
     ConstraintEdit, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange, DativeBondHandle,
     DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsForm,
@@ -42,17 +42,17 @@ pub(crate) use umol_graph_ir::ir::{
     MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
     MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
-    NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
+    NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm,
     NoncovalentBondUpdate, NumForm, OrientedLigandPermutation, PredExpr, ReactionAst,
     ReactionSpanAst, RelOp, RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst,
     StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange,
     StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
     StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondHandle,
-    StereoBondId, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition,
-    Stereogenicity, StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity,
-    TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsForm,
-    UnpairedElectronsUpdate,
+    StereoBondId, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
+    StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
+    TetrahedralStereoForm, Topicity, TopicityAst, TopicityRelationAst, TransactionError,
+    UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
 pub(crate) use umol_perm::{Orientation, Permutation};
 
@@ -241,31 +241,31 @@ pub(crate) fn raw_multicenter_valence_ast_strategy() -> BoxedStrategy<Multicente
     .boxed()
 }
 
-pub(crate) fn raw_tetrahedral_stereo_strategy() -> BoxedStrategy<TetrahedralStereoAst> {
+pub(crate) fn raw_tetrahedral_stereo_strategy() -> BoxedStrategy<TetrahedralStereoForm> {
     prop_oneof![
-        Just(TetrahedralStereoAst::Undetermined),
-        Just(TetrahedralStereoAst::NotStereo),
-        stereo_coset_strategy().prop_map(TetrahedralStereoAst::Stereo),
+        Just(TetrahedralStereoForm::Undetermined),
+        Just(TetrahedralStereoForm::NotStereo),
+        stereo_coset_strategy().prop_map(TetrahedralStereoForm::Stereo),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
     .boxed()
 }
 
-pub(crate) fn raw_cis_trans_stereo_strategy() -> BoxedStrategy<CisTransStereoAst> {
+pub(crate) fn raw_cis_trans_stereo_strategy() -> BoxedStrategy<CisTransStereoForm> {
     prop_oneof![
-        Just(CisTransStereoAst::Undetermined),
-        Just(CisTransStereoAst::NotStereo),
-        stereo_coset_strategy().prop_map(CisTransStereoAst::Stereo),
+        Just(CisTransStereoForm::Undetermined),
+        Just(CisTransStereoForm::NotStereo),
+        stereo_coset_strategy().prop_map(CisTransStereoForm::Stereo),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
     .boxed()
 }
 
-pub(crate) fn raw_stereo_configuration_strategy() -> BoxedStrategy<StereoConfigurationAst> {
+pub(crate) fn raw_stereo_configuration_strategy() -> BoxedStrategy<StereoConfigurationForm> {
     prop_oneof![
-        Just(StereoConfigurationAst::Undetermined),
+        Just(StereoConfigurationForm::Undetermined),
         (stereo_atom_kind_strategy(), stereo_coset_strategy())
-            .prop_map(|(kind, coset)| StereoConfigurationAst::kinded(kind, coset)),
+            .prop_map(|(kind, coset)| StereoConfigurationForm::kinded(kind, coset)),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
     .boxed()
@@ -886,11 +886,11 @@ pub(crate) fn multicenter_bond_ast_for(
         })
 }
 
-pub(crate) fn noncovalent_bond_kind_ast_strategy() -> impl Strategy<Value = NoncovalentBondKindAst>
+pub(crate) fn noncovalent_bond_kind_form_strategy() -> impl Strategy<Value = NoncovalentBondKindForm>
 {
     prop_oneof![
-        Just(NoncovalentBondKindAst::Undetermined),
-        prop::sample::select(NONCOVALENT_KINDS).prop_map(NoncovalentBondKindAst::Lit),
+        Just(NoncovalentBondKindForm::Undetermined),
+        prop::sample::select(NONCOVALENT_KINDS).prop_map(NoncovalentBondKindForm::Lit),
     ]
 }
 
@@ -938,14 +938,14 @@ pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = Noncovale
         noncovalent_bond_constraints_strategy(),
     )
         .prop_map(|(kind, constraints)| NoncovalentBondAst {
-            kind: NoncovalentBondKindAst::Lit(kind),
+            kind: NoncovalentBondKindForm::Lit(kind),
             constraints,
         })
 }
 
 pub(crate) fn noncovalent_bond_patch_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
     (
-        noncovalent_bond_kind_ast_strategy(),
+        noncovalent_bond_kind_form_strategy(),
         noncovalent_bond_constraints_strategy(),
     )
         .prop_map(|(kind, constraints)| NoncovalentBondAst { kind, constraints })
@@ -953,7 +953,7 @@ pub(crate) fn noncovalent_bond_patch_ast_strategy() -> impl Strategy<Value = Non
 
 pub(crate) fn noncovalent_bond_update_strategy() -> impl Strategy<Value = NoncovalentBondUpdate> {
     (
-        prop::option::of(noncovalent_bond_kind_ast_strategy()),
+        prop::option::of(noncovalent_bond_kind_form_strategy()),
         noncovalent_bond_update_constraints_strategy(),
     )
         .prop_map(|(kind, constraints)| NoncovalentBondUpdate { kind, constraints })
@@ -983,51 +983,52 @@ pub(crate) fn stereo_ligand_kind_strategy() -> impl Strategy<Value = StereoLigan
 /// site (it is dropped on render, breaking render → reparse). `Stereo(coset)`
 /// (incl. the `+` form `Stereo(Undetermined)`) and `NotStereo` are kept. The
 /// `_lattice_strategy` variants add `Undetermined` (the lattice top).
-pub(crate) fn tetrahedral_stereo_strategy() -> impl Strategy<Value = TetrahedralStereoAst> {
+pub(crate) fn tetrahedral_stereo_strategy() -> impl Strategy<Value = TetrahedralStereoForm> {
     prop_oneof![
-        Just(TetrahedralStereoAst::NotStereo),
-        stereo_coset_strategy().prop_map(TetrahedralStereoAst::Stereo),
+        Just(TetrahedralStereoForm::NotStereo),
+        stereo_coset_strategy().prop_map(TetrahedralStereoForm::Stereo),
     ]
     .prop_map(|s| {
         s.canonicalize()
-            .unwrap_or(TetrahedralStereoAst::Undetermined)
+            .unwrap_or(TetrahedralStereoForm::Undetermined)
     })
 }
 
-pub(crate) fn tetrahedral_stereo_lattice_strategy() -> impl Strategy<Value = TetrahedralStereoAst> {
+pub(crate) fn tetrahedral_stereo_lattice_strategy() -> impl Strategy<Value = TetrahedralStereoForm>
+{
     prop_oneof![
-        Just(TetrahedralStereoAst::Undetermined),
+        Just(TetrahedralStereoForm::Undetermined),
         tetrahedral_stereo_strategy(),
     ]
 }
 
-pub(crate) fn cis_trans_stereo_strategy() -> impl Strategy<Value = CisTransStereoAst> {
+pub(crate) fn cis_trans_stereo_strategy() -> impl Strategy<Value = CisTransStereoForm> {
     prop_oneof![
-        Just(CisTransStereoAst::NotStereo),
-        stereo_coset_strategy().prop_map(CisTransStereoAst::Stereo),
+        Just(CisTransStereoForm::NotStereo),
+        stereo_coset_strategy().prop_map(CisTransStereoForm::Stereo),
     ]
-    .prop_map(|s| s.canonicalize().unwrap_or(CisTransStereoAst::Undetermined))
+    .prop_map(|s| s.canonicalize().unwrap_or(CisTransStereoForm::Undetermined))
 }
 
-pub(crate) fn cis_trans_stereo_lattice_strategy() -> impl Strategy<Value = CisTransStereoAst> {
+pub(crate) fn cis_trans_stereo_lattice_strategy() -> impl Strategy<Value = CisTransStereoForm> {
     prop_oneof![
-        Just(CisTransStereoAst::Undetermined),
+        Just(CisTransStereoForm::Undetermined),
         cis_trans_stereo_strategy(),
     ]
 }
 
-/// `StereoConfigurationAst` over the atom geometry kinds, including the kindless
+/// `StereoConfigurationForm` over the atom geometry kinds, including the kindless
 /// `Undetermined` top.
 pub(crate) fn stereo_configuration_lattice_strategy(
-) -> impl Strategy<Value = StereoConfigurationAst> {
+) -> impl Strategy<Value = StereoConfigurationForm> {
     prop_oneof![
-        Just(StereoConfigurationAst::Undetermined),
+        Just(StereoConfigurationForm::Undetermined),
         (stereo_atom_kind_strategy(), stereo_coset_strategy())
-            .prop_map(|(kind, coset)| StereoConfigurationAst::kinded(kind, coset)),
+            .prop_map(|(kind, coset)| StereoConfigurationForm::kinded(kind, coset)),
     ]
     .prop_map(|c| {
         c.canonicalize()
-            .unwrap_or(StereoConfigurationAst::Undetermined)
+            .unwrap_or(StereoConfigurationForm::Undetermined)
     })
 }
 
@@ -3438,22 +3439,22 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyNoncovalentBondField {
             id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
             change: NoncovalentBondFieldChange::Kind {
-                old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
             },
         }),
         value(Edit::ModifyStereoAtomField {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             },
         }),
         value(Edit::ModifyStereoBondField {
             id: StereoBondHandle::Id(StereoBondId(0)),
             change: StereoBondFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
             },
         }),
     ]
@@ -4956,7 +4957,7 @@ fn build_reaction(
                 },
             ),
             StereoOp::SetCoset(coset) => {
-                let new = StereoConfigurationAst::kinded(kind, coset.clone());
+                let new = StereoConfigurationForm::kinded(kind, coset.clone());
                 (
                     new.clone(),
                     StereoAtomDelta::ModifyField {
@@ -4993,7 +4994,7 @@ fn build_reaction(
                 },
             ),
             StereoOp::SetCoset(coset) => {
-                let new = StereoConfigurationAst::kinded(kind, coset.clone());
+                let new = StereoConfigurationForm::kinded(kind, coset.clone());
                 (
                     new.clone(),
                     StereoBondDelta::ModifyField {
@@ -5037,7 +5038,7 @@ fn build_reaction(
             id: NoncovalentBondId(lhs.noncovalent_bonds().count() as u32),
             atoms: [added_atom_ids[0], added_atom_ids[1]],
             ast: NoncovalentBondAst {
-                kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::VanDerWaals),
+                kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::VanDerWaals),
                 constraints: Default::default(),
             },
         }));

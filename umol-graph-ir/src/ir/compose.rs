@@ -131,9 +131,9 @@ mod tests {
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::molecule::{MoleculeAst, MoleculeEntries};
     use super::super::noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
+        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm,
     };
-    use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCoset, StereoKind};
+    use super::super::stereo::{StereoAtomAst, StereoConfigurationForm, StereoCoset, StereoKind};
     use super::super::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use super::super::value::NumForm;
     use super::*;
@@ -386,8 +386,8 @@ mod tests {
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                 id: NoncovalentBondId(0),
                 change: NoncovalentBondFieldChange::Kind {
-                    old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                    new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
                 },
             })]),
         ),
@@ -406,8 +406,8 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                     id: NoncovalentBondId(0),
                     change: NoncovalentBondFieldChange::Kind {
-                        old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                        new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                        old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                        new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
                     },
                 }),
             ]),
@@ -471,8 +471,8 @@ mod tests {
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                 id: NoncovalentBondId(0),
                 change: NoncovalentBondFieldChange::Kind {
-                    old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                    new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
                 },
             })]),
         ),
@@ -494,8 +494,8 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                     id: NoncovalentBondId(0),
                     change: NoncovalentBondFieldChange::Kind {
-                        old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                        new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                        old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                        new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
                     },
                 }),
             ]),
@@ -940,11 +940,11 @@ mod tests {
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::Kinded(
+                    old: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0),
                     ),
-                    new: StereoConfigurationAst::Kinded(
+                    new: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1),
                     ),
@@ -980,11 +980,11 @@ mod tests {
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::Kinded(
+                    old: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(b_old),
                     ),
-                    new: StereoConfigurationAst::Kinded(
+                    new: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(b_new),
                     ),

@@ -10,7 +10,7 @@ use super::super::constraint::{BondConstraintAst, BondConstraintsAst};
 use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{CisTransStereoAst, StereoKind};
+use super::super::stereo::{CisTransStereoForm, StereoKind};
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
 use super::aromatic::AromaticSystemView;
@@ -198,8 +198,8 @@ impl<'a> BondView<'a> {
             .stereo_bond()
             .filter(|s| s.kind() == StereoKind::CisTrans)
         {
-            Some(stereo) => Some(CisTransStereoAst::stereo(stereo.coset().clone())),
-            None if include_missing => Some(CisTransStereoAst::NotStereo),
+            Some(stereo) => Some(CisTransStereoForm::stereo(stereo.coset().clone())),
+            None if include_missing => Some(CisTransStereoForm::NotStereo),
             None => None,
         };
         BondConstraintsAst::from_iter(cis_trans_stereo.map(BondConstraintAst::cis_trans_stereo))
@@ -255,7 +255,7 @@ mod tests {
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondAst;
     use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ir::stereo::{CisTransStereoAst, StereoBondAst, StereoCoset, StereoKind};
+    use crate::ir::stereo::{CisTransStereoForm, StereoBondAst, StereoCoset, StereoKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -436,10 +436,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::cis_trans_site(BondId(1), BondConstraintsAst::from_iter([
-        BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(StereoCoset::Lit(1))),
+        BondConstraintAst::cis_trans_stereo(CisTransStereoForm::stereo(StereoCoset::Lit(1))),
     ]))]
     #[case::non_stereo(BondId(0), BondConstraintsAst::from_iter([
-        BondConstraintAst::cis_trans_stereo(CisTransStereoAst::NotStereo),
+        BondConstraintAst::cis_trans_stereo(CisTransStereoForm::NotStereo),
     ]))]
     fn test_bond_view_derive_constraints(
         stereo_molecule: MoleculeAst,

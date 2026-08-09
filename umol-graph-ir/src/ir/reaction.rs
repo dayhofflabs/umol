@@ -40,7 +40,7 @@ use super::molecule::MoleculeEntries;
 use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
 use super::reaction_derivation::ReactionDerivation;
-use super::stereo::{StereoConfigurationAst, StereoCoset, StereoKind, StereoTerm};
+use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
 use super::traits::Canonicalize;
 use super::validate::{
@@ -82,10 +82,10 @@ fn stereo_delta_domains_are_valid(lhs: &MoleculeAst, deltas: &Deltas) -> bool {
         }
     }
 
-    fn configuration_is_valid(configuration: &StereoConfigurationAst) -> bool {
+    fn configuration_is_valid(configuration: &StereoConfigurationForm) -> bool {
         match configuration {
-            StereoConfigurationAst::Undetermined => true,
-            StereoConfigurationAst::Kinded(kind, coset) => match coset {
+            StereoConfigurationForm::Undetermined => true,
+            StereoConfigurationForm::Kinded(kind, coset) => match coset {
                 StereoCoset::Undetermined => true,
                 StereoCoset::Lit(index) => *index < kind.count() as u32,
                 StereoCoset::LitSet(indices) => {
@@ -97,11 +97,11 @@ fn stereo_delta_domains_are_valid(lhs: &MoleculeAst, deltas: &Deltas) -> bool {
     }
 
     fn configurations_are_compatible(
-        lhs: Option<&StereoConfigurationAst>,
-        old: &StereoConfigurationAst,
-        new: &StereoConfigurationAst,
+        lhs: Option<&StereoConfigurationForm>,
+        old: &StereoConfigurationForm,
+        new: &StereoConfigurationForm,
     ) -> bool {
-        let lhs_kind = lhs.and_then(StereoConfigurationAst::kind);
+        let lhs_kind = lhs.and_then(StereoConfigurationForm::kind);
         let old_kind = old.kind();
         let new_kind = new.kind();
         configuration_is_valid(old)
@@ -762,7 +762,7 @@ impl ReactionAst {
                         permutation,
                     } => {
                         let host_id = host_stereo_atom(*id)?;
-                        let old = StereoConfigurationAst::Kinded(
+                        let old = StereoConfigurationForm::Kinded(
                             *kind,
                             host.stereo_atom(host_id).coset().clone(),
                         );
@@ -774,7 +774,7 @@ impl ReactionAst {
                     }
                     StereoAtomDelta::Swap { id, kind } => {
                         let host_id = host_stereo_atom(*id)?;
-                        let old = StereoConfigurationAst::Kinded(
+                        let old = StereoConfigurationForm::Kinded(
                             *kind,
                             host.stereo_atom(host_id).coset().clone(),
                         );
@@ -786,7 +786,7 @@ impl ReactionAst {
                     }
                     StereoAtomDelta::Mirror { id, kind } => {
                         let host_id = host_stereo_atom(*id)?;
-                        let old = StereoConfigurationAst::Kinded(
+                        let old = StereoConfigurationForm::Kinded(
                             *kind,
                             host.stereo_atom(host_id).coset().clone(),
                         );
@@ -835,7 +835,7 @@ impl ReactionAst {
                         permutation,
                     } => {
                         let host_id = host_stereo_bond(*id)?;
-                        let old = StereoConfigurationAst::Kinded(
+                        let old = StereoConfigurationForm::Kinded(
                             *kind,
                             host.stereo_bond(host_id).coset().clone(),
                         );
@@ -847,7 +847,7 @@ impl ReactionAst {
                     }
                     StereoBondDelta::Swap { id, kind } => {
                         let host_id = host_stereo_bond(*id)?;
-                        let old = StereoConfigurationAst::Kinded(
+                        let old = StereoConfigurationForm::Kinded(
                             *kind,
                             host.stereo_bond(host_id).coset().clone(),
                         );
@@ -859,7 +859,7 @@ impl ReactionAst {
                     }
                     StereoBondDelta::Mirror { id, kind } => {
                         let host_id = host_stereo_bond(*id)?;
-                        let old = StereoConfigurationAst::Kinded(
+                        let old = StereoConfigurationForm::Kinded(
                             *kind,
                             host.stereo_bond(host_id).coset().clone(),
                         );
@@ -1818,8 +1818,8 @@ mod tests {
     #[case::field(Delta::StereoAtom(StereoAtomDelta::ModifyField {
         id: StereoAtomId(0),
         change: StereoAtomFieldChange::Configuration {
-            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0u32),
-            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1u32),
+            old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+            new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
         },
     }))]
     #[case::removal(Delta::StereoAtom(StereoAtomDelta::Remove {
@@ -1894,8 +1894,8 @@ mod tests {
     #[case::field(Delta::StereoBond(StereoBondDelta::ModifyField {
         id: StereoBondId(0),
         change: StereoBondFieldChange::Configuration {
-            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0u32),
-            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1u32),
+            old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32),
+            new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1u32),
         },
     }))]
     #[case::removal(Delta::StereoBond(StereoBondDelta::Remove {
@@ -2648,11 +2648,11 @@ mod tests {
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::Kinded(
+                    old: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0),
                     ),
-                    new: StereoConfigurationAst::Kinded(
+                    new: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1),
                     ),

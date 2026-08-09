@@ -272,7 +272,7 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceAst, AtomId, BooleanForm, Deltas, ElectronCountsForm,
-        NumForm, StereoCoset, TetrahedralStereoAst,
+        NumForm, StereoCoset, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
@@ -966,7 +966,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        Some(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)))
+        Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),
@@ -984,7 +984,7 @@ mod tests {
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Option<TetrahedralStereoAst>,
+        #[case] expected: Option<TetrahedralStereoForm>,
     ) {
         let ast = ingest_smiles_with("C[C@H](N)O", &io_config, &model, &resolve_config).unwrap();
 

@@ -18,7 +18,7 @@ use super::error::{PResult, ParseError};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::NoncovalentBondConstraintAst;
 use crate::ir::noncovalent::{
-    NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate,
+    NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
 };
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
@@ -193,10 +193,10 @@ fn constraint_tag(c: &NoncovalentBondConstraintAst) -> &'static str {
     }
 }
 
-fn kind_expr(i: &mut &str) -> PResult<NoncovalentBondKindAst> {
+fn kind_expr(i: &mut &str) -> PResult<NoncovalentBondKindForm> {
     alt((
-        '*'.value(NoncovalentBondKindAst::Undetermined),
-        kind_literal.map(NoncovalentBondKindAst::Lit),
+        '*'.value(NoncovalentBondKindForm::Undetermined),
+        kind_literal.map(NoncovalentBondKindForm::Lit),
     ))
     .parse_next(i)
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedNoncovalentBondKind))
@@ -253,10 +253,10 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &NoncovalentBondConstraintAst) 
     }
 }
 
-fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::Result {
+fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindForm) -> fmt::Result {
     match kind {
-        NoncovalentBondKindAst::Lit(k) => write!(f, "{}", kind_symbol(*k)),
-        NoncovalentBondKindAst::Undetermined => write!(f, "*"),
+        NoncovalentBondKindForm::Lit(k) => write!(f, "{}", kind_symbol(*k)),
+        NoncovalentBondKindForm::Undetermined => write!(f, "*"),
     }
 }
 
@@ -466,12 +466,12 @@ mod tests {
     #[case::ion("Ion", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic)))]
     #[case::vdw("Vdw", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::VanDerWaals)))]
     #[case::whitespace("  Hbd  ", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)))]
-    #[case::undetermined("*", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Undetermined)))]
+    #[case::undetermined("*", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindForm::Undetermined)))]
     #[case::intramolecular("Hbd#I", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
     #[case::intramolecular_plus("Hbd#I+", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
     #[case::intermolecular("Hbd#I!", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(false))))]
     #[case::intramolecular_undetermined("Hbd#I*", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined))))]
-    #[case::undetermined_kind_with_pred("*#I", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Undetermined).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
+    #[case::undetermined_kind_with_pred("*#I", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindForm::Undetermined).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
     fn test_parse_noncovalent_bond(#[case] input: &str, #[case] expected: NoncovalentBondDsl) {
         assert_eq!(parse_noncovalent_bond(input).unwrap(), expected);
     }
@@ -610,11 +610,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", NoncovalentBondUpdateDsl(NoncovalentBondUpdate::default()))]
-    #[case::kind("Hbd", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() }))]
-    #[case::kind_undetermined("*", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
+    #[case::kind("Hbd", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() }))]
+    #[case::kind_undetermined("*", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Undetermined), ..Default::default() }))]
     #[case::constraint("#I", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), ..Default::default() }))]
     #[case::constraint_removal("#I*", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() }))]
-    #[case::kind_and_constraint("Ion#I!", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)), constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) }))]
+    #[case::kind_and_constraint("Ion#I!", NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)), constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) }))]
     fn test_parse_noncovalent_bond_update(
         #[case] input: &str,
         #[case] expected: NoncovalentBondUpdateDsl,
@@ -647,9 +647,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(NoncovalentBondUpdateDsl(NoncovalentBondUpdate::default()), "")]
-    #[case::kind_undetermined(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }), "*")]
+    #[case::kind_undetermined(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Undetermined), ..Default::default() }), "*")]
     #[case::constraint_removal(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() }), "#I*")]
-    #[case::kind_and_constraint(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)), constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) }), "Ion#I!")]
+    #[case::kind_and_constraint(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)), constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) }), "Ion#I!")]
     fn test_noncovalent_bond_update_dsl_display(
         #[case] input: NoncovalentBondUpdateDsl,
         #[case] expected: &str,
@@ -660,7 +660,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(r##""""##, NoncovalentBondUpdateDsl(NoncovalentBondUpdate::default()))]
-    #[case::kind_undetermined(r##""*""##, NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
+    #[case::kind_undetermined(r##""*""##, NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Undetermined), ..Default::default() }))]
     #[case::constraint_removal(r##""#I*""##, NoncovalentBondUpdateDsl(NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() }))]
     fn test_noncovalent_bond_update_dsl_from_edn(
         #[case] input: &str,
@@ -687,7 +687,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(NoncovalentBondUpdateDsl(NoncovalentBondUpdate::default()), r##""""##)]
-    #[case::kind_undetermined(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }), r##""*""##)]
+    #[case::kind_undetermined(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Undetermined), ..Default::default() }), r##""*""##)]
     #[case::constraint_removal(NoncovalentBondUpdateDsl(NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() }), r##""#I*""##)]
     fn test_noncovalent_bond_update_dsl_to_edn(
         #[case] input: NoncovalentBondUpdateDsl,

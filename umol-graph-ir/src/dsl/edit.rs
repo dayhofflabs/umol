@@ -60,7 +60,7 @@ use crate::ir::multicenter::MulticenterBondUpdate;
 use crate::ir::noncovalent::NoncovalentBondUpdate;
 use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use crate::ir::stereo::{
-    StereoAtomUpdate, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate,
+    StereoAtomUpdate, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
     StereoKind,
 };
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
@@ -2302,20 +2302,20 @@ fn append_stereo_atom_modify(
     let old_configuration = match expect.configuration {
         StereoConfigurationUpdate::Unchanged
         | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
-        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationForm::Undetermined),
         StereoConfigurationUpdate::Kinded {
             kind,
             coset: Some(coset),
-        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+        } => Some(StereoConfigurationForm::kinded(kind, coset)),
     };
     let new_configuration = match update.configuration {
         StereoConfigurationUpdate::Unchanged
         | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
-        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationForm::Undetermined),
         StereoConfigurationUpdate::Kinded {
             kind,
             coset: Some(coset),
-        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+        } => Some(StereoConfigurationForm::kinded(kind, coset)),
     };
     if let (Some(old), Some(new)) = (old_configuration, new_configuration) {
         edits.push(Edit::ModifyStereoAtomField {
@@ -2345,20 +2345,20 @@ fn append_stereo_bond_modify(
     let old_configuration = match expect.configuration {
         StereoConfigurationUpdate::Unchanged
         | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
-        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationForm::Undetermined),
         StereoConfigurationUpdate::Kinded {
             kind,
             coset: Some(coset),
-        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+        } => Some(StereoConfigurationForm::kinded(kind, coset)),
     };
     let new_configuration = match update.configuration {
         StereoConfigurationUpdate::Unchanged
         | StereoConfigurationUpdate::Kinded { coset: None, .. } => None,
-        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationAst::Undetermined),
+        StereoConfigurationUpdate::Undetermined => Some(StereoConfigurationForm::Undetermined),
         StereoConfigurationUpdate::Kinded {
             kind,
             coset: Some(coset),
-        } => Some(StereoConfigurationAst::kinded(kind, coset)),
+        } => Some(StereoConfigurationForm::kinded(kind, coset)),
     };
     if let (Some(old), Some(new)) = (old_configuration, new_configuration) {
         edits.push(Edit::ModifyStereoBondField {
@@ -2643,8 +2643,8 @@ fn stereo_atom_field_updates(
     let StereoAtomFieldChange::Configuration { old, new } = change;
     let expect = StereoAtomUpdate {
         configuration: match old {
-            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
-            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
                 kind: *kind,
                 coset: Some(coset.clone()),
             },
@@ -2653,8 +2653,8 @@ fn stereo_atom_field_updates(
     };
     let update = StereoAtomUpdate {
         configuration: match new {
-            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
-            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
                 kind: *kind,
                 coset: Some(coset.clone()),
             },
@@ -2670,8 +2670,8 @@ fn stereo_bond_field_updates(
     let StereoBondFieldChange::Configuration { old, new } = change;
     let expect = StereoBondUpdate {
         configuration: match old {
-            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
-            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
                 kind: *kind,
                 coset: Some(coset.clone()),
             },
@@ -2680,8 +2680,8 @@ fn stereo_bond_field_updates(
     };
     let update = StereoBondUpdate {
         configuration: match new {
-            StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
-            StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Undetermined,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
                 kind: *kind,
                 coset: Some(coset.clone()),
             },
@@ -4390,9 +4390,11 @@ mod tests {
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::molecule::MoleculeAst;
     use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
+    use crate::ir::noncovalent::{
+        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm,
+    };
     use crate::ir::stereo::{
-        StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind, Stereogenicity,
+        StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind, Stereogenicity,
     };
     use crate::ir::value::NumForm;
     use crate::mol_dsl;
@@ -5065,8 +5067,8 @@ mod tests {
         Edit::ModifyNoncovalentBondField {
             id: NoncovalentBondHandle::New(0),
             change: NoncovalentBondFieldChange::Kind {
-                old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
             },
         },
     )]
@@ -5131,8 +5133,8 @@ mod tests {
         Edit::ModifyStereoAtomField {
             id: StereoAtomHandle::New(0),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32),
-                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32),
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32),
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32),
             },
         },
     )]
@@ -5199,8 +5201,8 @@ mod tests {
         Edit::ModifyStereoBondField {
             id: StereoBondHandle::Id(StereoBondId(0)),
             change: StereoBondFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32),
-                new: StereoConfigurationAst::Undetermined,
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
+                new: StereoConfigurationForm::Undetermined,
             },
         },
     )]

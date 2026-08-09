@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
     AtomConstraintKey as GraphIrAtomConstraintKey, AtomConstraintsAst as GraphIrAtomConstraintsAst,
     AtomId as GraphIrAtomId, MulticenterValence as GraphIrMulticenterValence,
     MulticenterValenceAst as GraphIrMulticenterValenceAst, RingScope as GraphIrRingScope,
-    TetrahedralStereoAst as GraphIrTetrahedralStereoAst,
+    TetrahedralStereoForm as GraphIrTetrahedralStereoForm,
 };
 
 use super::ring::{RingMembershipAst, RingScope};
@@ -305,9 +305,9 @@ pub(crate) enum TetrahedralStereoLike {
 }
 
 impl TetrahedralStereoLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrTetrahedralStereoAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrTetrahedralStereoForm> {
         Ok(match self {
-            Self::Flag(false) => GraphIrTetrahedralStereoAst::NotStereo,
+            Self::Flag(false) => GraphIrTetrahedralStereoForm::NotStereo,
             Self::Flag(true) => {
                 return Err(PyValueError::new_err(
                     "tetrahedral_stereo = True is not meaningful; use TetrahedralConfiguration.Ccw/Cw or False",

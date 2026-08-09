@@ -8,9 +8,9 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, CisTransStereoAst, Lattice, MoleculeAst, StereoAtomAst, StereoAtomId,
+    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, MoleculeAst, StereoAtomAst, StereoAtomId,
     StereoBondAst, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    TetrahedralStereoAst,
+    TetrahedralStereoForm,
 };
 
 use crate::ops::model::StereoModel;
@@ -83,10 +83,10 @@ impl StereoPerception {
                 .ast
                 .constraints
                 .tetrahedral_stereo()
-                .unwrap_or(&TetrahedralStereoAst::Undetermined);
+                .unwrap_or(&TetrahedralStereoForm::Undetermined);
 
             let constraint_candidate = match assertion {
-                TetrahedralStereoAst::Stereo(coset) => {
+                TetrahedralStereoForm::Stereo(coset) => {
                     let candidate = self.derive_stereo_atom(ast, atom, coset);
                     if candidate.is_none() {
                         inconsistencies
@@ -94,8 +94,8 @@ impl StereoPerception {
                     }
                     candidate
                 }
-                TetrahedralStereoAst::NotStereo => None,
-                TetrahedralStereoAst::Undetermined => None,
+                TetrahedralStereoForm::NotStereo => None,
+                TetrahedralStereoForm::Undetermined => None,
             };
 
             if let Some((ligands, stereo)) = &constraint_candidate {
@@ -120,13 +120,13 @@ impl StereoPerception {
                 };
 
                 if constraint_candidate.is_none()
-                    && matches!(assertion, TetrahedralStereoAst::Undetermined)
+                    && matches!(assertion, TetrahedralStereoForm::Undetermined)
                 {
                     atoms.push((atom, entity_ligands.clone(), entity_stereo.clone()));
                 }
                 let mismatch =
                     match assertion {
-                        TetrahedralStereoAst::Stereo(_) => constraint_candidate
+                        TetrahedralStereoForm::Stereo(_) => constraint_candidate
                             .as_ref()
                             .is_some_and(|(_, constraint_stereo)| {
                                 let Some(expected) = constraint_stereo.configuration.coset() else {
@@ -135,11 +135,11 @@ impl StereoPerception {
                                 let Some(actual) = entity_stereo.configuration.coset() else {
                                     return false;
                                 };
-                                !TetrahedralStereoAst::Stereo(expected.clone())
-                                    .matches(&TetrahedralStereoAst::Stereo(actual.clone()))
+                                !TetrahedralStereoForm::Stereo(expected.clone())
+                                    .matches(&TetrahedralStereoForm::Stereo(actual.clone()))
                             }),
-                        TetrahedralStereoAst::NotStereo => true,
-                        TetrahedralStereoAst::Undetermined => false,
+                        TetrahedralStereoForm::NotStereo => true,
+                        TetrahedralStereoForm::Undetermined => false,
                     };
                 if mismatch {
                     inconsistencies.insert(StereoInconsistency::TetrahedralStereoMismatch {
@@ -161,18 +161,18 @@ impl StereoPerception {
                 .ast
                 .constraints
                 .cis_trans_stereo()
-                .unwrap_or(&CisTransStereoAst::Undetermined);
+                .unwrap_or(&CisTransStereoForm::Undetermined);
 
             let constraint_candidate = match assertion {
-                CisTransStereoAst::Stereo(coset) => {
+                CisTransStereoForm::Stereo(coset) => {
                     let candidate = self.derive_stereo_bond(ast, bond, coset);
                     if candidate.is_none() {
                         inconsistencies.insert(StereoInconsistency::CisTransStereoFailure { bond });
                     }
                     candidate
                 }
-                CisTransStereoAst::NotStereo => None,
-                CisTransStereoAst::Undetermined => None,
+                CisTransStereoForm::NotStereo => None,
+                CisTransStereoForm::Undetermined => None,
             };
 
             if let Some((ligands, stereo)) = &constraint_candidate {
@@ -197,12 +197,12 @@ impl StereoPerception {
                 };
 
                 if constraint_candidate.is_none()
-                    && matches!(assertion, CisTransStereoAst::Undetermined)
+                    && matches!(assertion, CisTransStereoForm::Undetermined)
                 {
                     bonds.push((bond, entity_ligands.clone(), entity_stereo.clone()));
                 }
                 let mismatch = match assertion {
-                    CisTransStereoAst::Stereo(_) => {
+                    CisTransStereoForm::Stereo(_) => {
                         constraint_candidate
                             .as_ref()
                             .is_some_and(|(_, constraint_stereo)| {
@@ -212,12 +212,12 @@ impl StereoPerception {
                                 let Some(actual) = entity_stereo.configuration.coset() else {
                                     return false;
                                 };
-                                !CisTransStereoAst::Stereo(expected.clone())
-                                    .matches(&CisTransStereoAst::Stereo(actual.clone()))
+                                !CisTransStereoForm::Stereo(expected.clone())
+                                    .matches(&CisTransStereoForm::Stereo(actual.clone()))
                             })
                     }
-                    CisTransStereoAst::NotStereo => true,
-                    CisTransStereoAst::Undetermined => false,
+                    CisTransStereoForm::NotStereo => true,
+                    CisTransStereoForm::Undetermined => false,
                 };
                 if mismatch {
                     inconsistencies.insert(StereoInconsistency::CisTransStereoMismatch {

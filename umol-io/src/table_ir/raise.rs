@@ -11,9 +11,9 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst,
-    BooleanForm, CisTransStereoAst, Constraints, DativeBondAst, ElementForm, IsotopeMassForm,
+    BooleanForm, CisTransStereoForm, Constraints, DativeBondAst, ElementForm, IsotopeMassForm,
     Lattice, MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst,
-    NoncovalentBondAst, NumForm, StereoCoset, TetrahedralStereoAst, TryIntoIr,
+    NoncovalentBondAst, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
     UnpairedElectronsForm,
 };
 use umol_perm::{ClassKey, Permutation};
@@ -257,7 +257,7 @@ fn raise_tetrahedral_stereo(
         Some(Chirality::Unspecified) => {
             validate_tetrahedral_geometry(mol, atom_idx)?;
             return Ok(Some(AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoAst::stereo(StereoCoset::Undetermined),
+                TetrahedralStereoForm::stereo(StereoCoset::Undetermined),
             )));
         }
         Some(symbol) => {
@@ -338,7 +338,7 @@ fn raise_tetrahedral_stereo(
         .reindex(source_coset as u32, relabeling)
         .expect("tetrahedral coset reindex");
     Ok(Some(AtomConstraintAst::TetrahedralStereo(
-        TetrahedralStereoAst::stereo(StereoCoset::Lit(coset)),
+        TetrahedralStereoForm::stereo(StereoCoset::Lit(coset)),
     )))
 }
 
@@ -353,7 +353,7 @@ fn raise_cis_trans_stereo(
     }
     if bond.stereo == Some(BondStereo::Either) {
         return Ok(Some(BondConstraintAst::CisTransStereo(
-            CisTransStereoAst::stereo(StereoCoset::Undetermined),
+            CisTransStereoForm::stereo(StereoCoset::Undetermined),
         )));
     }
     let atom_1_idx = bond.start_atom() as usize;
@@ -388,7 +388,7 @@ fn raise_cis_trans_stereo(
         )
         .expect("cis/trans coset index");
     Ok(Some(BondConstraintAst::CisTransStereo(
-        CisTransStereoAst::stereo(StereoCoset::Lit(coset)),
+        CisTransStereoForm::stereo(StereoCoset::Lit(coset)),
     )))
 }
 
@@ -749,8 +749,9 @@ mod tests {
         #[case] atom_idx: usize,
         #[case] expected: Option<StereoCoset>,
     ) {
-        let expected = expected
-            .map(|coset| AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(coset)));
+        let expected = expected.map(|coset| {
+            AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::stereo(coset))
+        });
         assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Ok(expected));
     }
 
@@ -807,7 +808,7 @@ mod tests {
         #[case] expected: Option<StereoCoset>,
     ) {
         let expected = expected
-            .map(|coset| BondConstraintAst::CisTransStereo(CisTransStereoAst::stereo(coset)));
+            .map(|coset| BondConstraintAst::CisTransStereo(CisTransStereoForm::stereo(coset)));
         assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Ok(expected));
     }
 

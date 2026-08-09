@@ -2332,10 +2332,10 @@ mod tests {
     use super::super::super::ligand::StereoLigandKind;
     use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
+        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm,
     };
     use super::super::super::stereo::{
-        CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCoset,
+        CisTransStereoForm, StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoCoset,
         StereoKind,
     };
     use super::super::super::value::NumForm;
@@ -2768,22 +2768,22 @@ mod tests {
         edits.push(Edit::ModifyNoncovalentBondField {
             id: noncovalent,
             change: NoncovalentBondFieldChange::Kind {
-                old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
             },
         });
         edits.push(Edit::ModifyStereoAtomField {
             id: stereo_atom,
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             },
         });
         edits.push(Edit::ModifyStereoBondField {
             id: stereo_bond,
             change: StereoBondFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
             },
         });
 
@@ -2805,15 +2805,15 @@ mod tests {
         );
         assert_eq!(
             editor.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
-            NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)
+            NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
         );
         assert_eq!(
             editor.stereo_atom(StereoAtomId(0)).ast.configuration,
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
         assert_eq!(
             editor.stereo_bond(StereoBondId(0)).ast.configuration,
-            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
         );
 
         transaction.rollback(&mut editor).unwrap();
@@ -3625,11 +3625,11 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyStereoAtomField {
                 id: StereoAtomHandle::Id(StereoAtomId(0)),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(
+                    old: StereoConfigurationForm::kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1),
                     ),
-                    new: StereoConfigurationAst::kinded(
+                    new: StereoConfigurationForm::kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0),
                     ),
@@ -3641,7 +3641,7 @@ mod tests {
                 .stereo_atom(StereoAtomId(0))
                 .ast
                 .configuration,
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0),),
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0),),
         );
         tx.rollback(&mut stereo_atom_skeleton).unwrap();
         assert_eq!(stereo_atom_skeleton.build(), before);
@@ -3661,11 +3661,11 @@ mod tests {
                 id: StereoAtomHandle::Id(StereoAtomId(0)),
                 change: StereoAtomFieldChange::Configuration {
                     // Wrong recorded coset (Th0 vs the stored Th1).
-                    old: StereoConfigurationAst::kinded(
+                    old: StereoConfigurationForm::kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0),
                     ),
-                    new: StereoConfigurationAst::kinded(
+                    new: StereoConfigurationForm::kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1),
                     ),
@@ -3692,8 +3692,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyStereoBondField {
                 id: StereoBondHandle::Id(StereoBondId(0)),
                 change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                    new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 },
             }]))
             .unwrap();
@@ -3702,7 +3702,7 @@ mod tests {
                 .stereo_bond(StereoBondId(0))
                 .ast
                 .configuration,
-            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
         );
         tx.rollback(&mut stereo_bond_skeleton).unwrap();
         assert_eq!(stereo_bond_skeleton.build(), before);
@@ -3725,8 +3725,8 @@ mod tests {
                 id: StereoBondHandle::Id(StereoBondId(0)),
                 change: StereoBondFieldChange::Configuration {
                     // Wrong recorded coset (vs the stored 1).
-                    old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                    new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 },
             }]))
             .unwrap_err();
@@ -4226,8 +4226,8 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyNoncovalentBondField {
                 id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
                 change: NoncovalentBondFieldChange::Kind {
-                    old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                    new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
                 },
             }]))
             .unwrap();
@@ -4236,7 +4236,7 @@ mod tests {
                 .noncovalent_bond(NoncovalentBondId(0))
                 .ast
                 .kind,
-            NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+            NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
         );
     }
 
@@ -4511,7 +4511,7 @@ mod tests {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
                 new: Some(BondConstraintAst::cis_trans_stereo(
-                    CisTransStereoAst::NotStereo,
+                    CisTransStereoForm::NotStereo,
                 )),
             }]))
             .unwrap();
@@ -4524,7 +4524,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<_>>(),
             vec![BondConstraintAst::cis_trans_stereo(
-                CisTransStereoAst::NotStereo
+                CisTransStereoForm::NotStereo
             )],
         );
     }
@@ -4910,18 +4910,18 @@ mod tests {
             EntityKind::NoncovalentBond => Undo::ModifyNoncovalentBondField {
                 id: NoncovalentBondId(0),
                 change: NoncovalentBondFieldChange::Kind {
-                    old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
-                    new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
+                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
                 },
             },
             EntityKind::StereoAtom => Undo::ModifyStereoAtomField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(
+                    old: StereoConfigurationForm::kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0),
                     ),
-                    new: StereoConfigurationAst::kinded(
+                    new: StereoConfigurationForm::kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1),
                     ),
@@ -4930,8 +4930,8 @@ mod tests {
             EntityKind::StereoBond => Undo::ModifyStereoBondField {
                 id: StereoBondId(0),
                 change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                    new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 },
             },
         };

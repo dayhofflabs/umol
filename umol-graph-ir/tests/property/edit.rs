@@ -385,18 +385,18 @@ proptest! {
                 EntityKind::NoncovalentBond => Edit::ModifyNoncovalentBondField {
                     id: NoncovalentBondHandle::New(0),
                     change: NoncovalentBondFieldChange::Kind {
-                        old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-                        new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                        old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                        new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
                     },
                 },
                 EntityKind::StereoAtom => Edit::ModifyStereoAtomField {
                     id: StereoAtomHandle::New(0),
                     change: StereoAtomFieldChange::Configuration {
-                        old: StereoConfigurationAst::kinded(
+                        old: StereoConfigurationForm::kinded(
                             StereoKind::Tetrahedral,
                             StereoCoset::Lit(1),
                         ),
-                        new: StereoConfigurationAst::kinded(
+                        new: StereoConfigurationForm::kinded(
                             StereoKind::Tetrahedral,
                             StereoCoset::Lit(0),
                         ),
@@ -405,11 +405,11 @@ proptest! {
                 EntityKind::StereoBond => Edit::ModifyStereoBondField {
                     id: StereoBondHandle::New(0),
                     change: StereoBondFieldChange::Configuration {
-                        old: StereoConfigurationAst::kinded(
+                        old: StereoConfigurationForm::kinded(
                             StereoKind::CisTrans,
                             StereoCoset::Lit(1),
                         ),
-                        new: StereoConfigurationAst::kinded(
+                        new: StereoConfigurationForm::kinded(
                             StereoKind::CisTrans,
                             StereoCoset::Lit(0),
                         ),
@@ -450,13 +450,13 @@ proptest! {
         if kinds.contains(&EntityKind::NoncovalentBond) {
             prop_assert_eq!(
                 &editor.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
-                &NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+                &NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
             );
         }
         if kinds.contains(&EntityKind::StereoAtom) {
             prop_assert_eq!(
                 &editor.stereo_atom(StereoAtomId(0)).ast.configuration,
-                &StereoConfigurationAst::kinded(
+                &StereoConfigurationForm::kinded(
                     StereoKind::Tetrahedral,
                     StereoCoset::Lit(0),
                 ),
@@ -465,7 +465,7 @@ proptest! {
         if kinds.contains(&EntityKind::StereoBond) {
             prop_assert_eq!(
                 &editor.stereo_bond(StereoBondId(0)).ast.configuration,
-                &StereoConfigurationAst::kinded(
+                &StereoConfigurationForm::kinded(
                     StereoKind::CisTrans,
                     StereoCoset::Lit(0),
                 ),

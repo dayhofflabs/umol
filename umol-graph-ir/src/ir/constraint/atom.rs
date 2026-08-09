@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::stereo::TetrahedralStereoAst;
+use super::super::stereo::TetrahedralStereoForm;
 use super::super::traits::{AsLit, Canonicalize, Lattice};
 use super::super::value::NumForm;
 
@@ -21,7 +21,7 @@ pub enum AtomConstraintAst {
     AcceptedPairs(NumForm),
     AromaticValence(AromaticValenceAst),
     MulticenterValence(MulticenterValenceAst),
-    TetrahedralStereo(TetrahedralStereoAst),
+    TetrahedralStereo(TetrahedralStereoForm),
     Degree(NumForm),
     TotalDegree(NumForm),
     TotalValence(NumForm),
@@ -55,7 +55,7 @@ impl AtomConstraintAst {
         Self::MulticenterValence(v.into())
     }
 
-    pub fn tetrahedral_stereo(c: impl Into<TetrahedralStereoAst>) -> Self {
+    pub fn tetrahedral_stereo(c: impl Into<TetrahedralStereoForm>) -> Self {
         Self::TetrahedralStereo(c.into())
     }
 
@@ -117,7 +117,7 @@ impl AtomConstraintAst {
                 Self::MulticenterValence(MulticenterValenceAst::Undetermined)
             }
             Self::TetrahedralStereo(_) => {
-                Self::TetrahedralStereo(TetrahedralStereoAst::Undetermined)
+                Self::TetrahedralStereo(TetrahedralStereoForm::Undetermined)
             }
             Self::Degree(_) => Self::Degree(NumForm::Undetermined),
             Self::TotalDegree(_) => Self::TotalDegree(NumForm::Undetermined),
@@ -354,7 +354,7 @@ impl AtomConstraintsAst {
         }
     }
 
-    pub fn tetrahedral_stereo(&self) -> Option<&TetrahedralStereoAst> {
+    pub fn tetrahedral_stereo(&self) -> Option<&TetrahedralStereoForm> {
         match self.get(AtomConstraintKey::TetrahedralStereo) {
             Some(AtomConstraintAst::TetrahedralStereo(c)) => Some(c),
             _ => None,
@@ -663,7 +663,7 @@ impl Lattice for AtomConstraintsAst {
             AtomConstraintAst::TetrahedralStereo(ts) => ts.matches(
                 target
                     .tetrahedral_stereo()
-                    .unwrap_or(&TetrahedralStereoAst::Undetermined),
+                    .unwrap_or(&TetrahedralStereoForm::Undetermined),
             ),
             AtomConstraintAst::Degree(v) => {
                 v.matches(target.degree().unwrap_or(&NumForm::Undetermined))
@@ -1092,8 +1092,8 @@ mod tests {
         AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter),
     )]
     #[case::tetrahedral_stereo(
-        AtomConstraintAst::tetrahedral_stereo(TetrahedralStereoAst::NotStereo),
-        AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo),
+        AtomConstraintAst::tetrahedral_stereo(TetrahedralStereoForm::NotStereo),
+        AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
     )]
     fn test_atom_constraint_ast_constructors(
         #[case] actual: AtomConstraintAst,
@@ -1117,7 +1117,7 @@ mod tests {
     #[case::total_hydrogens(AtomConstraintAst::total_hydrogens(3), AtomConstraintKey::TotalHydrogens)]
     #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, 1), AtomConstraintKey::RingMembership(RingScope::All))]
     #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintKey::RingMembership(RingScope::Size(6)))]
-    #[case::tetrahedral_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintKey::TetrahedralStereo)]
+    #[case::tetrahedral_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo), AtomConstraintKey::TetrahedralStereo)]
     fn test_atom_constraint_ast_key(
         #[case] constraint: AtomConstraintAst,
         #[case] expected: AtomConstraintKey,
@@ -1151,8 +1151,8 @@ mod tests {
     #[case::multicenter_undetermined(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::Undetermined), true)]
     #[case::multicenter_not(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::NotMulticenter), false)]
     #[case::multicenter_with_value(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::multicenter(1)), false)]
-    #[case::tetrahedral_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), false)]
-    #[case::tetrahedral_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined), true)]
+    #[case::tetrahedral_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo), false)]
+    #[case::tetrahedral_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Undetermined), true)]
     fn test_atom_constraint_ast_is_undetermined(
         #[case] c: AtomConstraintAst,
         #[case] expected: bool,
@@ -1167,7 +1167,7 @@ mod tests {
     #[case::ring_membership_keeps_scope(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined))]
     #[case::aromatic(AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1)), AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined))]
     #[case::multicenter(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::multicenter(1)), AtomConstraintAst::multicenter_valence(MulticenterValenceAst::Undetermined))]
-    #[case::tetrahedral(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined))]
+    #[case::tetrahedral(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo), AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Undetermined))]
     fn test_atom_constraint_ast_as_undetermined(
         #[case] c: AtomConstraintAst,
         #[case] expected: AtomConstraintAst,
@@ -1877,10 +1877,10 @@ mod tests {
         Some(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)])))]
     #[case::prunes_vacuous(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::Undetermined)]), Some(AtomConstraintsAst::new()))]
     #[case::tetrahedral_narrows_from_absent(AtomConstraintsAst::new(),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)])))]
-    #[case::tetrahedral_not_stereo_vs_stereo_contradicts(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(0_u32))]), None)]
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)])))]
+    #[case::tetrahedral_not_stereo_vs_stereo_contradicts(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::stereo(0_u32))]), None)]
     fn test_atom_constraints_ast_meet(
         #[case] a: AtomConstraintsAst,
         #[case] b: AtomConstraintsAst,
@@ -1911,11 +1911,11 @@ mod tests {
         AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]))]
     #[case::widens_value(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(3)]),
         AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::lit_set([4, 3]))]))]
-    #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]))]
-    #[case::tetrahedral_incompatible_drops_to_undetermined(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(0_u32))]), AtomConstraintsAst::new())]
+    #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]))]
+    #[case::tetrahedral_incompatible_drops_to_undetermined(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::stereo(0_u32))]), AtomConstraintsAst::new())]
     fn test_atom_constraints_ast_join(
         #[case] a: AtomConstraintsAst,
         #[case] b: AtomConstraintsAst,
@@ -1939,9 +1939,9 @@ mod tests {
         AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), false)]
     #[case::multi_kind_all_must_match(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)]),
         AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(2)]), false)]
-    #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]), true)]
-    #[case::tetrahedral_pattern_specific_vs_absent(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+    #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]), true)]
+    #[case::tetrahedral_pattern_specific_vs_absent(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
         AtomConstraintsAst::new(), false)]
     fn test_atom_constraints_ast_matches(
         #[case] pattern: AtomConstraintsAst,

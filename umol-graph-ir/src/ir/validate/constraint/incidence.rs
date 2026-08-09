@@ -14,7 +14,7 @@ use super::super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::super::molecule::MoleculeAst;
-use super::super::super::stereo::{CisTransStereoAst, StereoKind, TetrahedralStereoAst};
+use super::super::super::stereo::{CisTransStereoForm, StereoKind, TetrahedralStereoForm};
 use super::super::super::traits::Lattice;
 use super::ConstraintError;
 
@@ -334,12 +334,12 @@ pub fn validate_atom_constraint(
                     stereo.ast.configuration.coset(),
                 ) {
                     (Some(StereoKind::Tetrahedral), Some(coset)) => {
-                        TetrahedralStereoAst::stereo(coset.clone())
+                        TetrahedralStereoForm::stereo(coset.clone())
                     }
-                    (Some(_), _) => TetrahedralStereoAst::NotStereo,
-                    (None, _) => TetrahedralStereoAst::Undetermined,
+                    (Some(_), _) => TetrahedralStereoForm::NotStereo,
+                    (None, _) => TetrahedralStereoForm::Undetermined,
                 },
-                None => TetrahedralStereoAst::NotStereo,
+                None => TetrahedralStereoForm::NotStereo,
             };
             evaluate(
                 constraint,
@@ -426,12 +426,12 @@ pub fn validate_bond_constraint(
                     stereo.ast.configuration.coset(),
                 ) {
                     (Some(StereoKind::CisTrans), Some(coset)) => {
-                        CisTransStereoAst::stereo(coset.clone())
+                        CisTransStereoForm::stereo(coset.clone())
                     }
-                    (Some(_), _) => CisTransStereoAst::NotStereo,
-                    (None, _) => CisTransStereoAst::Undetermined,
+                    (Some(_), _) => CisTransStereoForm::NotStereo,
+                    (None, _) => CisTransStereoForm::Undetermined,
                 },
-                None => CisTransStereoAst::NotStereo,
+                None => CisTransStereoForm::NotStereo,
             };
             evaluate(
                 constraint,

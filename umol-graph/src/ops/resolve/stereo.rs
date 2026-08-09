@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintAst, AtomHandle, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
-    CisTransStereoAst, Edits, Lattice, MoleculeAst, StereoAtomHandle, StereoBondHandle,
-    TetrahedralStereoAst, TransactionError,
+    CisTransStereoForm, Edits, Lattice, MoleculeAst, StereoAtomHandle, StereoBondHandle,
+    TetrahedralStereoForm, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -326,14 +326,14 @@ impl StereoResolver {
         for atom in remove_atom_constraints {
             let mut update = AtomUpdate::default();
             update.constraints.set(AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoAst::Undetermined,
+                TetrahedralStereoForm::Undetermined,
             ));
             edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).ast, &update);
         }
         for bond in remove_bond_constraints {
             let mut update = BondUpdate::default();
             update.constraints.set(BondConstraintAst::CisTransStereo(
-                CisTransStereoAst::Undetermined,
+                CisTransStereoForm::Undetermined,
             ));
             edits.update_bond(BondHandle::Id(bond), ast.bond(bond).ast, &update);
         }
@@ -525,7 +525,7 @@ mod tests {
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(1)),
             old: Some(AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)),
+                TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
             )),
             new: None,
         }]))
@@ -554,7 +554,7 @@ mod tests {
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(1)),
             old: Some(BondConstraintAst::CisTransStereo(
-                CisTransStereoAst::Stereo(StereoCoset::Lit(1)),
+                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
             )),
             new: None,
         }]))
@@ -684,7 +684,7 @@ mod tests {
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(1)),
             old: Some(AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)),
+                TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
             )),
             new: None,
         }]))
@@ -745,7 +745,7 @@ mod tests {
             Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(1)),
                 old: Some(AtomConstraintAst::TetrahedralStereo(
-                    TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)),
+                    TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
                 )),
                 new: None,
             },
@@ -786,7 +786,7 @@ mod tests {
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(1)),
             old: Some(BondConstraintAst::CisTransStereo(
-                CisTransStereoAst::Stereo(StereoCoset::Lit(1)),
+                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
             )),
             new: None,
         }]))
@@ -856,7 +856,7 @@ mod tests {
             Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(1)),
                 old: Some(BondConstraintAst::CisTransStereo(
-                    CisTransStereoAst::Stereo(StereoCoset::Lit(1)),
+                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
                 )),
                 new: None,
             },

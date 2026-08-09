@@ -149,7 +149,7 @@ mod tests {
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::{Canonicalize, Lattice};
-    use crate::ir::{BooleanForm, CisTransStereoAst};
+    use crate::ir::{BooleanForm, CisTransStereoForm};
 
     #[rustfmt::skip]
     #[rstest]
@@ -240,7 +240,7 @@ mod tests {
             .with_unpaired_electrons((2_u8, 1_u8))
             .with_constraints([
                 BondConstraintAst::Aromatic(BooleanForm::Lit(false)),
-                BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo),
+                BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo),
             ]);
         assert_eq!(
             bond.difference_to(&other),
@@ -253,7 +253,7 @@ mod tests {
                 },
                 constraints: BondConstraintsAst::from_iter([
                     BondConstraintAst::Aromatic(BooleanForm::Lit(false)),
-                    BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo),
+                    BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo),
                     BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined,),
                 ]),
             }

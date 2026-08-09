@@ -8,7 +8,7 @@ use super::super::boolean::BooleanForm;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::stereo::CisTransStereoAst;
+use super::super::stereo::CisTransStereoForm;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
 
@@ -16,7 +16,7 @@ use super::super::value::NumForm;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BondConstraintAst {
     Aromatic(BooleanForm),
-    CisTransStereo(CisTransStereoAst),
+    CisTransStereo(CisTransStereoForm),
     /// Ring count in the fixed Relevant ring projection, optionally restricted by size.
     RingMembership(RingMembershipAst),
 }
@@ -26,7 +26,7 @@ impl BondConstraintAst {
         Self::Aromatic(b.into())
     }
 
-    pub fn cis_trans_stereo(c: impl Into<CisTransStereoAst>) -> Self {
+    pub fn cis_trans_stereo(c: impl Into<CisTransStereoForm>) -> Self {
         Self::CisTransStereo(c.into())
     }
 
@@ -47,7 +47,7 @@ impl BondConstraintAst {
     pub fn as_undetermined(&self) -> Self {
         match self {
             Self::Aromatic(_) => Self::Aromatic(BooleanForm::Undetermined),
-            Self::CisTransStereo(_) => Self::CisTransStereo(CisTransStereoAst::Undetermined),
+            Self::CisTransStereo(_) => Self::CisTransStereo(CisTransStereoForm::Undetermined),
             Self::RingMembership(m) => {
                 Self::RingMembership(RingMembershipAst::new(m.scope, NumForm::Undetermined))
             }
@@ -163,7 +163,7 @@ impl BondConstraintsAst {
         }
     }
 
-    pub fn cis_trans_stereo(&self) -> Option<&CisTransStereoAst> {
+    pub fn cis_trans_stereo(&self) -> Option<&CisTransStereoForm> {
         match self.get(BondConstraintKey::CisTransStereo) {
             Some(BondConstraintAst::CisTransStereo(c)) => Some(c),
             _ => None,
@@ -396,7 +396,7 @@ impl Lattice for BondConstraintsAst {
             BondConstraintAst::CisTransStereo(cts) => cts.matches(
                 target
                     .cis_trans_stereo()
-                    .unwrap_or(&CisTransStereoAst::Undetermined),
+                    .unwrap_or(&CisTransStereoForm::Undetermined),
             ),
             BondConstraintAst::RingMembership(rm) => rm.count.matches(
                 target
@@ -473,7 +473,7 @@ mod tests {
     #[rstest]
     #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)))]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1))]
-    #[case::cis_trans_stereo(BondConstraintAst::cis_trans_stereo(CisTransStereoAst::NotStereo), BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo))]
+    #[case::cis_trans_stereo(BondConstraintAst::cis_trans_stereo(CisTransStereoForm::NotStereo), BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo))]
     fn test_bond_constraint_ast_constructors(
         #[case] actual: BondConstraintAst,
         #[case] expected: BondConstraintAst,
@@ -486,7 +486,7 @@ mod tests {
     #[case::aromatic(BondConstraintAst::Aromatic(BooleanForm::Lit(true)), BondConstraintKey::Aromatic)]
     #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintKey::RingMembership(RingScope::All))]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), BondConstraintKey::RingMembership(RingScope::Size(6)))]
-    #[case::cis_trans_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), BondConstraintKey::CisTransStereo)]
+    #[case::cis_trans_stereo(BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo), BondConstraintKey::CisTransStereo)]
     fn test_bond_constraint_ast_key(#[case] c: BondConstraintAst, #[case] expected: BondConstraintKey) {
         assert_eq!(c.key(), expected);
     }
@@ -495,7 +495,7 @@ mod tests {
     #[rstest]
     #[case::aromatic(BondConstraintAst::Aromatic(BooleanForm::Lit(true)), BondConstraintAst::Aromatic(BooleanForm::Undetermined))]
     #[case::ring_membership_keeps_scope(BondConstraintAst::ring_membership(RingScope::Size(6), 1), BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined))]
-    #[case::cis_trans(BondConstraintAst::CisTransStereo(CisTransStereoAst::stereo(1_u32)), BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined))]
+    #[case::cis_trans(BondConstraintAst::CisTransStereo(CisTransStereoForm::stereo(1_u32)), BondConstraintAst::CisTransStereo(CisTransStereoForm::Undetermined))]
     fn test_bond_constraint_ast_as_undetermined(#[case] c: BondConstraintAst, #[case] expected: BondConstraintAst) {
         assert_eq!(c.as_undetermined(), expected);
     }
@@ -507,8 +507,8 @@ mod tests {
         BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set([2]))),
         Ok(BondConstraintAst::ring_membership(RingScope::All, 2)))]
     #[case::cis_trans_lifts_term(
-        BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
-        Ok(BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))))]
+        BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
+        Ok(BondConstraintAst::cis_trans_stereo(CisTransStereoForm::stereo(1_u32))))]
     #[case::empty_litset_contradiction(
         BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
@@ -526,8 +526,8 @@ mod tests {
     #[case::ring_membership_all_undetermined(BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined), true)]
     #[case::ring_membership_size_lit(BondConstraintAst::ring_membership(RingScope::Size(6), 1), false)]
     #[case::ring_membership_size_undetermined(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined), true)]
-    #[case::cis_trans_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), false)]
-    #[case::cis_trans_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined), true)]
+    #[case::cis_trans_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo), false)]
+    #[case::cis_trans_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoForm::Undetermined), true)]
     fn test_bond_constraint_ast_is_undetermined(#[case] c: BondConstraintAst, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
     }
@@ -780,9 +780,9 @@ mod tests {
         Ok(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))])))]
     #[case::canonicalizes_values(
         BondConstraintsAst::from_iter([
-            BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
+            BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
         ]),
-        Ok(BondConstraintsAst::from_iter([BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))])))]
+        Ok(BondConstraintsAst::from_iter([BondConstraintAst::cis_trans_stereo(CisTransStereoForm::stereo(1_u32))])))]
     fn test_bond_constraints_ast_canonicalize(
         #[case] constraints: BondConstraintsAst,
         #[case] expected: Result<BondConstraintsAst, Contradiction>,
@@ -829,9 +829,9 @@ mod tests {
         BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(5), 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]), true)]
     #[case::ring_membership_size_not_in_target(BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(7), 1)]),
         BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(5), 1)]), false)]
-    #[case::cis_trans_match(BondConstraintsAst::from_iter([BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo)]),
-        BondConstraintsAst::from_iter([BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo)]), true)]
-    #[case::cis_trans_pattern_more_specific(BondConstraintsAst::from_iter([BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo)]),
+    #[case::cis_trans_match(BondConstraintsAst::from_iter([BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo)]),
+        BondConstraintsAst::from_iter([BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo)]), true)]
+    #[case::cis_trans_pattern_more_specific(BondConstraintsAst::from_iter([BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo)]),
         BondConstraintsAst::new(), false)]
     fn test_bond_constraints_ast_matches(
         #[case] pattern: BondConstraintsAst,
@@ -854,8 +854,8 @@ mod tests {
     #[rstest]
     #[case::distinct(vec![BondConstraintAst::Aromatic(BooleanForm::Lit(true)), BondConstraintAst::ring_membership(RingScope::All, 1)],
         vec![BondConstraintAst::Aromatic(BooleanForm::Lit(true)), BondConstraintAst::ring_membership(RingScope::All, 1)])]
-    #[case::unique_kind_last_wins(vec![BondConstraintAst::cis_trans_stereo(CisTransStereoAst::Undetermined), BondConstraintAst::cis_trans_stereo(CisTransStereoAst::NotStereo)],
-        vec![BondConstraintAst::cis_trans_stereo(CisTransStereoAst::NotStereo)])]
+    #[case::unique_kind_last_wins(vec![BondConstraintAst::cis_trans_stereo(CisTransStereoForm::Undetermined), BondConstraintAst::cis_trans_stereo(CisTransStereoForm::NotStereo)],
+        vec![BondConstraintAst::cis_trans_stereo(CisTransStereoForm::NotStereo)])]
     #[case::ring_appends(vec![BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)],
         vec![BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)])]
     #[case::empty(vec![], vec![])]

@@ -27,7 +27,7 @@ use crate::ir::bond::{BondAst, BondUpdate};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst, RingScope};
 use crate::ir::spin::UnpairedElectronsForm;
-use crate::ir::stereo::CisTransStereoAst;
+use crate::ir::stereo::CisTransStereoForm;
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::NumForm;
 
@@ -487,7 +487,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintAst) -> fmt::Res
         BondConstraintAst::Aromatic(BooleanForm::Lit(false)) => write!(f, "#a!"),
         BondConstraintAst::Aromatic(BooleanForm::Undetermined) => Ok(()),
         BondConstraintAst::RingMembership(m) => fmt_ring_membership(f, m),
-        BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined) => Ok(()),
+        BondConstraintAst::CisTransStereo(CisTransStereoForm::Undetermined) => Ok(()),
         BondConstraintAst::CisTransStereo(c) => {
             write!(f, "#C")?;
             fmt_cis_trans_stereo_config(f, c)
@@ -543,7 +543,7 @@ fn raise_bond_constraints(constraints: &mut BondConstraintsAst, cfg: &BondDefaul
             .is_none_or(|c| c.is_undetermined())
     {
         constraints.set(BondConstraintAst::CisTransStereo(
-            CisTransStereoAst::NotStereo,
+            CisTransStereoForm::NotStereo,
         ));
     }
 }
@@ -553,7 +553,7 @@ fn lower_bond_constraints(constraints: &mut BondConstraintsAst, cfg: &BondDefaul
     if matches!(cfg.cis_trans_stereo, StereoDefault::NotStereo)
         && constraints.get(BondConstraintKey::CisTransStereo)
             == Some(&BondConstraintAst::CisTransStereo(
-                CisTransStereoAst::NotStereo,
+                CisTransStereoForm::NotStereo,
             ))
     {
         constraints.remove(BondConstraintKey::CisTransStereo);
@@ -803,10 +803,10 @@ mod tests {
     #[case::ring_membership_all_undetermined("#R*", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)))]
     #[case::ring_membership_size("#R(6)", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1)))]
     #[case::ring_membership_size_undetermined("#R(6)*", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)))]
-    #[case::cis_trans_stereo_undetermined("#C*", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined)))]
-    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Undetermined))))]
-    #[case::cis_trans_stereo_not_stereo("#C!", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo)))]
-    #[case::cis_trans_stereo("#C1", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Lit(1)))))]
+    #[case::cis_trans_stereo_undetermined("#C*", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoForm::Undetermined)))]
+    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Undetermined))))]
+    #[case::cis_trans_stereo_not_stereo("#C!", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo)))]
+    #[case::cis_trans_stereo("#C1", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Lit(1)))))]
     fn test_bond_predicate(#[case] input: &str, #[case] expected: BondPredicate) {
         let result = bond_predicate.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -901,11 +901,11 @@ mod tests {
     #[case::ring_membership_all_undetermined(BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined), "{:ring-membership {:count :undetermined}}")]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
     #[case::ring_membership_size_count_set(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
-    #[case::cis_trans_stereo_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined), "{:cis-trans-stereo :undetermined}")]
-    #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:cis-trans-stereo :not-stereo}")]
-    #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
-    #[case::cis_trans_stereo_coset_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Undetermined)), "{:cis-trans-stereo {:stereo :undetermined}}")]
-    #[case::cis_trans_stereo_set(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::lit_set([1, 2]))), "{:cis-trans-stereo {:stereo [1 2]}}")]
+    #[case::cis_trans_stereo_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoForm::Undetermined), "{:cis-trans-stereo :undetermined}")]
+    #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoForm::NotStereo), "{:cis-trans-stereo :not-stereo}")]
+    #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
+    #[case::cis_trans_stereo_coset_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Undetermined)), "{:cis-trans-stereo {:stereo :undetermined}}")]
+    #[case::cis_trans_stereo_set(BondConstraintAst::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::lit_set([1, 2]))), "{:cis-trans-stereo {:stereo [1 2]}}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[case] input: BondConstraintAst,
         #[case] edn_source: &str,

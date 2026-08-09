@@ -540,7 +540,7 @@ mod tests {
         AtomAst as GraphIrAtomAst, BondConstraintAst as GraphIrBondConstraintAst,
         BondConstraintKey as GraphIrBondConstraintKey,
         BondConstraintsAst as GraphIrBondConstraintsAst, BooleanForm as GraphIrBooleanForm,
-        CisTransStereoAst as GraphIrCisTransStereoAst, MoleculeEntries as GraphIrMoleculeEntries,
+        CisTransStereoForm as GraphIrCisTransStereoForm, MoleculeEntries as GraphIrMoleculeEntries,
         NumForm as GraphIrNumForm, RingScope as GraphIrRingScope,
         StereoCoset as GraphIrStereoCoset,
     };
@@ -621,9 +621,9 @@ mod tests {
 
     #[rstest]
     #[case(GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)))]
-    #[case(GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoAst::NotStereo))]
+    #[case(GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoForm::NotStereo))]
     #[case(
-        GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoAst::Stereo(
+        GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoForm::Stereo(
             GraphIrStereoCoset::Lit(1)
         ))
     )]

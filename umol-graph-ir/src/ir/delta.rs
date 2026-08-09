@@ -43,7 +43,7 @@ use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
 use super::remap::IdRemapping;
 use super::stereo::{
     CosetOp, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
-    StereoConfigurationAst, StereoKind,
+    StereoConfigurationForm, StereoKind,
 };
 use super::traits::{Canonicalize, EntityPatch, Lattice};
 
@@ -2178,8 +2178,8 @@ pub(crate) fn apply_stereo_bond_change(
 /// (its net permutation). Constraint / membership ops fold separately.
 enum StereoConfigOp {
     Set {
-        old: StereoConfigurationAst,
-        new: StereoConfigurationAst,
+        old: StereoConfigurationForm,
+        new: StereoConfigurationForm,
     },
     Relative(Permutation),
 }
@@ -2189,8 +2189,8 @@ enum StereoConfigFold {
     Identity,
     Relative(Permutation),
     Set {
-        old: StereoConfigurationAst,
-        new: StereoConfigurationAst,
+        old: StereoConfigurationForm,
+        new: StereoConfigurationForm,
     },
 }
 
@@ -2204,8 +2204,8 @@ fn fold_stereo_config(
     enum State {
         Relative(Permutation),
         Set {
-            old: StereoConfigurationAst,
-            new: StereoConfigurationAst,
+            old: StereoConfigurationForm,
+            new: StereoConfigurationForm,
         },
     }
     let mut state = State::Relative(Permutation::identity(kind.degree()));
@@ -3131,8 +3131,8 @@ mod tests {
     use crate::ir::{
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanForm,
         DativeBondConstraintsAst, ElectronCountsForm, ElementForm, IsotopeMassForm,
-        MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindAst,
-        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationAst,
+        MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindForm,
+        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationForm,
         StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
         StereogenicityAst, UnpairedElectronsForm, UnpairedElectronsUpdate,
     };
@@ -3546,13 +3546,13 @@ mod tests {
     #[case::kind_and_constraint(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
         NoncovalentBondUpdate {
-            kind: Some(NoncovalentBondKindAst::Undetermined),
+            kind: Some(NoncovalentBondKindForm::Undetermined),
             constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)),
         },
         vec![
             NoncovalentBondDelta::ModifyField {
                 id: NoncovalentBondId(7),
-                change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindAst::Undetermined },
+                change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindForm::Undetermined },
             },
             NoncovalentBondDelta::ModifyConstraint {
                 id: NoncovalentBondId(7),
@@ -3575,7 +3575,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
-    #[case::same_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
+    #[case::same_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
     #[case::absent_constraint_removal(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
     fn test_noncovalent_bond_delta_for_update_identity(
         #[case] current: NoncovalentBondAst,
@@ -3606,15 +3606,15 @@ mod tests {
         StereoAtomDelta::ModifyField {
             id: StereoAtomId(1),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                old: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         },
         StereoAtomDelta::ModifyField {
             id: StereoAtomId(1),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                old: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                new: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             },
         }
     )]
@@ -3655,7 +3655,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
@@ -3663,7 +3663,7 @@ mod tests {
         vec![
             StereoAtomDelta::ModifyField {
                 id: StereoAtomId(7),
-                change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32) },
+                change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32) },
             },
             StereoAtomDelta::ModifyConstraint {
                 id: StereoAtomId(7),
@@ -3737,7 +3737,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
@@ -3745,7 +3745,7 @@ mod tests {
         vec![
             StereoBondDelta::ModifyField {
                 id: StereoBondId(7),
-                change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32) },
+                change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32) },
             },
             StereoBondDelta::ModifyConstraint {
                 id: StereoBondId(7),
@@ -3792,11 +3792,11 @@ mod tests {
             vec![StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::Kinded(
+                    old: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0)
                     ),
-                    new: StereoConfigurationAst::Kinded(
+                    new: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1)
                     ),
@@ -3811,8 +3811,8 @@ mod tests {
         StereoAtomDelta::apply_field(
             &mut ast,
             StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                old: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         )
         .unwrap();
@@ -3826,11 +3826,11 @@ mod tests {
             StereoAtomDelta::apply_field(
                 &mut ast,
                 StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::Kinded(
+                    old: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(0)
                     ),
-                    new: StereoConfigurationAst::Kinded(
+                    new: StereoConfigurationForm::Kinded(
                         StereoKind::Tetrahedral,
                         StereoCoset::Lit(1)
                     ),

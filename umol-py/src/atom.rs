@@ -897,7 +897,7 @@ mod tests {
         AtomConstraintsAst as GraphIrAtomConstraintsAst, MemOp as GraphIrMemOp,
         MoleculeEntries as GraphIrMoleculeEntries, NumForm as GraphIrNumForm,
         RingScope as GraphIrRingScope, StereoCoset as GraphIrStereoCoset,
-        TetrahedralStereoAst as GraphIrTetrahedralStereoAst,
+        TetrahedralStereoForm as GraphIrTetrahedralStereoForm,
         UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
 
@@ -1262,7 +1262,9 @@ mod tests {
     #[case(GraphIrAtomConstraintAst::valence(4))]
     #[case(GraphIrAtomConstraintAst::aromatic_valence(GraphIrAromaticValenceAst::aromatic(1)))]
     #[case(GraphIrAtomConstraintAst::ring_membership(GraphIrRingScope::All, 2))]
-    #[case(GraphIrAtomConstraintAst::tetrahedral_stereo(GraphIrTetrahedralStereoAst::not_stereo()))]
+    #[case(GraphIrAtomConstraintAst::tetrahedral_stereo(
+        GraphIrTetrahedralStereoForm::not_stereo()
+    ))]
     fn test_atom_constraint_roundtrip(#[case] ast: GraphIrAtomConstraintAst) {
         Python::attach(|py| {
             assert_eq!(

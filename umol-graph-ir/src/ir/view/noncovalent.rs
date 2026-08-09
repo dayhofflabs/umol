@@ -7,7 +7,7 @@ use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 use super::super::constraint::NoncovalentBondConstraintsAst;
 use super::super::id::{AtomId, NoncovalentBondId};
 use super::super::molecule::MoleculeAst;
-use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
+use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindForm};
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 
@@ -171,7 +171,7 @@ pub struct NoncovalentBondView<'a> {
 
 impl<'a> NoncovalentBondView<'a> {
     #[inline]
-    pub fn kind(&self) -> &'a NoncovalentBondKindAst {
+    pub fn kind(&self) -> &'a NoncovalentBondKindForm {
         &self.ast.kind
     }
 

@@ -445,8 +445,8 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(kind, 0u32),
-                    new: StereoConfigurationAst::kinded(kind, kind.count() as u32 + offset),
+                    old: StereoConfigurationForm::kinded(kind, 0u32),
+                    new: StereoConfigurationForm::kinded(kind, kind.count() as u32 + offset),
                 },
             })]),
         )
@@ -469,8 +469,8 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
             Deltas::from_iter([Delta::StereoBond(StereoBondDelta::ModifyField {
                 id: StereoBondId(0),
                 change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(kind, 0u32),
-                    new: StereoConfigurationAst::kinded(kind, kind.count() as u32 + offset),
+                    old: StereoConfigurationForm::kinded(kind, 0u32),
+                    new: StereoConfigurationForm::kinded(kind, kind.count() as u32 + offset),
                 },
             })]),
         )

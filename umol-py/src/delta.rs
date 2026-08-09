@@ -2212,13 +2212,13 @@ mod tests {
         MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
         NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
-        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst, NumForm as GraphIrNumForm,
+        NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm, NumForm as GraphIrNumForm,
         StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
         StereoBondConstraintAst as GraphIrStereoBondConstraintAst,
-        StereoConfigurationAst as GraphIrStereoConfigurationAst, StereoCoset as GraphIrStereoCoset,
-        StereoKind as GraphIrStereoKind, StereoLigand as GraphIrStereoLigand,
-        StereoLigandKind as GraphIrStereoLigandKind, Stereogenicity as GraphIrStereogenicity,
-        StereogenicityAst as GraphIrStereogenicityAst,
+        StereoConfigurationForm as GraphIrStereoConfigurationForm,
+        StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
+        StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
+        Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
         UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
     use umol_perm::Permutation as PermPermutation;
@@ -2666,8 +2666,8 @@ mod tests {
 
     #[rstest]
     #[case::kind(GraphIrNoncovalentBondFieldChange::Kind {
-        old: GraphIrNoncovalentBondKindAst::Undetermined,
-        new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+        old: GraphIrNoncovalentBondKindForm::Undetermined,
+        new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
     fn test_noncovalent_bond_field_change_roundtrip(
         #[case] change: GraphIrNoncovalentBondFieldChange,
@@ -2684,8 +2684,8 @@ mod tests {
 
     #[rstest]
     #[case::kind(GraphIrNoncovalentBondFieldChange::Kind {
-        old: GraphIrNoncovalentBondKindAst::Undetermined,
-        new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+        old: GraphIrNoncovalentBondKindForm::Undetermined,
+        new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
     fn test_noncovalent_bond_field_change_inverse(
         #[case] change: GraphIrNoncovalentBondFieldChange,
@@ -2704,18 +2704,18 @@ mod tests {
 
     #[rstest]
     #[case::geometry_unknown(GraphIrStereoAtomFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Undetermined,
-        new: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Undetermined,
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(GraphIrStereoAtomFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Undetermined,
         ),
-        new: GraphIrStereoConfigurationAst::Kinded(
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Lit(1),
         ),
@@ -2734,15 +2734,15 @@ mod tests {
     #[rstest]
     #[case::equal(
         GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Undetermined,
             ),
         },
         GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Undetermined,
             ),
@@ -2751,15 +2751,15 @@ mod tests {
     )]
     #[case::different(
         GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Undetermined,
             ),
         },
         GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(1),
             ),
@@ -2781,8 +2781,8 @@ mod tests {
     #[rstest]
     #[case::geometry_unknown(
         GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Undetermined,
             ),
@@ -2793,11 +2793,11 @@ mod tests {
     )]
     #[case::coset_resolved(
         GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Undetermined,
             ),
-            new: GraphIrStereoConfigurationAst::Kinded(
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(1),
             ),
@@ -2843,18 +2843,18 @@ mod tests {
 
     #[rstest]
     #[case::geometry_unknown(GraphIrStereoAtomFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Undetermined,
-        new: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Undetermined,
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(GraphIrStereoAtomFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Undetermined,
         ),
-        new: GraphIrStereoConfigurationAst::Kinded(
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Lit(1),
         ),
@@ -2874,18 +2874,18 @@ mod tests {
 
     #[rstest]
     #[case::geometry_unknown(GraphIrStereoBondFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Undetermined,
-        new: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Undetermined,
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(GraphIrStereoBondFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Undetermined,
         ),
-        new: GraphIrStereoConfigurationAst::Kinded(
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Lit(1),
         ),
@@ -2904,15 +2904,15 @@ mod tests {
     #[rstest]
     #[case::equal(
         GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Undetermined,
             ),
         },
         GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Undetermined,
             ),
@@ -2921,15 +2921,15 @@ mod tests {
     )]
     #[case::different(
         GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Undetermined,
             ),
         },
         GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(1),
             ),
@@ -2951,8 +2951,8 @@ mod tests {
     #[rstest]
     #[case::geometry_unknown(
         GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Undetermined,
             ),
@@ -2963,11 +2963,11 @@ mod tests {
     )]
     #[case::coset_resolved(
         GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Undetermined,
             ),
-            new: GraphIrStereoConfigurationAst::Kinded(
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(1),
             ),
@@ -3013,18 +3013,18 @@ mod tests {
 
     #[rstest]
     #[case::geometry_unknown(GraphIrStereoBondFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Undetermined,
-        new: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Undetermined,
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(GraphIrStereoBondFieldChange::Configuration {
-        old: GraphIrStereoConfigurationAst::Kinded(
+        old: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Undetermined,
         ),
-        new: GraphIrStereoConfigurationAst::Kinded(
+        new: GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Lit(1),
         ),
@@ -3953,8 +3953,8 @@ mod tests {
     #[case::modify_field(GraphIrNoncovalentBondDelta::ModifyField {
         id: GraphIrNoncovalentBondId(4),
         change: GraphIrNoncovalentBondFieldChange::Kind {
-            old: GraphIrNoncovalentBondKindAst::Undetermined,
-            new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+            old: GraphIrNoncovalentBondKindForm::Undetermined,
+            new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
         },
     })]
     #[case::constraint_added(GraphIrNoncovalentBondDelta::ModifyConstraint {
@@ -4043,8 +4043,8 @@ mod tests {
         GraphIrNoncovalentBondDelta::ModifyField {
             id: GraphIrNoncovalentBondId(4),
             change: GraphIrNoncovalentBondFieldChange::Kind {
-                old: GraphIrNoncovalentBondKindAst::Undetermined,
-                new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+                old: GraphIrNoncovalentBondKindForm::Undetermined,
+                new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
             },
         },
         "NoncovalentBondDelta.ModifyField(id=4, change=NoncovalentBondFieldChange.Kind(old=NoncovalentBondKindAst.Undetermined(), new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)))",
@@ -4091,8 +4091,8 @@ mod tests {
     #[case::modify_field(GraphIrNoncovalentBondDelta::ModifyField {
         id: GraphIrNoncovalentBondId(4),
         change: GraphIrNoncovalentBondFieldChange::Kind {
-            old: GraphIrNoncovalentBondKindAst::Undetermined,
-            new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+            old: GraphIrNoncovalentBondKindForm::Undetermined,
+            new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
         },
     })]
     #[case::constraint_added(GraphIrNoncovalentBondDelta::ModifyConstraint {
@@ -4147,8 +4147,8 @@ mod tests {
     #[case::modify_field(GraphIrStereoAtomDelta::ModifyField {
         id: GraphIrStereoAtomId(5),
         change: GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4303,8 +4303,8 @@ mod tests {
         GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(5),
             change: GraphIrStereoAtomFieldChange::Configuration {
-                old: GraphIrStereoConfigurationAst::Undetermined,
-                new: GraphIrStereoConfigurationAst::Kinded(
+                old: GraphIrStereoConfigurationForm::Undetermined,
+                new: GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 ),
@@ -4384,8 +4384,8 @@ mod tests {
     #[case::modify_field(GraphIrStereoAtomDelta::ModifyField {
         id: GraphIrStereoAtomId(5),
         change: GraphIrStereoAtomFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4466,8 +4466,8 @@ mod tests {
     #[case::modify_field(GraphIrStereoBondDelta::ModifyField {
         id: GraphIrStereoBondId(5),
         change: GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(0),
             ),
@@ -4622,8 +4622,8 @@ mod tests {
         GraphIrStereoBondDelta::ModifyField {
             id: GraphIrStereoBondId(5),
             change: GraphIrStereoBondFieldChange::Configuration {
-                old: GraphIrStereoConfigurationAst::Undetermined,
-                new: GraphIrStereoConfigurationAst::Kinded(
+                old: GraphIrStereoConfigurationForm::Undetermined,
+                new: GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::CisTrans,
                     GraphIrStereoCoset::Lit(0),
                 ),
@@ -4703,8 +4703,8 @@ mod tests {
     #[case::modify_field(GraphIrStereoBondDelta::ModifyField {
         id: GraphIrStereoBondId(5),
         change: GraphIrStereoBondFieldChange::Configuration {
-            old: GraphIrStereoConfigurationAst::Undetermined,
-            new: GraphIrStereoConfigurationAst::Kinded(
+            old: GraphIrStereoConfigurationForm::Undetermined,
+            new: GraphIrStereoConfigurationForm::Kinded(
                 GraphIrStereoKind::CisTrans,
                 GraphIrStereoCoset::Lit(0),
             ),

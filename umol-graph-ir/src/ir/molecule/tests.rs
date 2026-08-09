@@ -35,7 +35,7 @@ use super::super::id::{
 };
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondAst;
-use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
+use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm};
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
@@ -644,7 +644,7 @@ fn test_molecule_ast_equiv_entity_data(#[from(equiv_molecule_entries)] entries: 
     differences.push(MoleculeAst::from_entries(multicenter));
 
     let mut noncovalent = entries.clone();
-    noncovalent.noncovalent[0].2.kind = NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
+    noncovalent.noncovalent[0].2.kind = NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic);
     differences.push(MoleculeAst::from_entries(noncovalent));
 
     let mut stereo_atom = entries.clone();
@@ -2282,11 +2282,11 @@ fn test_molecule_editor_multicenter_bond_mut(#[from(rich_molecule)] ast: Molecul
 fn test_molecule_editor_noncovalent_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.noncovalent_bond_mut(NoncovalentBondId(0)).ast.kind =
-        NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
+        NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic);
     let result = b.build();
     assert_eq!(
         result.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
-        NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+        NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
     );
 }
 
@@ -2716,7 +2716,7 @@ fn test_molecule_ast_index_multicenter_bond(#[from(rich_molecule)] ast: Molecule
 fn test_molecule_ast_index_noncovalent_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     assert_eq!(
         ast.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
-        NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)
+        NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)
     );
 }
 
@@ -2816,10 +2816,10 @@ fn test_molecule_ast_modify_multicenter_bonds(#[from(rich_molecule)] mut ast: Mo
 #[rstest]
 fn test_molecule_ast_noncovalent_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     ast.noncovalent_bond_mut(NoncovalentBondId(0)).ast.kind =
-        NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
+        NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic);
     assert_eq!(
         ast.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
-        NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)
+        NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
     );
 }
 

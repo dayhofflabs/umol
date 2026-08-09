@@ -35,7 +35,7 @@ use crate::ir::constraint::{
     MulticenterValenceAst, RingScope,
 };
 use crate::ir::operators::MemOp;
-use crate::ir::stereo::TetrahedralStereoAst;
+use crate::ir::stereo::TetrahedralStereoForm;
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::NumForm;
 
@@ -821,7 +821,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintAst) -> fmt::Res
         AtomConstraintAst::TotalValence(v) => fmt_value_field_required(f, "#V", v),
         AtomConstraintAst::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraintAst::RingMembership(m) => fmt_ring_membership(f, m),
-        AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined) => Ok(()),
+        AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Undetermined) => Ok(()),
         AtomConstraintAst::TetrahedralStereo(c) => {
             write!(f, "#T")?;
             fmt_tetrahedral_stereo_config(f, c)
@@ -915,7 +915,7 @@ fn raise_atom_constraints(constraints: &mut AtomConstraintsAst, cfg: &AtomDefaul
         && is_unset_or_vacuous(constraints, AtomConstraintKey::TetrahedralStereo)
     {
         constraints.set(AtomConstraintAst::TetrahedralStereo(
-            TetrahedralStereoAst::NotStereo,
+            TetrahedralStereoForm::NotStereo,
         ));
     }
 }
@@ -978,7 +978,7 @@ fn lower_atom_constraints(constraints: &mut AtomConstraintsAst, cfg: &AtomDefaul
     if matches!(cfg.tetrahedral_stereo, StereoDefault::NotStereo) {
         remove_if_default(
             constraints,
-            AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo),
+            AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
         );
     }
     if matches!(cfg.accepted_pairs, NumericDefault::Zero) {
@@ -1393,9 +1393,9 @@ mod tests {
     #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
     #[case::ring_membership_all("C#R2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(2))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
     #[case::ring_membership_size_conj("C#R(5)#R(6)", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
-    #[case::tetrahedral_stereo_stereo("C#T+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
-    #[case::tetrahedral_stereo_lit("C#T1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
-    #[case::tetrahedral_stereo_not_stereo("C#T!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::tetrahedral_stereo_stereo("C#T+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::tetrahedral_stereo_lit("C#T1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::tetrahedral_stereo_not_stereo("C#T!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
     #[case::whitespace_before_predicate("C #h3", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
     #[case::whitespace_between_predicates("C#c+ #h3", AtomDsl(AtomAst { charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
     #[case::whitespace_surrounding_predicates("  C  #c+  #h3  ", AtomDsl(AtomAst { charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
@@ -1873,12 +1873,12 @@ mod tests {
     #[case::multicenter_value(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
     #[case::valence_expr(AtomConstraintAst::Valence(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1)))), "{:valence \"?h >= 1\"}")]
     #[case::ring_membership_size_count_set(AtomConstraintAst::ring_membership(RingScope::Size(6), NumForm::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
-    #[case::tetrahedral_stereo_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined), "{:tetrahedral-stereo :undetermined}")]
-    #[case::tetrahedral_stereo_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
-    #[case::tetrahedral_stereo_lit(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
-    #[case::tetrahedral_stereo_coset_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined)), "{:tetrahedral-stereo {:stereo :undetermined}}")]
-    #[case::tetrahedral_stereo_set(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
-    #[case::tetrahedral_stereo_term(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))), "{:tetrahedral-stereo {:stereo \"~1\"}}")]
+    #[case::tetrahedral_stereo_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Undetermined), "{:tetrahedral-stereo :undetermined}")]
+    #[case::tetrahedral_stereo_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
+    #[case::tetrahedral_stereo_lit(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
+    #[case::tetrahedral_stereo_coset_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)), "{:tetrahedral-stereo {:stereo :undetermined}}")]
+    #[case::tetrahedral_stereo_set(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
+    #[case::tetrahedral_stereo_term(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))), "{:tetrahedral-stereo {:stereo \"~1\"}}")]
     fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraintAst, #[case] edn_source: &str) {
 
         let dsl = AtomConstraintDsl::from_ir(&input, &());

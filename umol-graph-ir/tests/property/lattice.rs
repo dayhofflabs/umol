@@ -87,7 +87,7 @@ proptest! {
     }
 
     #[test]
-    fn test_tetrahedral_stereo_ast_lattice_laws_raw(
+    fn test_tetrahedral_stereo_form_lattice_laws_raw(
         a in raw_tetrahedral_stereo_strategy(),
         b in raw_tetrahedral_stereo_strategy(),
         c in raw_tetrahedral_stereo_strategy(),
@@ -96,7 +96,7 @@ proptest! {
     }
 
     #[test]
-    fn test_cis_trans_stereo_ast_lattice_laws_raw(
+    fn test_cis_trans_stereo_form_lattice_laws_raw(
         a in raw_cis_trans_stereo_strategy(),
         b in raw_cis_trans_stereo_strategy(),
         c in raw_cis_trans_stereo_strategy(),
@@ -105,7 +105,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_configuration_ast_lattice_laws_raw(
+    fn test_stereo_configuration_form_lattice_laws_raw(
         a in raw_stereo_configuration_strategy(),
         b in raw_stereo_configuration_strategy(),
         c in raw_stereo_configuration_strategy(),
@@ -180,7 +180,7 @@ proptest! {
     }
 
     #[test]
-    fn test_tetrahedral_stereo_ast_as_lit_laws(
+    fn test_tetrahedral_stereo_form_as_lit_laws(
         a in raw_tetrahedral_stereo_strategy(),
         b in raw_tetrahedral_stereo_strategy(),
     ) {
@@ -194,7 +194,7 @@ proptest! {
     }
 
     #[test]
-    fn test_cis_trans_stereo_ast_as_lit_laws(
+    fn test_cis_trans_stereo_form_as_lit_laws(
         a in raw_cis_trans_stereo_strategy(),
         b in raw_cis_trans_stereo_strategy(),
     ) {
@@ -276,10 +276,10 @@ proptest! {
     }
 
     #[test]
-    fn test_noncovalent_bond_kind_ast_lattice_laws(
-        a in noncovalent_bond_kind_ast_strategy(),
-        b in noncovalent_bond_kind_ast_strategy(),
-        c in noncovalent_bond_kind_ast_strategy(),
+    fn test_noncovalent_bond_kind_form_lattice_laws(
+        a in noncovalent_bond_kind_form_strategy(),
+        b in noncovalent_bond_kind_form_strategy(),
+        c in noncovalent_bond_kind_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -296,7 +296,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_configuration_ast_lattice_laws(
+    fn test_stereo_configuration_form_lattice_laws(
         a in stereo_configuration_lattice_strategy(),
         b in stereo_configuration_lattice_strategy(),
         c in stereo_configuration_lattice_strategy(),
@@ -306,7 +306,7 @@ proptest! {
     }
 
     #[test]
-    fn test_tetrahedral_stereo_ast_lattice_laws(
+    fn test_tetrahedral_stereo_form_lattice_laws(
         a in tetrahedral_stereo_lattice_strategy(),
         b in tetrahedral_stereo_lattice_strategy(),
         c in tetrahedral_stereo_lattice_strategy(),
@@ -316,7 +316,7 @@ proptest! {
     }
 
     #[test]
-    fn test_cis_trans_stereo_ast_lattice_laws(
+    fn test_cis_trans_stereo_form_lattice_laws(
         a in cis_trans_stereo_lattice_strategy(),
         b in cis_trans_stereo_lattice_strategy(),
         c in cis_trans_stereo_lattice_strategy(),

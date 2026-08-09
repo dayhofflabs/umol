@@ -31,7 +31,7 @@ macro_rules! stereo_element {
         $(#[doc = $doc])+
         #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
         pub struct $name {
-            pub configuration: StereoConfigurationAst,
+            pub configuration: StereoConfigurationForm,
             pub constraints: $constraints,
         }
 
@@ -60,7 +60,7 @@ macro_rules! stereo_element {
         impl $name {
             pub fn new(kind: StereoKind, coset: impl Into<StereoCoset>) -> Self {
                 Self {
-                    configuration: StereoConfigurationAst::kinded(kind, coset),
+                    configuration: StereoConfigurationForm::kinded(kind, coset),
                     constraints: $constraints::new(),
                 }
             }
@@ -153,21 +153,21 @@ pub enum StereoConfigurationUpdate {
 }
 
 impl StereoConfigurationUpdate {
-    fn apply_to(&self, current: &StereoConfigurationAst) -> StereoConfigurationAst {
+    fn apply_to(&self, current: &StereoConfigurationForm) -> StereoConfigurationForm {
         match self {
             Self::Unchanged => current.clone(),
-            Self::Undetermined => StereoConfigurationAst::Undetermined,
+            Self::Undetermined => StereoConfigurationForm::Undetermined,
             Self::Kinded {
                 kind,
                 coset: Some(coset),
-            } => StereoConfigurationAst::kinded(*kind, coset.clone()),
+            } => StereoConfigurationForm::kinded(*kind, coset.clone()),
             Self::Kinded { kind, coset: None } => match current {
-                StereoConfigurationAst::Kinded(current_kind, current_coset)
+                StereoConfigurationForm::Kinded(current_kind, current_coset)
                     if current_kind == kind =>
                 {
-                    StereoConfigurationAst::kinded(*kind, current_coset.clone())
+                    StereoConfigurationForm::kinded(*kind, current_coset.clone())
                 }
-                _ => StereoConfigurationAst::kinded(*kind, StereoCoset::Undetermined),
+                _ => StereoConfigurationForm::kinded(*kind, StereoCoset::Undetermined),
             },
         }
     }
@@ -231,8 +231,8 @@ impl StereoAtomAst {
             }
         } else {
             match &other.configuration {
-                StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
-                StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Undetermined,
+                StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
                     kind: *kind,
                     coset: Some(coset.clone()),
                 },
@@ -282,8 +282,8 @@ impl StereoBondAst {
             }
         } else {
             match &other.configuration {
-                StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
-                StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Undetermined,
+                StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
                     kind: *kind,
                     coset: Some(coset.clone()),
                 },
@@ -422,13 +422,13 @@ pub enum Stereogenicity {
 /// Undetermined)`) are distinct. `canonicalize` folds the coset under the kind;
 /// no physical range-check (tier-2; the validator does it).
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum StereoConfigurationAst {
+pub enum StereoConfigurationForm {
     #[default]
     Undetermined,
     Kinded(StereoKind, StereoCoset),
 }
 
-impl StereoConfigurationAst {
+impl StereoConfigurationForm {
     pub fn undetermined() -> Self {
         Self::Undetermined
     }
@@ -497,13 +497,13 @@ impl StereoConfigurationAst {
     }
 }
 
-impl From<(StereoKind, u32)> for StereoConfigurationAst {
+impl From<(StereoKind, u32)> for StereoConfigurationForm {
     fn from((kind, coset): (StereoKind, u32)) -> Self {
         Self::Kinded(kind, StereoCoset::Lit(coset))
     }
 }
 
-impl Canonicalize for StereoConfigurationAst {
+impl Canonicalize for StereoConfigurationForm {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::Kinded(kind, coset) => Self::Kinded(kind, canon_coset(coset, kind)?),
@@ -519,7 +519,7 @@ impl Canonicalize for StereoConfigurationAst {
     }
 }
 
-impl AsLit for StereoConfigurationAst {
+impl AsLit for StereoConfigurationForm {
     type Lit = StereoConfiguration;
 
     fn as_lit(&self) -> Option<StereoConfiguration> {
@@ -532,7 +532,7 @@ impl AsLit for StereoConfigurationAst {
     }
 }
 
-impl Lattice for StereoConfigurationAst {
+impl Lattice for StereoConfigurationForm {
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -709,10 +709,10 @@ macro_rules! stereo_site {
     };
 }
 
-stereo_site! { TetrahedralStereoAst, TetrahedralStereo, StereoKind::Tetrahedral }
-stereo_site! { CisTransStereoAst, CisTransStereo, StereoKind::CisTrans }
+stereo_site! { TetrahedralStereoForm, TetrahedralStereo, StereoKind::Tetrahedral }
+stereo_site! { CisTransStereoForm, CisTransStereo, StereoKind::CisTrans }
 
-impl From<TetrahedralStereo> for TetrahedralStereoAst {
+impl From<TetrahedralStereo> for TetrahedralStereoForm {
     fn from(stereo: TetrahedralStereo) -> Self {
         match stereo {
             TetrahedralStereo::NotStereo => Self::NotStereo,
@@ -721,7 +721,7 @@ impl From<TetrahedralStereo> for TetrahedralStereoAst {
     }
 }
 
-impl From<CisTransStereo> for CisTransStereoAst {
+impl From<CisTransStereo> for CisTransStereoForm {
     fn from(stereo: CisTransStereo) -> Self {
         match stereo {
             CisTransStereo::NotStereo => Self::NotStereo,
@@ -748,13 +748,13 @@ impl From<CisTransConfiguration> for CisTransStereo {
     }
 }
 
-impl From<TetrahedralConfiguration> for TetrahedralStereoAst {
+impl From<TetrahedralConfiguration> for TetrahedralStereoForm {
     fn from(configuration: TetrahedralConfiguration) -> Self {
         TetrahedralStereo::from(configuration).into()
     }
 }
 
-impl From<CisTransConfiguration> for CisTransStereoAst {
+impl From<CisTransConfiguration> for CisTransStereoForm {
     fn from(configuration: CisTransConfiguration) -> Self {
         CisTransStereo::from(configuration).into()
     }
@@ -890,7 +890,7 @@ impl AsLit for StereoCoset {
 }
 
 /// A ground stereo configuration: a concrete geometry plus its coset index. The
-/// `AsLit` target of `StereoConfigurationAst` and the per-kind site types.
+/// `AsLit` target of `StereoConfigurationForm` and the per-kind site types.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StereoConfiguration {
     pub kind: StereoKind,
@@ -1121,278 +1121,283 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::tetrahedral((StereoKind::Tetrahedral, 1), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
-    #[case::octahedral((StereoKind::Octahedral, 5), StereoConfigurationAst::Kinded(StereoKind::Octahedral, StereoCoset::Lit(5)))]
-    fn test_stereo_configuration_ast_from(#[case] input: (StereoKind, u32), #[case] expected: StereoConfigurationAst) {
-        assert_eq!(StereoConfigurationAst::from(input), expected);
+    #[case::tetrahedral((StereoKind::Tetrahedral, 1), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
+    #[case::octahedral((StereoKind::Octahedral, 5), StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::Lit(5)))]
+    fn test_stereo_configuration_form_from(#[case] input: (StereoKind, u32), #[case] expected: StereoConfigurationForm) {
+        assert_eq!(StereoConfigurationForm::from(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::term_swap_folds_to_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
-    fn test_stereo_configuration_ast_canonicalize(#[case] input: StereoConfigurationAst, #[case] expected: StereoConfigurationAst) {
+    #[case::term_swap_folds_to_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
+    fn test_stereo_configuration_form_canonicalize(#[case] input: StereoConfigurationForm, #[case] expected: StereoConfigurationForm) {
         assert_eq!(input.canonicalize(), Ok(expected));
     }
 
     #[rstest]
-    #[case::undetermined(StereoConfigurationAst::Undetermined)]
-    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
-    #[case::kind_open(StereoConfigurationAst::Kinded(
+    #[case::undetermined(StereoConfigurationForm::Undetermined)]
+    #[case::kind_lit(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::Lit(0)
+    ))]
+    #[case::kind_open(StereoConfigurationForm::Kinded(
         StereoKind::Tetrahedral,
         StereoCoset::Undetermined
     ))]
     // Multi-element / full coset sets are preserved (no complement or full→Undetermined fold).
-    #[case::multi_element_set(StereoConfigurationAst::Kinded(StereoKind::SquarePlanar, StereoCoset::lit_set([0, 1])))]
-    #[case::full_set(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
-    fn test_stereo_configuration_ast_canonicalize_identity(#[case] input: StereoConfigurationAst) {
+    #[case::multi_element_set(StereoConfigurationForm::Kinded(StereoKind::SquarePlanar, StereoCoset::lit_set([0, 1])))]
+    #[case::full_set(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
+    fn test_stereo_configuration_form_canonicalize_identity(
+        #[case] input: StereoConfigurationForm,
+    ) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rstest]
-    #[case::empty_set(StereoConfigurationAst::Kinded(
+    #[case::empty_set(StereoConfigurationForm::Kinded(
         StereoKind::SquarePlanar,
         StereoCoset::LitSet(BTreeSet::new())
     ))]
-    fn test_stereo_configuration_ast_canonicalize_error(#[case] input: StereoConfigurationAst) {
+    fn test_stereo_configuration_form_canonicalize_error(#[case] input: StereoConfigurationForm) {
         assert_eq!(input.canonicalize(), Err(Contradiction));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)), Some(StereoConfiguration { kind: StereoKind::Tetrahedral, coset: 1 }))]
-    #[case::undetermined(StereoConfigurationAst::Undetermined, None)]
-    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), None)]
-    fn test_stereo_configuration_ast_as_lit(#[case] config: StereoConfigurationAst, #[case] expected: Option<StereoConfiguration>) {
+    #[case::kind_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)), Some(StereoConfiguration { kind: StereoKind::Tetrahedral, coset: 1 }))]
+    #[case::undetermined(StereoConfigurationForm::Undetermined, None)]
+    #[case::kind_open(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), None)]
+    fn test_stereo_configuration_form_as_lit(#[case] config: StereoConfigurationForm, #[case] expected: Option<StereoConfiguration>) {
         assert_eq!(config.as_lit(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(StereoConfigurationAst::Undetermined, true)]
-    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
-    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), false)]
-    fn test_stereo_configuration_ast_is_undetermined(#[case] config: StereoConfigurationAst, #[case] expected: bool) {
+    #[case::undetermined(StereoConfigurationForm::Undetermined, true)]
+    #[case::kind_open(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
+    #[case::kind_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), false)]
+    fn test_stereo_configuration_form_is_undetermined(#[case] config: StereoConfigurationForm, #[case] expected: bool) {
         assert_eq!(config.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), true)]
-    #[case::undetermined(StereoConfigurationAst::Undetermined, false)]
-    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
-    fn test_stereo_configuration_ast_is_ground(#[case] config: StereoConfigurationAst, #[case] expected: bool) {
+    #[case::kind_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), true)]
+    #[case::undetermined(StereoConfigurationForm::Undetermined, false)]
+    #[case::kind_open(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
+    fn test_stereo_configuration_form_is_ground(#[case] config: StereoConfigurationForm, #[case] expected: bool) {
         assert_eq!(config.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_narrows(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0))))]
-    #[case::coset_same(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0))))]
-    #[case::open_narrows(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0))))]
-    #[case::coset_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), None)]
-    #[case::kind_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), None)]
-    fn test_stereo_configuration_ast_meet(#[case] a: StereoConfigurationAst, #[case] b: StereoConfigurationAst, #[case] expected: Option<StereoConfigurationAst>) {
+    #[case::undetermined_narrows(StereoConfigurationForm::Undetermined, StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0))))]
+    #[case::coset_same(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0))))]
+    #[case::open_narrows(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0))))]
+    #[case::coset_conflict(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 1)), None)]
+    #[case::kind_conflict(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::CisTrans, 0)), None)]
+    fn test_stereo_configuration_form_meet(#[case] a: StereoConfigurationForm, #[case] b: StereoConfigurationForm, #[case] expected: Option<StereoConfigurationForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_absorbs(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::Undetermined)]
-    #[case::coset_same(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)))]
-    #[case::coset_widens(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
-    #[case::kind_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), StereoConfigurationAst::Undetermined)]
-    fn test_stereo_configuration_ast_join(#[case] a: StereoConfigurationAst, #[case] b: StereoConfigurationAst, #[case] expected: StereoConfigurationAst) {
+    #[case::undetermined_absorbs(StereoConfigurationForm::Undetermined, StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::Undetermined)]
+    #[case::coset_same(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)))]
+    #[case::coset_widens(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 1)), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
+    #[case::kind_conflict(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::CisTrans, 0)), StereoConfigurationForm::Undetermined)]
+    fn test_stereo_configuration_form_join(#[case] a: StereoConfigurationForm, #[case] b: StereoConfigurationForm, #[case] expected: StereoConfigurationForm) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_matches_any(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), true)]
-    #[case::open_matches_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), true)]
-    #[case::specific_vs_undetermined(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::Undetermined, false)]
-    #[case::coset_match(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), true)]
-    #[case::coset_mismatch(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), false)]
-    #[case::kind_mismatch(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), false)]
-    fn test_stereo_configuration_ast_matches(#[case] pattern: StereoConfigurationAst, #[case] target: StereoConfigurationAst, #[case] expected: bool) {
+    #[case::undetermined_matches_any(StereoConfigurationForm::Undetermined, StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), true)]
+    #[case::open_matches_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), true)]
+    #[case::specific_vs_undetermined(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::Undetermined, false)]
+    #[case::coset_match(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), true)]
+    #[case::coset_mismatch(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 1)), false)]
+    #[case::kind_mismatch(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::CisTrans, 0)), false)]
+    fn test_stereo_configuration_form_matches(#[case] pattern: StereoConfigurationForm, #[case] target: StereoConfigurationForm, #[case] expected: bool) {
         assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rstest]
-    #[case::not_stereo(TetrahedralStereo::NotStereo, TetrahedralStereoAst::NotStereo)]
+    #[case::not_stereo(TetrahedralStereo::NotStereo, TetrahedralStereoForm::NotStereo)]
     #[case::stereo(
         TetrahedralStereo::Stereo(1),
-        TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))
+        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))
     )]
-    fn test_tetrahedral_stereo_ast_from(
+    fn test_tetrahedral_stereo_form_from(
         #[case] stereo: TetrahedralStereo,
-        #[case] expected: TetrahedralStereoAst,
+        #[case] expected: TetrahedralStereoForm,
     ) {
-        assert_eq!(TetrahedralStereoAst::from(stereo), expected);
+        assert_eq!(TetrahedralStereoForm::from(stereo), expected);
     }
 
     #[rstest]
     #[case::ccw(
         TetrahedralConfiguration::Ccw,
-        TetrahedralStereoAst::Stereo(StereoCoset::Lit(0))
+        TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
     )]
     #[case::cw(
         TetrahedralConfiguration::Cw,
-        TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))
+        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))
     )]
-    fn test_tetrahedral_stereo_ast_from_configuration(
+    fn test_tetrahedral_stereo_form_from_configuration(
         #[case] configuration: TetrahedralConfiguration,
-        #[case] expected: TetrahedralStereoAst,
+        #[case] expected: TetrahedralStereoForm,
     ) {
-        assert_eq!(TetrahedralStereoAst::from(configuration), expected);
+        assert_eq!(TetrahedralStereoForm::from(configuration), expected);
     }
 
     #[rstest]
-    #[case::not_stereo(CisTransStereo::NotStereo, CisTransStereoAst::NotStereo)]
+    #[case::not_stereo(CisTransStereo::NotStereo, CisTransStereoForm::NotStereo)]
     #[case::stereo(
         CisTransStereo::Stereo(1),
-        CisTransStereoAst::Stereo(StereoCoset::Lit(1))
+        CisTransStereoForm::Stereo(StereoCoset::Lit(1))
     )]
-    fn test_cis_trans_stereo_ast_from(
+    fn test_cis_trans_stereo_form_from(
         #[case] stereo: CisTransStereo,
-        #[case] expected: CisTransStereoAst,
+        #[case] expected: CisTransStereoForm,
     ) {
-        assert_eq!(CisTransStereoAst::from(stereo), expected);
+        assert_eq!(CisTransStereoForm::from(stereo), expected);
     }
 
     #[rstest]
     #[case::z(
         CisTransConfiguration::Z,
-        CisTransStereoAst::Stereo(StereoCoset::Lit(0))
+        CisTransStereoForm::Stereo(StereoCoset::Lit(0))
     )]
     #[case::e(
         CisTransConfiguration::E,
-        CisTransStereoAst::Stereo(StereoCoset::Lit(1))
+        CisTransStereoForm::Stereo(StereoCoset::Lit(1))
     )]
-    fn test_cis_trans_stereo_ast_from_configuration(
+    fn test_cis_trans_stereo_form_from_configuration(
         #[case] configuration: CisTransConfiguration,
-        #[case] expected: CisTransStereoAst,
+        #[case] expected: CisTransStereoForm,
     ) {
-        assert_eq!(CisTransStereoAst::from(configuration), expected);
+        assert_eq!(CisTransStereoForm::from(configuration), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::term_swap_folds(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_ast_canonicalize(#[case] input: TetrahedralStereoAst, #[case] expected: TetrahedralStereoAst) {
+    #[case::term_swap_folds(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
+    fn test_tetrahedral_stereo_form_canonicalize(#[case] input: TetrahedralStereoForm, #[case] expected: TetrahedralStereoForm) {
         assert_eq!(input.canonicalize(), Ok(expected));
     }
 
     #[rstest]
-    #[case::undetermined(TetrahedralStereoAst::Undetermined)]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo)]
-    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)))]
-    #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined))]
-    fn test_tetrahedral_stereo_ast_canonicalize_identity(#[case] input: TetrahedralStereoAst) {
+    #[case::undetermined(TetrahedralStereoForm::Undetermined)]
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
+    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))]
+    #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined))]
+    fn test_tetrahedral_stereo_form_canonicalize_identity(#[case] input: TetrahedralStereoForm) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), Some(TetrahedralStereo::Stereo(1)))]
-    #[case::stereo_zero(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereo::Stereo(0)))]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo, Some(TetrahedralStereo::NotStereo))]
-    #[case::undetermined(TetrahedralStereoAst::Undetermined, None)]
-    #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined), None)]
-    fn test_tetrahedral_stereo_ast_as_lit(#[case] site: TetrahedralStereoAst, #[case] expected: Option<TetrahedralStereo>) {
+    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), Some(TetrahedralStereo::Stereo(1)))]
+    #[case::stereo_zero(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereo::Stereo(0)))]
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo, Some(TetrahedralStereo::NotStereo))]
+    #[case::undetermined(TetrahedralStereoForm::Undetermined, None)]
+    #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), None)]
+    fn test_tetrahedral_stereo_form_as_lit(#[case] site: TetrahedralStereoForm, #[case] expected: Option<TetrahedralStereo>) {
         assert_eq!(site.as_lit(), expected);
         assert_eq!(site.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(TetrahedralStereoAst::Undetermined, true)]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo, false)]
-    #[case::stereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), false)]
-    fn test_tetrahedral_stereo_ast_is_undetermined(#[case] site: TetrahedralStereoAst, #[case] expected: bool) {
+    #[case::undetermined(TetrahedralStereoForm::Undetermined, true)]
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo, false)]
+    #[case::stereo(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), false)]
+    fn test_tetrahedral_stereo_form_is_undetermined(#[case] site: TetrahedralStereoForm, #[case] expected: bool) {
         assert_eq!(site.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo, true)]
-    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::undetermined(TetrahedralStereoAst::Undetermined, false)]
-    #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined), false)]
-    fn test_tetrahedral_stereo_ast_is_ground(#[case] site: TetrahedralStereoAst, #[case] expected: bool) {
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo, true)]
+    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
+    #[case::undetermined(TetrahedralStereoForm::Undetermined, false)]
+    #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), false)]
+    fn test_tetrahedral_stereo_form_is_ground(#[case] site: TetrahedralStereoForm, #[case] expected: bool) {
         assert_eq!(site.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(TetrahedralStereoAst::Undetermined, TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0))))]
-    #[case::not_stereo_same(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo, Some(TetrahedralStereoAst::NotStereo))]
-    #[case::not_stereo_vs_stereo(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), None)]
-    #[case::stereo_same(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0))))]
-    #[case::stereo_disjoint(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), None)]
-    #[case::open_narrows(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined), TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0))))]
-    fn test_tetrahedral_stereo_ast_meet(#[case] a: TetrahedralStereoAst, #[case] b: TetrahedralStereoAst, #[case] expected: Option<TetrahedralStereoAst>) {
+    #[case::wildcard(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))))]
+    #[case::not_stereo_same(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, Some(TetrahedralStereoForm::NotStereo))]
+    #[case::not_stereo_vs_stereo(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), None)]
+    #[case::stereo_same(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))))]
+    #[case::stereo_disjoint(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), None)]
+    #[case::open_narrows(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))))]
+    fn test_tetrahedral_stereo_form_meet(#[case] a: TetrahedralStereoForm, #[case] b: TetrahedralStereoForm, #[case] expected: Option<TetrahedralStereoForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(TetrahedralStereoAst::Undetermined, TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Undetermined)]
-    #[case::not_stereo_same(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo)]
-    #[case::not_stereo_vs_stereo(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Undetermined)]
-    #[case::stereo_same(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)))]
-    #[case::stereo_widens(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), TetrahedralStereoAst::Stereo(StereoCoset::lit_set([0, 1])))]
-    fn test_tetrahedral_stereo_ast_join(#[case] a: TetrahedralStereoAst, #[case] b: TetrahedralStereoAst, #[case] expected: TetrahedralStereoAst) {
+    #[case::wildcard(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Undetermined)]
+    #[case::not_stereo_same(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo)]
+    #[case::not_stereo_vs_stereo(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Undetermined)]
+    #[case::stereo_same(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))]
+    #[case::stereo_widens(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), TetrahedralStereoForm::Stereo(StereoCoset::lit_set([0, 1])))]
+    fn test_tetrahedral_stereo_form_join(#[case] a: TetrahedralStereoForm, #[case] b: TetrahedralStereoForm, #[case] expected: TetrahedralStereoForm) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(TetrahedralStereoAst::Undetermined, TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::open_matches_lit(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined), TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::specific_vs_undetermined(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Undetermined, false)]
-    #[case::lit_match(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::lit_mismatch(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), false)]
-    #[case::not_stereo_match(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo, true)]
-    #[case::not_stereo_vs_stereo(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), false)]
-    fn test_tetrahedral_stereo_ast_matches(#[case] pattern: TetrahedralStereoAst, #[case] target: TetrahedralStereoAst, #[case] expected: bool) {
+    #[case::wildcard(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
+    #[case::open_matches_lit(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
+    #[case::specific_vs_undetermined(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Undetermined, false)]
+    #[case::lit_match(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
+    #[case::lit_mismatch(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), false)]
+    #[case::not_stereo_match(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, true)]
+    #[case::not_stereo_vs_stereo(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), false)]
+    fn test_tetrahedral_stereo_form_matches(#[case] pattern: TetrahedralStereoForm, #[case] target: TetrahedralStereoForm, #[case] expected: bool) {
         assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(TetrahedralStereoAst::Undetermined, 0, true)]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo, 0, false)]
-    #[case::stereo_match(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), 0, true)]
-    #[case::stereo_miss(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)), 1, false)]
-    fn test_tetrahedral_stereo_ast_matches_value(#[case] site: TetrahedralStereoAst, #[case] value: u32, #[case] expected: bool) {
+    #[case::wildcard(TetrahedralStereoForm::Undetermined, 0, true)]
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo, 0, false)]
+    #[case::stereo_match(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), 0, true)]
+    #[case::stereo_miss(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), 1, false)]
+    fn test_tetrahedral_stereo_form_matches_value(#[case] site: TetrahedralStereoForm, #[case] value: u32, #[case] expected: bool) {
         assert_eq!(site.matches_value(value), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::term_swap_folds(CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoAst::Stereo(StereoCoset::Lit(1)))]
-    fn test_cis_trans_stereo_ast_canonicalize(#[case] input: CisTransStereoAst, #[case] expected: CisTransStereoAst) {
+    #[case::term_swap_folds(CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::Lit(1)))]
+    fn test_cis_trans_stereo_form_canonicalize(#[case] input: CisTransStereoForm, #[case] expected: CisTransStereoForm) {
         assert_eq!(input.canonicalize(), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::stereo_zero(CisTransStereoAst::Stereo(StereoCoset::Lit(0)), Some(CisTransStereo::Stereo(0)))]
-    #[case::stereo_lit(CisTransStereoAst::Stereo(StereoCoset::Lit(1)), Some(CisTransStereo::Stereo(1)))]
-    #[case::not_stereo(CisTransStereoAst::NotStereo, Some(CisTransStereo::NotStereo))]
-    #[case::undetermined(CisTransStereoAst::Undetermined, None)]
-    #[case::stereo_open(CisTransStereoAst::Stereo(StereoCoset::Undetermined), None)]
-    fn test_cis_trans_stereo_ast_as_lit(#[case] site: CisTransStereoAst, #[case] expected: Option<CisTransStereo>) {
+    #[case::stereo_zero(CisTransStereoForm::Stereo(StereoCoset::Lit(0)), Some(CisTransStereo::Stereo(0)))]
+    #[case::stereo_lit(CisTransStereoForm::Stereo(StereoCoset::Lit(1)), Some(CisTransStereo::Stereo(1)))]
+    #[case::not_stereo(CisTransStereoForm::NotStereo, Some(CisTransStereo::NotStereo))]
+    #[case::undetermined(CisTransStereoForm::Undetermined, None)]
+    #[case::stereo_open(CisTransStereoForm::Stereo(StereoCoset::Undetermined), None)]
+    fn test_cis_trans_stereo_form_as_lit(#[case] site: CisTransStereoForm, #[case] expected: Option<CisTransStereo>) {
         assert_eq!(site.as_lit(), expected);
         assert_eq!(site.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(CisTransStereoAst::Undetermined, CisTransStereoAst::Stereo(StereoCoset::Lit(0)), Some(CisTransStereoAst::Stereo(StereoCoset::Lit(0))))]
-    #[case::not_stereo_vs_stereo(CisTransStereoAst::NotStereo, CisTransStereoAst::Stereo(StereoCoset::Lit(0)), None)]
-    #[case::stereo_disjoint(CisTransStereoAst::Stereo(StereoCoset::Lit(0)), CisTransStereoAst::Stereo(StereoCoset::Lit(1)), None)]
-    fn test_cis_trans_stereo_ast_meet(#[case] a: CisTransStereoAst, #[case] b: CisTransStereoAst, #[case] expected: Option<CisTransStereoAst>) {
+    #[case::wildcard(CisTransStereoForm::Undetermined, CisTransStereoForm::Stereo(StereoCoset::Lit(0)), Some(CisTransStereoForm::Stereo(StereoCoset::Lit(0))))]
+    #[case::not_stereo_vs_stereo(CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo(StereoCoset::Lit(0)), None)]
+    #[case::stereo_disjoint(CisTransStereoForm::Stereo(StereoCoset::Lit(0)), CisTransStereoForm::Stereo(StereoCoset::Lit(1)), None)]
+    fn test_cis_trans_stereo_form_meet(#[case] a: CisTransStereoForm, #[case] b: CisTransStereoForm, #[case] expected: Option<CisTransStereoForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
@@ -1476,7 +1481,7 @@ mod tests {
         let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
         assert_eq!(
             stereo_atom.configuration,
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
         );
         assert_eq!(stereo_atom.constraints, StereoAtomConstraintsAst::new());
     }
@@ -1522,10 +1527,10 @@ mod tests {
     #[case::constraint_set(
         StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
         StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
-        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
     )]
     #[case::constraint_remove(
-        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
         StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
     )]
@@ -1546,12 +1551,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomAst::default(),
         StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
     )]
     #[case::constraint_context(
-        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
         StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
     )]
@@ -1594,10 +1599,10 @@ mod tests {
     #[case::constraint_set(
         StereoBondAst::new(StereoKind::CisTrans, 1_u32),
         StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
-        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
     )]
     #[case::constraint_remove(
-        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
         StereoBondAst::new(StereoKind::CisTrans, 1_u32),
     )]
@@ -1618,12 +1623,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondAst::default(),
         StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
     )]
     #[case::constraint_context(
-        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondAst::new(StereoKind::CisTrans, 1_u32),
         StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
     )]
@@ -1698,7 +1703,7 @@ mod tests {
         let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Undetermined);
         assert_eq!(
             stereo_bond.configuration,
-            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
+            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
         );
         assert_eq!(stereo_bond.constraints, StereoBondConstraintsAst::new())
     }
@@ -1821,85 +1826,85 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(
-        StereoConfigurationAst::Undetermined,
+        StereoConfigurationForm::Undetermined,
         Permutation::identity(4),
-        StereoConfigurationAst::Undetermined
+        StereoConfigurationForm::Undetermined
     )]
-    #[case::kinded(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), StereoKind::Tetrahedral.involution(), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
-    fn test_stereo_configuration_ast_apply(
-        #[case] config: StereoConfigurationAst,
+    #[case::kinded(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), StereoKind::Tetrahedral.involution(), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
+    fn test_stereo_configuration_form_apply(
+        #[case] config: StereoConfigurationForm,
         #[case] permutation: Permutation,
-        #[case] expected: StereoConfigurationAst,
+        #[case] expected: StereoConfigurationForm,
     ) {
         assert_eq!(config.apply(permutation), expected);
     }
 
     #[rstest]
     #[case::undetermined(
-        StereoConfigurationAst::Undetermined,
-        StereoConfigurationAst::Undetermined
+        StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::Undetermined
     )]
     #[case::kinded(
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
     )]
-    fn test_stereo_configuration_ast_swap(
-        #[case] config: StereoConfigurationAst,
-        #[case] expected: StereoConfigurationAst,
+    fn test_stereo_configuration_form_swap(
+        #[case] config: StereoConfigurationForm,
+        #[case] expected: StereoConfigurationForm,
     ) {
         assert_eq!(config.swap(), expected);
     }
 
     #[rstest]
     #[case::undetermined(
-        StereoConfigurationAst::Undetermined,
-        StereoConfigurationAst::Undetermined
+        StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::Undetermined
     )]
     #[case::chiral(
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
     )]
     #[case::achiral_noop(
-        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
     )]
-    fn test_stereo_configuration_ast_mirror(
-        #[case] config: StereoConfigurationAst,
-        #[case] expected: StereoConfigurationAst,
+    fn test_stereo_configuration_form_mirror(
+        #[case] config: StereoConfigurationForm,
+        #[case] expected: StereoConfigurationForm,
     ) {
         assert_eq!(config.mirror(), expected);
     }
 
     #[rstest]
     #[case::other_undetermined_keeps_self(
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        StereoConfigurationAst::Undetermined,
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
     )]
     #[case::same_kind_undetermined_coset_keeps_coset(
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
     )]
     #[case::same_kind_determined_coset_overrides(
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
     )]
     #[case::different_kind_overrides(
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined),
-        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined),
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
     )]
     #[case::self_undetermined_takes_other(
-        StereoConfigurationAst::Undetermined,
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
+        StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
     )]
-    fn test_stereo_configuration_ast_update(
-        #[case] base: StereoConfigurationAst,
-        #[case] other: StereoConfigurationAst,
-        #[case] expected: StereoConfigurationAst,
+    fn test_stereo_configuration_form_update(
+        #[case] base: StereoConfigurationForm,
+        #[case] other: StereoConfigurationForm,
+        #[case] expected: StereoConfigurationForm,
     ) {
         assert_eq!(base.update(&other), expected);
     }

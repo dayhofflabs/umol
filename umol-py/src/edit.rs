@@ -1816,12 +1816,12 @@ mod tests {
         NoncovalentBondAst as GraphIrNoncovalentBondAst,
         NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
-        NoncovalentBondKindAst as GraphIrNoncovalentBondKindAst, NumForm as GraphIrNumForm,
+        NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm, NumForm as GraphIrNumForm,
         StereoAtomAst as GraphIrStereoAtomAst,
         StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
         StereoBondAst as GraphIrStereoBondAst,
         StereoBondFieldChange as GraphIrStereoBondFieldChange,
-        StereoConfigurationAst as GraphIrStereoConfigurationAst, StereoKind as GraphIrStereoKind,
+        StereoConfigurationForm as GraphIrStereoConfigurationForm, StereoKind as GraphIrStereoKind,
         StereoLigandKind as GraphIrStereoLigandKind,
     };
 
@@ -2011,8 +2011,8 @@ mod tests {
         GraphIrEdit::ModifyNoncovalentBondField {
             id: GraphIrNoncovalentBondHandle::Id(GraphIrNoncovalentBondId(0)),
             change: GraphIrNoncovalentBondFieldChange::Kind {
-                old: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
-                new: GraphIrNoncovalentBondKindAst::Lit(GraphIrNoncovalentBondKind::Ionic),
+                old: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond),
+                new: GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic),
             },
         },
         GraphIrEdit::AddStereoAtom {
@@ -2029,8 +2029,8 @@ mod tests {
         GraphIrEdit::ModifyStereoAtomField {
             id: GraphIrStereoAtomHandle::New(0),
             change: GraphIrStereoAtomFieldChange::Configuration {
-                old: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::Tetrahedral, 0_u32),
-                new: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::Tetrahedral, 1_u32),
+                old: GraphIrStereoConfigurationForm::kinded(GraphIrStereoKind::Tetrahedral, 0_u32),
+                new: GraphIrStereoConfigurationForm::kinded(GraphIrStereoKind::Tetrahedral, 1_u32),
             },
         },
         GraphIrEdit::AddStereoBond {
@@ -2047,8 +2047,8 @@ mod tests {
         GraphIrEdit::ModifyStereoBondField {
             id: GraphIrStereoBondHandle::Id(GraphIrStereoBondId(0)),
             change: GraphIrStereoBondFieldChange::Configuration {
-                old: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::CisTrans, 0_u32),
-                new: GraphIrStereoConfigurationAst::kinded(GraphIrStereoKind::CisTrans, 1_u32),
+                old: GraphIrStereoConfigurationForm::kinded(GraphIrStereoKind::CisTrans, 0_u32),
+                new: GraphIrStereoConfigurationForm::kinded(GraphIrStereoKind::CisTrans, 1_u32),
             },
         },
         GraphIrEdit::ModifyAtomConstraint {

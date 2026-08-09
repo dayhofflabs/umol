@@ -91,7 +91,7 @@ pub use molecule::{
 };
 pub use multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 pub use noncovalent::{
-    NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate,
+    NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
 };
 pub use operators::{MemOp, RelOp};
 pub use reaction::ReactionAst;
@@ -103,10 +103,10 @@ pub use ring::{
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
-    CisTransConfiguration, CisTransStereo, CisTransStereoAst, StereoAtomAst, StereoAtomUpdate,
-    StereoBondAst, StereoBondUpdate, StereoConfiguration, StereoConfigurationAst,
+    CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomAst, StereoAtomUpdate,
+    StereoBondAst, StereoBondUpdate, StereoConfiguration, StereoConfigurationForm,
     StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
-    TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoAst, Topicity,
+    TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};

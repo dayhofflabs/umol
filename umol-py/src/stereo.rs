@@ -15,14 +15,14 @@ use umol_graph_ir::ir::BooleanForm as GraphIrBooleanForm;
 use umol_graph_ir::ir::{
     AsLit, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
     CisTransConfiguration as GraphIrCisTransConfiguration, CisTransStereo as GraphIrCisTransStereo,
-    CisTransStereoAst as GraphIrCisTransStereoAst, LigandPermutation as GraphIrLigandPermutation,
+    CisTransStereoForm as GraphIrCisTransStereoForm, LigandPermutation as GraphIrLigandPermutation,
     MoleculeAst as GraphIrMoleculeAst,
     OrientedLigandPermutation as GraphIrOrientedLigandPermutation,
     StereoAtomAst as GraphIrStereoAtomAst, StereoAtomId as GraphIrStereoAtomId,
     StereoAtomUpdate as GraphIrStereoAtomUpdate, StereoAtomView as GraphIrStereoAtomView,
     StereoBondAst as GraphIrStereoBondAst, StereoBondId as GraphIrStereoBondId,
     StereoBondUpdate as GraphIrStereoBondUpdate, StereoBondView as GraphIrStereoBondView,
-    StereoConfigurationAst as GraphIrStereoConfigurationAst,
+    StereoConfigurationForm as GraphIrStereoConfigurationForm,
     StereoConfigurationUpdate as GraphIrStereoConfigurationUpdate,
     StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
     StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
@@ -31,7 +31,7 @@ use umol_graph_ir::ir::{
     Stereogenicity as GraphIrStereogenicity,
     TetrahedralConfiguration as GraphIrTetrahedralConfiguration,
     TetrahedralStereo as GraphIrTetrahedralStereo,
-    TetrahedralStereoAst as GraphIrTetrahedralStereoAst, Topicity as GraphIrTopicity,
+    TetrahedralStereoForm as GraphIrTetrahedralStereoForm, Topicity as GraphIrTopicity,
 };
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
@@ -260,32 +260,32 @@ impl TetrahedralStereoAst {
 
 impl_py_lattice!(
     TetrahedralStereoAst,
-    GraphIrTetrahedralStereoAst,
-    |value: &TetrahedralStereoAst, py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoAst> {
+    GraphIrTetrahedralStereoForm,
+    |value: &TetrahedralStereoAst, py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrTetrahedralStereoAst| -> PyResult<TetrahedralStereoAst> {
+    |py: Python<'_>, value: GraphIrTetrahedralStereoForm| -> PyResult<TetrahedralStereoAst> {
         TetrahedralStereoAst::from_rust(py, &value)
     }
 );
 
 impl TetrahedralStereoAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTetrahedralStereoAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTetrahedralStereoForm) -> PyResult<Self> {
         Ok(match ast {
-            GraphIrTetrahedralStereoAst::Undetermined => Self::Undetermined(),
-            GraphIrTetrahedralStereoAst::NotStereo => Self::NotStereo(),
-            GraphIrTetrahedralStereoAst::Stereo(coset) => {
+            GraphIrTetrahedralStereoForm::Undetermined => Self::Undetermined(),
+            GraphIrTetrahedralStereoForm::NotStereo => Self::NotStereo(),
+            GraphIrTetrahedralStereoForm::Stereo(coset) => {
                 Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTetrahedralStereoAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTetrahedralStereoForm {
         match self {
-            Self::Undetermined() => GraphIrTetrahedralStereoAst::Undetermined,
-            Self::NotStereo() => GraphIrTetrahedralStereoAst::NotStereo,
+            Self::Undetermined() => GraphIrTetrahedralStereoForm::Undetermined,
+            Self::NotStereo() => GraphIrTetrahedralStereoForm::NotStereo,
             Self::Stereo(coset) => {
-                GraphIrTetrahedralStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
+                GraphIrTetrahedralStereoForm::Stereo(coset.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -387,32 +387,32 @@ impl CisTransStereoAst {
 
 impl_py_lattice!(
     CisTransStereoAst,
-    GraphIrCisTransStereoAst,
-    |value: &CisTransStereoAst, py: Python<'_>| -> PyResult<GraphIrCisTransStereoAst> {
+    GraphIrCisTransStereoForm,
+    |value: &CisTransStereoAst, py: Python<'_>| -> PyResult<GraphIrCisTransStereoForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrCisTransStereoAst| -> PyResult<CisTransStereoAst> {
+    |py: Python<'_>, value: GraphIrCisTransStereoForm| -> PyResult<CisTransStereoAst> {
         CisTransStereoAst::from_rust(py, &value)
     }
 );
 
 impl CisTransStereoAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrCisTransStereoAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrCisTransStereoForm) -> PyResult<Self> {
         Ok(match ast {
-            GraphIrCisTransStereoAst::Undetermined => Self::Undetermined(),
-            GraphIrCisTransStereoAst::NotStereo => Self::NotStereo(),
-            GraphIrCisTransStereoAst::Stereo(coset) => {
+            GraphIrCisTransStereoForm::Undetermined => Self::Undetermined(),
+            GraphIrCisTransStereoForm::NotStereo => Self::NotStereo(),
+            GraphIrCisTransStereoForm::Stereo(coset) => {
                 Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrCisTransStereoAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrCisTransStereoForm {
         match self {
-            Self::Undetermined() => GraphIrCisTransStereoAst::Undetermined,
-            Self::NotStereo() => GraphIrCisTransStereoAst::NotStereo,
+            Self::Undetermined() => GraphIrCisTransStereoForm::Undetermined,
+            Self::NotStereo() => GraphIrCisTransStereoForm::NotStereo,
             Self::Stereo(coset) => {
-                GraphIrCisTransStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
+                GraphIrCisTransStereoForm::Stereo(coset.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -489,9 +489,9 @@ pub(crate) enum CisTransStereoLike {
 }
 
 impl CisTransStereoLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrCisTransStereoAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrCisTransStereoForm> {
         Ok(match self {
-            CisTransStereoLike::Flag(false) => GraphIrCisTransStereoAst::NotStereo,
+            CisTransStereoLike::Flag(false) => GraphIrCisTransStereoForm::NotStereo,
             CisTransStereoLike::Flag(true) => return Err(PyValueError::new_err(
                 "cis_trans_stereo = True is not meaningful; use CisTransConfiguration.Z/E or False",
             )),
@@ -667,7 +667,7 @@ impl StereoLigand {
 
 /// A stereo configuration: undetermined (geometry not yet known, so no coset), or `Kinded`
 /// — a concrete coordination geometry bound to a coset that may still be open. Corresponds to the
-/// Rust `StereoConfigurationAst`; `Undetermined` and `Kinded(Tetrahedral, Undetermined)` are
+/// Rust `StereoConfigurationForm`; `Undetermined` and `Kinded(Tetrahedral, Undetermined)` are
 /// distinct.
 #[pyclass]
 pub enum StereoConfigurationAst {
@@ -928,30 +928,33 @@ impl StereoConfigurationUpdate {
 
 impl_py_lattice!(
     StereoConfigurationAst,
-    GraphIrStereoConfigurationAst,
-    |value: &StereoConfigurationAst, py: Python<'_>| -> PyResult<GraphIrStereoConfigurationAst> {
+    GraphIrStereoConfigurationForm,
+    |value: &StereoConfigurationAst, py: Python<'_>| -> PyResult<GraphIrStereoConfigurationForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrStereoConfigurationAst| -> PyResult<StereoConfigurationAst> {
+    |py: Python<'_>, value: GraphIrStereoConfigurationForm| -> PyResult<StereoConfigurationAst> {
         StereoConfigurationAst::from_rust(py, &value)
     }
 );
 
 impl StereoConfigurationAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrStereoConfigurationAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        ast: &GraphIrStereoConfigurationForm,
+    ) -> PyResult<Self> {
         Ok(match ast {
-            GraphIrStereoConfigurationAst::Undetermined => Self::Undetermined(),
-            GraphIrStereoConfigurationAst::Kinded(kind, coset) => Self::Kinded(
+            GraphIrStereoConfigurationForm::Undetermined => Self::Undetermined(),
+            GraphIrStereoConfigurationForm::Kinded(kind, coset) => Self::Kinded(
                 StereoKind::from_rust(*kind),
                 into_py_variant(py, StereoCoset::from_rust(py, coset)?)?,
             ),
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationForm {
         match self {
-            Self::Undetermined() => GraphIrStereoConfigurationAst::Undetermined,
-            Self::Kinded(kind, coset) => GraphIrStereoConfigurationAst::Kinded(
+            Self::Undetermined() => GraphIrStereoConfigurationForm::Undetermined,
+            Self::Kinded(kind, coset) => GraphIrStereoConfigurationForm::Kinded(
                 kind.to_rust(),
                 coset.bind(py).borrow().to_rust(py),
             ),
@@ -971,14 +974,14 @@ pub(crate) enum StereoConfigurationLike {
 }
 
 impl StereoConfigurationLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationForm {
         match self {
             StereoConfigurationLike::Tetrahedral(t) => {
                 let coset = match t.to_rust() {
                     GraphIrTetrahedralConfiguration::Ccw => 0,
                     GraphIrTetrahedralConfiguration::Cw => 1,
                 };
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(coset),
                 )
@@ -988,7 +991,7 @@ impl StereoConfigurationLike {
                     GraphIrCisTransConfiguration::Z => 0,
                     GraphIrCisTransConfiguration::E => 1,
                 };
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::CisTrans,
                     GraphIrStereoCoset::Lit(coset),
                 )
@@ -1672,13 +1675,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrTetrahedralStereoAst::Undetermined)]
-    #[case(GraphIrTetrahedralStereoAst::NotStereo)]
-    #[case(GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::Lit(1)))]
-    #[case(GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::Term(Box::new(
-        GraphIrStereoTerm::Lit(0)
-    ))))]
-    fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: GraphIrTetrahedralStereoAst) {
+    #[case(GraphIrTetrahedralStereoForm::Undetermined)]
+    #[case(GraphIrTetrahedralStereoForm::NotStereo)]
+    #[case(GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::Lit(1)))]
+    #[case(
+        GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::Term(Box::new(
+            GraphIrStereoTerm::Lit(0)
+        )))
+    )]
+    fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: GraphIrTetrahedralStereoForm) {
         Python::attach(|py| {
             assert_eq!(
                 TetrahedralStereoAst::from_rust(py, &ast)
@@ -1691,17 +1696,17 @@ mod tests {
 
     #[rstest]
     #[case(
-        GraphIrTetrahedralStereoAst::NotStereo,
+        GraphIrTetrahedralStereoForm::NotStereo,
         Some(GraphIrTetrahedralStereo::NotStereo)
     )]
     #[case(
-        GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::Lit(2)),
+        GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::Lit(2)),
         Some(GraphIrTetrahedralStereo::Stereo(2))
     )]
-    #[case(GraphIrTetrahedralStereoAst::Undetermined, None)]
-    #[case(GraphIrTetrahedralStereoAst::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
+    #[case(GraphIrTetrahedralStereoForm::Undetermined, None)]
+    #[case(GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
     fn test_tetrahedral_stereo_ast_as_lit(
-        #[case] ast: GraphIrTetrahedralStereoAst,
+        #[case] ast: GraphIrTetrahedralStereoForm,
         #[case] expected: Option<GraphIrTetrahedralStereo>,
     ) {
         Python::attach(|py| {
@@ -1726,13 +1731,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrCisTransStereoAst::Undetermined)]
-    #[case(GraphIrCisTransStereoAst::NotStereo)]
-    #[case(GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::Lit(1)))]
-    #[case(GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::Term(Box::new(
+    #[case(GraphIrCisTransStereoForm::Undetermined)]
+    #[case(GraphIrCisTransStereoForm::NotStereo)]
+    #[case(GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::Lit(1)))]
+    #[case(GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::Term(Box::new(
         GraphIrStereoTerm::Lit(0)
     ))))]
-    fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: GraphIrCisTransStereoAst) {
+    fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: GraphIrCisTransStereoForm) {
         Python::attach(|py| {
             assert_eq!(
                 CisTransStereoAst::from_rust(py, &ast).unwrap().to_rust(py),
@@ -1743,17 +1748,17 @@ mod tests {
 
     #[rstest]
     #[case(
-        GraphIrCisTransStereoAst::NotStereo,
+        GraphIrCisTransStereoForm::NotStereo,
         Some(GraphIrCisTransStereo::NotStereo)
     )]
     #[case(
-        GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::Lit(1)),
+        GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::Lit(1)),
         Some(GraphIrCisTransStereo::Stereo(1))
     )]
-    #[case(GraphIrCisTransStereoAst::Undetermined, None)]
-    #[case(GraphIrCisTransStereoAst::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
+    #[case(GraphIrCisTransStereoForm::Undetermined, None)]
+    #[case(GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
     fn test_cis_trans_stereo_ast_as_lit(
-        #[case] ast: GraphIrCisTransStereoAst,
+        #[case] ast: GraphIrCisTransStereoForm,
         #[case] expected: Option<GraphIrCisTransStereo>,
     ) {
         Python::attach(|py| {
@@ -1834,12 +1839,12 @@ mod tests {
     fn test_stereo_configuration_ast_roundtrip() {
         Python::attach(|py| {
             for ast in [
-                GraphIrStereoConfigurationAst::Undetermined,
-                GraphIrStereoConfigurationAst::kinded(
+                GraphIrStereoConfigurationForm::Undetermined,
+                GraphIrStereoConfigurationForm::kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1),
                 ),
-                GraphIrStereoConfigurationAst::kinded(
+                GraphIrStereoConfigurationForm::kinded(
                     GraphIrStereoKind::Octahedral,
                     GraphIrStereoCoset::Undetermined,
                 ),
@@ -1904,7 +1909,7 @@ mod tests {
             // the Th shorthand → Kinded(Tetrahedral, coset)
             assert_eq!(
                 StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw).to_rust(py),
-                GraphIrStereoConfigurationAst::kinded(
+                GraphIrStereoConfigurationForm::kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1)
                 )
@@ -1912,7 +1917,7 @@ mod tests {
             // the Ct shorthand → Kinded(CisTrans, coset)
             assert_eq!(
                 StereoConfigurationLike::CisTrans(CisTransConfiguration::E).to_rust(py),
-                GraphIrStereoConfigurationAst::kinded(
+                GraphIrStereoConfigurationForm::kinded(
                     GraphIrStereoKind::CisTrans,
                     GraphIrStereoCoset::Lit(1)
                 )
@@ -1921,7 +1926,7 @@ mod tests {
             let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
             assert_eq!(
                 StereoConfigurationLike::Ast(config).to_rust(py),
-                GraphIrStereoConfigurationAst::Undetermined
+                GraphIrStereoConfigurationForm::Undetermined
             );
         });
     }
@@ -2624,7 +2629,7 @@ mod tests {
             let value = Py::new(
                 py,
                 StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -2657,7 +2662,7 @@ mod tests {
             let value = Py::new(
                 py,
                 StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -2708,7 +2713,7 @@ mod tests {
             let value = Py::new(
                 py,
                 StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -2793,7 +2798,7 @@ mod tests {
             let value = Py::new(
                 py,
                 StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -2858,7 +2863,7 @@ mod tests {
             let value = Py::new(
                 py,
                 StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -2890,7 +2895,7 @@ mod tests {
             let value = Py::new(
                 py,
                 StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -2982,7 +2987,7 @@ mod tests {
             assert_eq!(
                 *value.inner(),
                 GraphIrStereoAtomAst {
-                    configuration: GraphIrStereoConfigurationAst::Kinded(
+                    configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0)
                     ),
@@ -2995,21 +3000,21 @@ mod tests {
     #[rstest]
     #[case::ccw(
         "Th0",
-        GraphIrStereoConfigurationAst::Kinded(
+        GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Lit(0)
         )
     )]
     #[case::undetermined_coset(
         "Th*",
-        GraphIrStereoConfigurationAst::Kinded(
+        GraphIrStereoConfigurationForm::Kinded(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Undetermined
         )
     )]
     fn test_stereo_atom_ast_parse(
         #[case] input: &str,
-        #[case] expected: GraphIrStereoConfigurationAst,
+        #[case] expected: GraphIrStereoConfigurationForm,
     ) {
         let value = StereoAtomAst::parse(input).unwrap();
         assert_eq!(value.inner().configuration, expected);
@@ -3052,7 +3057,7 @@ mod tests {
             ));
             assert_eq!(
                 value.configuration(py).unwrap().to_rust(py),
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0)
                 )
@@ -3073,7 +3078,7 @@ mod tests {
             );
             assert_eq!(
                 value.inner().configuration,
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1)
                 )
@@ -3119,7 +3124,7 @@ mod tests {
             let mut ast_cs = GraphIrStereoAtomConstraintsAst::new();
             ast_cs.extend([stereogenicity]);
             let value = StereoAtomAst::from_inner(GraphIrStereoAtomAst {
-                configuration: GraphIrStereoConfigurationAst::Kinded(
+                configuration: GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 ),
@@ -3131,7 +3136,7 @@ mod tests {
                 py,
                 StereoConfigurationAst::from_rust(
                     py,
-                    &GraphIrStereoConfigurationAst::Kinded(
+                    &GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -3318,7 +3323,7 @@ mod tests {
             };
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0)
                 )
@@ -3339,7 +3344,7 @@ mod tests {
             );
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1)
                 )
@@ -3408,7 +3413,7 @@ mod tests {
                 py,
                 StereoConfigurationAst::from_rust(
                     py,
-                    &GraphIrStereoConfigurationAst::Kinded(
+                    &GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
                     ),
@@ -3450,7 +3455,7 @@ mod tests {
             assert_eq!(view.site_id(py).unwrap(), 0);
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::CisTrans,
                     GraphIrStereoCoset::Lit(0)
                 )
@@ -3511,7 +3516,7 @@ mod tests {
             // value replaced
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                GraphIrStereoConfigurationAst::Kinded(
+                GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1)
                 )

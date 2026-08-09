@@ -29,9 +29,9 @@ use crate::ir::constraint::{
 };
 use crate::ir::id::StereoLigandPosition;
 use crate::ir::stereo::{
-    CisTransStereoAst, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
-    StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
-    Stereogenicity, TetrahedralStereoAst, Topicity,
+    CisTransStereoForm, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
+    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
+    Stereogenicity, TetrahedralStereoForm, Topicity,
 };
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
@@ -137,8 +137,10 @@ fn stereo_atom_keyword_for(ast: &StereoAtomAst) -> Option<&'static str> {
         return None;
     }
     match &ast.configuration {
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)) => Some("ccw"),
-        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)) => Some("cw"),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)) => {
+            Some("ccw")
+        }
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)) => Some("cw"),
         _ => None,
     }
 }
@@ -166,11 +168,11 @@ pub fn parse_stereo_atom(input: &str) -> Result<StereoAtomDsl, ParseError> {
 
 /// Parse the configuration head of a stereo element: `*` (undetermined geometry,
 /// no coset) or `<kind><coset>` (a concrete kind with a coset). `*` and `Th*` are distinct.
-fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
+fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationForm> {
     multispace0.parse_next(i)?;
     if opt('*').parse_next(i)?.is_some() {
         multispace0.parse_next(i)?;
-        return Ok(StereoConfigurationAst::Undetermined);
+        return Ok(StereoConfigurationForm::Undetermined);
     }
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
     let coset = terminated(
@@ -178,7 +180,7 @@ fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
         multispace0,
     )
     .parse_next(i)?;
-    Ok(StereoConfigurationAst::kinded(kind, coset))
+    Ok(StereoConfigurationForm::kinded(kind, coset))
 }
 
 /// Partial-modify variant of `stereo_configuration`: the coset is optional (omitted =
@@ -191,9 +193,12 @@ pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
 
 /// Parse the kind-scoped constraint predicates and trailing-input check given an already-parsed
 /// configuration.
-fn stereo_atom_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PResult<StereoAtomDsl> {
+fn stereo_atom_tail(
+    i: &mut &str,
+    configuration: StereoConfigurationForm,
+) -> PResult<StereoAtomDsl> {
     let mut constraints = StereoAtomConstraintsAst::new();
-    if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
+    if let StereoConfigurationForm::Kinded(kind, _) = &configuration {
         let kind = *kind;
         loop {
             let before = *i;
@@ -326,8 +331,8 @@ fn stereo_bond_keyword_for(ast: &StereoBondAst) -> Option<&'static str> {
         return None;
     }
     match &ast.configuration {
-        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)) => Some("z"),
-        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)) => Some("e"),
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)) => Some("z"),
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)) => Some("e"),
         _ => None,
     }
 }
@@ -359,9 +364,12 @@ pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
 
 /// Parse the kind-scoped constraint predicates and trailing-input check given an already-parsed
 /// configuration.
-fn stereo_bond_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PResult<StereoBondDsl> {
+fn stereo_bond_tail(
+    i: &mut &str,
+    configuration: StereoConfigurationForm,
+) -> PResult<StereoBondDsl> {
     let mut constraints = StereoBondConstraintsAst::new();
-    if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
+    if let StereoConfigurationForm::Kinded(kind, _) = &configuration {
         let kind = *kind;
         loop {
             let before = *i;
@@ -801,11 +809,11 @@ stereo_constraint_fmt! { fmt_stereo_bond_constraint, StereoBondConstraintAst }
 /// Render the configuration head of a stereo element: `*` or `<kind><coset>`.
 fn fmt_stereo_configuration(
     f: &mut fmt::Formatter<'_>,
-    configuration: &StereoConfigurationAst,
+    configuration: &StereoConfigurationForm,
 ) -> fmt::Result {
     match configuration {
-        StereoConfigurationAst::Undetermined => write!(f, "*"),
-        StereoConfigurationAst::Kinded(kind, coset) => {
+        StereoConfigurationForm::Undetermined => write!(f, "*"),
+        StereoConfigurationForm::Kinded(kind, coset) => {
             fmt_stereo_kind(f, *kind)?;
             fmt_stereo_coset(f, coset)
         }
@@ -816,7 +824,7 @@ pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) 
     fmt_stereo_configuration(f, &atom.configuration)?;
     // Vacuous (Undetermined) predicates are elided on canonical render, as for
     // the atom-string; they remain admissible on parse.
-    if let StereoConfigurationAst::Kinded(kind, _) = &atom.configuration {
+    if let StereoConfigurationForm::Kinded(kind, _) = &atom.configuration {
         for c in atom.constraints.iter().filter(|c| !c.is_undetermined()) {
             fmt_stereo_atom_constraint(f, c, *kind)?;
         }
@@ -827,7 +835,7 @@ pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) 
 /// Write the stereo bond DSL
 pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
     fmt_stereo_configuration(f, &bond.configuration)?;
-    if let StereoConfigurationAst::Kinded(kind, _) = &bond.configuration {
+    if let StereoConfigurationForm::Kinded(kind, _) = &bond.configuration {
         for c in bond.constraints.iter().filter(|c| !c.is_undetermined()) {
             fmt_stereo_bond_constraint(f, c, *kind)?;
         }
@@ -1951,14 +1959,14 @@ macro_rules! stereo_site_dsl {
 
 stereo_site_dsl! {
     TetrahedralStereoDsl,
-    TetrahedralStereoAst,
+    TetrahedralStereoForm,
     StereoKind::Tetrahedral,
     tetrahedral_stereo_config,
     fmt_tetrahedral_stereo_config
 }
 stereo_site_dsl! {
     CisTransStereoDsl,
-    CisTransStereoAst,
+    CisTransStereoForm,
     StereoKind::CisTrans,
     cis_trans_stereo_config,
     fmt_cis_trans_stereo_config
@@ -2394,21 +2402,21 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined("*", TetrahedralStereoAst::Undetermined)]
-    #[case::not_stereo("!", TetrahedralStereoAst::NotStereo)]
-    #[case::stereo_undetermined("+", TetrahedralStereoAst::Stereo(StereoCoset::Undetermined))]
-    #[case::lit("1", TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]
-    #[case::var("?o", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::var("o"))))]
-    #[case::lit_set("{1,2}", TetrahedralStereoAst::Stereo(StereoCoset::lit_set([1, 2])))]
-    #[case::var_domain("?o :: {1,2}", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))))]
-    #[case::swap("~1", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
-    #[case::mirror("'1", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(1)))))]
-    #[case::apply("1^(0,1)", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))))]
-    #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
-    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
-    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))))]
-    #[case::no_canonicalization("{1}", TetrahedralStereoAst::Stereo(StereoCoset::lit_set([1])))]
-    fn test_tetrahedral_stereo_config(#[case] input: &str, #[case] expected: TetrahedralStereoAst) {
+    #[case::undetermined("*", TetrahedralStereoForm::Undetermined)]
+    #[case::not_stereo("!", TetrahedralStereoForm::NotStereo)]
+    #[case::stereo_undetermined("+", TetrahedralStereoForm::Stereo(StereoCoset::Undetermined))]
+    #[case::lit("1", TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
+    #[case::var("?o", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var("o"))))]
+    #[case::lit_set("{1,2}", TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2])))]
+    #[case::var_domain("?o :: {1,2}", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))))]
+    #[case::swap("~1", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
+    #[case::mirror("'1", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(1)))))]
+    #[case::apply("1^(0,1)", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))))]
+    #[case::no_canonicalization("{1}", TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1])))]
+    fn test_tetrahedral_stereo_config(#[case] input: &str, #[case] expected: TetrahedralStereoForm) {
         assert_eq!(
             (|i: &mut &str| tetrahedral_stereo_config(i)).parse(input).unwrap(),
             expected
@@ -2417,12 +2425,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined("*", CisTransStereoAst::Undetermined)]
-    #[case::not_stereo("!", CisTransStereoAst::NotStereo)]
-    #[case::stereo_undetermined("+", CisTransStereoAst::Stereo(StereoCoset::Undetermined))]
-    #[case::lit("1", CisTransStereoAst::Stereo(StereoCoset::Lit(1)))]
-    #[case::no_canonicalization("~1", CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
-    fn test_cis_trans_stereo_config(#[case] input: &str, #[case] expected: CisTransStereoAst) {
+    #[case::undetermined("*", CisTransStereoForm::Undetermined)]
+    #[case::not_stereo("!", CisTransStereoForm::NotStereo)]
+    #[case::stereo_undetermined("+", CisTransStereoForm::Stereo(StereoCoset::Undetermined))]
+    #[case::lit("1", CisTransStereoForm::Stereo(StereoCoset::Lit(1)))]
+    #[case::no_canonicalization("~1", CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
+    fn test_cis_trans_stereo_config(#[case] input: &str, #[case] expected: CisTransStereoForm) {
         assert_eq!(
             (|i: &mut &str| cis_trans_stereo_config(i)).parse(input).unwrap(),
             expected
@@ -2431,18 +2439,18 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(TetrahedralStereoAst::Undetermined, "*")]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo, "!")]
-    #[case::stereogenic(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined), "+")]
-    #[case::lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)), "1")]
-    #[case::var(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::var("o"))), "?o")]
-    #[case::lit_set(TetrahedralStereoAst::Stereo(StereoCoset::lit_set([1, 2])), "{1,2}")]
-    #[case::var_domain(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))), "?o :: {1,2}")]
-    #[case::swap(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))), "~1")]
-    #[case::mirror(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(1)))), "'1")]
-    #[case::apply(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))), "1^(0,1)")]
-    fn test_fmt_tetrahedral_stereo_config(#[case] c: TetrahedralStereoAst, #[case] expected: &str) {
-        struct W(TetrahedralStereoAst);
+    #[case::undetermined(TetrahedralStereoForm::Undetermined, "*")]
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo, "!")]
+    #[case::stereogenic(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), "+")]
+    #[case::lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), "1")]
+    #[case::var(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var("o"))), "?o")]
+    #[case::lit_set(TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2])), "{1,2}")]
+    #[case::var_domain(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))), "?o :: {1,2}")]
+    #[case::swap(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))), "~1")]
+    #[case::mirror(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(1)))), "'1")]
+    #[case::apply(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))), "1^(0,1)")]
+    fn test_fmt_tetrahedral_stereo_config(#[case] c: TetrahedralStereoForm, #[case] expected: &str) {
+        struct W(TetrahedralStereoForm);
         impl fmt::Display for W {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 fmt_tetrahedral_stereo_config(f, &self.0)
@@ -2506,21 +2514,21 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(TetrahedralStereoAst::Undetermined)]
-    #[case::not_stereo(TetrahedralStereoAst::NotStereo)]
-    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_dsl_into_ast(#[case] ast: TetrahedralStereoAst) {
+    #[case::undetermined(TetrahedralStereoForm::Undetermined)]
+    #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
+    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
+    fn test_tetrahedral_stereo_dsl_into_ast(#[case] ast: TetrahedralStereoForm) {
         assert_eq!(TetrahedralStereoDsl(ast.clone()).into_ir(&()), ast);
         assert_eq!(TetrahedralStereoDsl::from_ir(&ast, &()), TetrahedralStereoDsl(ast));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(":undetermined", TetrahedralStereoDsl(TetrahedralStereoAst::Undetermined))]
-    #[case::not_stereo(":not-stereo", TetrahedralStereoDsl(TetrahedralStereoAst::NotStereo))]
-    #[case::stereo_lit("{:stereo 1}", TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))))]
-    #[case::stereo_undetermined("{:stereo :undetermined}", TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined)))]
-    #[case::stereo_set("{:stereo [1 2]}", TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCoset::lit_set([1, 2]))))]
+    #[case::undetermined(":undetermined", TetrahedralStereoDsl(TetrahedralStereoForm::Undetermined))]
+    #[case::not_stereo(":not-stereo", TetrahedralStereoDsl(TetrahedralStereoForm::NotStereo))]
+    #[case::stereo_lit("{:stereo 1}", TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))))]
+    #[case::stereo_undetermined("{:stereo :undetermined}", TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)))]
+    #[case::stereo_set("{:stereo [1 2]}", TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2]))))]
     fn test_tetrahedral_stereo_dsl_from_edn(#[case] input: &str, #[case] expected: TetrahedralStereoDsl) {
         assert_eq!(TetrahedralStereoDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
@@ -2536,10 +2544,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(TetrahedralStereoDsl(TetrahedralStereoAst::Undetermined), ":undetermined")]
-    #[case::not_stereo(TetrahedralStereoDsl(TetrahedralStereoAst::NotStereo), ":not-stereo")]
-    #[case::stereo_lit(TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))), "{:stereo 1}")]
-    #[case::stereo_undetermined(TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined)), "{:stereo :undetermined}")]
+    #[case::undetermined(TetrahedralStereoDsl(TetrahedralStereoForm::Undetermined), ":undetermined")]
+    #[case::not_stereo(TetrahedralStereoDsl(TetrahedralStereoForm::NotStereo), ":not-stereo")]
+    #[case::stereo_lit(TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))), "{:stereo 1}")]
+    #[case::stereo_undetermined(TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)), "{:stereo :undetermined}")]
     fn test_tetrahedral_stereo_dsl_to_edn(#[case] form: TetrahedralStereoDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }

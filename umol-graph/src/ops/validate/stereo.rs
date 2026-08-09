@@ -356,7 +356,7 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         LigandPermutation, OrientedLigandPermutation, StereoAtomConstraintAst,
-        StereoBondConstraintAst, StereoConfigurationAst, StereoKind, StereoLigandPosition,
+        StereoBondConstraintAst, StereoConfigurationForm, StereoKind, StereoLigandPosition,
         StereogenicityAst,
     };
     use umol_graph_ir::mol_dsl_ground;
@@ -589,7 +589,7 @@ mod tests {
     #[case::coset_out_of_range(
         CFCLBRI,
         (|ast: &mut MoleculeAst| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
+            ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::CosetOutOfRange {
             kind: StereoKind::Tetrahedral,
@@ -600,7 +600,7 @@ mod tests {
     #[case::arity(
         CFCLBRI,
         (|ast: &mut MoleculeAst| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationAst::kinded(StereoKind::TrigonalBipyramidal, 0);
+            ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0);
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandArity {
             kind: StereoKind::TrigonalBipyramidal,
