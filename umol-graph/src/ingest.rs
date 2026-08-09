@@ -4,7 +4,7 @@ use std::any::Any;
 
 use thiserror::Error;
 use umol_graph_core::Correspondence;
-use umol_graph_ir::ir::{AtomId, MoleculeAst, ReactionAst, TryIntoAst};
+use umol_graph_ir::ir::{AtomId, MoleculeAst, ReactionAst, TryIntoIr};
 use umol_io::smiles::{ParseError as SmilesParseError, ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
 use umol_io::table_ir::Molecule as TableMolecule;
@@ -126,7 +126,7 @@ fn interpret_molecule(
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
 ) -> Result<MoleculeAst, MoleculeInterpretationError> {
-    let mut ast: MoleculeAst = molecule.try_into_ast(&())?;
+    let mut ast: MoleculeAst = molecule.try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),

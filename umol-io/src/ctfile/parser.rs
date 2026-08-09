@@ -9,7 +9,7 @@ use nom::character::complete::multispace0;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
 use umol_geometric_core::Point3D;
-use umol_graph_ir::ir::{MoleculeAst, TryIntoAst};
+use umol_graph_ir::ir::{MoleculeAst, TryIntoIr};
 use umol_utils::error::UmolError;
 
 use self::accumulator::PropertyAccumulator;
@@ -269,7 +269,7 @@ pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> 
 /// and raise (`RaiseError`) concerns, so per doc 065 it returns the boxed boundary error.
 pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
-    let ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
+    let ast: MoleculeAst = (&table_mol).try_into_ir(&())?;
     Ok(ast)
 }
 

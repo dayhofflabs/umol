@@ -7,7 +7,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{ElementAst, TryIntoAst};
+use umol_graph_ir::ir::{ElementAst, TryIntoIr};
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles};
 use umol_io::table_ir::{ExtendedMolecule, Span};
@@ -211,7 +211,7 @@ proptest! {
             .expect("generated wildcard chain should parse")
             .into_table_ir();
         let molecule_ast = (&molecule)
-            .try_into_ast(&())
+            .try_into_ir(&())
             .expect("generated wildcard chain should raise");
         let expected: Vec<_> = input
             .iter()

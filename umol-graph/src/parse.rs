@@ -2,7 +2,7 @@
 //!
 //! SMILES ingestion lives in [`crate::ingest`].
 
-use umol_graph_ir::ir::{MoleculeAst, TryIntoAst};
+use umol_graph_ir::ir::{MoleculeAst, TryIntoIr};
 use umol_io::ctfile::config::CtfileIoConfig;
 use umol_io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
 use umol_utils::error::UmolError;
@@ -44,7 +44,7 @@ pub fn parse_mol_bytes_with(
     resolve_config: &ResolveConfig,
 ) -> Result<MoleculeAst, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
+    let mut ast: MoleculeAst = (&table_mol).try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),

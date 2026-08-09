@@ -1,7 +1,7 @@
-//! AST-related traits.
+//! IR-related traits.
 //!
 //! `FromIr` / `IntoIr` are infallible conversions parameterized by context.
-//! `TryFromAst` / `TryIntoAst` are fallible, reject invalid boundary inputs.
+//! `TryFromIr` / `TryIntoIr` are fallible, reject invalid boundary inputs.
 //! `AsLit` extracts a literal value from an AST type.
 //! `Lattice` is a refinement lattice on AST value types.
 //! `Canonicalize` is a canonical form of an AST value.
@@ -30,21 +30,21 @@ pub trait IntoIr<A>: Sized {
     fn into_ir(self, ctx: &Self::Ctx) -> A;
 }
 
-/// Build `Self` from a borrowed AST of type `A` plus a configuration context.
+/// Build `Self` from a borrowed IR value of type `A` plus a configuration context.
 /// Fallible variant: the conversion can reject the input.
-pub trait TryFromAst<A>: Sized {
+pub trait TryFromIr<A>: Sized {
     type Ctx;
     type Error;
-    fn try_from_ast(ast: &A, ctx: &Self::Ctx) -> Result<Self, Self::Error>;
+    fn try_from_ir(ir: &A, ctx: &Self::Ctx) -> Result<Self, Self::Error>;
 }
 
-/// Consume `self` to produce an AST of type `A` plus a configuration context.
+/// Consume `self` to produce an IR value of type `A` plus a configuration context.
 /// Fallible variant: used by raising paths whose source carries information
-/// without a faithful AST representation (e.g. TableIR Sgroups).
-pub trait TryIntoAst<A>: Sized {
+/// without a faithful IR representation (e.g. TableIR Sgroups).
+pub trait TryIntoIr<A>: Sized {
     type Ctx;
     type Error;
-    fn try_into_ast(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
+    fn try_into_ir(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
 }
 
 /// Exact literal projection for AST types whose value space includes an

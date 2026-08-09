@@ -19,7 +19,7 @@ use std::path::Path;
 use std::{env, fs, process};
 
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_graph_ir::ir::{FromIr, MoleculeAst, TryIntoAst};
+use umol_graph_ir::ir::{FromIr, MoleculeAst, TryIntoIr};
 use umol_io::ctfile::parse_mol_bytes_to_ast;
 use umol_io::smiles::Smiles;
 
@@ -168,7 +168,7 @@ fn parse_and_lower(smiles: &str) -> Result<String, String> {
     let smiles = Smiles::parse(smiles.trim()).map_err(|error| error.to_string())?;
     let ast: MoleculeAst = smiles
         .as_table_ir()
-        .try_into_ast(&())
+        .try_into_ir(&())
         .map_err(|error| error.to_string())?;
     Ok(lower(&ast))
 }

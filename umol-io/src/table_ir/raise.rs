@@ -1,6 +1,6 @@
 //! TableIR → `umol_graph_ir::MoleculeAst` raise.
 //!
-//! Implements `TryIntoAst<MoleculeAst> for &Molecule` (and the per-atom and
+//! Implements `TryIntoIr<MoleculeAst> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
 //! raise applies fixed IO ground semantics for resolution.
 
@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
     MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst, NoncovalentBondAst,
-    StereoCoset, TetrahedralStereoAst, TryIntoAst, UnpairedElectronsAst, ValueAst,
+    StereoCoset, TetrahedralStereoAst, TryIntoIr, UnpairedElectronsAst, ValueAst,
 };
 use umol_perm::{ClassKey, Permutation};
 use umol_utils::error::UmolError;
@@ -54,17 +54,17 @@ impl UmolError for RaiseError {
     }
 }
 
-impl TryIntoAst<MoleculeAst> for &TableMolecule {
+impl TryIntoIr<MoleculeAst> for &TableMolecule {
     type Ctx = ();
     type Error = RaiseError;
 
-    fn try_into_ast(self, ctx: &Self::Ctx) -> Result<MoleculeAst, RaiseError> {
+    fn try_into_ir(self, ctx: &Self::Ctx) -> Result<MoleculeAst, RaiseError> {
         let atoms: Vec<AtomAst> = self
             .atoms
             .iter()
             .enumerate()
             .map(|(atom_idx, table_atom)| {
-                let mut atom = table_atom.try_into_ast(ctx)?;
+                let mut atom = table_atom.try_into_ir(ctx)?;
                 if let Some(constraint) = raise_tetrahedral_stereo(self, atom_idx)? {
                     atom.constraints.set(constraint);
                 }
@@ -86,14 +86,14 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                     TableBondDonation::Donating => (a_idx, b_idx),
                     TableBondDonation::Accepting => (b_idx, a_idx),
                     _ => {
-                        bonds.push((a_idx, b_idx, b.try_into_ast(ctx)?));
+                        bonds.push((a_idx, b_idx, b.try_into_ir(ctx)?));
                         continue;
                     }
                 };
                 let dative_bond = DativeBondAst::new(raise_bond_order(b.order));
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
-                let mut bond_ast = b.try_into_ast(ctx)?;
+                let mut bond_ast = b.try_into_ir(ctx)?;
                 if let Some(constraint) = raise_cis_trans_stereo(self, bond_idx)? {
                     bond_ast.constraints.set(constraint);
                 }
@@ -131,11 +131,11 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
     }
 }
 
-impl TryIntoAst<AtomAst> for &TableAtom {
+impl TryIntoIr<AtomAst> for &TableAtom {
     type Ctx = ();
     type Error = RaiseError;
 
-    fn try_into_ast(self, _ctx: &Self::Ctx) -> Result<AtomAst, RaiseError> {
+    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<AtomAst, RaiseError> {
         let mut atom = AtomAst {
             element: match self.element {
                 Some(element) => ElementAst::Lit(element),
@@ -204,11 +204,11 @@ impl TryIntoAst<AtomAst> for &TableAtom {
     }
 }
 
-impl TryIntoAst<BondAst> for &TableBond {
+impl TryIntoIr<BondAst> for &TableBond {
     type Ctx = ();
     type Error = RaiseError;
 
-    fn try_into_ast(self, _ctx: &Self::Ctx) -> Result<BondAst, RaiseError> {
+    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<BondAst, RaiseError> {
         let mut bond = BondAst::new(raise_bond_order(self.order));
         bond.charge = match self.charge {
             Some(c) => ValueAst::Lit(c as i64),
@@ -466,8 +466,8 @@ mod tests {
     const CIS_TRANS_EITHER_MOL: &str = "butene\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  2  3  2  3  0  0  0\n  3  4  1  0  0  0  0\nM  END\n";
 
     #[rstest]
-    fn test_table_molecule_try_into_ast(methane: TableMolecule) {
-        let ast: MoleculeAst = (&methane).try_into_ast(&()).unwrap();
+    fn test_table_molecule_try_into_ir(methane: TableMolecule) {
+        let ast: MoleculeAst = (&methane).try_into_ir(&()).unwrap();
         assert_eq!(
             ast,
             MoleculeAst::from_entries(MoleculeEntries {
@@ -504,11 +504,11 @@ mod tests {
             entity: Entity::Atom(AtomId(1)),
         })
     )]
-    fn test_table_molecule_try_into_ast_error(
+    fn test_table_molecule_try_into_ir_error(
         #[case] molecule: TableMolecule,
         #[case] expected: RaiseError,
     ) {
-        let actual: Result<MoleculeAst, RaiseError> = (&molecule).try_into_ast(&());
+        let actual: Result<MoleculeAst, RaiseError> = (&molecule).try_into_ir(&());
         assert_eq!(actual, Err(expected));
     }
 
@@ -553,7 +553,7 @@ mod tests {
             constraints: AtomConstraintsAst::new(),
         }
     )]
-    fn test_table_atom_try_into_ast(
+    fn test_table_atom_try_into_ir(
         #[case] isotope_mass: Option<u32>,
         #[case] charge: Option<i8>,
         #[case] implicit_hydrogens: Option<u8>,
@@ -571,17 +571,17 @@ mod tests {
             multiplicity,
             ..TableAtom::wildcard()
         };
-        assert_eq!(atom.try_into_ast(&()), Ok(expected));
+        assert_eq!(atom.try_into_ir(&()), Ok(expected));
     }
 
     #[rstest]
-    fn test_table_atom_try_into_ast_aromatic_wildcard() {
+    fn test_table_atom_try_into_ir_aromatic_wildcard() {
         let atom = TableAtom {
             aromatic: Some(true),
             ..TableAtom::wildcard()
         };
         assert_eq!(
-            atom.try_into_ast(&()),
+            atom.try_into_ir(&()),
             Ok(AtomAst {
                 element: ElementAst::Undetermined,
                 isotope_mass: IsotopeMassAst::Natural,
@@ -606,13 +606,13 @@ mod tests {
         Some(true),
         Some(AromaticValenceAst::Aromatic(ValueAst::Undetermined))
     )]
-    fn test_table_molecule_try_into_ast_aromatic(
+    fn test_table_molecule_try_into_ir_aromatic(
         mut carbon: TableMolecule,
         #[case] aromatic: Option<bool>,
         #[case] expected: Option<AromaticValenceAst>,
     ) {
         carbon.atoms[0].aromatic = aromatic;
-        let ast: MoleculeAst = (&carbon).try_into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&carbon).try_into_ir(&()).unwrap();
         assert_eq!(
             ast.atom(AtomId(0)).ast.constraints.aromatic_valence(),
             expected.as_ref()
@@ -627,7 +627,7 @@ mod tests {
     #[case::aromatic_nitrogen_bracket_h(Element::N, Some(true), Some(1), ValueAst::Lit(1))]
     #[case::aromatic_carbon_bare(Element::C, Some(true), None, ValueAst::Undetermined)]
     #[case::aliphatic_nitrogen_bare(Element::N, Some(false), None, ValueAst::Undetermined)]
-    fn test_table_molecule_try_into_ast_aromatic_heteroatoms(
+    fn test_table_molecule_try_into_ir_aromatic_heteroatoms(
         #[case] element: Element,
         #[case] aromatic: Option<bool>,
         #[case] hydrogens: Option<u8>,
@@ -638,24 +638,24 @@ mod tests {
         atom.implicit_hydrogens = hydrogens;
         let mut mol = TableMolecule::empty();
         mol.atoms.push(atom);
-        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&mol).try_into_ir(&()).unwrap();
         assert_eq!(ast.atom(AtomId(0)).ast.implicit_hydrogens, expected);
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ast_bond_order(
+    fn test_table_molecule_try_into_ir_bond_order(
         #[with(TableBondOrder::Double)] diatomic: TableMolecule,
     ) {
-        let ast: MoleculeAst = (&diatomic).try_into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&diatomic).try_into_ir(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
         assert!(matches!(bond.order, ValueAst::Lit(2)));
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ast_aromatic_bond(
+    fn test_table_molecule_try_into_ir_aromatic_bond(
         #[with(TableBondOrder::Aromatic)] diatomic: TableMolecule,
     ) {
-        let ast: MoleculeAst = (&diatomic).try_into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&diatomic).try_into_ir(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
         assert!(matches!(bond.order, ValueAst::Lit(1)));
         assert!(bond
@@ -686,9 +686,9 @@ mod tests {
 
     #[rstest]
     #[case::organic("C", "C#i=#c0#u0#a!")]
-    fn test_table_molecule_try_into_ast_smiles(#[case] input: &str, #[case] expected_atom: &str) {
+    fn test_table_molecule_try_into_ir_smiles(#[case] input: &str, #[case] expected_atom: &str) {
         let smiles = Smiles::parse(input).unwrap();
-        let ast: MoleculeAst = smiles.as_table_ir().try_into_ast(&()).unwrap();
+        let ast: MoleculeAst = smiles.as_table_ir().try_into_ir(&()).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
         assert_eq!(atom.charge, ValueAst::Lit(0));
         assert!(matches!(atom.implicit_hydrogens, ValueAst::Undetermined));
@@ -700,9 +700,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ast_smiles_wildcard() {
+    fn test_table_molecule_try_into_ir_smiles_wildcard() {
         let smiles = Smiles::parse("*").unwrap();
-        let ast: MoleculeAst = smiles.as_table_ir().try_into_ast(&()).unwrap();
+        let ast: MoleculeAst = smiles.as_table_ir().try_into_ir(&()).unwrap();
 
         assert_eq!(
             ast.atom(AtomId(0)).ast,
