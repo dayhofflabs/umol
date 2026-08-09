@@ -97,7 +97,7 @@ pub use noncovalent::{
 pub use operators::{MemOp, RelOp};
 pub use reaction::Reaction;
 pub use reaction_derivation::ReactionDerivation;
-pub use reaction_span::{ReactionSpanAst, ReactionSpanEntries, ReactionSpanEntriesError};
+pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanEntriesError};
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,

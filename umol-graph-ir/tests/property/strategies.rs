@@ -44,7 +44,7 @@ pub(crate) use umol_graph_ir::ir::{
     MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm,
     NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
-    NumForm, OrientedLigandPermutation, PredExpr, Reaction, ReactionSpanAst, RelOp,
+    NumForm, OrientedLigandPermutation, PredExpr, Reaction, ReactionSpan, RelOp,
     RelationalConstraint, RingMembershipForm, RingScope, StereoAtomConstraintForm,
     StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
     StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
@@ -2613,7 +2613,7 @@ pub(crate) fn reaction_span_dsl_strategy() -> impl Strategy<Value = ReactionSpan
 }
 
 pub(crate) fn invalid_reaction_span_dsl_parts_strategy(
-) -> impl Strategy<Value = (ReactionSpanAst, MoleculeMetadata, Entity)> {
+) -> impl Strategy<Value = (ReactionSpan, MoleculeMetadata, Entity)> {
     comprehensive_reaction_strategy()
         .prop_filter_map("reaction must have a materializable span", |reaction| {
             reaction.to_reaction_span().ok()

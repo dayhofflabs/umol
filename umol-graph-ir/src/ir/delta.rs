@@ -1089,7 +1089,7 @@ impl<T> EntitySpan<T> {
     }
 }
 
-/// A span stored as relation data (a `ReactionSpanAst` overlay) reindexes each present side's payload
+/// A span stored as relation data (a `ReactionSpan` overlay) reindexes each present side's payload
 /// and compares side-wise, delegating to the underlying payload's [`RelationData`].
 impl<U: RelationData> RelationData for EntitySpan<U> {
     fn on_permutation(&mut self, order: &[ParticipantPosition]) {
@@ -1131,7 +1131,7 @@ impl<U: BiRelationData> BiRelationData for EntitySpan<U> {
 
 impl<T: Canonicalize> EntitySpan<T> {
     /// Superimpose an entity's optional lhs and rhs values into a span — the per-entity kernel of
-    /// `ReactionSpanAst::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
+    /// `ReactionSpan::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
     /// lhs-only to `Removed`, rhs-only to `Added`, neither to `None`.
     pub fn superimpose(lhs: Option<T>, rhs: Option<T>) -> Option<Self> {
         match (lhs, rhs) {
@@ -2039,7 +2039,7 @@ impl EntityPatch for StereoBondDelta {
 /// Apply a resolved per-entity change to a value AST, reusing the `EntityPatch` apply that
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the rhs-hand value of a
-/// preserved entity for a `ReactionSpanAst`.
+/// preserved entity for a `ReactionSpan`.
 pub(crate) fn apply_atom_change(
     ast: &mut AtomForm,
     delta: &AtomDelta,

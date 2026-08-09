@@ -8,7 +8,7 @@ use umol_graph_ir::dsl::ReactionSpanDsl as GraphIrReactionSpanDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, Canonicalize,
     Constraint as GraphIrConstraint, ConstraintSpan as GraphIrConstraintSpan,
-    EntitySpan as GraphIrEntitySpan, FromIr, IntoIr, ReactionSpanAst as GraphIrReactionSpanAst,
+    EntitySpan as GraphIrEntitySpan, FromIr, IntoIr, ReactionSpan as GraphIrReactionSpan,
     ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
 
@@ -57,7 +57,7 @@ fn constraint_spans(
 /// A superimposed reaction span with explicit before/after entity states.
 #[pyclass(eq, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionSpanAst(GraphIrReactionSpanAst);
+pub struct ReactionSpanAst(GraphIrReactionSpan);
 
 #[pymethods]
 impl ReactionSpanAst {
@@ -243,7 +243,7 @@ impl ReactionSpanAst {
             )?);
         }
 
-        GraphIrReactionSpanAst::try_from_entries(GraphIrReactionSpanEntries {
+        GraphIrReactionSpan::try_from_entries(GraphIrReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -280,12 +280,12 @@ impl ReactionSpanAst {
 }
 
 impl ReactionSpanAst {
-    pub(crate) fn from_rust(span: GraphIrReactionSpanAst) -> Self {
+    pub(crate) fn from_rust(span: GraphIrReactionSpan) -> Self {
         Self(span)
     }
 
     #[cfg(test)]
-    pub(crate) fn to_rust(&self) -> GraphIrReactionSpanAst {
+    pub(crate) fn to_rust(&self) -> GraphIrReactionSpan {
         self.0.clone()
     }
 }
@@ -323,7 +323,7 @@ mod tests {
     #[case::required(
         r#"{:atoms ["C" {:add "O"}]}"#,
         None,
-        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+        GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![
                 GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(ChemElement::C)),
                 GraphIrEntitySpan::Added(GraphIrAtomForm::from_element(ChemElement::O)),
@@ -334,7 +334,7 @@ mod tests {
     #[case::ground(
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
         Some(MoleculeDefaults::ground()),
-        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+        GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![GraphIrEntitySpan::Unchanged(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
             )],
@@ -344,7 +344,7 @@ mod tests {
     fn test_reaction_span_ast_parse(
         #[case] text: &str,
         #[case] defaults: Option<MoleculeDefaults>,
-        #[case] expected: GraphIrReactionSpanAst,
+        #[case] expected: GraphIrReactionSpan,
     ) {
         assert_eq!(
             ReactionSpanAst::parse(text, defaults).unwrap().to_rust(),
@@ -376,7 +376,7 @@ mod tests {
 
         assert_eq!(
             span.to_rust(),
-            GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+            GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
                 atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                     ChemElement::C,
                 ))],
@@ -397,7 +397,7 @@ mod tests {
 
     #[rstest]
     #[case::required(
-        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+        GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![
                 GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(ChemElement::C)),
                 GraphIrEntitySpan::Added(GraphIrAtomForm::from_element(ChemElement::O)),
@@ -408,7 +408,7 @@ mod tests {
         r#"{:atoms ["C" {:add "O"}]}"#
     )]
     #[case::ground(
-        GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+        GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![GraphIrEntitySpan::Unchanged(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
             )],
@@ -418,7 +418,7 @@ mod tests {
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#
     )]
     fn test_reaction_span_ast_render(
-        #[case] span: GraphIrReactionSpanAst,
+        #[case] span: GraphIrReactionSpan,
         #[case] defaults: Option<MoleculeDefaults>,
         #[case] expected: &str,
     ) {
@@ -427,7 +427,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_render_with_metadata() {
-        let span = ReactionSpanAst::from_rust(GraphIrReactionSpanAst::from_entries(
+        let span = ReactionSpanAst::from_rust(GraphIrReactionSpan::from_entries(
             GraphIrReactionSpanEntries {
                 atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                     ChemElement::C,
@@ -456,7 +456,7 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_render_with_metadata_error() {
         Python::attach(|py| {
-            let span = ReactionSpanAst::from_rust(GraphIrReactionSpanAst::from_entries(
+            let span = ReactionSpanAst::from_rust(GraphIrReactionSpan::from_entries(
                 GraphIrReactionSpanEntries {
                     atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                         ChemElement::C,
@@ -502,7 +502,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_str() {
-        let span = ReactionSpanAst::from_rust(GraphIrReactionSpanAst::from_entries(
+        let span = ReactionSpanAst::from_rust(GraphIrReactionSpan::from_entries(
             GraphIrReactionSpanEntries {
                 atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                     ChemElement::C,
@@ -724,7 +724,7 @@ mod tests {
 
             assert_eq!(
                 span.to_rust(),
-                GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+                GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
                     atoms: vec![
                         GraphIrEntitySpan::Unchanged(canonical_lhs),
                         GraphIrEntitySpan::Modified {
@@ -971,7 +971,7 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_to_reaction() {
         Python::attach(|py| {
-            let span: GraphIrReactionSpanAst =
+            let span: GraphIrReactionSpan =
                 r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
                     .parse()
                     .unwrap();

@@ -1,4 +1,4 @@
-//! Reaction span DSL: the surface form of `ReactionSpanAst`, where each entity carries its
+//! Reaction span DSL: the surface form of `ReactionSpan`, where each entity carries its
 //! complete before/after value (`EntitySpan`) rather than a delta. Entity ids, bond endpoints,
 //! and constraint topology refs are resolved in `into_ir`.
 
@@ -47,22 +47,22 @@ use crate::ir::ligand::StereoLigand;
 use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::{
     AromaticSystemForm, Constraint, ConstraintSpan, DativeBondForm, EntitySpan,
-    MulticenterBondForm, NoncovalentBondForm, ReactionSpanAst, ReactionSpanEntries, StereoAtomForm,
+    MulticenterBondForm, NoncovalentBondForm, ReactionSpan, ReactionSpanEntries, StereoAtomForm,
     StereoBondForm,
 };
 
-/// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the
+/// Surface DSL for a reaction span. Pairs `ReactionSpan` with the
 /// `MoleculeMetadata` recording its span-frame entity-keyword bindings; fields
 /// are private so metadata cannot drift onto a different AST.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionSpanDsl {
-    ast: ReactionSpanAst,
+    ast: ReactionSpan,
     metadata: MoleculeMetadata,
 }
 
 impl ReactionSpanDsl {
     /// Pair a reaction-span AST with coherent surface metadata.
-    pub fn new(ast: ReactionSpanAst, metadata: MoleculeMetadata) -> Result<Self, MetadataError> {
+    pub fn new(ast: ReactionSpan, metadata: MoleculeMetadata) -> Result<Self, MetadataError> {
         for (entity, _) in metadata.iter_keywords() {
             let contains = match entity {
                 Entity::Atom(id) => id.index() < ast.atoms().len(),
@@ -81,11 +81,11 @@ impl ReactionSpanDsl {
         Ok(Self::from_parts(ast, metadata))
     }
 
-    fn from_parts(ast: ReactionSpanAst, metadata: MoleculeMetadata) -> Self {
+    fn from_parts(ast: ReactionSpan, metadata: MoleculeMetadata) -> Self {
         Self { ast, metadata }
     }
 
-    pub fn ast(&self) -> &ReactionSpanAst {
+    pub fn ast(&self) -> &ReactionSpan {
         &self.ast
     }
 
@@ -93,7 +93,7 @@ impl ReactionSpanDsl {
         &self.metadata
     }
 
-    pub fn into_parts(self) -> (ReactionSpanAst, MoleculeMetadata) {
+    pub fn into_parts(self) -> (ReactionSpan, MoleculeMetadata) {
         (self.ast, self.metadata)
     }
 }
@@ -114,11 +114,11 @@ fn map_span<T, U>(span: &EntitySpan<T>, f: impl Fn(&T) -> U) -> EntitySpan<U> {
     }
 }
 
-impl FromIr<ReactionSpanAst> for ReactionSpanDsl {
+impl FromIr<ReactionSpan> for ReactionSpanDsl {
     type Ctx = MoleculeDefaults;
 
-    fn from_ir(ast: &ReactionSpanAst, cfg: &Self::Ctx) -> Self {
-        let lowered = ReactionSpanAst::from_entries(ReactionSpanEntries {
+    fn from_ir(ast: &ReactionSpan, cfg: &Self::Ctx) -> Self {
+        let lowered = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: ast
                 .atoms()
                 .iter()
@@ -235,12 +235,12 @@ impl FromIr<ReactionSpanAst> for ReactionSpanDsl {
     }
 }
 
-impl IntoIr<ReactionSpanAst> for ReactionSpanDsl {
+impl IntoIr<ReactionSpan> for ReactionSpanDsl {
     type Ctx = MoleculeDefaults;
 
-    fn into_ir(self, cfg: &Self::Ctx) -> ReactionSpanAst {
+    fn into_ir(self, cfg: &Self::Ctx) -> ReactionSpan {
         let ast = self.ast;
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
+        ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: ast
                 .atoms()
                 .iter()
@@ -1059,7 +1059,7 @@ impl SpanInput {
     /// `AtomForm`, and participant, site, ligand, and constraint refs resolve against the context.
     /// Checked span construction requires every selected side reference to remain available after
     /// projection; chemistry and other semantic properties are not validated here.
-    pub(crate) fn into_ir(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
+    pub(crate) fn into_ir(self) -> Result<(ReactionSpan, MoleculeMetadata), ParseError> {
         let atom_count = self.atoms.len();
         let bond_count = self.bonds.len();
 
@@ -1156,7 +1156,7 @@ impl SpanInput {
         }
 
         let metadata = context.into_metadata();
-        let ast = ReactionSpanAst::try_from_entries(ReactionSpanEntries {
+        let ast = ReactionSpan::try_from_entries(ReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -1427,8 +1427,8 @@ fn render_constraint_span_entry(span: &ConstraintSpan, meta: &MoleculeMetadata) 
     }
 }
 
-/// Render a `ReactionSpanAst` (+ its `MoleculeMetadata`) to the span EDN map.
-fn render_span_edn(ast: &ReactionSpanAst, meta: &MoleculeMetadata) -> Edn<'static> {
+/// Render a `ReactionSpan` (+ its `MoleculeMetadata`) to the span EDN map.
+fn render_span_edn(ast: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(4);
     let atoms: Vec<Edn<'static>> = ast
         .atoms()
@@ -1626,7 +1626,7 @@ impl Display for ReactionSpanDsl {
     }
 }
 
-impl<'de> FromEdn<'de> for ReactionSpanAst {
+impl<'de> FromEdn<'de> for ReactionSpan {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         ReactionSpanDsl::from_edn(edn).map(|dsl| dsl.into_parts().0)
     }
@@ -1636,7 +1636,7 @@ impl<'de> FromEdn<'de> for ReactionSpanAst {
     }
 }
 
-impl FromStr for ReactionSpanAst {
+impl FromStr for ReactionSpan {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -1644,15 +1644,15 @@ impl FromStr for ReactionSpanAst {
     }
 }
 
-impl Display for ReactionSpanAst {
+impl Display for ReactionSpan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_edn())
     }
 }
 
-/// Direct EDN rendering for `ReactionSpanAst`: positional form (no entity keywords or aliases) since
+/// Direct EDN rendering for `ReactionSpan`: positional form (no entity keywords or aliases) since
 /// the AST carries no metadata. For keyword/alias-bearing output, wrap in [`ReactionSpanDsl`].
-impl ToEdn for ReactionSpanAst {
+impl ToEdn for ReactionSpan {
     fn to_edn(&self) -> Edn<'static> {
         render_span_edn(self, &MoleculeMetadata::default())
     }
@@ -1821,7 +1821,7 @@ mod tests {
         });
         let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0))], 2, 2).unwrap();
         let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atoms).unwrap();
-        let expected = ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence).unwrap();
+        let expected = ReactionSpan::superimpose(&lhs, &rhs, &correspondence).unwrap();
         let defaults = MoleculeDefaults::default();
 
         assert_eq!(
@@ -2163,7 +2163,7 @@ mod tests {
     #[rstest]
     #[case::alias_and_add(
         r#"{:atoms [:nu {:add "O"}] :bonds [{:add [0 1 :single]}] :atom-aliases [:nu "C"]}"#,
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
+        ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                 EntitySpan::Added(AtomForm::from_element(Element::O)),
@@ -2181,7 +2181,7 @@ mod tests {
     )]
     #[case::dative_overlay(
         r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#,
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
+        ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                 EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
@@ -2203,7 +2203,7 @@ mod tests {
     )]
     fn test_span_input_into_ast(
         #[case] input: &str,
-        #[case] expected_ast: ReactionSpanAst,
+        #[case] expected_ast: ReactionSpan,
         #[case] expected_metadata: MoleculeMetadata,
     ) {
         assert_eq!(
@@ -2348,7 +2348,7 @@ mod tests {
     #[case::span(
         r#"{:atoms ["C" {:add "O"}] :bonds [{:add [0 1 :single]}]}"#,
         ReactionSpanDsl::new(
-            ReactionSpanAst::from_entries(ReactionSpanEntries {
+            ReactionSpan::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                     EntitySpan::Added(AtomForm::from_element(Element::O)),
@@ -2362,7 +2362,7 @@ mod tests {
     #[case::plain_molecule(
         r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#,
         ReactionSpanDsl::new(
-            ReactionSpanAst::from_entries(ReactionSpanEntries {
+            ReactionSpan::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
@@ -2637,7 +2637,7 @@ mod tests {
         assert_eq!(ReactionSpanDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
     }
 
-    // `ReactionSpanAst` renders positionally and round-trips (metadata discarded on both sides).
+    // `ReactionSpan` renders positionally and round-trips (metadata discarded on both sides).
     #[rstest]
     #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
     #[case::modify(r#"{:atoms ["C" "C"] :bonds [{:modify [0 1 [:single :double]]}]}"#)]
@@ -2652,8 +2652,8 @@ mod tests {
     #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
     #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#)]
     fn test_reaction_span_ast_to_edn(#[case] input: &str) {
-        let ast = ReactionSpanAst::from_str(input).unwrap();
-        assert_eq!(ReactionSpanAst::from_edn(&ast.to_edn()).unwrap(), ast);
+        let ast = ReactionSpan::from_str(input).unwrap();
+        assert_eq!(ReactionSpan::from_edn(&ast.to_edn()).unwrap(), ast);
     }
 
     /// Every `fuzz_reaction_span` seed must parse and satisfy the fuzz invariant (streaming and tree
@@ -2696,7 +2696,7 @@ mod tests {
         #[case] lhs: Vec<Constraint>,
         #[case] rhs: Vec<Constraint>,
     ) {
-        let ast = ReactionSpanAst::from_str(input).unwrap();
+        let ast = ReactionSpan::from_str(input).unwrap();
         assert_eq!(ast.lhs().constraints().as_slice(), lhs.as_slice());
         assert_eq!(ast.rhs().constraints().as_slice(), rhs.as_slice());
     }

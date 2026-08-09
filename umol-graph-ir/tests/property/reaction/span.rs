@@ -11,7 +11,7 @@ use umol_chem::element::Element;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondId, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries,
-    Reaction, ReactionSpanAst, ReactionSpanEntries, StereoLigand,
+    Reaction, ReactionSpan, ReactionSpanEntries, StereoLigand,
 };
 
 use crate::strategies::{
@@ -339,7 +339,7 @@ proptest! {
     fn test_reaction_span_ast_superimpose_matches_delta_path(reaction in reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
-                ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
+                ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
             prop_assert_eq!(rebuilt, Some(span));
         }
     }
@@ -351,7 +351,7 @@ proptest! {
     fn test_reaction_ast_reverse_swaps_sides(reaction in reaction_strategy()) {
         if let (Ok(span), Ok(reverse)) = (reaction.to_reaction_span(), reaction.reverse()) {
             if let Ok(reverse_span) = reverse.to_reaction_span() {
-                let expected = ReactionSpanAst::superimpose(
+                let expected = ReactionSpan::superimpose(
                     &span.rhs(),
                     &span.lhs(),
                     &span.correspondence().reverse(),
@@ -369,7 +369,7 @@ proptest! {
     ) {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
-                ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
+                ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
             prop_assert_eq!(rebuilt, Some(span));
         }
     }
@@ -415,13 +415,13 @@ proptest! {
     fn test_reaction_span_ast_from_entries_roundtrip(
         entries in reaction_span_entries_strategy(),
     ) {
-        let direct = ReactionSpanAst::try_from_entries(entries).map_err(|error| {
+        let direct = ReactionSpan::try_from_entries(entries).map_err(|error| {
             TestCaseError::fail(format!("generated entries were invalid: {error}"))
         })?;
-        let parsed = direct.to_string().parse::<ReactionSpanAst>().map_err(|error| {
+        let parsed = direct.to_string().parse::<ReactionSpan>().map_err(|error| {
             TestCaseError::fail(format!("rendered span did not parse: {error}"))
         })?;
-        let superimposed = ReactionSpanAst::superimpose(
+        let superimposed = ReactionSpan::superimpose(
             &direct.lhs(),
             &direct.rhs(),
             &direct.correspondence(),

@@ -638,8 +638,7 @@ mod tests {
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
-        ReactionSpanAst as GraphIrReactionSpanAst,
-        ReactionSpanEntries as GraphIrReactionSpanEntries,
+        ReactionSpan as GraphIrReactionSpan, ReactionSpanEntries as GraphIrReactionSpanEntries,
         StereoAtomDelta as GraphIrStereoAtomDelta, StereoAtomForm as GraphIrStereoAtomForm,
         StereoAtomId as GraphIrStereoAtomId, StereoBondDelta as GraphIrStereoBondDelta,
         StereoBondForm as GraphIrStereoBondForm, StereoBondId as GraphIrStereoBondId,
@@ -1783,7 +1782,7 @@ mod tests {
 
             assert_eq!(
                 reaction.to_reaction_span(py).unwrap().to_rust(),
-                GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
+                GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
                     atoms: vec![
                         GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(ChemElement::C)),
                         GraphIrEntitySpan::Added(GraphIrAtomForm::from_element(ChemElement::O)),

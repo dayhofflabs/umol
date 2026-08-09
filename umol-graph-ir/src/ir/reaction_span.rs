@@ -50,7 +50,7 @@ use super::traits::{Canonicalize, EntityPatch};
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
 /// appended; `atoms` / `bonds` are indexed parallel to the graph's nodes / edges.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionSpanAst {
+pub struct ReactionSpan {
     graph: Graph,
     atoms: Vec<EntitySpan<AtomForm>>,
     bonds: Vec<EntitySpan<BondForm>>,
@@ -78,7 +78,7 @@ pub struct ReactionSpanAst {
     constraints: Vec<ConstraintSpan>,
 }
 
-/// Flat constructor input for [`ReactionSpanAst::from_entries`]. Each [`EntitySpan`] is present on
+/// Flat constructor input for [`ReactionSpan::from_entries`]. Each [`EntitySpan`] is present on
 /// at least one side by construction; a value absent from both sides has no entry representation.
 #[derive(Clone, Debug, Default)]
 pub struct ReactionSpanEntries {
@@ -100,7 +100,7 @@ pub enum ReactionSpanEntriesError {
     InvalidReference { entity: Entity },
 }
 
-impl ReactionSpanAst {
+impl ReactionSpan {
     /// Construct a reaction span from entries whose structural integrity is established by the
     /// caller.
     ///
@@ -270,7 +270,7 @@ impl Molecule {
         correspondence: &MoleculeCorrespondence,
     ) -> Option<Deltas> {
         Some(
-            ReactionSpanAst::superimpose(self, rhs, correspondence)?
+            ReactionSpan::superimpose(self, rhs, correspondence)?
                 .to_reaction()
                 .deltas,
         )
@@ -593,7 +593,7 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-impl ReactionSpanAst {
+impl ReactionSpan {
     /// Superimpose two molecules over their correspondence into the reaction span. Matched entities
     /// become `Unchanged` / `Modified` carrying both molecules' actual values; entities unmatched
     /// on the lhs become `Removed`, those unmatched on the rhs `Added`. Lhs-anchored: lhs ids kept,
@@ -615,7 +615,7 @@ impl ReactionSpanAst {
         lhs: &Molecule,
         rhs: &Molecule,
         correspondence: &MoleculeCorrespondence,
-    ) -> Option<ReactionSpanAst> {
+    ) -> Option<ReactionSpan> {
         if !correspondence_is_compatible(lhs, rhs, correspondence) {
             return None;
         }
@@ -968,7 +968,7 @@ impl ReactionSpanAst {
             }
         }
 
-        Some(ReactionSpanAst::from_entries(ReactionSpanEntries {
+        Some(ReactionSpan::from_entries(ReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -1448,7 +1448,7 @@ impl Reaction {
     /// `Added` / `Modified` / `Unchanged` — appending created entities. A `Modified` entity's
     /// right value is its left value with the entity's field/constraint changes applied.
     /// `Err(Contradiction)` if the deltas are inconsistent (or inconsistent with `lhs`).
-    pub fn to_reaction_span(&self) -> Result<ReactionSpanAst, Contradiction> {
+    pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
         let deltas = self.deltas.clone().canonicalize()?;
         let lhs = &self.lhs;
         let atom_count = lhs.atoms().count();
@@ -1933,7 +1933,7 @@ impl Reaction {
             constraints.push(ConstraintSpan::Added(c));
         }
 
-        ReactionSpanAst::try_from_entries(ReactionSpanEntries {
+        ReactionSpan::try_from_entries(ReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -2097,7 +2097,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_ast_from_entries() {
-        let span = ReactionSpanAst::from_entries(ReactionSpanEntries {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                 EntitySpan::Modified {
@@ -2287,7 +2287,7 @@ mod tests {
         let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
         let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
         assert_ne!(lhs_atom, rhs_atom);
-        let span = ReactionSpanAst::from_entries(ReactionSpanEntries {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Modified {
                     lhs: lhs_atom.clone(),
@@ -2426,7 +2426,7 @@ mod tests {
         #[case] expected_bonds: Vec<EntitySpan<BondForm>>,
         #[case] expected_constraints: Vec<ConstraintSpan>,
     ) {
-        let span = ReactionSpanAst::try_from_entries(entries).unwrap();
+        let span = ReactionSpan::try_from_entries(entries).unwrap();
 
         assert_eq!(span.graph(), &expected_graph);
         assert_eq!(span.atoms(), expected_atoms);
@@ -2439,7 +2439,7 @@ mod tests {
         expected = "invalid reaction span entries: reaction span entries reference unavailable atom 1"
     )]
     fn test_reaction_span_ast_from_entries_error() {
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
+        ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
             bonds: vec![(
                 AtomId(0),
@@ -2736,7 +2736,7 @@ mod tests {
         #[case] entries: ReactionSpanEntries,
         #[case] expected: ReactionSpanEntriesError,
     ) {
-        assert_eq!(ReactionSpanAst::try_from_entries(entries), Err(expected));
+        assert_eq!(ReactionSpan::try_from_entries(entries), Err(expected));
     }
 
     #[rstest]
@@ -2799,7 +2799,7 @@ mod tests {
         };
 
         assert_eq!(
-            ReactionSpanAst::try_from_entries(entries),
+            ReactionSpan::try_from_entries(entries),
             Err(ReactionSpanEntriesError::InvalidReference { entity }),
         );
     }
@@ -2977,7 +2977,7 @@ mod tests {
                 ]),
             )
             .to_reaction_span(),
-            Ok(ReactionSpanAst::from_entries(ReactionSpanEntries {
+            Ok(ReactionSpan::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
@@ -3137,7 +3137,7 @@ mod tests {
                 ))),
             ]),
         ),
-        ReactionSpanAst::from_entries(ReactionSpanEntries {
+        ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                 EntitySpan::Removed(AtomForm::from_element(Element::O)),
@@ -3157,7 +3157,7 @@ mod tests {
     )]
     fn test_reaction_ast_to_reaction_span_constraint(
         #[case] reaction: Reaction,
-        #[case] expected: ReactionSpanAst,
+        #[case] expected: ReactionSpan,
     ) {
         assert_eq!(reaction.to_reaction_span(), Ok(expected));
     }
@@ -3961,8 +3961,8 @@ mod tests {
             .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
-            ReactionSpanAst::superimpose(&left, &right, &correspondence),
-            Some(ReactionSpanAst::from_entries(ReactionSpanEntries {
+            ReactionSpan::superimpose(&left, &right, &correspondence),
+            Some(ReactionSpan::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
@@ -4241,10 +4241,7 @@ mod tests {
         #[case] rhs: Molecule,
         #[case] correspondence: MoleculeCorrespondence,
     ) {
-        assert_eq!(
-            ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence),
-            None,
-        );
+        assert_eq!(ReactionSpan::superimpose(&lhs, &rhs, &correspondence), None,);
         assert_eq!(lhs.difference_to(&rhs, &correspondence), None);
     }
 
@@ -4272,8 +4269,8 @@ mod tests {
         );
 
         assert_eq!(
-            ReactionSpanAst::superimpose(&lhs, &rhs, &correspondence),
-            Some(ReactionSpanAst::from_entries(ReactionSpanEntries {
+            ReactionSpan::superimpose(&lhs, &rhs, &correspondence),
+            Some(ReactionSpan::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
@@ -4317,12 +4314,12 @@ mod tests {
             .expect("correspondence producer preserves partial-bijection invariants");
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms)
             .expect("the atom correspondence describes the molecule pair");
-        let span = ReactionSpanAst::superimpose(&left, &right, &correspondence).unwrap();
+        let span = ReactionSpan::superimpose(&left, &right, &correspondence).unwrap();
 
         // recovers the input correspondence, and inverts `superimpose`.
         assert_eq!(span.correspondence(), correspondence);
         assert_eq!(
-            ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence()),
+            ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence()),
             Some(span)
         );
     }
