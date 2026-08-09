@@ -427,6 +427,89 @@ of C where perhaps a fifth is genuinely subtle, plus the PubChem-scale
 differential campaign, which is compute and iteration time, not just code.
 That estimate is structural, not a schedule.
 
+## Staged verification path into the rewrite
+
+The rewrite does not have to be entered as a single commitment. The 1.07.2
+de-globalization makes every pipeline stage a function of explicit context
+structs over POD-ish data (`inp_ATOM[]`, `T_GROUP_INFO`, rank arrays,
+`FTCN`), so each stage is independently callable, snapshottable, and
+replayable. That supports a bottom-up build in which each core algorithm is
+ported and verified against the C source in isolation before anything is
+composed.
+
+**Step 0, shared with the wrap path**: vendor the C at v1.07.5 and build it
+with internal symbols exposed — the vendored build controls visibility, so
+the `libinchi.map` hiding does not apply. Add dev-only dump hooks at the
+stage call sites in `Create_INChI`/`ProcessOneStructureEx` that serialize
+each stage's inputs and outputs to flat buffers. This is the same `-sys`
+build the deep shim needs, doubling as an oracle; it is not wasted under any
+outcome.
+
+**Record–replay per stage**: run the instrumented C over corpora (the
+4,190-structure reference set, then PubChem shards), recording (input,
+output) pairs at one cut point at a time. The Rust port of that stage
+replays recorded inputs and must reproduce outputs bit-for-bit. This
+sidesteps inventing an input model for intermediate representations — the C
+generates realistic, invariant-satisfying inputs. For the graph kernel,
+random colored-graph fuzzing through both implementations via FFI adds
+coverage on top.
+
+Build order, by dependency and interface cleanliness:
+
+| Stage | C entry | Compared artifact |
+| --- | --- | --- |
+| Tables, iso keys, InChIKey | `eldata.c`, `ichiisot.c`, `ikey_dll.c` | direct equality; the key is independent (SHA-224 + formatting) |
+| Canonicalizer kernel | `CanonGraph` | canon/symm ranks, atom numbers, linear CT + color arrays |
+| Flow engine | `RunBalancedNetworkSearch`, `bExistsAltPath`, `BnsAdjustFlowBondsRad` | flows, bond marks |
+| Normalization driver | `mark_alt_bonds_and_taut_groups` (both passes) | mutated `inp_ATOM` fields + `T_GROUP_INFO` |
+| Stereo perception | `set_stereo_parity` | `sp_ATOM` parity fields |
+| Canon pass driver | `GetBaseCanonRanking` | `FTCN` for both tautomer states |
+| Stereo canonicalization | `Canon_INChI3` + `map_stereo_*` | stereo CTs, canon orders, `bCmpStereo` |
+| Preprocessing | `PreprocessOneStructure` | disconnected + reconnected `prep_inp_data` |
+| Assembly + serialization | `FillOutINChI`, `OutputINChI1` | `INChI` struct fields, then strings |
+| Composition | full pipeline | byte-for-byte oracle + invariance harness |
+
+`CanonGraph` is the natural first target: its signature contains no
+chemistry (adjacency lists, partition, four color arrays), it is
+deterministic, and a verified port has standalone value for the doc-186
+experiments even if nothing further is built.
+
+**Swap-in testing closes the composition gap.** Stage interfaces are C ABIs,
+so a ported Rust stage can be linked *into* the C pipeline in place of its C
+original (`#[no_mangle] extern "C" fn CanonGraph(...)`, the C version
+renamed in the vendored copy). The full pipeline then runs end-to-end
+against the oracle with exactly one stage swapped; any divergence localizes
+to that stage. Working through the table one swap at a time reduces
+"composition risk" to verifying the glue drivers, which are themselves rows
+in the table.
+
+Caveats that shape the plan:
+
+- **In-place mutation blurs some boundaries.** Canonicalization reorders
+  `T_GROUP_INFO` in place (`SortTautomerGroupsAndEndpoints` is called from
+  inside `Canon_INChI3`), so cut points must be chosen where state is
+  quiescent; the snapshot hooks define the stage contracts, and that choice
+  is part of the work.
+- **Equality means identical leaf choice, not "a valid canonical form".**
+  Branch order, tie-breaking, and fixpoint iteration order are the
+  specification. Record–replay enforces this automatically; it is the reason
+  the methodology works where property-based testing alone would not.
+- **The flow engine cannot be verified fully chemistry-free** — the veto
+  hooks (TACN, aggressive deprotonation) live inside the search loop and are
+  part of the kernel port, parameterized.
+- **Coverage becomes per-stage**, which is the point, but tautomer-rule
+  coverage still needs targeted structures per pattern. Under a
+  standard-InChI scope the seven `PT_*` rules and KET/15T are runtime-off
+  and drop out entirely.
+- Determinism holds on the library path (no timeout with `msec_MaxTime = 0`,
+  clocks zeroed, no randomness); the two benign static races should be fixed
+  in the vendored copy first so record–replay is exact.
+
+The off-ramps are what keep the path non-committal: after step 0 the wrap
+exists and is usable regardless; after the kernel ports the two core
+algorithms are written down, verified, and reusable; the full encoder is
+only the last rows of the table, and stopping earlier strands nothing.
+
 ## Decoupling the two purposes
 
 The two stated purposes have different faithfulness requirements, and that
