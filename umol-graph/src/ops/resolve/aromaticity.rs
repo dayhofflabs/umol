@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
+    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
     AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
     BooleanForm, Edits, MoleculeAst,
 };
@@ -262,7 +262,7 @@ impl AromaticityResolver {
         &self,
         ast: &MoleculeAst,
         atoms: Vec<AtomId>,
-        system: AromaticSystemAst,
+        system: AromaticSystemForm,
     ) -> Edits {
         let mut atom_updates = Vec::new();
         if self.config.reset_aromatic_valence {
@@ -405,7 +405,7 @@ mod tests {
             Ok(Solution::Determined(Edits::from_iter([
                 Edit::AddAromaticSystem {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                    ast: AromaticSystemAst::from_electrons(vec![1; 6])
+                    ast: AromaticSystemForm::from_electrons(vec![1; 6])
                         .with_charge(0)
                         .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 },
@@ -496,12 +496,12 @@ mod tests {
                 removes: vec![(
                     AromaticSystemHandle::Id(AromaticSystemId(0)),
                     (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                    AromaticSystemAst::from_electrons(vec![1; 6]),
+                    AromaticSystemForm::from_electrons(vec![1; 6]),
                 )],
             },
             Edit::AddAromaticSystem {
                 atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                ast: AromaticSystemAst::from_electrons(vec![2, 0, 1, 1, 1, 1])
+                ast: AromaticSystemForm::from_electrons(vec![2, 0, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             },

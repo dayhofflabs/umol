@@ -199,18 +199,18 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
     };
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::MoleculeEntries;
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
 
     // Six carbons; chain bonds 0-1-2-3 (BondId 0,1,2); a dative 0→3; an aromatic
@@ -225,19 +225,19 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(0)], AtomId(3), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(0)], AtomId(3), DativeBondForm::from_order(1))],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(3), AtomId(4), AtomId(5)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(5),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             stereo_atoms: vec![(
                 AtomId(1),

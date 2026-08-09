@@ -7,7 +7,7 @@ use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 use super::super::constraint::NoncovalentBondConstraintsAst;
 use super::super::id::{AtomId, NoncovalentBondId};
 use super::super::molecule::MoleculeAst;
-use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindForm};
+use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 
@@ -15,13 +15,13 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct NoncovalentBondViews<'a> {
     molecule: &'a MoleculeAst,
-    noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>,
+    noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>,
 }
 
 impl<'a> NoncovalentBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>,
+        noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>,
     ) -> Self {
         Self {
             molecule,
@@ -165,7 +165,7 @@ impl<'a> NoncovalentBondViews<'a> {
 pub struct NoncovalentBondView<'a> {
     pub id: NoncovalentBondId,
     atoms: [NodeId; 2],
-    pub ast: &'a NoncovalentBondAst,
+    pub ast: &'a NoncovalentBondForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -208,7 +208,7 @@ impl<'a> NoncovalentBondView<'a> {
 pub struct NoncovalentBondViewMut<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut NoncovalentBondAst,
+    pub ast: &'a mut NoncovalentBondForm,
 }
 
 // Builder-scope view bundles for noncovalent bonds.
@@ -216,13 +216,13 @@ pub struct NoncovalentBondViewMut<'a> {
 pub struct NoncovalentBondEditorView<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a NoncovalentBondAst,
+    pub ast: &'a NoncovalentBondForm,
 }
 
 pub struct NoncovalentBondEditorViewMut<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut NoncovalentBondAst,
+    pub ast: &'a mut NoncovalentBondForm,
 }
 
 #[cfg(test)]
@@ -232,14 +232,14 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::assert_exact_size_by;
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AtomId, NoncovalentBondId};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -255,19 +255,19 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(2)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1))],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         })
@@ -304,7 +304,7 @@ mod tests {
             vec![(
                 NoncovalentBondId(0),
                 [AtomId(0), AtomId(3)],
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             |view| (view.id, view.atom_ids(), view.ast.clone()),
         );

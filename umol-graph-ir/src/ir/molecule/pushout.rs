@@ -12,10 +12,10 @@ use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
-use super::super::dative::DativeBondAst;
+use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
-use super::super::noncovalent::NoncovalentBondAst;
+use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::IdRemapping;
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::super::traits::Lattice;
@@ -118,7 +118,7 @@ impl MoleculeAst {
         let dative_glue = other.dative_bonds.apply_remapping(&participant_remapping);
         let dative_merged = self.dative_bonds.pushout(&dative_glue, |a, b| a.meet(b))?;
         let dative_object = &dative_merged.object;
-        let dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = dative_object
+        let dative: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> = dative_object
             .relation_ids()
             .map(|id| {
                 (
@@ -140,7 +140,7 @@ impl MoleculeAst {
             .noncovalent_bonds
             .pushout(&noncovalent_glue, |a, b| a.meet(b))?;
         let noncovalent_object = &noncovalent_merged.object;
-        let noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)> = noncovalent_object
+        let noncovalent: Vec<(AtomId, AtomId, NoncovalentBondForm)> = noncovalent_object
             .relation_ids()
             .map(|id| {
                 let &[u, v] = noncovalent_object.participants(id);
@@ -373,10 +373,10 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::Correspondence;
 
-    use super::super::super::aromatic::AromaticSystemAst;
+    use super::super::super::aromatic::AromaticSystemForm;
     use super::super::super::constraint::{AtomConstraintAst, Constraint};
     use super::super::super::ligand::StereoLigandKind;
-    use super::super::super::multicenter::MulticenterBondAst;
+    use super::super::super::multicenter::MulticenterBondForm;
     use super::super::super::stereo::StereoKind;
     use super::*;
 
@@ -466,14 +466,14 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-            aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+            aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default())],
             constraints: Constraints::new(),
             ..Default::default()
         }),
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-            aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+            aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default())],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -510,11 +510,11 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1)],
-                AromaticSystemAst::from_electrons(vec![1, 2]),
+                AromaticSystemForm::from_electrons(vec![1, 2]),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1)],
-                MulticenterBondAst::from_electrons(vec![7, 11]),
+                MulticenterBondForm::from_electrons(vec![7, 11]),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -524,21 +524,21 @@ mod tests {
             aromatic: vec![
                 (
                     vec![AtomId(0), AtomId(1)],
-                    AromaticSystemAst::from_electrons(vec![2, 1]),
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
                 ),
                 (
                     vec![AtomId(2), AtomId(3)],
-                    AromaticSystemAst::from_electrons(vec![5, 3]),
+                    AromaticSystemForm::from_electrons(vec![5, 3]),
                 ),
             ],
             multicenter: vec![
                 (
                     vec![AtomId(0), AtomId(1)],
-                    MulticenterBondAst::from_electrons(vec![11, 7]),
+                    MulticenterBondForm::from_electrons(vec![11, 7]),
                 ),
                 (
                     vec![AtomId(2), AtomId(3)],
-                    MulticenterBondAst::from_electrons(vec![17, 13]),
+                    MulticenterBondForm::from_electrons(vec![17, 13]),
                 ),
             ],
             constraints: Constraints::new(),
@@ -549,21 +549,21 @@ mod tests {
             aromatic: vec![
                 (
                     vec![AtomId(0), AtomId(1)],
-                    AromaticSystemAst::from_electrons(vec![1, 2]),
+                    AromaticSystemForm::from_electrons(vec![1, 2]),
                 ),
                 (
                     vec![AtomId(2), AtomId(3)],
-                    AromaticSystemAst::from_electrons(vec![3, 5]),
+                    AromaticSystemForm::from_electrons(vec![3, 5]),
                 ),
             ],
             multicenter: vec![
                 (
                     vec![AtomId(0), AtomId(1)],
-                    MulticenterBondAst::from_electrons(vec![7, 11]),
+                    MulticenterBondForm::from_electrons(vec![7, 11]),
                 ),
                 (
                     vec![AtomId(2), AtomId(3)],
-                    MulticenterBondAst::from_electrons(vec![13, 17]),
+                    MulticenterBondForm::from_electrons(vec![13, 17]),
                 ),
             ],
             constraints: Constraints::new(),

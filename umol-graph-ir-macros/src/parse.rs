@@ -538,7 +538,7 @@ pub(crate) fn overlay_term(
     match overlay {
         Overlay::Aromatic { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::AromaticSystemAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::AromaticSystemForm });
             Ok(quote! { aromatic_system([ #(#atoms),* ], #ast) })
         }
         Overlay::Dative {
@@ -548,12 +548,12 @@ pub(crate) fn overlay_term(
         } => {
             let donors = overlay_atoms(donors, labels)?;
             let acceptor = overlay_atom(acceptor, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::DativeBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::DativeBondForm });
             Ok(quote! { dative_bond([ #(#donors),* ], #acceptor, #ast) })
         }
         Overlay::Multicenter { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::MulticenterBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::MulticenterBondForm });
             Ok(quote! { multicenter_bond([ #(#atoms),* ], #ast) })
         }
         Overlay::Noncovalent { atoms, payload } => {
@@ -565,7 +565,7 @@ pub(crate) fn overlay_term(
             }
             let first = overlay_atom(&atoms[0], labels)?;
             let second = overlay_atom(&atoms[1], labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::NoncovalentBondAst });
+            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::NoncovalentBondForm });
             Ok(quote! { noncovalent_bond(#first, #second, #ast) })
         }
         Overlay::StereoAtom {

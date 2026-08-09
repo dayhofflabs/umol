@@ -1804,17 +1804,16 @@ impl Edits {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AromaticSystemAst as GraphIrAromaticSystemAst,
         AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange,
-        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
-        BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
-        Constraint as GraphIrConstraint, DativeBondAst as GraphIrDativeBondAst,
+        AromaticSystemForm as GraphIrAromaticSystemForm, AtomFieldChange as GraphIrAtomFieldChange,
+        AtomForm as GraphIrAtomForm, BondFieldChange as GraphIrBondFieldChange,
+        BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
         DativeBondFieldChange as GraphIrDativeBondFieldChange,
-        MoleculeConstraint as GraphIrMoleculeConstraint,
-        MulticenterBondAst as GraphIrMulticenterBondAst,
+        DativeBondForm as GraphIrDativeBondForm, MoleculeConstraint as GraphIrMoleculeConstraint,
         MulticenterBondFieldChange as GraphIrMulticenterBondFieldChange,
-        NoncovalentBondAst as GraphIrNoncovalentBondAst,
+        MulticenterBondForm as GraphIrMulticenterBondForm,
         NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
+        NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
         NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm, NumForm as GraphIrNumForm,
         StereoAtomAst as GraphIrStereoAtomAst,
@@ -1953,12 +1952,12 @@ mod tests {
         },
         GraphIrEdit::AddDativeBond {
             atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrDativeBondAst::default(),
+            ast: GraphIrDativeBondForm::default(),
         },
         GraphIrEdit::RemoveDativeBonds { removes: vec![(
             GraphIrDativeBondHandle::New(0),
             vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
-            GraphIrDativeBondAst::default(),
+            GraphIrDativeBondForm::default(),
         )] },
         GraphIrEdit::ModifyDativeBondField {
             id: GraphIrDativeBondHandle::Id(GraphIrDativeBondId(0)),
@@ -1969,12 +1968,12 @@ mod tests {
         },
         GraphIrEdit::AddAromaticSystem {
             atoms: vec![GraphIrAtomHandle::New(0)],
-            ast: GraphIrAromaticSystemAst::default(),
+            ast: GraphIrAromaticSystemForm::default(),
         },
         GraphIrEdit::RemoveAromaticSystems { removes: vec![(
             GraphIrAromaticSystemHandle::Id(GraphIrAromaticSystemId(0)),
             vec![GraphIrAtomHandle::New(0)],
-            GraphIrAromaticSystemAst::default(),
+            GraphIrAromaticSystemForm::default(),
         )] },
         GraphIrEdit::ModifyAromaticSystemField {
             id: GraphIrAromaticSystemHandle::New(0),
@@ -1985,12 +1984,12 @@ mod tests {
         },
         GraphIrEdit::AddMulticenterBond {
             atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrMulticenterBondAst::default(),
+            ast: GraphIrMulticenterBondForm::default(),
         },
         GraphIrEdit::RemoveMulticenterBonds { removes: vec![(
             GraphIrMulticenterBondHandle::New(0),
             vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
-            GraphIrMulticenterBondAst::default(),
+            GraphIrMulticenterBondForm::default(),
         )] },
         GraphIrEdit::ModifyMulticenterBondField {
             id: GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(0)),
@@ -2001,12 +2000,12 @@ mod tests {
         },
         GraphIrEdit::AddNoncovalentBond {
             atoms: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrNoncovalentBondAst::default(),
+            ast: GraphIrNoncovalentBondForm::default(),
         },
         GraphIrEdit::RemoveNoncovalentBonds { removes: vec![(
             GraphIrNoncovalentBondHandle::New(0),
             [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            GraphIrNoncovalentBondAst::default(),
+            GraphIrNoncovalentBondForm::default(),
         )] },
         GraphIrEdit::ModifyNoncovalentBondField {
             id: GraphIrNoncovalentBondHandle::Id(GraphIrNoncovalentBondId(0)),

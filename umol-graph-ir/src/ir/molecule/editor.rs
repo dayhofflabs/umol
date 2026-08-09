@@ -16,11 +16,11 @@ use umol_graph_core::{
     RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
 };
 
-use super::super::aromatic::AromaticSystemAst;
+use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::{Constraint, Constraints};
-use super::super::dative::DativeBondAst;
+use super::super::dative::DativeBondForm;
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, RemovedAromaticSystem, RemovedAtom,
@@ -32,8 +32,8 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::multicenter::MulticenterBondAst;
-use super::super::noncovalent::NoncovalentBondAst;
+use super::super::multicenter::MulticenterBondForm;
+use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::{IdCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::super::traits::{BiEquiv, Equiv};
@@ -633,10 +633,10 @@ pub struct MoleculeEditor {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
-    dative_bonds: FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
-    aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemAst>,
-    multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondAst>,
-    noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondAst, 2>,
+    dative_bonds: FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
+    aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemForm>,
+    multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondForm>,
+    noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondForm, 2>,
     stereo_atoms: FixedVarSetStorage<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
     stereo_bonds: FixedVarSetStorage<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>,
     constraints: Constraints,
@@ -649,11 +649,11 @@ impl MoleculeEditor {
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
         dative_bonds: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
+            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
         >,
-        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
-        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
+        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
+        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
+        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
         stereo_atoms: Arc<
             FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
         >,
@@ -706,7 +706,7 @@ impl MoleculeEditor {
         &mut self,
         donors: Vec<AtomId>,
         acceptor: AtomId,
-        bond: DativeBondAst,
+        bond: DativeBondForm,
     ) -> DativeBondId {
         let donors: Vec<NodeId> = donors.into_iter().map(NodeId::from).collect();
         DativeBondId(
@@ -719,7 +719,7 @@ impl MoleculeEditor {
     pub fn add_aromatic_system(
         &mut self,
         atoms: Vec<AtomId>,
-        data: AromaticSystemAst,
+        data: AromaticSystemForm,
     ) -> AromaticSystemId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.aromatic_systems.push(nodes, data);
@@ -730,7 +730,7 @@ impl MoleculeEditor {
     pub fn add_multicenter_bond(
         &mut self,
         atoms: Vec<AtomId>,
-        data: MulticenterBondAst,
+        data: MulticenterBondForm,
     ) -> MulticenterBondId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.multicenter_bonds.push(nodes, data);
@@ -741,7 +741,7 @@ impl MoleculeEditor {
     pub fn add_noncovalent_bond(
         &mut self,
         ends: [AtomId; 2],
-        bond: NoncovalentBondAst,
+        bond: NoncovalentBondForm,
     ) -> NoncovalentBondId {
         let i = self
             .noncovalent_bonds
@@ -976,7 +976,7 @@ impl MoleculeEditor {
         &self,
         id: NoncovalentBondId,
         atoms: [AtomId; 2],
-        ast: &NoncovalentBondAst,
+        ast: &NoncovalentBondForm,
     ) -> bool {
         self.noncovalent_bonds
             .participant_permutation(id.index(), &atoms.map(NodeId::from))
@@ -988,7 +988,7 @@ impl MoleculeEditor {
         &self,
         id: AromaticSystemId,
         atoms: &[AtomId],
-        ast: &AromaticSystemAst,
+        ast: &AromaticSystemForm,
     ) -> bool {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.aromatic_systems
@@ -1001,7 +1001,7 @@ impl MoleculeEditor {
         &self,
         id: MulticenterBondId,
         atoms: &[AtomId],
-        ast: &MulticenterBondAst,
+        ast: &MulticenterBondForm,
     ) -> bool {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.multicenter_bonds
@@ -1016,7 +1016,7 @@ impl MoleculeEditor {
         id: DativeBondId,
         acceptor: AtomId,
         donors: &[AtomId],
-        ast: &DativeBondAst,
+        ast: &DativeBondForm,
     ) -> bool {
         let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
@@ -1575,7 +1575,7 @@ mod tests {
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::mol_dsl;
 
     #[derive(Debug)]
@@ -1730,8 +1730,8 @@ mod tests {
         let mut b = MoleculeAst::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
-        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
-        b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(2));
+        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1));
+        b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondForm::from_order(2));
         let expected = b.clone().build();
         let view = b.dative_bond(DativeBondId(0));
         let removed = RemovedDativeBond {

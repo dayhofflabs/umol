@@ -7,7 +7,7 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
-    AtomId as GraphIrAtomId, DativeBondAst as GraphIrDativeBondAst,
+    AtomId as GraphIrAtomId, DativeBondForm as GraphIrDativeBondForm,
     DativeBondId as GraphIrDativeBondId, DativeBondUpdate as GraphIrDativeBondUpdate,
     DativeBondView as GraphIrDativeBondView, MoleculeAst as GraphIrMoleculeAst,
 };
@@ -100,7 +100,7 @@ impl DativeBondUpdate {
 /// A dative bond: order and bond-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct DativeBondAst(GraphIrDativeBondAst);
+pub struct DativeBondAst(GraphIrDativeBondForm);
 
 #[pymethods]
 impl DativeBondAst {
@@ -113,7 +113,7 @@ impl DativeBondAst {
         order: NumLike,
         constraints: Option<Py<DativeBondConstraintsAst>>,
     ) -> Self {
-        let mut bond = GraphIrDativeBondAst::new(order.to_rust(py));
+        let mut bond = GraphIrDativeBondForm::new(order.to_rust(py));
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
@@ -123,7 +123,7 @@ impl DativeBondAst {
     /// Parse a dative-bond-DSL string (e.g. `"1#R(6)"`) into a `DativeBondAst`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        GraphIrDativeBondAst::from_str(s)
+        GraphIrDativeBondForm::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -182,29 +182,29 @@ impl DativeBondAst {
 
 impl DativeBondAst {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &GraphIrDativeBondAst {
+    pub(crate) fn inner(&self) -> &GraphIrDativeBondForm {
         &self.0
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrDativeBondAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrDativeBondForm {
         &mut self.0
     }
 
     /// Wrap an owned Rust dative-bond AST.
-    pub(crate) fn from_inner(bond: GraphIrDativeBondAst) -> Self {
+    pub(crate) fn from_inner(bond: GraphIrDativeBondForm) -> Self {
         DativeBondAst(bond)
     }
 }
 
 impl_py_lattice!(
     DativeBondAst,
-    GraphIrDativeBondAst,
-    |value: &DativeBondAst, _py: Python<'_>| -> PyResult<GraphIrDativeBondAst> {
+    GraphIrDativeBondForm,
+    |value: &DativeBondAst, _py: Python<'_>| -> PyResult<GraphIrDativeBondForm> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: GraphIrDativeBondAst| -> PyResult<DativeBondAst> {
+    |_py: Python<'_>, value: GraphIrDativeBondForm| -> PyResult<DativeBondAst> {
         Ok(DativeBondAst::from_inner(value))
     }
 );
@@ -494,7 +494,7 @@ mod tests {
             dative: vec![(
                 vec![GraphIrAtomId(1)],
                 GraphIrAtomId(0),
-                GraphIrDativeBondAst::from_order(1),
+                GraphIrDativeBondForm::from_order(1),
             )],
             ..Default::default()
         });
@@ -518,7 +518,7 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_ast_constraints() {
-        let bond = DativeBondAst(GraphIrDativeBondAst::from_order(1).with_constraint(
+        let bond = DativeBondAst(GraphIrDativeBondForm::from_order(1).with_constraint(
             GraphIrDativeBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
         ));
         assert_eq!(bond.inner().constraints.len(), 1);
@@ -529,7 +529,7 @@ mod tests {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1).with_constraint(
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -543,7 +543,7 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(2)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(2)),
             )
             .unwrap();
             DativeBondAst::set_constraints(
@@ -642,7 +642,7 @@ mod tests {
             };
             let single = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(2)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(2)),
             )
             .unwrap();
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
@@ -662,7 +662,7 @@ mod tests {
             };
             let single = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(2)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(2)),
             )
             .unwrap();
             assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
@@ -695,7 +695,7 @@ mod tests {
                 dative: vec![(
                     vec![GraphIrAtomId(1)],
                     GraphIrAtomId(0),
-                    GraphIrDativeBondAst::from_order(1),
+                    GraphIrDativeBondForm::from_order(1),
                 )],
                 ..Default::default()
             });
@@ -1091,7 +1091,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1).with_constraint(
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1123,7 +1123,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1).with_constraint(
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1199,7 +1199,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {
@@ -1240,7 +1240,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1).with_constraint(
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1272,7 +1272,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {
@@ -1305,7 +1305,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {
@@ -1346,7 +1346,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1)),
+                DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {

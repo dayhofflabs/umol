@@ -13,7 +13,7 @@ use umol_graph_core::{
     SubgraphIsomorphismAlgorithm,
 };
 
-use super::super::aromatic::AromaticSystemAst;
+use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::super::bond::BondForm;
 use super::super::boolean::BooleanForm;
@@ -25,7 +25,7 @@ use super::super::constraint::{
     StereogenicityAst, SubPatternAnchor,
 };
 use super::super::correspondence::MoleculeCorrespondence;
-use super::super::dative::DativeBondAst;
+use super::super::dative::DativeBondForm;
 use super::super::edit::{AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
@@ -34,8 +34,10 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::multicenter::MulticenterBondAst;
-use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm};
+use super::super::multicenter::MulticenterBondForm;
+use super::super::noncovalent::{
+    NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
+};
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
@@ -201,7 +203,7 @@ fn test_molecule_editor_add_aromatic_system() {
         ..Default::default()
     });
     let mut b = ast.edit();
-    let id = b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default());
+    let id = b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default());
     let new_ast = b.build();
     assert_eq!(id, AromaticSystemId(0));
     let new_atoms: Vec<AtomId> = new_ast
@@ -233,19 +235,19 @@ fn rich_molecule() -> MoleculeAst {
             (AtomId(1), AtomId(2), BondForm::from_order(2)),
             (AtomId(2), AtomId(3), BondForm::from_order(1)),
         ],
-        dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+        dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1))],
         aromatic: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::default(),
+            AromaticSystemForm::default(),
         )],
         multicenter: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondAst::default(),
+            MulticenterBondForm::default(),
         )],
         noncovalent: vec![(
             AtomId(0),
             AtomId(3),
-            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         ..Default::default()
     })
@@ -271,20 +273,20 @@ fn equiv_molecule_entries() -> MoleculeEntries {
         dative: vec![(
             vec![AtomId(1), AtomId(2)],
             AtomId(3),
-            DativeBondAst::from_order(1),
+            DativeBondForm::from_order(1),
         )],
         aromatic: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_electrons(vec![1, 2, 0]),
+            AromaticSystemForm::from_electrons(vec![1, 2, 0]),
         )],
         multicenter: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondAst::from_electrons(vec![2, 1, 0]),
+            MulticenterBondForm::from_electrons(vec![2, 1, 0]),
         )],
         noncovalent: vec![(
             AtomId(0),
             AtomId(3),
-            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
             AtomId(1),
@@ -2189,7 +2191,7 @@ fn test_molecule_editor_atom_constraint_mut(#[from(rich_molecule)] ast: Molecule
 #[rstest]
 fn test_molecule_editor_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    let id = b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(1));
+    let id = b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondForm::from_order(1));
     let result = b.build();
     assert_eq!(id, DativeBondId(1));
     let view = result.dative_bond(id);
@@ -2202,7 +2204,7 @@ fn test_molecule_editor_add_multicenter_bond(#[from(rich_molecule)] ast: Molecul
     let mut b = ast.edit();
     let id = b.add_multicenter_bond(
         vec![AtomId(1), AtomId(2), AtomId(3)],
-        MulticenterBondAst::default(),
+        MulticenterBondForm::default(),
     );
     let result = b.build();
     assert_eq!(id, MulticenterBondId(1));
@@ -2215,7 +2217,7 @@ fn test_molecule_editor_add_noncovalent_bond(#[from(rich_molecule)] ast: Molecul
     let mut b = ast.edit();
     let id = b.add_noncovalent_bond(
         [AtomId(1), AtomId(2)],
-        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
     );
     let result = b.build();
     assert_eq!(id, NoncovalentBondId(1));
@@ -2523,7 +2525,7 @@ fn test_molecule_ast_dative_acceptor_donor(#[case] donor: AtomId, #[case] accept
     let atoms = vec![ground_atom(), ground_atom()];
     let ast = MoleculeAst::from_entries(MoleculeEntries {
         atoms,
-        dative: vec![(vec![donor], acceptor, DativeBondAst::from_order(1))],
+        dative: vec![(vec![donor], acceptor, DativeBondForm::from_order(1))],
         constraints: Constraints::new(),
         ..Default::default()
     });
@@ -2563,13 +2565,13 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
     let atoms_b = vec![ground_atom(), ground_atom()];
     let forward = MoleculeAst::from_entries(MoleculeEntries {
         atoms: atoms_a,
-        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
         constraints: Constraints::new(),
         ..Default::default()
     });
     let reverse = MoleculeAst::from_entries(MoleculeEntries {
         atoms: atoms_b,
-        dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(1))],
+        dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondForm::from_order(1))],
         constraints: Constraints::new(),
         ..Default::default()
     });
@@ -3254,7 +3256,7 @@ fn test_molecule_ast_combine_overlay() {
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
         aromatic: vec![(
             vec![AtomId(0), AtomId(1)],
-            AromaticSystemAst::from_electrons(vec![1, 1]),
+            AromaticSystemForm::from_electrons(vec![1, 1]),
         )],
         ..Default::default()
     });
@@ -3376,7 +3378,7 @@ fn test_molecule_ast_split() {
 
 #[rstest]
 fn test_molecule_ast_split_duplicate_incidence() {
-    let bond = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
+    let bond = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
     let mol = MoleculeAst::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 3],
         noncovalent: vec![
@@ -3420,7 +3422,7 @@ fn test_molecule_ast_split_overlay_binds() {
         ],
         aromatic: vec![(
             vec![AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_electrons(vec![1, 1]),
+            AromaticSystemForm::from_electrons(vec![1, 1]),
         )],
         ..Default::default()
     });

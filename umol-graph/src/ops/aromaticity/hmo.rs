@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AtomId, AtomView, ElementForm, MoleculeAst, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AtomId, AtomView, ElementForm, MoleculeAst, RingSet, UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
@@ -60,7 +60,7 @@ impl HmoAromaticity {
         rings: &RingSet,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
         electrons_at: &F,
-    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemAst)>, HmoError>
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
@@ -125,7 +125,7 @@ impl HmoAromaticity {
 
                 candidates.push((
                     atoms,
-                    AromaticSystemAst::from_electrons(electrons)
+                    AromaticSystemForm::from_electrons(electrons)
                         .with_charge(0)
                         .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 ));

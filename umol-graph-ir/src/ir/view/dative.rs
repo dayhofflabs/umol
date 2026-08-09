@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
 use super::super::constraint::DativeBondConstraintsAst;
-use super::super::dative::DativeBondAst;
+use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::traits::Lattice;
@@ -16,7 +16,7 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     molecule: &'a MoleculeAst,
-    dative_bonds: &'a FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
+    dative_bonds: &'a FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
 }
 
 impl<'a> DativeBondViews<'a> {
@@ -28,7 +28,7 @@ impl<'a> DativeBondViews<'a> {
             1,
             NodeId,
             Unordered,
-            DativeBondAst,
+            DativeBondForm,
         >,
     ) -> Self {
         Self {
@@ -175,14 +175,14 @@ impl<'a> DativeBondViews<'a> {
 }
 
 /// Borrowed view of a dative bond: index, the designated acceptor atom,
-/// and underlying `DativeBondAst`. Donor atoms via `donors()` / `donor_ids()`;
+/// and underlying `DativeBondForm`. Donor atoms via `donors()` / `donor_ids()`;
 /// the full participant set (donors then acceptor) via `atoms()` / `atom_ids()`.
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
     pub id: DativeBondId,
     acceptor_id: NodeId,
     donors: &'a [NodeId],
-    pub ast: &'a DativeBondAst,
+    pub ast: &'a DativeBondForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -262,7 +262,7 @@ pub struct DativeBondViewMut<'a> {
     pub id: DativeBondId,
     pub donors: Vec<AtomId>,
     pub acceptor: AtomId,
-    pub ast: &'a mut DativeBondAst,
+    pub ast: &'a mut DativeBondForm,
 }
 
 // Editor-scope view bundles for dative bonds.
@@ -271,7 +271,7 @@ pub struct DativeBondEditorView<'a> {
     pub id: DativeBondId,
     donors: &'a [NodeId],
     acceptor: AtomId,
-    pub ast: &'a DativeBondAst,
+    pub ast: &'a DativeBondForm,
 }
 
 impl<'a> DativeBondEditorView<'a> {
@@ -279,7 +279,7 @@ impl<'a> DativeBondEditorView<'a> {
         id: DativeBondId,
         donors: &'a [NodeId],
         acceptor: AtomId,
-        ast: &'a DativeBondAst,
+        ast: &'a DativeBondForm,
     ) -> Self {
         Self {
             id,
@@ -307,7 +307,7 @@ pub struct DativeBondEditorViewMut<'a> {
     pub id: DativeBondId,
     donors: &'a [NodeId],
     acceptor: AtomId,
-    pub ast: &'a mut DativeBondAst,
+    pub ast: &'a mut DativeBondForm,
 }
 
 impl<'a> DativeBondEditorViewMut<'a> {
@@ -315,7 +315,7 @@ impl<'a> DativeBondEditorViewMut<'a> {
         id: DativeBondId,
         donors: &'a [NodeId],
         acceptor: AtomId,
-        ast: &'a mut DativeBondAst,
+        ast: &'a mut DativeBondForm,
     ) -> Self {
         Self {
             id,
@@ -348,14 +348,14 @@ mod tests {
 
     use super::super::assert_exact_size_by;
     use super::{DativeBondEditorView, DativeBondEditorViewMut};
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AtomId, DativeBondId};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -371,19 +371,19 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(2)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1))],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         })
@@ -411,7 +411,7 @@ mod tests {
         );
         assert_exact_size_by(
             molecule.dative_bonds().iter(),
-            vec![(DativeBondId(0), AtomId(3), DativeBondAst::from_order(1))],
+            vec![(DativeBondId(0), AtomId(3), DativeBondForm::from_order(1))],
             |view| (view.id, view.acceptor_id(), view.ast.clone()),
         );
     }
@@ -520,7 +520,7 @@ mod tests {
     #[rstest]
     fn test_dative_bond_editor_view_atom_ids() {
         let donors = [NodeId(1), NodeId(2)];
-        let ast = DativeBondAst::from_order(1);
+        let ast = DativeBondForm::from_order(1);
         let view = DativeBondEditorView::new(DativeBondId(0), &donors, AtomId(3), &ast);
         assert_exact_size_by(
             view.atom_ids(),
@@ -532,7 +532,7 @@ mod tests {
     #[rstest]
     fn test_dative_bond_editor_view_mut_atom_ids() {
         let donors = [NodeId(1), NodeId(2)];
-        let mut ast = DativeBondAst::from_order(1);
+        let mut ast = DativeBondForm::from_order(1);
         let view = DativeBondEditorViewMut::new(DativeBondId(0), &donors, AtomId(3), &mut ast);
         assert_exact_size_by(
             view.atom_ids(),

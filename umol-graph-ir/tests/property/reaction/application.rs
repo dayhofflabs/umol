@@ -118,7 +118,7 @@ proptest! {
         host_bond in dative_bond_strategy(),
         update in dative_bond_update_strategy(),
     ) {
-        let pattern_bond = DativeBondAst::default();
+        let pattern_bond = DativeBondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
         let dative_deltas = DativeBondDelta::for_update(
@@ -129,7 +129,7 @@ proptest! {
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-                dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
+                dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(dative_deltas.into_iter().map(Delta::DativeBond)),
@@ -161,11 +161,11 @@ proptest! {
     /// A pattern-relative aromatic-system update lowers against the matched host relation.
     #[test]
     fn test_reaction_ast_apply_aromatic_system_update(
-        mut host_system in aromatic_system_ast_for(3),
+        mut host_system in aromatic_system_form_for(3),
         update in aromatic_system_update_for(3),
     ) {
         host_system.unpaired_electrons = UnpairedElectronsForm::from((2_u8, 3_u8));
-        let pattern_system = AromaticSystemAst::default();
+        let pattern_system = AromaticSystemForm::default();
         let effective_update = pattern_system.difference_to(&pattern_system.update(&update));
         let expected_system = host_system.update(&effective_update).canonicalize().unwrap();
         let aromatic_deltas = AromaticSystemDelta::for_update(
@@ -180,7 +180,7 @@ proptest! {
                     AtomForm::from_element(Element::N),
                     AtomForm::from_element(Element::O),
                 ],
-                aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], AromaticSystemAst::default())],
+                aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], AromaticSystemForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(aromatic_deltas.into_iter().map(Delta::AromaticSystem)),
@@ -224,7 +224,7 @@ proptest! {
         update in multicenter_bond_update_for(3),
     ) {
         host_bond.unpaired_electrons = UnpairedElectronsForm::from((2_u8, 3_u8));
-        let pattern_bond = MulticenterBondAst::default();
+        let pattern_bond = MulticenterBondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
         let multicenter_deltas = MulticenterBondDelta::for_update(
@@ -239,7 +239,7 @@ proptest! {
                     AtomForm::from_element(Element::N),
                     AtomForm::from_element(Element::O),
                 ],
-                multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst::default())],
+                multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(multicenter_deltas.into_iter().map(Delta::MulticenterBond)),
@@ -282,7 +282,7 @@ proptest! {
         host_bond in noncovalent_bond_form_strategy(),
         update in noncovalent_bond_update_strategy(),
     ) {
-        let pattern_bond = NoncovalentBondAst::default();
+        let pattern_bond = NoncovalentBondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
         let noncovalent_deltas = NoncovalentBondDelta::for_update(
@@ -293,7 +293,7 @@ proptest! {
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
+                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(noncovalent_deltas.into_iter().map(Delta::NoncovalentBond)),

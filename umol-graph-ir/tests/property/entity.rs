@@ -93,7 +93,7 @@ proptest! {
 
     #[test]
     fn test_aromatic_system_dsl_display_from_str_roundtrip(
-        system in aromatic_system_ast_strategy(),
+        system in aromatic_system_form_strategy(),
     ) {
         let dsl = AromaticSystemDsl(system);
         let rendered = dsl.to_string();
@@ -372,7 +372,7 @@ proptest! {
 
     #[test]
     fn test_aromatic_system_constraints_ast_take_exact_size(
-        mut constraints in aromatic_system_ast_strategy().prop_map(|ast| ast.constraints),
+        mut constraints in aromatic_system_form_strategy().prop_map(|ast| ast.constraints),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();

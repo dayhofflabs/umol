@@ -8,15 +8,15 @@ use std::ops::Add;
 
 use umol_chem::element::Element;
 
-use super::super::aromatic::AromaticSystemAst;
+use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::BondConstraintAst;
-use super::super::dative::DativeBondAst;
+use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::multicenter::MulticenterBondAst;
-use super::super::noncovalent::NoncovalentBondAst;
+use super::super::multicenter::MulticenterBondForm;
+use super::super::noncovalent::NoncovalentBondForm;
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::{MoleculeAst, MoleculeBuilder};
 
@@ -140,20 +140,20 @@ pub enum MoleculeSpecTerm {
     DativeBond {
         donors: Vec<AtomArg>,
         acceptor: AtomArg,
-        ast: DativeBondAst,
+        ast: DativeBondForm,
     },
     AromaticSystem {
         atoms: Vec<AtomArg>,
-        ast: AromaticSystemAst,
+        ast: AromaticSystemForm,
     },
     MulticenterBond {
         atoms: Vec<AtomArg>,
-        ast: MulticenterBondAst,
+        ast: MulticenterBondForm,
     },
     NoncovalentBond {
         first: AtomArg,
         second: AtomArg,
-        ast: NoncovalentBondAst,
+        ast: NoncovalentBondForm,
     },
     StereoAtom {
         site: AtomArg,
@@ -260,11 +260,11 @@ pub fn ring(specs: impl IntoIterator<Item = impl Into<AtomArg>>) -> MoleculeSpec
     MoleculeSpecTerm::Ring(specs.into_iter().map(Into::into).collect())
 }
 
-/// A dative bond from `donors` to `acceptor`, carrying `ast` (a `DativeBondAst` or a DSL spec string).
+/// A dative bond from `donors` to `acceptor`, carrying `ast` (a `DativeBondForm` or a DSL spec string).
 pub fn dative_bond(
     donors: impl IntoIterator<Item = impl Into<AtomArg>>,
     acceptor: impl Into<AtomArg>,
-    ast: impl Into<DativeBondAst>,
+    ast: impl Into<DativeBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::DativeBond {
         donors: donors.into_iter().map(Into::into).collect(),
@@ -273,11 +273,11 @@ pub fn dative_bond(
     }
 }
 
-/// An aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemAst` — e.g. from
+/// An aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemForm` — e.g. from
 /// `from_electrons` — or a DSL spec string).
 pub fn aromatic_system(
     atoms: impl IntoIterator<Item = impl Into<AtomArg>>,
-    ast: impl Into<AromaticSystemAst>,
+    ast: impl Into<AromaticSystemForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::AromaticSystem {
         atoms: atoms.into_iter().map(Into::into).collect(),
@@ -285,11 +285,11 @@ pub fn aromatic_system(
     }
 }
 
-/// A multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondAst` or a DSL spec
+/// A multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondForm` or a DSL spec
 /// string).
 pub fn multicenter_bond(
     atoms: impl IntoIterator<Item = impl Into<AtomArg>>,
-    ast: impl Into<MulticenterBondAst>,
+    ast: impl Into<MulticenterBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::MulticenterBond {
         atoms: atoms.into_iter().map(Into::into).collect(),
@@ -297,12 +297,12 @@ pub fn multicenter_bond(
     }
 }
 
-/// A noncovalent-bond overlay between `first` and `second`, carrying `ast` (a `NoncovalentBondAst` —
+/// A noncovalent-bond overlay between `first` and `second`, carrying `ast` (a `NoncovalentBondForm` —
 /// e.g. from `from_kind` — or a DSL spec string).
 pub fn noncovalent_bond(
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    ast: impl Into<NoncovalentBondAst>,
+    ast: impl Into<NoncovalentBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::NoncovalentBond {
         first: first.into(),
@@ -667,14 +667,14 @@ mod tests {
 
     #[rstest]
     fn test_molecule_spec_dative_bond() {
-        let spec =
-            atoms([Element::N, Element::B]) + dative_bond([0_u32], 1_u32, DativeBondAst::default());
+        let spec = atoms([Element::N, Element::B])
+            + dative_bond([0_u32], 1_u32, DativeBondForm::default());
         let mol = spec.build();
 
         assert_eq!(mol.dative_bonds().count(), 1);
         assert_eq!(
             mol.dative_bond(DativeBondId(0)).ast,
-            &DativeBondAst::default()
+            &DativeBondForm::default()
         );
     }
 
@@ -683,13 +683,13 @@ mod tests {
         let spec = atoms([Element::C, Element::C])
             + aromatic_system(
                 [0_u32, 1_u32],
-                AromaticSystemAst::from_electrons(vec![1, 1]),
+                AromaticSystemForm::from_electrons(vec![1, 1]),
             );
         let mol = spec.build();
 
         assert_eq!(
             mol.aromatic_system(AromaticSystemId(0)).ast,
-            &AromaticSystemAst::from_electrons(vec![1, 1])
+            &AromaticSystemForm::from_electrons(vec![1, 1])
         );
     }
 
@@ -698,13 +698,13 @@ mod tests {
         let spec = atoms([Element::B, Element::B, Element::H])
             + multicenter_bond(
                 [0_u32, 1_u32, 2_u32],
-                MulticenterBondAst::from_electrons(vec![1, 1, 1]),
+                MulticenterBondForm::from_electrons(vec![1, 1, 1]),
             );
         let mol = spec.build();
 
         assert_eq!(
             mol.multicenter_bond(MulticenterBondId(0)).ast,
-            &MulticenterBondAst::from_electrons(vec![1, 1, 1])
+            &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }
 
@@ -714,13 +714,13 @@ mod tests {
             + noncovalent_bond(
                 0_u32,
                 1_u32,
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             );
         let mol = spec.build();
 
         assert_eq!(
             mol.noncovalent_bond(NoncovalentBondId(0)).ast,
-            &NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+            &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }
 

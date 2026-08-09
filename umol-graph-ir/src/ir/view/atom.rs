@@ -469,13 +469,13 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::assert_exact_size_by;
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::{
         AromaticValenceAst, AtomConstraintAst, AtomConstraintsAst, MulticenterValenceAst,
     };
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -483,8 +483,8 @@ mod tests {
     };
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::stereo::{StereoAtomAst, StereoCoset, StereoKind, TetrahedralStereoForm};
     use crate::ir::value::NumForm;
     use crate::mol_dsl;
@@ -503,19 +503,19 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(2)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1))],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         })
@@ -680,7 +680,7 @@ mod tests {
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::C),
             ],
-            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         });
         assert_eq!(molecule.atom(atom).donated_pairs(), expected);
@@ -709,7 +709,7 @@ mod tests {
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::C),
             ],
-            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         });
         assert_eq!(molecule.atom(atom).accepted_pairs(), expected);
@@ -748,7 +748,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
-                AromaticSystemAst::from_electrons(vec![1]),
+                AromaticSystemForm::from_electrons(vec![1]),
             )],
             ..Default::default()
         }),
@@ -759,7 +759,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
-                AromaticSystemAst::from_electrons(vec![0]),
+                AromaticSystemForm::from_electrons(vec![0]),
             )],
             ..Default::default()
         }),
@@ -770,7 +770,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
-                AromaticSystemAst::from_electrons(vec![2]),
+                AromaticSystemForm::from_electrons(vec![2]),
             )],
             ..Default::default()
         }),
@@ -779,7 +779,7 @@ mod tests {
     #[case::undetermined(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
-            aromatic: vec![(vec![AtomId(0)], AromaticSystemAst::default())],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
             ..Default::default()
         }),
         NumForm::Undetermined,
@@ -979,7 +979,7 @@ mod tests {
     #[case::aromatic(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
-            aromatic: vec![(vec![AtomId(0)], AromaticSystemAst::default())],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
             ..Default::default()
         }),
         AtomConstraintsAst::from_iter([
@@ -998,7 +998,7 @@ mod tests {
             ],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             ..Default::default()
         }),
@@ -1054,7 +1054,7 @@ mod tests {
     ) {
         let multicenter: Vec<_> = bonds
             .into_iter()
-            .map(|(parts, electrons)| (parts, MulticenterBondAst::new(electrons)))
+            .map(|(parts, electrons)| (parts, MulticenterBondForm::new(electrons)))
             .collect();
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
@@ -1199,7 +1199,7 @@ mod tests {
             ],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::from_electrons(vec![1, 2, 0]),
+                AromaticSystemForm::from_electrons(vec![1, 2, 0]),
             )],
             ..Default::default()
         })
@@ -1227,7 +1227,7 @@ mod tests {
                 AtomForm::from_element(Element::N).with_implicit_hydrogens(3_i64),
                 AtomForm::from_element(Element::B).with_implicit_hydrogens(3_i64),
             ],
-            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         })
     }
@@ -1253,7 +1253,7 @@ mod tests {
             ],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::from_electrons(vec![2, 2, 2]),
+                MulticenterBondForm::from_electrons(vec![2, 2, 2]),
             )],
             ..Default::default()
         });

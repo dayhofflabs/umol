@@ -2,18 +2,18 @@
 //! every method *adds/declares* (there is no lookup — that is `MoleculeEditor`). Wraps a
 //! `MoleculeEditor` and lowers each call onto it.
 
-use super::super::aromatic::AromaticSystemAst;
+use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::BondConstraintAst;
-use super::super::dative::DativeBondAst;
+use super::super::dative::DativeBondForm;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::multicenter::MulticenterBondAst;
-use super::super::noncovalent::NoncovalentBondAst;
+use super::super::multicenter::MulticenterBondForm;
+use super::super::noncovalent::NoncovalentBondForm;
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::{MoleculeAst, MoleculeEditor};
 
@@ -92,12 +92,12 @@ impl MoleculeBuilder {
     }
 
     /// Add a dative bond from `donors` to `acceptor` — its own family, not a bond order. Carries
-    /// `ast` (a `DativeBondAst` or a DSL spec string).
+    /// `ast` (a `DativeBondForm` or a DSL spec string).
     pub fn dative_bond(
         &mut self,
         donors: impl IntoIterator<Item = AtomId>,
         acceptor: AtomId,
-        ast: impl Into<DativeBondAst>,
+        ast: impl Into<DativeBondForm>,
     ) -> DativeBondId {
         self.editor
             .add_dative_bond(donors.into_iter().collect(), acceptor, ast.into())
@@ -124,36 +124,36 @@ impl MoleculeBuilder {
         bonds
     }
 
-    /// Add an aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemAst` — e.g.
+    /// Add an aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemForm` — e.g.
     /// `from_electrons([1, 1, 1, 1, 1, 1])` for benzene — or a DSL spec string). The σ-framework is
     /// separate — add those bonds with the bond verbs.
     pub fn aromatic_system(
         &mut self,
         atoms: impl IntoIterator<Item = AtomId>,
-        ast: impl Into<AromaticSystemAst>,
+        ast: impl Into<AromaticSystemForm>,
     ) -> AromaticSystemId {
         self.editor
             .add_aromatic_system(atoms.into_iter().collect(), ast.into())
     }
 
-    /// Add a multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondAst` or a DSL
+    /// Add a multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondForm` or a DSL
     /// spec string).
     pub fn multicenter_bond(
         &mut self,
         atoms: impl IntoIterator<Item = AtomId>,
-        ast: impl Into<MulticenterBondAst>,
+        ast: impl Into<MulticenterBondForm>,
     ) -> MulticenterBondId {
         self.editor
             .add_multicenter_bond(atoms.into_iter().collect(), ast.into())
     }
 
     /// Add a noncovalent-bond overlay between `first` and `second`, carrying `ast` (a
-    /// `NoncovalentBondAst` — e.g. `from_kind(...)` — or a DSL spec string).
+    /// `NoncovalentBondForm` — e.g. `from_kind(...)` — or a DSL spec string).
     pub fn noncovalent_bond(
         &mut self,
         first: AtomId,
         second: AtomId,
-        ast: impl Into<NoncovalentBondAst>,
+        ast: impl Into<NoncovalentBondForm>,
     ) -> NoncovalentBondId {
         self.editor
             .add_noncovalent_bond([first, second], ast.into())
@@ -316,14 +316,14 @@ mod tests {
         let a0 = builder.atom(Element::C);
         let a1 = builder.atom(Element::C);
         let system =
-            builder.aromatic_system([a0, a1], AromaticSystemAst::from_electrons(vec![1, 1]));
+            builder.aromatic_system([a0, a1], AromaticSystemForm::from_electrons(vec![1, 1]));
         let mol = builder.build();
 
         assert_eq!(system, AromaticSystemId(0));
         assert_eq!(mol.aromatic_systems().count(), 1);
         assert_eq!(
             mol.aromatic_system(system).ast,
-            &AromaticSystemAst::from_electrons(vec![1, 1])
+            &AromaticSystemForm::from_electrons(vec![1, 1])
         );
         assert_eq!(
             mol.aromatic_system(system)
@@ -342,14 +342,14 @@ mod tests {
         let a2 = builder.atom(Element::H);
         let bond = builder.multicenter_bond(
             [a0, a1, a2],
-            MulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            MulticenterBondForm::from_electrons(vec![1, 1, 1]),
         );
         let mol = builder.build();
 
         assert_eq!(bond, MulticenterBondId(0));
         assert_eq!(
             mol.multicenter_bond(bond).ast,
-            &MulticenterBondAst::from_electrons(vec![1, 1, 1])
+            &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }
 
@@ -361,14 +361,14 @@ mod tests {
         let bond = builder.noncovalent_bond(
             a0,
             a1,
-            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         );
         let mol = builder.build();
 
         assert_eq!(bond, NoncovalentBondId(0));
         assert_eq!(
             mol.noncovalent_bond(bond).ast,
-            &NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+            &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }
 

@@ -16,12 +16,12 @@ use umol_graph_core::{
 };
 
 use self::transact::TransactionError;
-use super::aromatic::AromaticSystemAst;
+use super::aromatic::AromaticSystemForm;
 use super::atom::AtomForm;
 use super::bond::BondForm;
 use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::DativeBondAst;
+use super::dative::DativeBondForm;
 use super::edit::{AtomHandle, BondHandle, Edits};
 use super::entity::Entity;
 use super::id::{
@@ -29,8 +29,8 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::multicenter::MulticenterBondAst;
-use super::noncovalent::NoncovalentBondAst;
+use super::multicenter::MulticenterBondForm;
+use super::noncovalent::NoncovalentBondForm;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
@@ -60,10 +60,10 @@ pub struct MoleculeAst {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
-    dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>>,
-    aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
-    multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
-    noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
+    dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
+    aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
+    multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
+    noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
     stereo_atoms:
         Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>>,
     stereo_bonds:
@@ -76,10 +76,10 @@ pub struct MoleculeAst {
 pub struct MoleculeEntries {
     pub atoms: Vec<AtomForm>,
     pub bonds: Vec<(AtomId, AtomId, BondForm)>,
-    pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)>,
-    pub aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)>,
-    pub multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)>,
-    pub noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)>,
+    pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>,
+    pub aromatic: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+    pub multicenter: Vec<(Vec<AtomId>, MulticenterBondForm)>,
+    pub noncovalent: Vec<(AtomId, AtomId, NoncovalentBondForm)>,
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
     pub constraints: Constraints,
@@ -474,11 +474,11 @@ impl MoleculeAst {
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
         dative_bonds: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
+            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
         >,
-        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
-        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
+        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
+        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
+        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
         stereo_atoms: Arc<
             FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
         >,
@@ -1310,7 +1310,7 @@ impl MoleculeAst {
     }
 
     /// Replace every dative bond with `f(bond)` in place.
-    pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondAst) -> DativeBondAst) {
+    pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondForm) -> DativeBondForm) {
         for dative_bond in Arc::make_mut(&mut self.dative_bonds).data_iter_mut() {
             *dative_bond = f(mem::take(dative_bond));
         }
@@ -1331,7 +1331,7 @@ impl MoleculeAst {
     /// Replace every aromatic system with `f(system)` in place.
     pub fn modify_aromatic_systems(
         &mut self,
-        mut f: impl FnMut(AromaticSystemAst) -> AromaticSystemAst,
+        mut f: impl FnMut(AromaticSystemForm) -> AromaticSystemForm,
     ) {
         for aromatic_system in Arc::make_mut(&mut self.aromatic_systems).data_iter_mut() {
             *aromatic_system = f(mem::take(aromatic_system));
@@ -1353,7 +1353,7 @@ impl MoleculeAst {
     /// Replace every multicenter bond with `f(bond)` in place.
     pub fn modify_multicenter_bonds(
         &mut self,
-        mut f: impl FnMut(MulticenterBondAst) -> MulticenterBondAst,
+        mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
     ) {
         for multicenter_bond in Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut() {
             *multicenter_bond = f(mem::take(multicenter_bond));
@@ -1371,7 +1371,7 @@ impl MoleculeAst {
     /// Replace every noncovalent bond with `f(bond)` in place.
     pub fn modify_noncovalent_bonds(
         &mut self,
-        mut f: impl FnMut(NoncovalentBondAst) -> NoncovalentBondAst,
+        mut f: impl FnMut(NoncovalentBondForm) -> NoncovalentBondForm,
     ) {
         for noncovalent_bond in Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut() {
             *noncovalent_bond = f(mem::take(noncovalent_bond));

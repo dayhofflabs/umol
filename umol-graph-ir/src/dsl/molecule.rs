@@ -40,10 +40,10 @@ use super::refs::{
 use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
-use crate::ir::aromatic::AromaticSystemAst;
+use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
-use crate::ir::dative::DativeBondAst;
+use crate::ir::dative::DativeBondForm;
 use crate::ir::entity::Entity;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -51,8 +51,8 @@ use crate::ir::id::{
 };
 use crate::ir::ligand::{StereoLigand, StereoLigandKind};
 use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-use crate::ir::multicenter::MulticenterBondAst;
-use crate::ir::noncovalent::NoncovalentBondAst;
+use crate::ir::multicenter::MulticenterBondForm;
+use crate::ir::noncovalent::NoncovalentBondForm;
 use crate::ir::stereo::{StereoAtomAst, StereoBondAst};
 use crate::ir::traits::{FromIr, IntoIr};
 
@@ -1177,7 +1177,7 @@ impl MoleculeInput {
         }
 
         // Dative bonds.
-        let mut dative_list: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> =
+        let mut dative_list: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> =
             Vec::with_capacity(dative_entries.len());
         for entry in dative_entries {
             let donors = entry
@@ -1196,7 +1196,7 @@ impl MoleculeInput {
         }
 
         // Aromatic systems.
-        let mut aromatic_list: Vec<(Vec<AtomId>, AromaticSystemAst)> =
+        let mut aromatic_list: Vec<(Vec<AtomId>, AromaticSystemForm)> =
             Vec::with_capacity(aromatic_entries.len());
         for entry in aromatic_entries {
             let atoms_resolved: Vec<AtomId> = entry
@@ -1209,7 +1209,7 @@ impl MoleculeInput {
         }
 
         // Multicenter bonds.
-        let mut multicenter_list: Vec<(Vec<AtomId>, MulticenterBondAst)> =
+        let mut multicenter_list: Vec<(Vec<AtomId>, MulticenterBondForm)> =
             Vec::with_capacity(multicenter_entries.len());
         for entry in multicenter_entries {
             let atoms_resolved: Vec<AtomId> = entry
@@ -1222,7 +1222,7 @@ impl MoleculeInput {
         }
 
         // Noncovalent bonds.
-        let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondAst)> =
+        let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondForm)> =
             Vec::with_capacity(noncovalent_entries.len());
         for entry in noncovalent_entries {
             let first = entry.first.resolve(&context)?;

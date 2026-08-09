@@ -11,9 +11,9 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticValenceAst, AtomConstraintAst, AtomForm, AtomId, BondConstraintAst, BondForm,
-    BooleanForm, CisTransStereoForm, Constraints, DativeBondAst, ElementForm, IsotopeMassForm,
-    Lattice, MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst,
-    NoncovalentBondAst, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
+    BooleanForm, CisTransStereoForm, Constraints, DativeBondForm, ElementForm, IsotopeMassForm,
+    Lattice, MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondForm,
+    NoncovalentBondForm, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
     UnpairedElectronsForm,
 };
 use umol_perm::{ClassKey, Permutation};
@@ -74,14 +74,14 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
             .collect::<Result<_, RaiseError>>()?;
 
         let mut bonds = Vec::new();
-        let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
+        let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> = Vec::new();
         let mut noncovalent_bonds = Vec::new();
         for (bond_idx, b) in self.bonds.iter().enumerate() {
             validate_bond_direction(self, bond_idx)?;
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
-                noncovalent_bonds.push((a_idx, b_idx, NoncovalentBondAst::from_kind(kind)));
+                noncovalent_bonds.push((a_idx, b_idx, NoncovalentBondForm::from_kind(kind)));
             } else if let Some(donation) = b.donation {
                 let (donor, acceptor) = match donation {
                     TableBondDonation::Donating => (a_idx, b_idx),
@@ -91,7 +91,7 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
                         continue;
                     }
                 };
-                let dative_bond = DativeBondAst::new(raise_bond_order(b.order));
+                let dative_bond = DativeBondForm::new(raise_bond_order(b.order));
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
                 let mut bond_form = b.try_into_ir(ctx)?;
@@ -102,7 +102,7 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
             }
         }
 
-        let multicenter_bond: Vec<(Vec<AtomId>, MulticenterBondAst)> = self
+        let multicenter_bond: Vec<(Vec<AtomId>, MulticenterBondForm)> = self
             .multicenter_bonds
             .iter()
             .map(|mc| {
@@ -113,7 +113,7 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
                     .filter(|a| seen.insert(*a))
                     .map(AtomId)
                     .collect();
-                (atoms, MulticenterBondAst::default())
+                (atoms, MulticenterBondForm::default())
             })
             .collect();
 

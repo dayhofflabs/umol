@@ -3,13 +3,13 @@
 //! Filters candidate atoms by element scope and the per-atom aromatic-valence
 //! constraint, enumerates rings within configured bounds, checks the Hueckel
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
-//! system tuples `(Vec<AtomId>, AromaticSystemAst)` ready for `MoleculeAst::edit`.
+//! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `MoleculeAst::edit`.
 
 use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet, RingView,
+    AromaticSystemForm, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet, RingView,
     UnpairedElectronsForm,
 };
 
@@ -34,7 +34,7 @@ impl HueckelRuleAromaticity {
         ast: &MoleculeAst,
         rings: &RingSet,
         electrons_at: &F,
-    ) -> Vec<(Vec<AtomId>, AromaticSystemAst)>
+    ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
@@ -96,7 +96,7 @@ impl HueckelRuleAromaticity {
 
             candidates.push((
                 atoms,
-                AromaticSystemAst::from_electrons(electrons)
+                AromaticSystemForm::from_electrons(electrons)
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             ));
@@ -503,7 +503,7 @@ mod tests {
         ])
     }
 
-    fn electron_total(system: &(Vec<AtomId>, AromaticSystemAst)) -> i64 {
+    fn electron_total(system: &(Vec<AtomId>, AromaticSystemForm)) -> i64 {
         match &system.1.electrons {
             ElectronCountsForm::Lit(counts) => counts.iter().sum(),
             ElectronCountsForm::Undetermined => 0,

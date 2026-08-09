@@ -527,12 +527,12 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::NoncovalentBondAst;
+    use crate::ir::dative::DativeBondForm;
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::NoncovalentBondForm;
     use crate::ir::stereo::{StereoAtomAst, StereoBondAst};
 
     #[fixture]
@@ -663,7 +663,7 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(1), AtomId(2), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
@@ -673,7 +673,7 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         });
         let atoms = Correspondence::new(
@@ -755,14 +755,14 @@ mod tests {
                 MoleculeEntries {
                     atoms: atoms.clone(),
                     dative: vec![
-                        (vec![AtomId(0)], AtomId(1), DativeBondAst::default()),
-                        (vec![AtomId(0)], AtomId(1), DativeBondAst::default()),
+                        (vec![AtomId(0)], AtomId(1), DativeBondForm::default()),
+                        (vec![AtomId(0)], AtomId(1), DativeBondForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
+                    dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
                     ..Default::default()
                 },
             ),
@@ -770,14 +770,14 @@ mod tests {
                 MoleculeEntries {
                     atoms: atoms.clone(),
                     aromatic: vec![
-                        (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
-                        (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
+                        (vec![AtomId(0), AtomId(1)], AromaticSystemForm::default()),
+                        (vec![AtomId(0), AtomId(1)], AromaticSystemForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+                    aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default())],
                     ..Default::default()
                 },
             ),
@@ -785,14 +785,14 @@ mod tests {
                 MoleculeEntries {
                     atoms: atoms.clone(),
                     multicenter: vec![
-                        (vec![AtomId(0), AtomId(1)], MulticenterBondAst::default()),
-                        (vec![AtomId(0), AtomId(1)], MulticenterBondAst::default()),
+                        (vec![AtomId(0), AtomId(1)], MulticenterBondForm::default()),
+                        (vec![AtomId(0), AtomId(1)], MulticenterBondForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondAst::default())],
+                    multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondForm::default())],
                     ..Default::default()
                 },
             ),
@@ -800,14 +800,14 @@ mod tests {
                 MoleculeEntries {
                     atoms: atoms.clone(),
                     noncovalent: vec![
-                        (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
-                        (AtomId(0), AtomId(1), NoncovalentBondAst::default()),
+                        (AtomId(0), AtomId(1), NoncovalentBondForm::default()),
+                        (AtomId(0), AtomId(1), NoncovalentBondForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
+                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
                     ..Default::default()
                 },
             ),

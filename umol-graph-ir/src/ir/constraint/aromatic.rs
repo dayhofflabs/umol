@@ -10,12 +10,12 @@ use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
 
-/// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst` via
+/// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
 /// `AromaticSystemConstraintsAst`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticSystemConstraintAst {
     /// Asserted total π-electron count for the system. Cross-checked by the
-    /// `ConsistencyValidator` against `sum(AromaticSystemAst::electrons)`.
+    /// `ConsistencyValidator` against `sum(AromaticSystemForm::electrons)`.
     ElectronCount(NumForm),
 }
 

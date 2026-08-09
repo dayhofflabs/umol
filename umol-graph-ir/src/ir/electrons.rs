@@ -1,5 +1,5 @@
 //! Electron-count leaf: the per-member-atom electron-count vector shared by
-//! `AromaticSystemAst` and `MulticenterBondAst`.
+//! `AromaticSystemForm` and `MulticenterBondForm`.
 
 use std::borrow::Cow;
 

@@ -1,4 +1,4 @@
-//! Aromatic system AST.
+//! Aromatic system form.
 
 use umol_graph_core::{ParticipantPosition, RelationData};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
@@ -10,7 +10,7 @@ use super::traits::{Canonicalize, Lattice};
 use super::value::NumForm;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
-pub struct AromaticSystemAst {
+pub struct AromaticSystemForm {
     pub electrons: ElectronCountsForm,
     pub charge: NumForm,
     pub unpaired_electrons: UnpairedElectronsForm,
@@ -28,13 +28,13 @@ pub struct AromaticSystemUpdate {
     pub constraints: AromaticSystemConstraintsAst,
 }
 
-impl From<&str> for AromaticSystemAst {
+impl From<&str> for AromaticSystemForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid aromatic system string")
     }
 }
 
-impl RelationData for AromaticSystemAst {
+impl RelationData for AromaticSystemForm {
     /// The per-member electron counts are positional, so they follow a participant reorder.
     fn on_permutation(&mut self, order: &[ParticipantPosition]) {
         self.electrons.permute(order);
@@ -45,7 +45,7 @@ impl RelationData for AromaticSystemAst {
     }
 }
 
-impl AromaticSystemAst {
+impl AromaticSystemForm {
     pub fn new(electrons: ElectronCountsForm) -> Self {
         Self {
             electrons,
@@ -107,10 +107,10 @@ impl AromaticSystemAst {
     }
 
     /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
-    pub fn update(&self, update: &AromaticSystemUpdate) -> AromaticSystemAst {
+    pub fn update(&self, update: &AromaticSystemUpdate) -> AromaticSystemForm {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
-        AromaticSystemAst {
+        AromaticSystemForm {
             electrons: update
                 .electrons
                 .clone()
@@ -167,107 +167,107 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::literal(AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 3])),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1; 3]),
+    #[case::literal(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 3])),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: AromaticSystemConstraintsAst::new() })]
-    fn test_aromatic_system_ast_new(
-        #[case] actual: AromaticSystemAst,
-        #[case] expected: AromaticSystemAst,
+    fn test_aromatic_system_form_new(
+        #[case] actual: AromaticSystemForm,
+        #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::literal(AromaticSystemAst::from_electrons(vec![1, 1, 1]),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1; 3]),
+    #[case::literal(AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: AromaticSystemConstraintsAst::new() })]
-    fn test_aromatic_system_ast_from_electrons(
-        #[case] actual: AromaticSystemAst,
-        #[case] expected: AromaticSystemAst,
+    fn test_aromatic_system_form_from_electrons(
+        #[case] actual: AromaticSystemForm,
+        #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::with_charge(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
+    #[case::with_charge(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: AromaticSystemConstraintsAst::new() })]
-    #[case::with_unpaired_electrons(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 1_u8)),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
+    #[case::with_unpaired_electrons(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 1_u8)),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(),
             constraints: AromaticSystemConstraintsAst::new() })]
     #[case::with_constraint(
-        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)) })]
     #[case::with_constraint_replaces_same_kind(
-        AromaticSystemAst::default()
+        AromaticSystemForm::default()
             .with_constraint(AromaticSystemConstraintAst::electron_count(2))
             .with_constraint(AromaticSystemConstraintAst::electron_count(6)),
-        AromaticSystemAst { electrons: ElectronCountsForm::Undetermined,
+        AromaticSystemForm { electrons: ElectronCountsForm::Undetermined,
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)) })]
-    fn test_aromatic_system_ast_with_methods(
-        #[case] actual: AromaticSystemAst,
-        #[case] expected: AromaticSystemAst,
+    fn test_aromatic_system_form_with_methods(
+        #[case] actual: AromaticSystemForm,
+        #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::from_ground_electrons(AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
+    #[case::from_ground_electrons(AromaticSystemForm::from_electrons(vec![1; 6]).into_ground(),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraintsAst::new() })]
-    #[case::preserves_set_charge(AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
+    #[case::preserves_set_charge(AromaticSystemForm::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraintsAst::new() })]
-    #[case::preserves_constraints(AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground(),
-        AromaticSystemAst { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
+    #[case::preserves_constraints(AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground(),
+        AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)) })]
-    fn test_aromatic_system_ast_into_ground(
-        #[case] actual: AromaticSystemAst,
-        #[case] expected: AromaticSystemAst,
+    fn test_aromatic_system_form_into_ground(
+        #[case] actual: AromaticSystemForm,
+        #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electrons(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])), ..Default::default() }, AromaticSystemAst::from_electrons(vec![2, 2, 2]))]
-    #[case::electrons_undetermined(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Undetermined), ..Default::default() }, AromaticSystemAst::default())]
-    #[case::charge(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64), AromaticSystemUpdate { charge: Some(NumForm::Lit(-1)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64))]
-    #[case::charge_undetermined(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64), AromaticSystemUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]))]
-    #[case::unpaired_electrons_count(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 3_u8)))]
-    #[case::unpaired_electrons_multiplicity(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 1_u8)))]
-    #[case::constraint_set(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6_i64)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)))]
-    #[case::constraint_replace(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(4_i64)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(4_i64)))]
-    #[case::constraint_remove(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]))]
-    fn test_aromatic_system_ast_update(
-        #[case] system: AromaticSystemAst,
+    #[case::electrons(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])), ..Default::default() }, AromaticSystemForm::from_electrons(vec![2, 2, 2]))]
+    #[case::electrons_undetermined(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Undetermined), ..Default::default() }, AromaticSystemForm::default())]
+    #[case::charge(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64), AromaticSystemUpdate { charge: Some(NumForm::Lit(-1)), ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1_i64))]
+    #[case::charge_undetermined(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1_i64), AromaticSystemUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]))]
+    #[case::unpaired_electrons_count(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 3_u8)))]
+    #[case::unpaired_electrons_multiplicity(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 1_u8)))]
+    #[case::constraint_set(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6_i64)), ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)))]
+    #[case::constraint_replace(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(4_i64)), ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(4_i64)))]
+    #[case::constraint_remove(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }, AromaticSystemForm::from_electrons(vec![1, 1, 1]))]
+    fn test_aromatic_system_form_update(
+        #[case] system: AromaticSystemForm,
         #[case] update: AromaticSystemUpdate,
-        #[case] expected: AromaticSystemAst,
+        #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(system.update(&update), expected);
     }
 
     #[rstest]
-    #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)))]
-    fn test_aromatic_system_ast_update_identity(#[case] system: AromaticSystemAst) {
+    #[case::empty(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)))]
+    fn test_aromatic_system_form_update_identity(#[case] system: AromaticSystemForm) {
         assert_eq!(system.update(&AromaticSystemUpdate::default()), system);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
-        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
-        AromaticSystemAst::from_electrons(vec![2, 2, 2]).with_unpaired_electrons((2_u8, 1_u8)),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemForm::from_electrons(vec![2, 2, 2]).with_unpaired_electrons((2_u8, 1_u8)),
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
@@ -275,9 +275,9 @@ mod tests {
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)),
         },
     )]
-    fn test_aromatic_system_ast_difference_to(
-        #[case] system: AromaticSystemAst,
-        #[case] other: AromaticSystemAst,
+    fn test_aromatic_system_form_difference_to(
+        #[case] system: AromaticSystemForm,
+        #[case] other: AromaticSystemForm,
         #[case] expected: AromaticSystemUpdate,
     ) {
         assert_eq!(system.difference_to(&other), expected);
@@ -285,12 +285,12 @@ mod tests {
 
     #[rstest]
     #[case::canonical(
-        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64),
-        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(NumForm::lit_set([1])),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(NumForm::lit_set([1])),
     )]
-    fn test_aromatic_system_ast_difference_to_identity(
-        #[case] system: AromaticSystemAst,
-        #[case] other: AromaticSystemAst,
+    fn test_aromatic_system_form_difference_to_identity(
+        #[case] system: AromaticSystemForm,
+        #[case] other: AromaticSystemForm,
     ) {
         assert_eq!(
             system.difference_to(&other),
@@ -300,18 +300,18 @@ mod tests {
 
     #[rstest]
     #[case::three_members(
-        AromaticSystemAst::from_electrons(vec![10, 20, 30]).with_charge(-1),
+        AromaticSystemForm::from_electrons(vec![10, 20, 30]).with_charge(-1),
         vec![
             ParticipantPosition(2),
             ParticipantPosition(0),
             ParticipantPosition(1),
         ],
-        AromaticSystemAst::from_electrons(vec![30, 10, 20]).with_charge(-1),
+        AromaticSystemForm::from_electrons(vec![30, 10, 20]).with_charge(-1),
     )]
-    fn test_aromatic_system_ast_permute(
-        #[case] mut input: AromaticSystemAst,
+    fn test_aromatic_system_form_permute(
+        #[case] mut input: AromaticSystemForm,
         #[case] order: Vec<ParticipantPosition>,
-        #[case] expected: AromaticSystemAst,
+        #[case] expected: AromaticSystemForm,
     ) {
         input.permute(&order);
         assert_eq!(input, expected);
@@ -319,13 +319,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::all_undetermined(AromaticSystemAst::default(), false)]
-    #[case::charge_only(AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_charge(0), false)]
-    #[case::ground_no_atoms(AromaticSystemAst::new(ElectronCountsForm::Lit(Vec::new())).with_charge(0).with_unpaired_electrons((0, 1)), true)]
-    #[case::all_ground_six(AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
-    #[case::ground_with_constraint(AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)).with_constraint(AromaticSystemConstraintAst::electron_count(6)), true)]
-    fn test_aromatic_system_ast_is_ground(
-        #[case] ast: AromaticSystemAst,
+    #[case::all_undetermined(AromaticSystemForm::default(), false)]
+    #[case::charge_only(AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_charge(0), false)]
+    #[case::ground_no_atoms(AromaticSystemForm::new(ElectronCountsForm::Lit(Vec::new())).with_charge(0).with_unpaired_electrons((0, 1)), true)]
+    #[case::all_ground_six(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
+    #[case::ground_with_constraint(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)).with_constraint(AromaticSystemConstraintAst::electron_count(6)), true)]
+    fn test_aromatic_system_form_is_ground(
+        #[case] ast: AromaticSystemForm,
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_ground(), expected);
@@ -334,47 +334,47 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_charge(
-        AromaticSystemAst::default().with_charge(NumForm::lit_set([0])),
-        Ok(AromaticSystemAst::default().with_charge(0)),
+        AromaticSystemForm::default().with_charge(NumForm::lit_set([0])),
+        Ok(AromaticSystemForm::default().with_charge(0)),
     )]
     #[case::charge_empty_litset_contradiction(
-        AromaticSystemAst::default().with_charge(NumForm::lit_set(Vec::<i64>::new())),
+        AromaticSystemForm::default().with_charge(NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction),
     )]
-    fn test_aromatic_system_ast_canonicalize(
-        #[case] input: AromaticSystemAst,
-        #[case] expected: Result<AromaticSystemAst, Contradiction>,
+    fn test_aromatic_system_form_canonicalize(
+        #[case] input: AromaticSystemForm,
+        #[case] expected: Result<AromaticSystemForm, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_matches_default(AromaticSystemAst::default(), AromaticSystemAst::default(), true)]
-    #[case::default_matches_ground(AromaticSystemAst::default(), AromaticSystemAst::new(ElectronCountsForm::Lit(Vec::new())).with_charge(0).with_unpaired_electrons((0, 1)), true)]
-    #[case::exact(AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)),
-        AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
-    #[case::electrons_length_mismatch(AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 5])),
-        AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), false)]
-    #[case::electrons_value_mismatch(AromaticSystemAst::new(ElectronCountsForm::Lit(vec![2; 6])),
-        AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), false)]
-    #[case::pattern_undetermined_electron_matches_lit(AromaticSystemAst::new(ElectronCountsForm::Undetermined),
-      AromaticSystemAst::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
-    #[case::charge_mismatch(AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_charge(1),
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_charge(0), false)]
-    #[case::unpaired_electrons_mismatch(AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_unpaired_electrons((2_u8, 3_u8)),
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_unpaired_electrons((0_u8, 1_u8)), false)]
+    #[case::default_matches_default(AromaticSystemForm::default(), AromaticSystemForm::default(), true)]
+    #[case::default_matches_ground(AromaticSystemForm::default(), AromaticSystemForm::new(ElectronCountsForm::Lit(Vec::new())).with_charge(0).with_unpaired_electrons((0, 1)), true)]
+    #[case::exact(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)),
+        AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
+    #[case::electrons_length_mismatch(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 5])),
+        AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), false)]
+    #[case::electrons_value_mismatch(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![2; 6])),
+        AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), false)]
+    #[case::pattern_undetermined_electron_matches_lit(AromaticSystemForm::new(ElectronCountsForm::Undetermined),
+      AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
+    #[case::charge_mismatch(AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_charge(1),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_charge(0), false)]
+    #[case::unpaired_electrons_mismatch(AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_unpaired_electrons((2_u8, 3_u8)),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_unpaired_electrons((0_u8, 1_u8)), false)]
     #[case::constraint_required_present(
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
         true)]
     #[case::constraint_required_absent(
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined).with_constraint(AromaticSystemConstraintAst::electron_count(6)),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined),
         false)]
-    fn test_aromatic_system_ast_matches(
-        #[case] pattern: AromaticSystemAst,
-        #[case] target: AromaticSystemAst,
+    fn test_aromatic_system_form_matches(
+        #[case] pattern: AromaticSystemForm,
+        #[case] target: AromaticSystemForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -382,38 +382,38 @@ mod tests {
 
     #[rstest]
     #[case::both_default(
-        AromaticSystemAst::default(),
-        AromaticSystemAst::default(),
-        Some(AromaticSystemAst::default())
+        AromaticSystemForm::default(),
+        AromaticSystemForm::default(),
+        Some(AromaticSystemForm::default())
     )]
     #[case::electrons_length_mismatch(
-        AromaticSystemAst::from_electrons(vec![1; 6]),
-        AromaticSystemAst::from_electrons(vec![1; 5]),
+        AromaticSystemForm::from_electrons(vec![1; 6]),
+        AromaticSystemForm::from_electrons(vec![1; 5]),
         None,
     )]
     #[case::narrows_electrons(
-        AromaticSystemAst::new(ElectronCountsForm::Undetermined),
-        AromaticSystemAst::from_electrons(vec![1; 3]),
-        Some(AromaticSystemAst::from_electrons(vec![1; 3])),
+        AromaticSystemForm::new(ElectronCountsForm::Undetermined),
+        AromaticSystemForm::from_electrons(vec![1; 3]),
+        Some(AromaticSystemForm::from_electrons(vec![1; 3])),
     )]
-    fn test_aromatic_system_ast_meet(
-        #[case] a: AromaticSystemAst,
-        #[case] b: AromaticSystemAst,
-        #[case] expected: Option<AromaticSystemAst>,
+    fn test_aromatic_system_form_meet(
+        #[case] a: AromaticSystemForm,
+        #[case] b: AromaticSystemForm,
+        #[case] expected: Option<AromaticSystemForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
     #[case::electrons_length_mismatch_widens_to_default(
-        AromaticSystemAst::from_electrons(vec![1; 6]),
-        AromaticSystemAst::from_electrons(vec![1; 5]),
-        AromaticSystemAst::default(),
+        AromaticSystemForm::from_electrons(vec![1; 6]),
+        AromaticSystemForm::from_electrons(vec![1; 5]),
+        AromaticSystemForm::default(),
     )]
-    fn test_aromatic_system_ast_join(
-        #[case] a: AromaticSystemAst,
-        #[case] b: AromaticSystemAst,
-        #[case] expected: AromaticSystemAst,
+    fn test_aromatic_system_form_join(
+        #[case] a: AromaticSystemForm,
+        #[case] b: AromaticSystemForm,
+        #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
     }

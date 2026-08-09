@@ -359,10 +359,10 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_system_ast_lattice_laws(
-        a in aromatic_system_ast_strategy(),
-        b in aromatic_system_ast_strategy(),
-        c in aromatic_system_ast_strategy(),
+    fn test_aromatic_system_form_lattice_laws(
+        a in aromatic_system_form_strategy(),
+        b in aromatic_system_form_strategy(),
+        c in aromatic_system_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

@@ -49,7 +49,7 @@ fn apply_bond_diff(mut ast: BondForm, diff: Vec<BondDelta>) -> BondForm {
     ast
 }
 
-fn apply_dative_bond_diff(mut ast: DativeBondAst, diff: Vec<DativeBondDelta>) -> DativeBondAst {
+fn apply_dative_bond_diff(mut ast: DativeBondForm, diff: Vec<DativeBondDelta>) -> DativeBondForm {
     for delta in diff {
         match delta {
             DativeBondDelta::ModifyField { change, .. } => {
@@ -65,9 +65,9 @@ fn apply_dative_bond_diff(mut ast: DativeBondAst, diff: Vec<DativeBondDelta>) ->
 }
 
 fn apply_aromatic_system_diff(
-    mut ast: AromaticSystemAst,
+    mut ast: AromaticSystemForm,
     diff: Vec<AromaticSystemDelta>,
-) -> AromaticSystemAst {
+) -> AromaticSystemForm {
     for delta in diff {
         match delta {
             AromaticSystemDelta::ModifyField { change, .. } => {
@@ -83,9 +83,9 @@ fn apply_aromatic_system_diff(
 }
 
 fn apply_multicenter_bond_diff(
-    mut ast: MulticenterBondAst,
+    mut ast: MulticenterBondForm,
     diff: Vec<MulticenterBondDelta>,
-) -> MulticenterBondAst {
+) -> MulticenterBondForm {
     for delta in diff {
         match delta {
             MulticenterBondDelta::ModifyField { change, .. } => {
@@ -101,9 +101,9 @@ fn apply_multicenter_bond_diff(
 }
 
 fn apply_noncovalent_bond_diff(
-    mut ast: NoncovalentBondAst,
+    mut ast: NoncovalentBondForm,
     diff: Vec<NoncovalentBondDelta>,
-) -> NoncovalentBondAst {
+) -> NoncovalentBondForm {
     for delta in diff {
         match delta {
             NoncovalentBondDelta::ModifyField { change, .. } => {
@@ -338,7 +338,7 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_system_ast_difference_to(
+    fn test_aromatic_system_form_difference_to(
         lhs in aromatic_system_patch_ast_strategy(),
         rhs in aromatic_system_patch_ast_strategy(),
     ) {

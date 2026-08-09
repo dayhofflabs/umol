@@ -617,24 +617,25 @@ mod tests {
         ReactionMetadata as GraphIrReactionMetadata,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemAst as GraphIrAromaticSystemAst,
         AromaticSystemDelta as GraphIrAromaticSystemDelta,
+        AromaticSystemForm as GraphIrAromaticSystemForm,
         AromaticSystemId as GraphIrAromaticSystemId, AtomDelta as GraphIrAtomDelta,
         AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
         AtomId as GraphIrAtomId, BondDelta as GraphIrBondDelta,
         BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
         BondId as GraphIrBondId, Canonicalize, Constraint as GraphIrConstraint,
-        ConstraintDelta as GraphIrConstraintDelta, DativeBondAst as GraphIrDativeBondAst,
-        DativeBondDelta as GraphIrDativeBondDelta, DativeBondId as GraphIrDativeBondId,
+        ConstraintDelta as GraphIrConstraintDelta, DativeBondDelta as GraphIrDativeBondDelta,
+        DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
         Delta as GraphIrDelta, Deltas as GraphIrDeltas, Entity as GraphIrEntity,
         EntitySpan as GraphIrEntitySpan, MoleculeAst as GraphIrMoleculeAst,
         MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
-        MoleculeEntries as GraphIrMoleculeEntries, MulticenterBondAst as GraphIrMulticenterBondAst,
+        MoleculeEntries as GraphIrMoleculeEntries,
         MulticenterBondDelta as GraphIrMulticenterBondDelta,
+        MulticenterBondForm as GraphIrMulticenterBondForm,
         MulticenterBondId as GraphIrMulticenterBondId,
-        NoncovalentBondAst as GraphIrNoncovalentBondAst,
         NoncovalentBondDelta as GraphIrNoncovalentBondDelta,
+        NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
         ReactionSpanAst as GraphIrReactionSpanAst,
@@ -1345,7 +1346,7 @@ mod tests {
             id: GraphIrDativeBondId(0),
             donors: vec![GraphIrAtomId(0)],
             acceptor: GraphIrAtomId(1),
-            ast: GraphIrDativeBondAst::from_order(1),
+            ast: GraphIrDativeBondForm::from_order(1),
         })],
     )]
     #[case::aromatic_system(
@@ -1355,7 +1356,7 @@ mod tests {
         vec![GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(0),
             atoms: vec![GraphIrAtomId(0), GraphIrAtomId(1)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1]),
         })],
     )]
     #[case::multicenter_bond(
@@ -1365,7 +1366,7 @@ mod tests {
         vec![GraphIrDelta::MulticenterBond(GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(0),
             atoms: vec![GraphIrAtomId(0), GraphIrAtomId(1), GraphIrAtomId(2)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![3, 5, 7]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![3, 5, 7]),
         })],
     )]
     #[case::noncovalent_bond(
@@ -1375,7 +1376,7 @@ mod tests {
         vec![GraphIrDelta::NoncovalentBond(GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(0),
             atoms: [GraphIrAtomId(0), GraphIrAtomId(1)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         })],
     )]
     #[case::stereo_atom(

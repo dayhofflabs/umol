@@ -4375,7 +4375,7 @@ mod tests {
     use umol_edn::{read_string, EdnError};
 
     use super::*;
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
     use crate::ir::bond::BondForm;
     use crate::ir::boolean::BooleanForm;
@@ -4385,13 +4385,13 @@ mod tests {
         NoncovalentBondConstraintAst, RingMembershipAst, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
     };
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::AddBond;
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::molecule::MoleculeAst;
-    use crate::ir::multicenter::MulticenterBondAst;
+    use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm,
+        NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
     use crate::ir::stereo::{
         StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind, Stereogenicity,
@@ -4907,14 +4907,14 @@ mod tests {
         r#"{:dative-bond {:add {:donors [0 {:new 0}] :acceptor 2 :type :single}}}"#,
         Edit::AddDativeBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
-            ast: DativeBondAst::from_order(1),
+            ast: DativeBondForm::from_order(1),
         },
     )]
     #[case::dative_remove(
         r#"{:dative-bonds {:remove [{:id 0 :donors [1] :acceptor {:new 2} :type :single} {:id {:new 0} :donors [{:new 1}] :acceptor 3 :type :double}]}}"#,
         Edit::RemoveDativeBonds { removes: vec![
-            (DativeBondHandle::Id(DativeBondId(0)), vec![AtomHandle::Id(AtomId(1)), AtomHandle::New(2)], DativeBondAst::from_order(1)),
-            (DativeBondHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(3))], DativeBondAst::from_order(2)),
+            (DativeBondHandle::Id(DativeBondId(0)), vec![AtomHandle::Id(AtomId(1)), AtomHandle::New(2)], DativeBondForm::from_order(1)),
+            (DativeBondHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(3))], DativeBondForm::from_order(2)),
         ] },
     )]
     #[case::dative_field(
@@ -4944,14 +4944,14 @@ mod tests {
         r#"{:aromatic-system {:add {:atoms [0 {:new 0} 2] :type "[1,1,1]"}}}"#,
         Edit::AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
-            ast: AromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
     )]
     #[case::aromatic_remove(
         r#"{:aromatic-systems {:remove [{:id 0 :atoms [0 {:new 0}] :type "[1,1]"} {:id {:new 0} :atoms [{:new 1} 2] :type "[2,2]"}]}}"#,
         Edit::RemoveAromaticSystems { removes: vec![
-            (AromaticSystemHandle::Id(AromaticSystemId(0)), vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], AromaticSystemAst::from_electrons(vec![1, 1])),
-            (AromaticSystemHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(2))], AromaticSystemAst::from_electrons(vec![2, 2])),
+            (AromaticSystemHandle::Id(AromaticSystemId(0)), vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], AromaticSystemForm::from_electrons(vec![1, 1])),
+            (AromaticSystemHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(2))], AromaticSystemForm::from_electrons(vec![2, 2])),
         ] },
     )]
     #[case::aromatic_field(
@@ -4998,14 +4998,14 @@ mod tests {
         r#"{:multicenter-bond {:add {:atoms [0 {:new 0} 2] :type "[1,1,0]"}}}"#,
         Edit::AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
-            ast: MulticenterBondAst::from_electrons(vec![1, 1, 0]),
+            ast: MulticenterBondForm::from_electrons(vec![1, 1, 0]),
         },
     )]
     #[case::multicenter_remove(
         r#"{:multicenter-bonds {:remove [{:id 0 :atoms [0 {:new 0}] :type "[1,1]"} {:id {:new 0} :atoms [{:new 1} 2] :type "[2,0]"}]}}"#,
         Edit::RemoveMulticenterBonds { removes: vec![
-            (MulticenterBondHandle::Id(MulticenterBondId(0)), vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], MulticenterBondAst::from_electrons(vec![1, 1])),
-            (MulticenterBondHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(2))], MulticenterBondAst::from_electrons(vec![2, 0])),
+            (MulticenterBondHandle::Id(MulticenterBondId(0)), vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], MulticenterBondForm::from_electrons(vec![1, 1])),
+            (MulticenterBondHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(2))], MulticenterBondForm::from_electrons(vec![2, 0])),
         ] },
     )]
     #[case::multicenter_field(
@@ -5052,14 +5052,14 @@ mod tests {
         r#"{:noncovalent-bond {:add {:atoms [0 {:new 0}] :type "Hbd"}}}"#,
         Edit::AddNoncovalentBond {
             atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         },
     )]
     #[case::noncovalent_remove(
         r#"{:noncovalent-bonds {:remove [{:id 0 :atoms [0 {:new 0}] :type "Hbd"} {:id {:new 0} :atoms [{:new 1} 2] :type "Ion"}]}}"#,
         Edit::RemoveNoncovalentBonds { removes: vec![
-            (NoncovalentBondHandle::Id(NoncovalentBondId(0)), [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)),
-            (NoncovalentBondHandle::New(0), [AtomHandle::New(1), AtomHandle::Id(AtomId(2))], NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic)),
+            (NoncovalentBondHandle::Id(NoncovalentBondId(0)), [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)),
+            (NoncovalentBondHandle::New(0), [AtomHandle::New(1), AtomHandle::Id(AtomId(2))], NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic)),
         ] },
     )]
     #[case::noncovalent_field(
@@ -5253,7 +5253,7 @@ mod tests {
         r#"{:aromatic-system {:add {:atoms [0 1] :type "[1,1]"}}}"#,
         Edit::AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-            ast: AromaticSystemAst::from_electrons(vec![1, 1]).into_ground(),
+            ast: AromaticSystemForm::from_electrons(vec![1, 1]).into_ground(),
         },
     )]
     #[case::aromatic_remove(
@@ -5262,7 +5262,7 @@ mod tests {
             removes: vec![(
                 AromaticSystemHandle::Id(AromaticSystemId(0)),
                 vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                AromaticSystemAst::from_electrons(vec![1, 1]).into_ground(),
+                AromaticSystemForm::from_electrons(vec![1, 1]).into_ground(),
             )],
         },
     )]
@@ -5270,7 +5270,7 @@ mod tests {
         r#"{:multicenter-bond {:add {:atoms [0 1] :type "[1,1]"}}}"#,
         Edit::AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-            ast: MulticenterBondAst::from_electrons(vec![1, 1]).into_ground(),
+            ast: MulticenterBondForm::from_electrons(vec![1, 1]).into_ground(),
         },
     )]
     #[case::multicenter_remove(
@@ -5279,7 +5279,7 @@ mod tests {
             removes: vec![(
                 MulticenterBondHandle::Id(MulticenterBondId(0)),
                 vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                MulticenterBondAst::from_electrons(vec![1, 1]).into_ground(),
+                MulticenterBondForm::from_electrons(vec![1, 1]).into_ground(),
             )],
         },
     )]

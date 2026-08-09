@@ -511,17 +511,18 @@ mod tests {
         AtomDsl as GraphIrAtomDsl, MoleculeMetadata as GraphIrMoleculeMetadata,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemAst as GraphIrAromaticSystemAst, AromaticSystemId as GraphIrAromaticSystemId,
-        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
-        AtomHandle as GraphIrAtomHandle, AtomUpdate as GraphIrAtomUpdate,
-        BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
-        Constraints as GraphIrConstraints, DativeBondAst as GraphIrDativeBondAst,
-        DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
-        Entity as GraphIrEntity, MoleculeConstraint as GraphIrMoleculeConstraint,
+        AromaticSystemForm as GraphIrAromaticSystemForm,
+        AromaticSystemId as GraphIrAromaticSystemId, AtomFieldChange as GraphIrAtomFieldChange,
+        AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle,
+        AtomUpdate as GraphIrAtomUpdate, BondForm as GraphIrBondForm,
+        Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
+        DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
+        Edit as GraphIrEdit, Edits as GraphIrEdits, Entity as GraphIrEntity,
+        MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
-        MulticenterBondAst as GraphIrMulticenterBondAst,
+        MulticenterBondForm as GraphIrMulticenterBondForm,
         MulticenterBondId as GraphIrMulticenterBondId,
-        NoncovalentBondAst as GraphIrNoncovalentBondAst,
+        NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
         SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm,
@@ -729,7 +730,7 @@ mod tests {
                 1,
                 Py::new(
                     py,
-                    DativeBondAst::from_inner(GraphIrDativeBondAst::from_order(1)),
+                    DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1)),
                 )
                 .unwrap(),
             )];
@@ -737,7 +738,7 @@ mod tests {
                 vec![0, 1, 2],
                 Py::new(
                     py,
-                    AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                    AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                         1, 1, 1,
                     ])),
                 )
@@ -747,7 +748,7 @@ mod tests {
                 vec![0, 1, 2],
                 Py::new(
                     py,
-                    MulticenterBondAst::from_inner(GraphIrMulticenterBondAst::from_electrons(
+                    MulticenterBondAst::from_inner(GraphIrMulticenterBondForm::from_electrons(
                         vec![1, 1, 1],
                     )),
                 )
@@ -757,7 +758,7 @@ mod tests {
                 [0, 2],
                 Py::new(
                     py,
-                    NoncovalentBondAst::from_inner(GraphIrNoncovalentBondAst::from_kind(
+                    NoncovalentBondAst::from_inner(GraphIrNoncovalentBondForm::from_kind(
                         GraphIrNoncovalentBondKind::HydrogenBond,
                     )),
                 )
@@ -1517,7 +1518,7 @@ mod tests {
             noncovalent: vec![(
                 GraphIrAtomId(0),
                 GraphIrAtomId(1),
-                GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+                GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         })),

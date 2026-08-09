@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet,
+    AromaticSystemForm, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet,
     UnpairedElectronsForm,
 };
 
@@ -31,7 +31,7 @@ impl ClarAromaticity {
         rings: &RingSet,
         maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
         electrons_at: &F,
-    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemAst)>, ClarError>
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, ClarError>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
@@ -87,7 +87,7 @@ impl ClarAromaticity {
 
         Ok(vec![(
             atoms,
-            AromaticSystemAst::from_electrons(electrons)
+            AromaticSystemForm::from_electrons(electrons)
                 .with_charge(0)
                 .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
         )])

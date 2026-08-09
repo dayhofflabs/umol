@@ -300,13 +300,14 @@ mod tests {
         AtomDsl as GraphIrAtomDsl, MoleculeMetadata as GraphIrMoleculeMetadata,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemAst as GraphIrAromaticSystemAst, AtomForm as GraphIrAtomForm,
+        AromaticSystemForm as GraphIrAromaticSystemForm, AtomForm as GraphIrAtomForm,
         BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
-        DativeBondAst as GraphIrDativeBondAst, Entity as GraphIrEntity,
+        DativeBondForm as GraphIrDativeBondForm, Entity as GraphIrEntity,
         MoleculeAst as GraphIrMoleculeAst, MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
-        MoleculeEntries as GraphIrMoleculeEntries, MulticenterBondAst as GraphIrMulticenterBondAst,
-        NoncovalentBondAst as GraphIrNoncovalentBondAst,
+        MoleculeEntries as GraphIrMoleculeEntries,
+        MulticenterBondForm as GraphIrMulticenterBondForm,
+        NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
         ReactionAst as GraphIrReactionAst, StereoAtomAst as GraphIrStereoAtomAst,
         StereoBondAst as GraphIrStereoBondAst, StereoCoset as GraphIrStereoCoset,
@@ -525,12 +526,12 @@ mod tests {
             let removed_atom = GraphIrAtomForm::from_element(ChemElement::O);
             let added_atom = GraphIrAtomForm::from_element(ChemElement::F);
             let unchanged_bond = GraphIrBondForm::from_order(1);
-            let dative_lhs = GraphIrDativeBondAst::from_order(1);
-            let dative_rhs = GraphIrDativeBondAst::from_order(2);
-            let added_aromatic = GraphIrAromaticSystemAst::from_electrons(vec![1, 1]);
-            let removed_multicenter = GraphIrMulticenterBondAst::from_electrons(vec![1, 1]);
+            let dative_lhs = GraphIrDativeBondForm::from_order(1);
+            let dative_rhs = GraphIrDativeBondForm::from_order(2);
+            let added_aromatic = GraphIrAromaticSystemForm::from_electrons(vec![1, 1]);
+            let removed_multicenter = GraphIrMulticenterBondForm::from_electrons(vec![1, 1]);
             let unchanged_noncovalent =
-                GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond);
+                GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond);
             let stereo_atom_lhs = GraphIrStereoAtomAst::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(1),

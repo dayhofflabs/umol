@@ -15,12 +15,12 @@ use umol_graph_core::{
     RelationId, Remapping, Unordered, VarRelationSet,
 };
 
-use super::aromatic::AromaticSystemAst;
+use super::aromatic::AromaticSystemForm;
 use super::atom::AtomForm;
 use super::bond::BondForm;
 use super::constraint::Constraint;
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::DativeBondAst;
+use super::dative::DativeBondForm;
 use super::delta::{
     apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
     apply_multicenter_change, apply_noncovalent_change, apply_stereo_atom_change,
@@ -39,8 +39,8 @@ use super::molecule::{
     validate_constraint_references, validate_entry_references, MoleculeAst, MoleculeEntries,
     MoleculeEntriesError,
 };
-use super::multicenter::MulticenterBondAst;
-use super::noncovalent::NoncovalentBondAst;
+use super::multicenter::MulticenterBondForm;
+use super::noncovalent::NoncovalentBondForm;
 use super::reaction::ReactionAst;
 use super::remap::IdRemapping;
 use super::stereo::{StereoAtomAst, StereoBondAst};
@@ -55,10 +55,10 @@ pub struct ReactionSpanAst {
     atoms: Vec<EntitySpan<AtomForm>>,
     bonds: Vec<EntitySpan<BondForm>>,
     dative_bonds:
-        FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondAst>>,
-    aromatic_systems: VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemAst>>,
-    multicenter_bonds: VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondAst>>,
-    noncovalent_bonds: FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondAst>, 2>,
+        FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>,
+    aromatic_systems: VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>>,
+    multicenter_bonds: VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondForm>>,
+    noncovalent_bonds: FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2>,
     stereo_atoms:
         FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoAtomAst>>,
     stereo_bonds:
@@ -72,10 +72,10 @@ pub struct ReactionSpanAst {
 pub struct ReactionSpanEntries {
     pub atoms: Vec<EntitySpan<AtomForm>>,
     pub bonds: Vec<(AtomId, AtomId, EntitySpan<BondForm>)>,
-    pub dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondAst>)>,
-    pub aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemAst>)>,
-    pub multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondAst>)>,
-    pub noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondAst>)>,
+    pub dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)>,
+    pub aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)>,
+    pub multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)>,
+    pub noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)>,
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomAst>)>,
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondAst>)>,
     pub constraints: Vec<ConstraintSpan>,
@@ -631,7 +631,7 @@ impl ReactionSpanAst {
             1,
             NodeId,
             Unordered,
-            DativeBondAst,
+            DativeBondForm,
         > = FixedVarBirelationSet::new(
             rhs.dative_bonds()
                 .iter()
@@ -645,7 +645,7 @@ impl ReactionSpanAst {
                 .collect(),
         )
         .apply_remapping(&participant_remapping);
-        let remapped_rhs_aromatic: VarRelationSet<NodeId, Unordered, AromaticSystemAst> =
+        let remapped_rhs_aromatic: VarRelationSet<NodeId, Unordered, AromaticSystemForm> =
             VarRelationSet::new(
                 rhs.aromatic_systems()
                     .iter()
@@ -658,7 +658,7 @@ impl ReactionSpanAst {
                     .collect(),
             )
             .apply_remapping(&participant_remapping);
-        let remapped_rhs_multicenter: VarRelationSet<NodeId, Unordered, MulticenterBondAst> =
+        let remapped_rhs_multicenter: VarRelationSet<NodeId, Unordered, MulticenterBondForm> =
             VarRelationSet::new(
                 rhs.multicenter_bonds()
                     .iter()
@@ -671,7 +671,7 @@ impl ReactionSpanAst {
                     .collect(),
             )
             .apply_remapping(&participant_remapping);
-        let remapped_rhs_noncovalent: FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2> =
+        let remapped_rhs_noncovalent: FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2> =
             FixedRelationSet::new(
                 rhs.noncovalent_bonds()
                     .iter()
@@ -764,7 +764,7 @@ impl ReactionSpanAst {
 
         // Aromatic systems
         let aromatic_corr = correspondence.aromatic_systems();
-        let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemAst>)> = Vec::new();
+        let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> = Vec::new();
         for view in lhs.aromatic_systems().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
             let rhs_ast = aromatic_corr
@@ -791,7 +791,7 @@ impl ReactionSpanAst {
 
         // Multicenter bonds
         let multicenter_corr = correspondence.multicenter_bonds();
-        let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondAst>)> = Vec::new();
+        let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> = Vec::new();
         for view in lhs.multicenter_bonds().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
             let rhs_ast = multicenter_corr
@@ -818,7 +818,7 @@ impl ReactionSpanAst {
 
         // Noncovalent bonds
         let noncovalent_corr = correspondence.noncovalent_bonds();
-        let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondAst>)> = Vec::new();
+        let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> = Vec::new();
         for view in lhs.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
             let rhs_ast = noncovalent_corr
@@ -842,7 +842,7 @@ impl ReactionSpanAst {
 
         // Dative bonds
         let dative_corr = correspondence.dative_bonds();
-        let mut dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondAst>)> = Vec::new();
+        let mut dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)> = Vec::new();
         for view in lhs.dative_bonds().iter() {
             let acceptor = view.acceptor_id();
             let donors = view.donor_ids().collect();
@@ -1025,26 +1025,26 @@ impl ReactionSpanAst {
 
     pub(crate) fn dative_bonds(
         &self,
-    ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondAst>>
+    ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>
     {
         &self.dative_bonds
     }
 
     pub(crate) fn aromatic_systems(
         &self,
-    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemAst>> {
+    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>> {
         &self.aromatic_systems
     }
 
     pub(crate) fn multicenter_bonds(
         &self,
-    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondAst>> {
+    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondForm>> {
         &self.multicenter_bonds
     }
 
     pub(crate) fn noncovalent_bonds(
         &self,
-    ) -> &FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondAst>, 2> {
+    ) -> &FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2> {
         &self.noncovalent_bonds
     }
 
@@ -1093,7 +1093,7 @@ impl ReactionSpanAst {
             },
             &mut deltas,
         );
-        let dative_states: Vec<EntitySpan<DativeBondAst>> = (0..self.dative_bonds.count())
+        let dative_states: Vec<EntitySpan<DativeBondForm>> = (0..self.dative_bonds.count())
             .map(|i| self.dative_bonds.data(RelationId(i as u32)).clone())
             .collect();
         DativeBondDelta::append_deltas_from_states(
@@ -1111,7 +1111,7 @@ impl ReactionSpanAst {
             },
             &mut deltas,
         );
-        let aromatic_states: Vec<EntitySpan<AromaticSystemAst>> =
+        let aromatic_states: Vec<EntitySpan<AromaticSystemForm>> =
             (0..self.aromatic_systems.count())
                 .map(|i| self.aromatic_systems.data(RelationId(i as u32)).clone())
                 .collect();
@@ -1126,7 +1126,7 @@ impl ReactionSpanAst {
             },
             &mut deltas,
         );
-        let multicenter_states: Vec<EntitySpan<MulticenterBondAst>> =
+        let multicenter_states: Vec<EntitySpan<MulticenterBondForm>> =
             (0..self.multicenter_bonds.count())
                 .map(|i| self.multicenter_bonds.data(RelationId(i as u32)).clone())
                 .collect();
@@ -1141,7 +1141,7 @@ impl ReactionSpanAst {
             },
             &mut deltas,
         );
-        let noncovalent_states: Vec<EntitySpan<NoncovalentBondAst>> =
+        let noncovalent_states: Vec<EntitySpan<NoncovalentBondForm>> =
             (0..self.noncovalent_bonds.count())
                 .map(|i| self.noncovalent_bonds.data(RelationId(i as u32)).clone())
                 .collect();
@@ -1448,24 +1448,24 @@ impl ReactionAst {
         let mut removed_bonds: HashMap<BondId, BondForm> = HashMap::new();
         let mut added_bonds: BTreeMap<BondId, ([AtomId; 2], BondForm)> = BTreeMap::new();
         let mut bond_changes: HashMap<BondId, Vec<BondDelta>> = HashMap::new();
-        let mut removed_aromatic: HashMap<AromaticSystemId, AromaticSystemAst> = HashMap::new();
-        let mut added_aromatic: BTreeMap<AromaticSystemId, (Vec<AtomId>, AromaticSystemAst)> =
+        let mut removed_aromatic: HashMap<AromaticSystemId, AromaticSystemForm> = HashMap::new();
+        let mut added_aromatic: BTreeMap<AromaticSystemId, (Vec<AtomId>, AromaticSystemForm)> =
             BTreeMap::new();
         let mut aromatic_changes: HashMap<AromaticSystemId, Vec<AromaticSystemDelta>> =
             HashMap::new();
-        let mut removed_dative: HashMap<DativeBondId, DativeBondAst> = HashMap::new();
-        let mut added_dative: BTreeMap<DativeBondId, (Vec<AtomId>, AtomId, DativeBondAst)> =
+        let mut removed_dative: HashMap<DativeBondId, DativeBondForm> = HashMap::new();
+        let mut added_dative: BTreeMap<DativeBondId, (Vec<AtomId>, AtomId, DativeBondForm)> =
             BTreeMap::new();
         let mut dative_changes: HashMap<DativeBondId, Vec<DativeBondDelta>> = HashMap::new();
-        let mut removed_multicenter: HashMap<MulticenterBondId, MulticenterBondAst> =
+        let mut removed_multicenter: HashMap<MulticenterBondId, MulticenterBondForm> =
             HashMap::new();
-        let mut added_multicenter: BTreeMap<MulticenterBondId, (Vec<AtomId>, MulticenterBondAst)> =
+        let mut added_multicenter: BTreeMap<MulticenterBondId, (Vec<AtomId>, MulticenterBondForm)> =
             BTreeMap::new();
         let mut multicenter_changes: HashMap<MulticenterBondId, Vec<MulticenterBondDelta>> =
             HashMap::new();
-        let mut removed_noncovalent: HashMap<NoncovalentBondId, NoncovalentBondAst> =
+        let mut removed_noncovalent: HashMap<NoncovalentBondId, NoncovalentBondForm> =
             HashMap::new();
-        let mut added_noncovalent: BTreeMap<NoncovalentBondId, ([AtomId; 2], NoncovalentBondAst)> =
+        let mut added_noncovalent: BTreeMap<NoncovalentBondId, ([AtomId; 2], NoncovalentBondForm)> =
             BTreeMap::new();
         let mut noncovalent_changes: HashMap<NoncovalentBondId, Vec<NoncovalentBondDelta>> =
             HashMap::new();
@@ -1707,7 +1707,7 @@ impl ReactionAst {
 
         // Overlay columns: lhs overlays tagged by their fold (Removed/Modified/Unchanged),
         // created overlays appended; participants mapped to the union id space via `atom_index`.
-        let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemAst>)> = Vec::new();
+        let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> = Vec::new();
         for view in lhs.aromatic_systems().iter() {
             let participants: Vec<AtomId> = view
                 .atom_ids()
@@ -1737,7 +1737,7 @@ impl ReactionAst {
             aromatic.push((participants, EntitySpan::Added(ast)));
         }
 
-        let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondAst>)> = Vec::new();
+        let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> = Vec::new();
         for view in lhs.multicenter_bonds().iter() {
             let participants: Vec<AtomId> = view
                 .atom_ids()
@@ -1767,7 +1767,7 @@ impl ReactionAst {
             multicenter.push((participants, EntitySpan::Added(ast)));
         }
 
-        let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondAst>)> = Vec::new();
+        let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> = Vec::new();
         for view in lhs.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
             let first = AtomId(atom_index[&a] as u32);
@@ -1800,7 +1800,7 @@ impl ReactionAst {
             ));
         }
 
-        let mut dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondAst>)> = Vec::new();
+        let mut dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)> = Vec::new();
         for view in lhs.dative_bonds().iter() {
             let acceptor = AtomId(atom_index[&view.acceptor_id()] as u32);
             let donors: Vec<AtomId> = view
@@ -2124,20 +2124,20 @@ mod tests {
             dative: vec![(
                 vec![AtomId(1)],
                 AtomId(0),
-                EntitySpan::Unchanged(DativeBondAst::default()),
+                EntitySpan::Unchanged(DativeBondForm::default()),
             )],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(4)],
-                EntitySpan::Unchanged(AromaticSystemAst::default()),
+                EntitySpan::Unchanged(AromaticSystemForm::default()),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(4)],
-                EntitySpan::Unchanged(MulticenterBondAst::default()),
+                EntitySpan::Unchanged(MulticenterBondForm::default()),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(4),
-                EntitySpan::Unchanged(NoncovalentBondAst::default()),
+                EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -2182,16 +2182,16 @@ mod tests {
                     (AtomId(0), AtomId(1), BondForm::from_order(1)),
                     (AtomId(1), AtomId(2), BondForm::from_order(1)),
                 ],
-                dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::default())],
+                dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondForm::default())],
                 aromatic: vec![(
                     vec![AtomId(0), AtomId(1), AtomId(3)],
-                    AromaticSystemAst::default(),
+                    AromaticSystemForm::default(),
                 )],
                 multicenter: vec![(
                     vec![AtomId(0), AtomId(1), AtomId(3)],
-                    MulticenterBondAst::default(),
+                    MulticenterBondForm::default(),
                 )],
-                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondAst::default(),)],
+                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default(),)],
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
@@ -2232,16 +2232,16 @@ mod tests {
                     (AtomId(0), AtomId(1), BondForm::from_order(2)),
                     (AtomId(1), AtomId(2), BondForm::from_order(1)),
                 ],
-                dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::default())],
+                dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondForm::default())],
                 aromatic: vec![(
                     vec![AtomId(0), AtomId(1), AtomId(3)],
-                    AromaticSystemAst::default(),
+                    AromaticSystemForm::default(),
                 )],
                 multicenter: vec![(
                     vec![AtomId(0), AtomId(1), AtomId(3)],
-                    MulticenterBondAst::default(),
+                    MulticenterBondForm::default(),
                 )],
-                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondAst::default(),)],
+                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default(),)],
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
@@ -2295,30 +2295,30 @@ mod tests {
                 vec![AtomId(1)],
                 AtomId(0),
                 EntitySpan::Modified {
-                    lhs: DativeBondAst::default(),
-                    rhs: DativeBondAst::default(),
+                    lhs: DativeBondForm::default(),
+                    rhs: DativeBondForm::default(),
                 },
             )],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1)],
                 EntitySpan::Modified {
-                    lhs: AromaticSystemAst::default(),
-                    rhs: AromaticSystemAst::default(),
+                    lhs: AromaticSystemForm::default(),
+                    rhs: AromaticSystemForm::default(),
                 },
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1)],
                 EntitySpan::Modified {
-                    lhs: MulticenterBondAst::default(),
-                    rhs: MulticenterBondAst::default(),
+                    lhs: MulticenterBondForm::default(),
+                    rhs: MulticenterBondForm::default(),
                 },
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(1),
                 EntitySpan::Modified {
-                    lhs: NoncovalentBondAst::default(),
-                    rhs: NoncovalentBondAst::default(),
+                    lhs: NoncovalentBondForm::default(),
+                    rhs: NoncovalentBondForm::default(),
                 },
             )],
             stereo_atoms: vec![(
@@ -2344,19 +2344,19 @@ mod tests {
         assert_eq!(span.bonds()[0], EntitySpan::Unchanged(BondForm::default()));
         assert_eq!(
             span.dative_bonds().data(RelationId(0)),
-            &EntitySpan::Unchanged(DativeBondAst::default())
+            &EntitySpan::Unchanged(DativeBondForm::default())
         );
         assert_eq!(
             span.aromatic_systems().data(RelationId(0)),
-            &EntitySpan::Unchanged(AromaticSystemAst::default())
+            &EntitySpan::Unchanged(AromaticSystemForm::default())
         );
         assert_eq!(
             span.multicenter_bonds().data(RelationId(0)),
-            &EntitySpan::Unchanged(MulticenterBondAst::default())
+            &EntitySpan::Unchanged(MulticenterBondForm::default())
         );
         assert_eq!(
             span.noncovalent_bonds().data(RelationId(0)),
-            &EntitySpan::Unchanged(NoncovalentBondAst::default())
+            &EntitySpan::Unchanged(NoncovalentBondForm::default())
         );
         assert_eq!(
             span.stereo_atoms().data(RelationId(0)),
@@ -2453,7 +2453,7 @@ mod tests {
             dative: vec![(
                 vec![AtomId(1)],
                 AtomId(0),
-                EntitySpan::Unchanged(DativeBondAst::default()),
+                EntitySpan::Unchanged(DativeBondForm::default()),
             )],
             ..Default::default()
         },
@@ -2464,7 +2464,7 @@ mod tests {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1)],
-                EntitySpan::Unchanged(AromaticSystemAst::default()),
+                EntitySpan::Unchanged(AromaticSystemForm::default()),
             )],
             ..Default::default()
         },
@@ -2475,7 +2475,7 @@ mod tests {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1)],
-                EntitySpan::Unchanged(MulticenterBondAst::default()),
+                EntitySpan::Unchanged(MulticenterBondForm::default()),
             )],
             ..Default::default()
         },
@@ -2487,7 +2487,7 @@ mod tests {
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(1),
-                EntitySpan::Unchanged(NoncovalentBondAst::default()),
+                EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             ..Default::default()
         },
@@ -2591,7 +2591,7 @@ mod tests {
             dative: vec![(
                 vec![AtomId(0)],
                 AtomId(1),
-                EntitySpan::Unchanged(DativeBondAst::default()),
+                EntitySpan::Unchanged(DativeBondForm::default()),
             )],
             ..Default::default()
         },
@@ -2605,7 +2605,7 @@ mod tests {
             ],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1)],
-                EntitySpan::Unchanged(AromaticSystemAst::default()),
+                EntitySpan::Unchanged(AromaticSystemForm::default()),
             )],
             ..Default::default()
         },
@@ -2620,7 +2620,7 @@ mod tests {
             ],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                EntitySpan::Unchanged(MulticenterBondAst::default()),
+                EntitySpan::Unchanged(MulticenterBondForm::default()),
             )],
             ..Default::default()
         },
@@ -2635,7 +2635,7 @@ mod tests {
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(1),
-                EntitySpan::Unchanged(NoncovalentBondAst::default()),
+                EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             ..Default::default()
         },
@@ -2820,16 +2820,16 @@ mod tests {
                         (AtomId(0), AtomId(1), BondForm::from_order(1)),
                         (AtomId(1), AtomId(2), BondForm::from_order(1)),
                     ],
-                    dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::default(),)],
+                    dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondForm::default(),)],
                     aromatic: vec![(
                         vec![AtomId(0), AtomId(1), AtomId(2)],
-                        AromaticSystemAst::default(),
+                        AromaticSystemForm::default(),
                     )],
                     multicenter: vec![(
                         vec![AtomId(0), AtomId(1), AtomId(2)],
-                        MulticenterBondAst::default(),
+                        MulticenterBondForm::default(),
                     )],
-                    noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondAst::default(),)],
+                    noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::default(),)],
                     stereo_atoms: vec![(
                         AtomId(2),
                         vec![
@@ -2878,43 +2878,43 @@ mod tests {
                         id: DativeBondId(0),
                         donors: vec![AtomId(2)],
                         acceptor: AtomId(1),
-                        ast: DativeBondAst::default(),
+                        ast: DativeBondForm::default(),
                     }),
                     Delta::DativeBond(DativeBondDelta::Add {
                         id: DativeBondId(1),
                         donors: vec![AtomId(4)],
                         acceptor: AtomId(1),
-                        ast: DativeBondAst::default(),
+                        ast: DativeBondForm::default(),
                     }),
                     Delta::AromaticSystem(AromaticSystemDelta::Remove {
                         id: AromaticSystemId(0),
                         atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
-                        ast: AromaticSystemAst::default(),
+                        ast: AromaticSystemForm::default(),
                     }),
                     Delta::AromaticSystem(AromaticSystemDelta::Add {
                         id: AromaticSystemId(1),
                         atoms: vec![AtomId(0), AtomId(1), AtomId(4)],
-                        ast: AromaticSystemAst::default(),
+                        ast: AromaticSystemForm::default(),
                     }),
                     Delta::MulticenterBond(MulticenterBondDelta::Remove {
                         id: MulticenterBondId(0),
                         atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
-                        ast: MulticenterBondAst::default(),
+                        ast: MulticenterBondForm::default(),
                     }),
                     Delta::MulticenterBond(MulticenterBondDelta::Add {
                         id: MulticenterBondId(1),
                         atoms: vec![AtomId(0), AtomId(1), AtomId(4)],
-                        ast: MulticenterBondAst::default(),
+                        ast: MulticenterBondForm::default(),
                     }),
                     Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id: NoncovalentBondId(0),
                         atoms: [AtomId(0), AtomId(2)],
-                        ast: NoncovalentBondAst::default(),
+                        ast: NoncovalentBondForm::default(),
                     }),
                     Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                         id: NoncovalentBondId(1),
                         atoms: [AtomId(0), AtomId(4)],
-                        ast: NoncovalentBondAst::default(),
+                        ast: NoncovalentBondForm::default(),
                     }),
                     Delta::StereoAtom(StereoAtomDelta::Remove {
                         id: StereoAtomId(0),
@@ -2999,44 +2999,44 @@ mod tests {
                     (
                         vec![AtomId(2)],
                         AtomId(1),
-                        EntitySpan::Removed(DativeBondAst::default()),
+                        EntitySpan::Removed(DativeBondForm::default()),
                     ),
                     (
                         vec![AtomId(4)],
                         AtomId(1),
-                        EntitySpan::Added(DativeBondAst::default()),
+                        EntitySpan::Added(DativeBondForm::default()),
                     ),
                 ],
                 aromatic: vec![
                     (
                         vec![AtomId(0), AtomId(1), AtomId(2)],
-                        EntitySpan::Removed(AromaticSystemAst::default()),
+                        EntitySpan::Removed(AromaticSystemForm::default()),
                     ),
                     (
                         vec![AtomId(0), AtomId(1), AtomId(4)],
-                        EntitySpan::Added(AromaticSystemAst::default()),
+                        EntitySpan::Added(AromaticSystemForm::default()),
                     ),
                 ],
                 multicenter: vec![
                     (
                         vec![AtomId(0), AtomId(1), AtomId(2)],
-                        EntitySpan::Removed(MulticenterBondAst::default()),
+                        EntitySpan::Removed(MulticenterBondForm::default()),
                     ),
                     (
                         vec![AtomId(0), AtomId(1), AtomId(4)],
-                        EntitySpan::Added(MulticenterBondAst::default()),
+                        EntitySpan::Added(MulticenterBondForm::default()),
                     ),
                 ],
                 noncovalent: vec![
                     (
                         AtomId(0),
                         AtomId(2),
-                        EntitySpan::Removed(NoncovalentBondAst::default()),
+                        EntitySpan::Removed(NoncovalentBondForm::default()),
                     ),
                     (
                         AtomId(0),
                         AtomId(4),
-                        EntitySpan::Added(NoncovalentBondAst::default()),
+                        EntitySpan::Added(NoncovalentBondForm::default()),
                     ),
                 ],
                 stereo_atoms: vec![
@@ -3552,7 +3552,7 @@ mod tests {
             id: DativeBondId(0),
             donors: vec![AtomId(0), AtomId(2)],
             acceptor: AtomId(1),
-            ast: DativeBondAst::from_order(1),
+            ast: DativeBondForm::from_order(1),
         })]),
     ))]
     #[case::aromatic_add(ReactionAst::new(
@@ -3564,7 +3564,7 @@ mod tests {
         Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Add {
             id: AromaticSystemId(0),
             atoms: vec![AtomId(0), AtomId(1)],
-            ast: AromaticSystemAst::from_electrons(vec![1, 2]),
+            ast: AromaticSystemForm::from_electrons(vec![1, 2]),
         })]),
     ))]
     #[case::multicenter_add(ReactionAst::new(
@@ -3580,7 +3580,7 @@ mod tests {
         Deltas::from_iter([Delta::MulticenterBond(MulticenterBondDelta::Add {
             id: MulticenterBondId(0),
             atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
-            ast: MulticenterBondAst::from_electrons(vec![3, 5, 7]),
+            ast: MulticenterBondForm::from_electrons(vec![3, 5, 7]),
         })]),
     ))]
     #[case::noncovalent_add(ReactionAst::new(
@@ -3592,26 +3592,26 @@ mod tests {
         Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(0),
             atoms: [AtomId(0), AtomId(1)],
-            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         })]),
     ))]
     #[case::noncovalent_remove(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
         Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
             id: NoncovalentBondId(0),
             atoms: [AtomId(0), AtomId(1)],
-            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         })]),
     ))]
     #[case::noncovalent_modify(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -3748,7 +3748,7 @@ mod tests {
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
@@ -3756,13 +3756,13 @@ mod tests {
         ),
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -3777,7 +3777,7 @@ mod tests {
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                 id: NoncovalentBondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             })]),
         ),
         MoleculeAst::from_entries(MoleculeEntries {
@@ -3787,7 +3787,7 @@ mod tests {
         }),
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -3853,16 +3853,16 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(1), AtomId(2), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::default())],
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondForm::default())],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
-            noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondAst::default())],
+            noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::default())],
             stereo_atoms: vec![(
                 AtomId(2),
                 vec![
@@ -3900,16 +3900,16 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(1), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(3)], AtomId(1), DativeBondAst::default())],
+            dative: vec![(vec![AtomId(3)], AtomId(1), DativeBondForm::default())],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(3)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(3)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
-            noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondAst::default())],
+            noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default())],
             stereo_atoms: vec![(
                 AtomId(3),
                 vec![
@@ -3984,44 +3984,44 @@ mod tests {
                     (
                         vec![AtomId(2)],
                         AtomId(1),
-                        EntitySpan::Removed(DativeBondAst::default()),
+                        EntitySpan::Removed(DativeBondForm::default()),
                     ),
                     (
                         vec![AtomId(4)],
                         AtomId(1),
-                        EntitySpan::Added(DativeBondAst::default()),
+                        EntitySpan::Added(DativeBondForm::default()),
                     ),
                 ],
                 aromatic: vec![
                     (
                         vec![AtomId(0), AtomId(1), AtomId(2)],
-                        EntitySpan::Removed(AromaticSystemAst::default()),
+                        EntitySpan::Removed(AromaticSystemForm::default()),
                     ),
                     (
                         vec![AtomId(0), AtomId(1), AtomId(4)],
-                        EntitySpan::Added(AromaticSystemAst::default()),
+                        EntitySpan::Added(AromaticSystemForm::default()),
                     ),
                 ],
                 multicenter: vec![
                     (
                         vec![AtomId(0), AtomId(1), AtomId(2)],
-                        EntitySpan::Removed(MulticenterBondAst::default()),
+                        EntitySpan::Removed(MulticenterBondForm::default()),
                     ),
                     (
                         vec![AtomId(0), AtomId(1), AtomId(4)],
-                        EntitySpan::Added(MulticenterBondAst::default()),
+                        EntitySpan::Added(MulticenterBondForm::default()),
                     ),
                 ],
                 noncovalent: vec![
                     (
                         AtomId(0),
                         AtomId(2),
-                        EntitySpan::Removed(NoncovalentBondAst::default()),
+                        EntitySpan::Removed(NoncovalentBondForm::default()),
                     ),
                     (
                         AtomId(0),
                         AtomId(4),
-                        EntitySpan::Added(NoncovalentBondAst::default()),
+                        EntitySpan::Added(NoncovalentBondForm::default()),
                     ),
                 ],
                 stereo_atoms: vec![
@@ -4140,7 +4140,7 @@ mod tests {
             ],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             ..Default::default()
         }),
@@ -4152,7 +4152,7 @@ mod tests {
             ],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             ..Default::default()
         }),

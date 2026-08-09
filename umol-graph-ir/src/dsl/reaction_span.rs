@@ -46,8 +46,9 @@ use crate::ir::id::{
 use crate::ir::ligand::StereoLigand;
 use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::{
-    AromaticSystemAst, Constraint, ConstraintSpan, DativeBondAst, EntitySpan, MulticenterBondAst,
-    NoncovalentBondAst, ReactionSpanAst, ReactionSpanEntries, StereoAtomAst, StereoBondAst,
+    AromaticSystemForm, Constraint, ConstraintSpan, DativeBondForm, EntitySpan,
+    MulticenterBondForm, NoncovalentBondForm, ReactionSpanAst, ReactionSpanEntries, StereoAtomAst,
+    StereoBondAst,
 };
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the
@@ -375,11 +376,19 @@ pub(crate) struct SpanInput {
         Option<String>,
         Vec<AtomRef>,
         AtomRef,
-        EntitySpan<DativeBondAst>,
+        EntitySpan<DativeBondForm>,
     )>,
-    aromatic_systems: Vec<(Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemAst>)>,
-    multicenter_bonds: Vec<(Option<String>, Vec<AtomRef>, EntitySpan<MulticenterBondAst>)>,
-    noncovalent_bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<NoncovalentBondAst>)>,
+    aromatic_systems: Vec<(Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemForm>)>,
+    multicenter_bonds: Vec<(
+        Option<String>,
+        Vec<AtomRef>,
+        EntitySpan<MulticenterBondForm>,
+    )>,
+    noncovalent_bonds: Vec<(
+        Option<String>,
+        [AtomRef; 2],
+        EntitySpan<NoncovalentBondForm>,
+    )>,
     stereo_atoms: Vec<(
         Option<String>,
         AtomRef,
@@ -543,11 +552,11 @@ fn parse_dative_span_entry(
         Option<String>,
         Vec<AtomRef>,
         AtomRef,
-        EntitySpan<DativeBondAst>,
+        EntitySpan<DativeBondForm>,
     ),
     DeError,
 > {
-    let full = |p: &Edn<'_>, wrap: fn(DativeBondAst) -> EntitySpan<DativeBondAst>| {
+    let full = |p: &Edn<'_>, wrap: fn(DativeBondForm) -> EntitySpan<DativeBondForm>| {
         let e = parse_dative_bond_entry(p)?;
         Ok::<_, DeError>((e.keyword, e.donors, e.acceptor, wrap(e.bond.0)))
     };
@@ -590,8 +599,8 @@ fn parse_dative_span_entry(
 #[allow(clippy::type_complexity)]
 fn parse_aromatic_span_entry(
     edn: &Edn<'_>,
-) -> Result<(Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemAst>), DeError> {
-    let full = |p: &Edn<'_>, wrap: fn(AromaticSystemAst) -> EntitySpan<AromaticSystemAst>| {
+) -> Result<(Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemForm>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(AromaticSystemForm) -> EntitySpan<AromaticSystemForm>| {
         let e = parse_aromatic_system_entry(p)?;
         Ok::<_, DeError>((e.keyword, e.atoms, wrap(e.system.0)))
     };
@@ -634,8 +643,15 @@ fn parse_aromatic_span_entry(
 #[allow(clippy::type_complexity, clippy::redundant_closure)]
 fn parse_multicenter_span_entry(
     edn: &Edn<'_>,
-) -> Result<(Option<String>, Vec<AtomRef>, EntitySpan<MulticenterBondAst>), DeError> {
-    let full = |p: &Edn<'_>, wrap: fn(MulticenterBondAst) -> EntitySpan<MulticenterBondAst>| {
+) -> Result<
+    (
+        Option<String>,
+        Vec<AtomRef>,
+        EntitySpan<MulticenterBondForm>,
+    ),
+    DeError,
+> {
+    let full = |p: &Edn<'_>, wrap: fn(MulticenterBondForm) -> EntitySpan<MulticenterBondForm>| {
         let e = parse_multicenter_bond_entry(p)?;
         Ok::<_, DeError>((e.keyword, e.atoms, wrap(e.bond.0)))
     };
@@ -680,8 +696,15 @@ fn parse_multicenter_span_entry(
 #[allow(clippy::type_complexity, clippy::redundant_closure)]
 fn parse_noncovalent_span_entry(
     edn: &Edn<'_>,
-) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<NoncovalentBondAst>), DeError> {
-    let full = |p: &Edn<'_>, wrap: fn(NoncovalentBondAst) -> EntitySpan<NoncovalentBondAst>| {
+) -> Result<
+    (
+        Option<String>,
+        [AtomRef; 2],
+        EntitySpan<NoncovalentBondForm>,
+    ),
+    DeError,
+> {
+    let full = |p: &Edn<'_>, wrap: fn(NoncovalentBondForm) -> EntitySpan<NoncovalentBondForm>| {
         let e = parse_noncovalent_bond_entry(p)?;
         Ok::<_, DeError>((e.keyword, [e.first, e.second], wrap(e.bond.0)))
     };
@@ -1241,10 +1264,10 @@ fn render_dative_span_entry(
     id: DativeBondId,
     donors: &[AtomId],
     acceptor: AtomId,
-    span: &EntitySpan<DativeBondAst>,
+    span: &EntitySpan<DativeBondForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
-    let value = |b: &DativeBondAst| DativeBondDsl::from_ref(b).to_edn();
+    let value = |b: &DativeBondForm| DativeBondDsl::from_ref(b).to_edn();
     let entry = |type_edn: Edn<'static>| {
         render_dative_entry(id, donors.iter().copied(), acceptor, type_edn, meta)
     };
@@ -1265,11 +1288,11 @@ fn render_dative_span_entry(
 fn render_aromatic_span_entry(
     id: AromaticSystemId,
     atoms: &[AtomId],
-    span: &EntitySpan<AromaticSystemAst>,
+    span: &EntitySpan<AromaticSystemForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let value =
-        |s: &AromaticSystemAst| Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(s).to_string()));
+        |s: &AromaticSystemForm| Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(s).to_string()));
     let entry =
         |type_edn: Edn<'static>| render_aromatic_entry(id, atoms.iter().copied(), type_edn, meta);
     match span {
@@ -1289,11 +1312,11 @@ fn render_aromatic_span_entry(
 fn render_multicenter_span_entry(
     id: MulticenterBondId,
     atoms: &[AtomId],
-    span: &EntitySpan<MulticenterBondAst>,
+    span: &EntitySpan<MulticenterBondForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let value =
-        |b: &MulticenterBondAst| Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(b).to_string()));
+        |b: &MulticenterBondForm| Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(b).to_string()));
     let entry = |type_edn: Edn<'static>| {
         render_multicenter_entry(id, atoms.iter().copied(), type_edn, meta)
     };
@@ -1314,10 +1337,10 @@ fn render_multicenter_span_entry(
 fn render_noncovalent_span_entry(
     id: NoncovalentBondId,
     atoms: [AtomId; 2],
-    span: &EntitySpan<NoncovalentBondAst>,
+    span: &EntitySpan<NoncovalentBondForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
-    let value = |b: &NoncovalentBondAst| NoncovalentBondDsl::from_ref(b).to_edn();
+    let value = |b: &NoncovalentBondForm| NoncovalentBondDsl::from_ref(b).to_edn();
     let entry = |type_edn: Edn<'static>| render_noncovalent_entry(id, atoms, type_edn, meta);
     match span {
         EntitySpan::Unchanged(b) => entry(value(b)),
@@ -1905,7 +1928,7 @@ mod tests {
             Option<String>,
             Vec<AtomRef>,
             AtomRef,
-            EntitySpan<DativeBondAst>,
+            EntitySpan<DativeBondForm>,
         ),
     ) {
         assert_eq!(
@@ -1932,7 +1955,7 @@ mod tests {
     ))]
     fn test_parse_aromatic_span_entry(
         #[case] input: &str,
-        #[case] expected: (Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemAst>),
+        #[case] expected: (Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemForm>),
     ) {
         assert_eq!(
             parse_aromatic_span_entry(&read_string(input).unwrap()).unwrap(),
@@ -1958,7 +1981,11 @@ mod tests {
     ))]
     fn test_parse_multicenter_span_entry(
         #[case] input: &str,
-        #[case] expected: (Option<String>, Vec<AtomRef>, EntitySpan<MulticenterBondAst>),
+        #[case] expected: (
+            Option<String>,
+            Vec<AtomRef>,
+            EntitySpan<MulticenterBondForm>,
+        ),
     ) {
         assert_eq!(
             parse_multicenter_span_entry(&read_string(input).unwrap()).unwrap(),
@@ -1977,7 +2004,11 @@ mod tests {
     ))]
     fn test_parse_noncovalent_span_entry(
         #[case] input: &str,
-        #[case] expected: (Option<String>, [AtomRef; 2], EntitySpan<NoncovalentBondAst>),
+        #[case] expected: (
+            Option<String>,
+            [AtomRef; 2],
+            EntitySpan<NoncovalentBondForm>,
+        ),
     ) {
         assert_eq!(
             parse_noncovalent_span_entry(&read_string(input).unwrap()).unwrap(),
@@ -2449,7 +2480,7 @@ mod tests {
         metadata
     }, r#"{:id :d1 :donors [0] :acceptor 1 :type "1#R"}"#)]
     fn test_render_dative_span_entry(
-        #[case] span: EntitySpan<DativeBondAst>,
+        #[case] span: EntitySpan<DativeBondForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {
@@ -2469,7 +2500,7 @@ mod tests {
         metadata
     }, r#"{:id :ar1 :atoms [0 1 2] :type "*#e6"}"#)]
     fn test_render_aromatic_span_entry(
-        #[case] span: EntitySpan<AromaticSystemAst>,
+        #[case] span: EntitySpan<AromaticSystemForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {
@@ -2489,7 +2520,7 @@ mod tests {
     #[case::remove(EntitySpan::Removed(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:atoms [0 1] :type "*#e2"}}"#)]
     #[case::modify(EntitySpan::Modified { lhs:MulticenterBondDsl::from_str("*#e2").unwrap().0, rhs:MulticenterBondDsl::from_str("*#e4").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#)]
     fn test_render_multicenter_span_entry(
-        #[case] span: EntitySpan<MulticenterBondAst>,
+        #[case] span: EntitySpan<MulticenterBondForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {
@@ -2513,7 +2544,7 @@ mod tests {
         metadata
     }, r#"{:id :nc1 :atoms [0 1] :type "Hbd"}"#)]
     fn test_render_noncovalent_span_entry(
-        #[case] span: EntitySpan<NoncovalentBondAst>,
+        #[case] span: EntitySpan<NoncovalentBondForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {

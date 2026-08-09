@@ -8,7 +8,7 @@ use super::super::constraint::MulticenterBondConstraintsAst;
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
-use super::super::multicenter::MulticenterBondAst;
+use super::super::multicenter::MulticenterBondForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
@@ -18,13 +18,13 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
     molecule: &'a MoleculeAst,
-    multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
+    multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondForm>,
 }
 
 impl<'a> MulticenterBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
+        multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondForm>,
     ) -> Self {
         Self {
             molecule,
@@ -169,12 +169,12 @@ impl<'a> MulticenterBondViews<'a> {
 }
 
 /// Borrowed view of a multicenter bond: its index, member atoms via
-/// `atoms()`, and underlying `MulticenterBondAst`.
+/// `atoms()`, and underlying `MulticenterBondForm`.
 #[derive(Clone, Copy, Debug)]
 pub struct MulticenterBondView<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
-    pub ast: &'a MulticenterBondAst,
+    pub ast: &'a MulticenterBondForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -256,7 +256,7 @@ impl<'a> MulticenterBondView<'a> {
 pub struct MulticenterBondViewMut<'a> {
     pub id: MulticenterBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: &'a mut MulticenterBondAst,
+    pub ast: &'a mut MulticenterBondForm,
 }
 
 // Builder-scope view bundles for multicenter bonds.
@@ -264,14 +264,14 @@ pub struct MulticenterBondViewMut<'a> {
 pub struct MulticenterBondEditorView<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
-    pub ast: &'a MulticenterBondAst,
+    pub ast: &'a MulticenterBondForm,
 }
 
 impl<'a> MulticenterBondEditorView<'a> {
     pub(crate) fn new(
         id: MulticenterBondId,
         atoms: &'a [NodeId],
-        ast: &'a MulticenterBondAst,
+        ast: &'a MulticenterBondForm,
     ) -> Self {
         Self { id, atoms, ast }
     }
@@ -284,14 +284,14 @@ impl<'a> MulticenterBondEditorView<'a> {
 pub struct MulticenterBondEditorViewMut<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
-    pub ast: &'a mut MulticenterBondAst,
+    pub ast: &'a mut MulticenterBondForm,
 }
 
 impl<'a> MulticenterBondEditorViewMut<'a> {
     pub(crate) fn new(
         id: MulticenterBondId,
         atoms: &'a [NodeId],
-        ast: &'a mut MulticenterBondAst,
+        ast: &'a mut MulticenterBondForm,
     ) -> Self {
         Self { id, atoms, ast }
     }
@@ -310,14 +310,14 @@ mod tests {
 
     use super::super::assert_exact_size_by;
     use super::{MulticenterBondEditorView, MulticenterBondEditorViewMut};
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AtomId, MulticenterBondId};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::value::NumForm;
 
     #[fixture]
@@ -334,19 +334,19 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(2)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1))],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         })
@@ -490,7 +490,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_editor_view_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let ast = MulticenterBondAst::default();
+        let ast = MulticenterBondForm::default();
         let view = MulticenterBondEditorView::new(MulticenterBondId(0), &atoms, &ast);
         assert_exact_size_by(
             view.atom_ids(),
@@ -502,7 +502,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_editor_view_mut_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let mut ast = MulticenterBondAst::default();
+        let mut ast = MulticenterBondForm::default();
         let view = MulticenterBondEditorViewMut::new(MulticenterBondId(0), &atoms, &mut ast);
         assert_exact_size_by(
             view.atom_ids(),

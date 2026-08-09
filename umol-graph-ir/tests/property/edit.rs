@@ -68,37 +68,37 @@ proptest! {
                 }
                 EntityKind::DativeBond => {
                     counts[2] += 1;
-                    direct.add_dative_bond(Vec::new(), DativeBondAst::default());
+                    direct.add_dative_bond(Vec::new(), DativeBondForm::default());
                     entries.push(Edit::AddDativeBond {
                         atoms: Vec::new(),
-                        ast: DativeBondAst::default(),
+                        ast: DativeBondForm::default(),
                     });
                 }
                 EntityKind::AromaticSystem => {
                     counts[3] += 1;
-                    direct.add_aromatic_system(Vec::new(), AromaticSystemAst::default());
+                    direct.add_aromatic_system(Vec::new(), AromaticSystemForm::default());
                     entries.push(Edit::AddAromaticSystem {
                         atoms: Vec::new(),
-                        ast: AromaticSystemAst::default(),
+                        ast: AromaticSystemForm::default(),
                     });
                 }
                 EntityKind::MulticenterBond => {
                     counts[4] += 1;
-                    direct.add_multicenter_bond(Vec::new(), MulticenterBondAst::default());
+                    direct.add_multicenter_bond(Vec::new(), MulticenterBondForm::default());
                     entries.push(Edit::AddMulticenterBond {
                         atoms: Vec::new(),
-                        ast: MulticenterBondAst::default(),
+                        ast: MulticenterBondForm::default(),
                     });
                 }
                 EntityKind::NoncovalentBond => {
                     counts[5] += 1;
                     direct.add_noncovalent_bond(
                         [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        NoncovalentBondAst::default(),
+                        NoncovalentBondForm::default(),
                     );
                     entries.push(Edit::AddNoncovalentBond {
                         atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        ast: NoncovalentBondAst::default(),
+                        ast: NoncovalentBondForm::default(),
                     });
                 }
                 EntityKind::StereoAtom => {
@@ -159,12 +159,12 @@ proptest! {
                 AtomHandle::Id(AtomId(1)),
                 BondForm::default(),
             ),
-            direct.add_dative_bond(Vec::new(), DativeBondAst::default()),
-            direct.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
-            direct.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            direct.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            direct.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
+            direct.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             direct.add_noncovalent_bond(
                 [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                NoncovalentBondAst::default(),
+                NoncovalentBondForm::default(),
             ),
             direct.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
@@ -184,12 +184,12 @@ proptest! {
                 AtomHandle::Id(AtomId(1)),
                 BondForm::default(),
             ),
-            pushed.add_dative_bond(Vec::new(), DativeBondAst::default()),
-            pushed.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
-            pushed.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            pushed.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            pushed.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
+            pushed.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             pushed.add_noncovalent_bond(
                 [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                NoncovalentBondAst::default(),
+                NoncovalentBondForm::default(),
             ),
             pushed.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
@@ -209,12 +209,12 @@ proptest! {
                 AtomHandle::Id(AtomId(1)),
                 BondForm::default(),
             ),
-            collected.add_dative_bond(Vec::new(), DativeBondAst::default()),
-            collected.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
-            collected.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            collected.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            collected.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
+            collected.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             collected.add_noncovalent_bond(
                 [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                NoncovalentBondAst::default(),
+                NoncovalentBondForm::default(),
             ),
             collected.add_stereo_atom(
                 AtomHandle::Id(AtomId(0)),
@@ -297,25 +297,25 @@ proptest! {
                 EntityKind::DativeBond => {
                     edits.add_dative_bond(
                         vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        DativeBondAst::from_order(1),
+                        DativeBondForm::from_order(1),
                     );
                 }
                 EntityKind::AromaticSystem => {
                     edits.add_aromatic_system(
                         vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        AromaticSystemAst::default(),
+                        AromaticSystemForm::default(),
                     );
                 }
                 EntityKind::MulticenterBond => {
                     edits.add_multicenter_bond(
                         vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        MulticenterBondAst::default(),
+                        MulticenterBondForm::default(),
                     );
                 }
                 EntityKind::NoncovalentBond => {
                     edits.add_noncovalent_bond(
                         [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                     );
                 }
                 EntityKind::StereoAtom => {
@@ -611,9 +611,9 @@ proptest! {
     ) {
         let atom = AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8));
         let bond = BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8));
-        let aromatic = AromaticSystemAst::from_electrons(vec![1, 1, 1])
+        let aromatic = AromaticSystemForm::from_electrons(vec![1, 1, 1])
             .with_unpaired_electrons((2_u8, 3_u8));
-        let multicenter = MulticenterBondAst::from_electrons(vec![1, 1, 1])
+        let multicenter = MulticenterBondForm::from_electrons(vec![1, 1, 1])
             .with_unpaired_electrons((2_u8, 3_u8));
         let atom_update = AtomUpdate {
             unpaired_electrons: atom_components,

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
-use super::super::aromatic::AromaticSystemAst;
+use super::super::aromatic::AromaticSystemForm;
 use super::super::constraint::AromaticSystemConstraintsAst;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
@@ -20,13 +20,13 @@ use super::bond::BondView;
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     molecule: &'a MoleculeAst,
-    aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
+    aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemForm>,
 }
 
 impl<'a> AromaticSystemViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
+        aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemForm>,
     ) -> Self {
         Self {
             molecule,
@@ -165,14 +165,14 @@ impl<'a> AromaticSystemViews<'a> {
     }
 }
 
-/// Borrowed view of an aromatic system: its index, the `AromaticSystemAst`,
+/// Borrowed view of an aromatic system: its index, the `AromaticSystemForm`,
 /// and accessors for member atoms and induced ring bonds via `atoms()` and
 /// `bonds()`.
 #[derive(Clone, Copy, Debug)]
 pub struct AromaticSystemView<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
-    pub ast: &'a AromaticSystemAst,
+    pub ast: &'a AromaticSystemForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -296,7 +296,7 @@ impl<'a> AromaticSystemView<'a> {
 pub struct AromaticSystemViewMut<'a> {
     pub id: AromaticSystemId,
     pub atoms: Vec<AtomId>,
-    pub ast: &'a mut AromaticSystemAst,
+    pub ast: &'a mut AromaticSystemForm,
 }
 
 // Editor-scope view bundles for aromatic systems.
@@ -304,14 +304,14 @@ pub struct AromaticSystemViewMut<'a> {
 pub struct AromaticSystemEditorView<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
-    pub ast: &'a AromaticSystemAst,
+    pub ast: &'a AromaticSystemForm,
 }
 
 impl<'a> AromaticSystemEditorView<'a> {
     pub(crate) fn new(
         id: AromaticSystemId,
         atoms: &'a [NodeId],
-        ast: &'a AromaticSystemAst,
+        ast: &'a AromaticSystemForm,
     ) -> Self {
         Self { id, atoms, ast }
     }
@@ -324,14 +324,14 @@ impl<'a> AromaticSystemEditorView<'a> {
 pub struct AromaticSystemEditorViewMut<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
-    pub ast: &'a mut AromaticSystemAst,
+    pub ast: &'a mut AromaticSystemForm,
 }
 
 impl<'a> AromaticSystemEditorViewMut<'a> {
     pub(crate) fn new(
         id: AromaticSystemId,
         atoms: &'a [NodeId],
-        ast: &'a mut AromaticSystemAst,
+        ast: &'a mut AromaticSystemForm,
     ) -> Self {
         Self { id, atoms, ast }
     }
@@ -350,14 +350,14 @@ mod tests {
 
     use super::super::assert_exact_size_by;
     use super::{AromaticSystemEditorView, AromaticSystemEditorViewMut};
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::dative::DativeBondAst;
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::multicenter::MulticenterBondAst;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::value::NumForm;
 
     #[fixture]
@@ -374,19 +374,19 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(2)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1))],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
             multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         })
@@ -595,7 +595,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_editor_view_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let ast = AromaticSystemAst::default();
+        let ast = AromaticSystemForm::default();
         let view = AromaticSystemEditorView::new(AromaticSystemId(0), &atoms, &ast);
         assert_exact_size_by(
             view.atom_ids(),
@@ -607,7 +607,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_editor_view_mut_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let mut ast = AromaticSystemAst::default();
+        let mut ast = AromaticSystemForm::default();
         let view = AromaticSystemEditorViewMut::new(AromaticSystemId(0), &atoms, &mut ast);
         assert_exact_size_by(
             view.atom_ids(),

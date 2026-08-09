@@ -10,12 +10,12 @@ use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
 
-/// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst` via
+/// Multicenter-bond-scope constraint. Held inline on `MulticenterBondForm` via
 /// `MulticenterBondConstraintsAst`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MulticenterBondConstraintAst {
     /// Asserted total electron count for the multicenter bond. Cross-checked
-    /// by the `ConsistencyValidator` against `sum(MulticenterBondAst::electrons)`.
+    /// by the `ConsistencyValidator` against `sum(MulticenterBondForm::electrons)`.
     ElectronCount(NumForm),
 }
 

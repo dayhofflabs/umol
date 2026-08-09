@@ -25,28 +25,29 @@ pub(crate) use umol_graph_ir::dsl::{
     StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_graph_ir::ir::{
-    aromatic_covalence, AddBond, ArithExpr, AromaticSystemAst, AromaticSystemConstraintAst,
+    aromatic_covalence, AddBond, ArithExpr, AromaticSystemConstraintAst,
     AromaticSystemConstraintKey, AromaticSystemConstraintsAst, AromaticSystemDelta,
-    AromaticSystemFieldChange, AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate,
-    AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst, AtomConstraintKey,
-    AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomForm, AtomHandle, AtomId, AtomUpdate,
-    BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta, BondFieldChange, BondForm,
-    BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize, CisTransStereoForm, Constraint,
-    ConstraintEdit, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
-    DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange, DativeBondHandle,
-    DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsForm,
-    ElementForm, Entity, EntityHandle, EntityKind, FluxionalityAst, FromIr, IntoIr,
-    IsotopeMassForm, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
-    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondAst,
-    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
-    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
-    MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
-    NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
-    NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm,
-    NoncovalentBondUpdate, NumForm, OrientedLigandPermutation, PredExpr, ReactionAst,
-    ReactionSpanAst, RelOp, RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst,
-    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange,
-    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
+    AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemHandle, AromaticSystemId,
+    AromaticSystemUpdate, AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst,
+    AtomConstraintKey, AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomForm, AtomHandle,
+    AtomId, AtomUpdate, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta,
+    BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize,
+    CisTransStereoForm, Constraint, ConstraintEdit, Constraints, DativeBondConstraintAst,
+    DativeBondConstraintKey, DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange,
+    DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator,
+    Edit, Edits, ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind,
+    FluxionalityAst, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
+    LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MoleculeCorrespondence,
+    MoleculeEntries, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
+    MulticenterBondConstraintsAst, MulticenterBondDelta, MulticenterBondFieldChange,
+    MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
+    MulticenterValenceAst, NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst,
+    NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
+    NumForm, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst, RelOp,
+    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst, StereoAtomConstraintAst,
+    StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomHandle,
+    StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
     StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondHandle,
     StereoBondId, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
     StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
@@ -660,7 +661,7 @@ pub(crate) fn edge_set_strategy(atom_count: usize) -> impl Strategy<Value = Vec<
         .boxed()
 }
 
-pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
+pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondForm> {
     // Order is sampled from the small literal range that the DSL keyword
     // shorthands cover (`:single` / `:double` / `:triple`), keeping
     // canonical-form roundtrip exercised across haptic-pair counts.
@@ -671,7 +672,7 @@ pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
         Just(NumForm::Undetermined),
     ];
     (order_strategy, dative_bond_constraints_strategy())
-        .prop_map(|(order, constraints)| DativeBondAst { order, constraints })
+        .prop_map(|(order, constraints)| DativeBondForm { order, constraints })
 }
 
 prop_compose! {
@@ -770,9 +771,9 @@ pub(crate) fn electron_counts_form_strategy() -> impl Strategy<Value = ElectronC
 /// Stand-alone strategy for entity-string roundtrip tests. `electrons` is
 /// `Undetermined` because the entity string carries no per-atom data; the
 /// `ElectronCount` constraint is exercised here via `#e<n>`.
-pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
+pub(crate) fn aromatic_system_form_strategy() -> impl Strategy<Value = AromaticSystemForm> {
     (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(|(charge, constraints)| {
-        AromaticSystemAst {
+        AromaticSystemForm {
             electrons: ElectronCountsForm::Undetermined,
             charge,
             unpaired_electrons: UnpairedElectronsForm::default(),
@@ -781,7 +782,7 @@ pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSy
     })
 }
 
-pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
+pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = AromaticSystemForm> {
     (
         electron_counts_form_strategy(),
         value_basic(-2..=2),
@@ -789,7 +790,7 @@ pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = Arom
         optional_aromatic_electron_count(),
     )
         .prop_map(
-            |(electrons, charge, unpaired_electrons, constraints)| AromaticSystemAst {
+            |(electrons, charge, unpaired_electrons, constraints)| AromaticSystemForm {
                 electrons,
                 charge,
                 unpaired_electrons,
@@ -810,19 +811,19 @@ prop_compose! {
     }
 }
 
-/// Atom-count-aware variant: generates an `AromaticSystemAst` whose
+/// Atom-count-aware variant: generates an `AromaticSystemForm` whose
 /// `electrons` `Lit` vector has exactly `atom_count` entries. Includes an
 /// optional `ElectronCount` constraint so the molecule-level prop tests
 /// exercise both the per-atom counts and the asserted total in the same pass.
-pub(crate) fn aromatic_system_ast_for(
+pub(crate) fn aromatic_system_form_for(
     atom_count: usize,
-) -> impl Strategy<Value = AromaticSystemAst> {
+) -> impl Strategy<Value = AromaticSystemForm> {
     (
         value_basic(-2..=2),
         prop::collection::vec(0i64..=2, atom_count),
         optional_aromatic_electron_count(),
     )
-        .prop_map(|(charge, electrons, constraints)| AromaticSystemAst {
+        .prop_map(|(charge, electrons, constraints)| AromaticSystemForm {
             electrons: ElectronCountsForm::Lit(electrons),
             charge,
             unpaired_electrons: UnpairedElectronsForm::default(),
@@ -830,9 +831,9 @@ pub(crate) fn aromatic_system_ast_for(
         })
 }
 
-pub(crate) fn multicenter_bond_form_strategy() -> impl Strategy<Value = MulticenterBondAst> {
+pub(crate) fn multicenter_bond_form_strategy() -> impl Strategy<Value = MulticenterBondForm> {
     (value_basic(-2..=2), optional_multicenter_electron_count()).prop_map(
-        |(charge, constraints)| MulticenterBondAst {
+        |(charge, constraints)| MulticenterBondForm {
             electrons: ElectronCountsForm::Undetermined,
             charge,
             unpaired_electrons: UnpairedElectronsForm::default(),
@@ -841,7 +842,7 @@ pub(crate) fn multicenter_bond_form_strategy() -> impl Strategy<Value = Multicen
     )
 }
 
-pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
+pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = MulticenterBondForm> {
     (
         electron_counts_form_strategy(),
         value_basic(-2..=2),
@@ -849,7 +850,7 @@ pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = Mul
         optional_multicenter_electron_count(),
     )
         .prop_map(
-            |(electrons, charge, unpaired_electrons, constraints)| MulticenterBondAst {
+            |(electrons, charge, unpaired_electrons, constraints)| MulticenterBondForm {
                 electrons,
                 charge,
                 unpaired_electrons,
@@ -872,13 +873,13 @@ prop_compose! {
 
 pub(crate) fn multicenter_bond_form_for(
     atom_count: usize,
-) -> impl Strategy<Value = MulticenterBondAst> {
+) -> impl Strategy<Value = MulticenterBondForm> {
     (
         value_basic(-2..=2),
         prop::collection::vec(0i64..=2, atom_count),
         optional_multicenter_electron_count(),
     )
-        .prop_map(|(charge, electrons, constraints)| MulticenterBondAst {
+        .prop_map(|(charge, electrons, constraints)| MulticenterBondForm {
             electrons: ElectronCountsForm::Lit(electrons),
             charge,
             unpaired_electrons: UnpairedElectronsForm::default(),
@@ -932,23 +933,23 @@ pub(crate) fn noncovalent_bond_update_constraints_strategy(
     })
 }
 
-pub(crate) fn noncovalent_bond_form_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
+pub(crate) fn noncovalent_bond_form_strategy() -> impl Strategy<Value = NoncovalentBondForm> {
     (
         prop::sample::select(NONCOVALENT_KINDS),
         noncovalent_bond_constraints_strategy(),
     )
-        .prop_map(|(kind, constraints)| NoncovalentBondAst {
+        .prop_map(|(kind, constraints)| NoncovalentBondForm {
             kind: NoncovalentBondKindForm::Lit(kind),
             constraints,
         })
 }
 
-pub(crate) fn noncovalent_bond_patch_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
+pub(crate) fn noncovalent_bond_patch_ast_strategy() -> impl Strategy<Value = NoncovalentBondForm> {
     (
         noncovalent_bond_kind_form_strategy(),
         noncovalent_bond_constraints_strategy(),
     )
-        .prop_map(|(kind, constraints)| NoncovalentBondAst { kind, constraints })
+        .prop_map(|(kind, constraints)| NoncovalentBondForm { kind, constraints })
 }
 
 pub(crate) fn noncovalent_bond_update_strategy() -> impl Strategy<Value = NoncovalentBondUpdate> {
@@ -1527,7 +1528,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                 distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
                     |atoms| {
                         let n = atoms.len();
-                        (Just(atoms), aromatic_system_ast_for(n))
+                        (Just(atoms), aromatic_system_form_for(n))
                     },
                 ),
                 0..=aromatic_count_max,
@@ -2887,7 +2888,7 @@ impl InvalidTransactionBatch {
                 (
                     vec![AtomId((index * 2) as u32)],
                     AtomId((index * 2 + 1) as u32),
-                    DativeBondAst::from_order(1),
+                    DativeBondForm::from_order(1),
                 )
             })
             .collect();
@@ -2895,7 +2896,7 @@ impl InvalidTransactionBatch {
             .map(|index| {
                 (
                     vec![AtomId((index * 2) as u32), AtomId((index * 2 + 1) as u32)],
-                    AromaticSystemAst::default(),
+                    AromaticSystemForm::default(),
                 )
             })
             .collect();
@@ -2903,7 +2904,7 @@ impl InvalidTransactionBatch {
             .map(|index| {
                 (
                     vec![AtomId((index * 2) as u32), AtomId((index * 2 + 1) as u32)],
-                    MulticenterBondAst::default(),
+                    MulticenterBondForm::default(),
                 )
             })
             .collect();
@@ -2912,7 +2913,7 @@ impl InvalidTransactionBatch {
                 (
                     AtomId((index * 2) as u32),
                     AtomId((index * 2 + 1) as u32),
-                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )
             })
             .collect();
@@ -2986,7 +2987,7 @@ impl InvalidTransactionBatch {
                                 AtomHandle::Id(AtomId((position * 2) as u32)),
                                 AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                             ],
-                            DativeBondAst::from_order(1),
+                            DativeBondForm::from_order(1),
                         )
                     })
                     .collect(),
@@ -3006,7 +3007,7 @@ impl InvalidTransactionBatch {
                                 AtomHandle::Id(AtomId((position * 2) as u32)),
                                 AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                             ],
-                            AromaticSystemAst::default(),
+                            AromaticSystemForm::default(),
                         )
                     })
                     .collect(),
@@ -3026,7 +3027,7 @@ impl InvalidTransactionBatch {
                                 AtomHandle::Id(AtomId((position * 2) as u32)),
                                 AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                             ],
-                            MulticenterBondAst::default(),
+                            MulticenterBondForm::default(),
                         )
                     })
                     .collect(),
@@ -3046,7 +3047,7 @@ impl InvalidTransactionBatch {
                                 AtomHandle::Id(AtomId((position * 2) as u32)),
                                 AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                             ],
-                            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                         )
                     })
                     .collect(),
@@ -3251,7 +3252,7 @@ impl TransactionCase {
                         AtomHandle::Id(AtomId(donor as u32)),
                         AtomHandle::Id(AtomId(acceptor as u32)),
                     ],
-                    DativeBondAst::from_order(1),
+                    DativeBondForm::from_order(1),
                 );
                 edits
             }
@@ -3292,19 +3293,19 @@ fn transaction_all_entities_molecule() -> MoleculeAst {
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
             (AtomId(2), AtomId(3), BondForm::from_order(1)),
         ],
-        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
         aromatic: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::default(),
+            AromaticSystemForm::default(),
         )],
         multicenter: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondAst::default(),
+            MulticenterBondForm::default(),
         )],
         noncovalent: vec![(
             AtomId(0),
             AtomId(3),
-            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
             AtomId(0),
@@ -3539,28 +3540,28 @@ fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
             removes: vec![(
                 DativeBondHandle::Id(DativeBondId(0)),
                 atom_handles(&[0, 1]),
-                DativeBondAst::from_order(1),
+                DativeBondForm::from_order(1),
             )],
         },
         Edit::RemoveAromaticSystems {
             removes: vec![(
                 AromaticSystemHandle::Id(AromaticSystemId(0)),
                 atom_handles(&[0, 1, 2]),
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )],
         },
         Edit::RemoveMulticenterBonds {
             removes: vec![(
                 MulticenterBondHandle::Id(MulticenterBondId(0)),
                 atom_handles(&[0, 1, 2]),
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )],
         },
         Edit::RemoveNoncovalentBonds {
             removes: vec![(
                 NoncovalentBondHandle::Id(NoncovalentBondId(0)),
                 [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(3))],
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
         },
         Edit::RemoveStereoAtoms {
@@ -3602,19 +3603,19 @@ fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, 
     );
     let dative = edits.add_dative_bond(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-        DativeBondAst::from_order(1),
+        DativeBondForm::from_order(1),
     );
     let aromatic = edits.add_aromatic_system(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-        AromaticSystemAst::default(),
+        AromaticSystemForm::default(),
     );
     let multicenter = edits.add_multicenter_bond(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-        MulticenterBondAst::default(),
+        MulticenterBondForm::default(),
     );
     let noncovalent = edits.add_noncovalent_bond(
         [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-        NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
     );
     let ligands = (0..4)
         .map(|id| (AtomHandle::Id(AtomId(id)), StereoLigandKind::Atom))
@@ -3734,15 +3735,15 @@ fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
     let pairs = [[0_u32, 1_u32], [2, 3], [4, 5]];
     let dative = pairs
         .iter()
-        .map(|[a, b]| (vec![AtomId(*a)], AtomId(*b), DativeBondAst::from_order(1)))
+        .map(|[a, b]| (vec![AtomId(*a)], AtomId(*b), DativeBondForm::from_order(1)))
         .collect();
     let aromatic = pairs
         .iter()
-        .map(|[a, b]| (vec![AtomId(*a), AtomId(*b)], AromaticSystemAst::default()))
+        .map(|[a, b]| (vec![AtomId(*a), AtomId(*b)], AromaticSystemForm::default()))
         .collect();
     let multicenter = pairs
         .iter()
-        .map(|[a, b]| (vec![AtomId(*a), AtomId(*b)], MulticenterBondAst::default()))
+        .map(|[a, b]| (vec![AtomId(*a), AtomId(*b)], MulticenterBondForm::default()))
         .collect();
     let noncovalent = pairs
         .iter()
@@ -3750,7 +3751,7 @@ fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
             (
                 AtomId(*a),
                 AtomId(*b),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )
         })
         .collect();
@@ -3861,28 +3862,28 @@ impl ConstraintCompactionCase {
                 removes: vec![(
                     DativeBondHandle::Id(DativeBondId(0)),
                     vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    DativeBondAst::from_order(1),
+                    DativeBondForm::from_order(1),
                 )],
             },
             EntityKind::AromaticSystem => Edit::RemoveAromaticSystems {
                 removes: vec![(
                     AromaticSystemHandle::Id(AromaticSystemId(0)),
                     vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    AromaticSystemAst::default(),
+                    AromaticSystemForm::default(),
                 )],
             },
             EntityKind::MulticenterBond => Edit::RemoveMulticenterBonds {
                 removes: vec![(
                     MulticenterBondHandle::Id(MulticenterBondId(0)),
                     vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    MulticenterBondAst::default(),
+                    MulticenterBondForm::default(),
                 )],
             },
             EntityKind::NoncovalentBond => Edit::RemoveNoncovalentBonds {
                 removes: vec![(
                     NoncovalentBondHandle::Id(NoncovalentBondId(0)),
                     [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )],
             },
             EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
@@ -4002,7 +4003,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
                     .map(|&a| AtomId(a))
                     .collect::<Vec<_>>(),
                 AtomId(DATIVE_ACCEPTORS[i]),
-                DativeBondAst::from_order(1),
+                DativeBondForm::from_order(1),
             )
         })
         .collect();
@@ -4011,7 +4012,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
         .map(|set| {
             (
                 set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(),
-                AromaticSystemAst::default(),
+                AromaticSystemForm::default(),
             )
         })
         .collect();
@@ -4020,7 +4021,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
         .map(|set| {
             (
                 set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(),
-                MulticenterBondAst::default(),
+                MulticenterBondForm::default(),
             )
         })
         .collect();
@@ -4030,7 +4031,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
             (
                 AtomId(*a),
                 AtomId(*b),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )
         })
         .collect();
@@ -4114,7 +4115,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                         (
                             DativeBondHandle::Id(DativeBondId(i as u32)),
                             atoms,
-                            DativeBondAst::from_order(1),
+                            DativeBondForm::from_order(1),
                         )
                     })
                     .collect();
@@ -4131,7 +4132,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                         (
                             AromaticSystemHandle::Id(AromaticSystemId(i as u32)),
                             atoms,
-                            AromaticSystemAst::default(),
+                            AromaticSystemForm::default(),
                         )
                     })
                     .collect();
@@ -4148,7 +4149,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                         (
                             MulticenterBondHandle::Id(MulticenterBondId(i as u32)),
                             atoms,
-                            MulticenterBondAst::default(),
+                            MulticenterBondForm::default(),
                         )
                     })
                     .collect();
@@ -4166,7 +4167,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                                 AtomHandle::Id(AtomId(NONCOVALENT_PAIRS[i][0])),
                                 AtomHandle::Id(AtomId(NONCOVALENT_PAIRS[i][1])),
                             ],
-                            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                         )
                     })
                     .collect();
@@ -4311,7 +4312,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
                     |atoms| {
                         let n = atoms.len();
-                        (Just(atoms), aromatic_system_ast_for(n))
+                        (Just(atoms), aromatic_system_form_for(n))
                     },
                 ),
                 0..=1,
@@ -5037,7 +5038,7 @@ fn build_reaction(
         deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(lhs.noncovalent_bonds().count() as u32),
             atoms: [added_atom_ids[0], added_atom_ids[1]],
-            ast: NoncovalentBondAst {
+            ast: NoncovalentBondForm {
                 kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::VanDerWaals),
                 constraints: Default::default(),
             },

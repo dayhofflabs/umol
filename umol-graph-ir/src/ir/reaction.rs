@@ -11,11 +11,11 @@ use std::iter::from_fn;
 use umol_graph_core::Correspondence;
 use umol_perm::Permutation;
 
-use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
+use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate};
 use super::bond::{BondForm, BondUpdate};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::{DativeBondAst, DativeBondUpdate};
+use super::dative::{DativeBondForm, DativeBondUpdate};
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
@@ -37,8 +37,8 @@ use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
-use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
+use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
+use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
 use super::reaction_derivation::ReactionDerivation;
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
@@ -955,18 +955,19 @@ impl ReactionAst {
         let mut new_noncovalent_handles = HashMap::new();
         let mut new_stereo_atom_handles = HashMap::new();
         let mut new_stereo_bond_handles = HashMap::new();
-        let mut remove_dative: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondAst)> = Vec::new();
-        let mut remove_aromatic: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemAst)> =
+        let mut remove_dative: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)> =
+            Vec::new();
+        let mut remove_aromatic: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)> =
             Vec::new();
         let mut remove_multicenter: Vec<(
             MulticenterBondHandle,
             Vec<AtomHandle>,
-            MulticenterBondAst,
+            MulticenterBondForm,
         )> = Vec::new();
         let mut remove_noncovalent: Vec<(
             NoncovalentBondHandle,
             [AtomHandle; 2],
-            NoncovalentBondAst,
+            NoncovalentBondForm,
         )> = Vec::new();
         let mut remove_stereo_atom: Vec<StereoAtomRemoval> = Vec::new();
         let mut remove_stereo_bond: Vec<StereoBondRemoval> = Vec::new();
@@ -1580,7 +1581,7 @@ mod tests {
     use super::super::entity::Entity;
     use super::super::ligand::StereoLigandKind;
     use super::super::molecule::transact::TransactionError;
-    use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::super::validate::{DpoContradiction, EntityStructureContradiction};
@@ -1670,17 +1671,17 @@ mod tests {
     )]
     #[case::overlay_removed(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::O) }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0), AtomId(1)],
         MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
     )]
@@ -1726,7 +1727,7 @@ mod tests {
                 ast: AtomForm::from_element(Element::O),
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0)],
         ApplyError::Dangling { host_atom: AtomId(0) },
     )]
@@ -1792,10 +1793,10 @@ mod tests {
     )]
     #[case::noncovalent_incidence(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::new(),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2)], 3),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
@@ -2069,22 +2070,22 @@ mod tests {
                     id: DativeBondId(0),
                     donors: vec![AtomId(0)],
                     acceptor: AtomId(1),
-                    ast: DativeBondAst::from_order(1),
+                    ast: DativeBondForm::from_order(1),
                 }),
                 Delta::AromaticSystem(AromaticSystemDelta::Add {
                     id: AromaticSystemId(0),
                     atoms: vec![AtomId(0), AtomId(1)],
-                    ast: AromaticSystemAst::default(),
+                    ast: AromaticSystemForm::default(),
                 }),
                 Delta::MulticenterBond(MulticenterBondDelta::Add {
                     id: MulticenterBondId(0),
                     atoms: vec![AtomId(0), AtomId(1)],
-                    ast: MulticenterBondAst::default(),
+                    ast: MulticenterBondForm::default(),
                 }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
                 Delta::StereoAtom(StereoAtomDelta::Add {
                     id: StereoAtomId(0),
@@ -2231,19 +2232,19 @@ mod tests {
         Entity::Bond(BondId(0)),
     )]
     #[case::dative_bond(
-        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(0), donors: vec![AtomId(0)], acceptor: AtomId(1), ast: DativeBondAst::default() }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(0), donors: vec![AtomId(0)], acceptor: AtomId(1), ast: DativeBondForm::default() }),
         Entity::DativeBond(DativeBondId(0)),
     )]
     #[case::aromatic_system(
-        Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(0), atoms: vec![AtomId(0)], ast: AromaticSystemAst::default() }),
+        Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(0), atoms: vec![AtomId(0)], ast: AromaticSystemForm::default() }),
         Entity::AromaticSystem(AromaticSystemId(0)),
     )]
     #[case::multicenter_bond(
-        Delta::MulticenterBond(MulticenterBondDelta::Remove { id: MulticenterBondId(0), atoms: vec![AtomId(0)], ast: MulticenterBondAst::default() }),
+        Delta::MulticenterBond(MulticenterBondDelta::Remove { id: MulticenterBondId(0), atoms: vec![AtomId(0)], ast: MulticenterBondForm::default() }),
         Entity::MulticenterBond(MulticenterBondId(0)),
     )]
     #[case::noncovalent_bond(
-        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)], ast: NoncovalentBondAst::default() }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)], ast: NoncovalentBondForm::default() }),
         Entity::NoncovalentBond(NoncovalentBondId(0)),
     )]
     #[case::stereo_atom(
@@ -2296,22 +2297,22 @@ mod tests {
         id: DativeBondId(0),
         donors: vec![AtomId(1)],
         acceptor: AtomId(0),
-        ast: DativeBondAst::default(),
+        ast: DativeBondForm::default(),
     }))]
     #[case::aromatic_participant(Delta::AromaticSystem(AromaticSystemDelta::Add {
         id: AromaticSystemId(0),
         atoms: vec![AtomId(0), AtomId(1)],
-        ast: AromaticSystemAst::default(),
+        ast: AromaticSystemForm::default(),
     }))]
     #[case::multicenter_participant(Delta::MulticenterBond(MulticenterBondDelta::Add {
         id: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1)],
-        ast: MulticenterBondAst::default(),
+        ast: MulticenterBondForm::default(),
     }))]
     #[case::noncovalent_endpoint(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
         id: NoncovalentBondId(0),
         atoms: [AtomId(0), AtomId(1)],
-        ast: NoncovalentBondAst::default(),
+        ast: NoncovalentBondForm::default(),
     }))]
     #[case::stereo_atom_site(Delta::StereoAtom(StereoAtomDelta::Add {
         id: StereoAtomId(0),
@@ -2399,7 +2400,7 @@ mod tests {
                 AtomForm::from_element(Element::B),
                 AtomForm::from_element(Element::O),
             ],
-            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
             ..Default::default()
         });
         let reaction = ReactionAst::new(
@@ -2408,7 +2409,7 @@ mod tests {
                 id: DativeBondId(0),
                 donors: vec![AtomId(2)],
                 acceptor: AtomId(1),
-                ast: DativeBondAst::default(),
+                ast: DativeBondForm::default(),
             })]),
         );
         assert_eq!(

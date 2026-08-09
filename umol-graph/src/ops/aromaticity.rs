@@ -25,7 +25,7 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomId, AtomView, BondConstraintAst,
+    AromaticSystemForm, AromaticSystemId, AromaticValenceAst, AtomId, AtomView, BondConstraintAst,
     BondId, BooleanForm, ElectronCountsForm, MoleculeAst, NumForm, RingConfig, RingModel,
     RingSetKind, TransactionError,
 };
@@ -80,7 +80,7 @@ impl Default for AromaticityConfig {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticityDerivation {
     /// Aromatic systems accepted by the selected model.
-    pub systems: Vec<(Vec<AtomId>, AromaticSystemAst)>,
+    pub systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     /// Constraint failures, entity failures, and independently valid mismatches.
     pub inconsistencies: Vec<AromaticityInconsistency>,
 }
@@ -135,7 +135,7 @@ impl AromaticityPerception {
         config: AromaticityConfig,
         electrons_at: F,
     ) -> Result<
-        Solution<Vec<(Vec<AtomId>, AromaticSystemAst)>, AromaticityContradiction>,
+        Solution<Vec<(Vec<AtomId>, AromaticSystemForm)>, AromaticityContradiction>,
         AromaticityError,
     >
     where
@@ -370,7 +370,7 @@ impl AromaticityPerception {
     pub fn add_systems(
         &self,
         ast: &mut MoleculeAst,
-        systems: Vec<(Vec<AtomId>, AromaticSystemAst)>,
+        systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     ) {
         if systems.is_empty() {
             return;
@@ -535,7 +535,7 @@ mod tests {
         Solution::Determined(AromaticityDerivation {
             systems: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
-                AromaticSystemAst::from_electrons(vec![2, 1, 1, 1, 1])
+                AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
@@ -580,7 +580,7 @@ mod tests {
                     AtomId(4),
                     AtomId(5),
                 ],
-                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
@@ -614,7 +614,7 @@ mod tests {
                     AtomId(4),
                     AtomId(5),
                 ],
-                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
@@ -642,7 +642,7 @@ mod tests {
                     AtomId(4),
                     AtomId(5),
                 ],
-                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
@@ -679,7 +679,7 @@ mod tests {
                     AtomId(4),
                     AtomId(5),
                 ],
-                AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],

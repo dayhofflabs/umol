@@ -95,87 +95,87 @@ macro_rules! bond_update_dsl {
     }};
 }
 
-/// Parse a compact dative-bond-string into a `DativeBondAst`.
+/// Parse a compact dative-bond-string into a `DativeBondForm`.
 #[macro_export]
 macro_rules! dative_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::DativeBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::DativeBondForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse a dative-bond DSL string into a `DativeBondAst` with `DativeBondDefaults::ground()` applied.
+/// Parse a dative-bond DSL string into a `DativeBondForm` with `DativeBondDefaults::ground()` applied.
 #[macro_export]
 macro_rules! dative_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::DativeBondDsl =
             <$crate::dsl::DativeBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::DativeBondDsl as $crate::ir::IntoIr<$crate::ir::DativeBondAst>>::into_ir(
+        <$crate::dsl::DativeBondDsl as $crate::ir::IntoIr<$crate::ir::DativeBondForm>>::into_ir(
             dsl,
             &$crate::dsl::DativeBondDefaults::ground(),
         )
     }};
 }
 
-/// Parse a compact aromatic-system-string into an `AromaticSystemAst`.
+/// Parse a compact aromatic-system-string into an `AromaticSystemForm`.
 #[macro_export]
 macro_rules! aromatic_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::AromaticSystemAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::AromaticSystemForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse an aromatic-system DSL string into an `AromaticSystemAst` with
+/// Parse an aromatic-system DSL string into an `AromaticSystemForm` with
 /// `AromaticSystemDefaults::ground()` applied.
 #[macro_export]
 macro_rules! aromatic_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AromaticSystemDsl =
             <$crate::dsl::AromaticSystemDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::AromaticSystemDsl as $crate::ir::IntoIr<$crate::ir::AromaticSystemAst>>::into_ir(
+        <$crate::dsl::AromaticSystemDsl as $crate::ir::IntoIr<$crate::ir::AromaticSystemForm>>::into_ir(
             dsl,
             &$crate::dsl::AromaticSystemDefaults::ground(),
         )
     }};
 }
 
-/// Parse a compact multicenter-bond-string into a `MulticenterBondAst`.
+/// Parse a compact multicenter-bond-string into a `MulticenterBondForm`.
 #[macro_export]
 macro_rules! multicenter_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::MulticenterBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::MulticenterBondForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse a multicenter-bond DSL string into a `MulticenterBondAst` with
+/// Parse a multicenter-bond DSL string into a `MulticenterBondForm` with
 /// `MulticenterBondDefaults::ground()` applied.
 #[macro_export]
 macro_rules! multicenter_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MulticenterBondDsl =
             <$crate::dsl::MulticenterBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::MulticenterBondDsl as $crate::ir::IntoIr<$crate::ir::MulticenterBondAst>>::into_ir(
+        <$crate::dsl::MulticenterBondDsl as $crate::ir::IntoIr<$crate::ir::MulticenterBondForm>>::into_ir(
             dsl,
             &$crate::dsl::MulticenterBondDefaults::ground(),
         )
     }};
 }
 
-/// Parse a compact noncovalent-bond-string into a `NoncovalentBondAst`.
+/// Parse a compact noncovalent-bond-string into a `NoncovalentBondForm`.
 #[macro_export]
 macro_rules! noncovalent_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::NoncovalentBondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::NoncovalentBondForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse a noncovalent-bond DSL string into a `NoncovalentBondAst` with
+/// Parse a noncovalent-bond DSL string into a `NoncovalentBondForm` with
 /// `NoncovalentBondDefaults::ground()` applied.
 #[macro_export]
 macro_rules! noncovalent_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::NoncovalentBondDsl =
             <$crate::dsl::NoncovalentBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::NoncovalentBondDsl as $crate::ir::IntoIr<$crate::ir::NoncovalentBondAst>>::into_ir(
+        <$crate::dsl::NoncovalentBondDsl as $crate::ir::IntoIr<$crate::ir::NoncovalentBondForm>>::into_ir(
             dsl,
             &$crate::dsl::NoncovalentBondDefaults::ground(),
         )
@@ -233,10 +233,10 @@ mod tests {
     use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
     use crate::ir::constraint::RingScope;
     use crate::ir::{
-        AromaticSystemAst, AromaticSystemConstraintAst, AtomConstraintAst, AtomConstraintsAst,
+        AromaticSystemConstraintAst, AromaticSystemForm, AtomConstraintAst, AtomConstraintsAst,
         AtomForm, AtomId, AtomUpdate, BondConstraintAst, BondConstraintsAst, BondForm, BondUpdate,
-        BooleanForm, DativeBondAst, DativeBondConstraintAst, ElementForm, Entity, MoleculeAst,
-        MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, NumForm,
+        BooleanForm, DativeBondConstraintAst, DativeBondForm, ElementForm, Entity, MoleculeAst,
+        MoleculeEntries, MulticenterBondForm, NoncovalentBondForm, NoncovalentBondKind, NumForm,
         StereoAtomAst, StereoBondAst, StereoCoset, StereoKind,
     };
 
@@ -297,7 +297,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1)), (AtomId(1), AtomId(2), BondForm::from_order(1)), (AtomId(2), AtomId(0), BondForm::from_order(1))],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintAst::electron_count(3)))],
+            AromaticSystemForm::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintAst::electron_count(3)))],
             ..Default::default()
         }))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
@@ -385,9 +385,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single("1", DativeBondAst::from_order(1))]
-    #[case::with_ring_size( "2 #R(6)", DativeBondAst::from_order(2).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),)]
-    fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
+    #[case::single("1", DativeBondForm::from_order(1))]
+    #[case::with_ring_size( "2 #R(6)", DativeBondForm::from_order(2).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),)]
+    fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondForm) {
         assert_eq!(dative_dsl!(input), expected);
     }
 
@@ -399,16 +399,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::double("2", DativeBondAst::from_order(2).into_ground())]
-    fn test_dative_ground_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
+    #[case::double("2", DativeBondForm::from_order(2).into_ground())]
+    fn test_dative_ground_macro(#[case] input: &str, #[case] expected: DativeBondForm) {
         assert_eq!(dative_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge("[1,1,1]#c+", AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64))]
-    #[case::electron_count("*#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraintAst::electron_count(6)))]
-    fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
+    #[case::charge("[1,1,1]#c+", AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64))]
+    #[case::electron_count("*#e6", AromaticSystemForm::default().with_constraint(AromaticSystemConstraintAst::electron_count(6)))]
+    fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemForm) {
         assert_eq!(aromatic_dsl!(input), expected);
     }
 
@@ -420,15 +420,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground())]
-    fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
+    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground())]
+    fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemForm) {
         assert_eq!(aromatic_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge("[1,1,1,1,1]#c-", MulticenterBondAst::from_electrons(vec![1; 5]).with_charge(-1_i64))]
-    fn test_multicenter_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
+    #[case::charge("[1,1,1,1,1]#c-", MulticenterBondForm::from_electrons(vec![1; 5]).with_charge(-1_i64))]
+    fn test_multicenter_macro(#[case] input: &str, #[case] expected: MulticenterBondForm) {
         assert_eq!(multicenter_dsl!(input), expected);
     }
 
@@ -440,16 +440,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charged("[1,1,1,1,1]#c-", MulticenterBondAst::from_electrons(vec![1; 5]).with_charge(-1_i64).into_ground())]
-    fn test_multicenter_ground_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
+    #[case::charged("[1,1,1,1,1]#c-", MulticenterBondForm::from_electrons(vec![1; 5]).with_charge(-1_i64).into_ground())]
+    fn test_multicenter_ground_macro(#[case] input: &str, #[case] expected: MulticenterBondForm) {
         assert_eq!(multicenter_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
-    #[case::ionic("Ion", NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic))]
-    fn test_noncovalent_macro(#[case] input: &str, #[case] expected: NoncovalentBondAst) {
+    #[case::hbond("Hbd", NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
+    #[case::ionic("Ion", NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic))]
+    fn test_noncovalent_macro(#[case] input: &str, #[case] expected: NoncovalentBondForm) {
         assert_eq!(noncovalent_dsl!(input), expected);
     }
 
@@ -461,8 +461,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).into_ground())]
-    fn test_noncovalent_ground_macro(#[case] input: &str, #[case] expected: NoncovalentBondAst) {
+    #[case::hbond("Hbd", NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).into_ground())]
+    fn test_noncovalent_ground_macro(#[case] input: &str, #[case] expected: NoncovalentBondForm) {
         assert_eq!(noncovalent_dsl_ground!(input), expected);
     }
 

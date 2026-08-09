@@ -137,14 +137,14 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
 
-    use super::super::super::aromatic::AromaticSystemAst;
+    use super::super::super::aromatic::AromaticSystemForm;
     use super::super::super::atom::AtomForm;
     use super::super::super::bond::BondForm;
     use super::super::super::constraint::Constraints;
-    use super::super::super::dative::DativeBondAst;
+    use super::super::super::dative::DativeBondForm;
     use super::super::super::molecule::{MoleculeAst, MoleculeEntries};
-    use super::super::super::multicenter::MulticenterBondAst;
-    use super::super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use super::super::super::multicenter::MulticenterBondForm;
+    use super::super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use super::super::super::reaction::ReactionAst;
     use super::*;
 
@@ -211,7 +211,7 @@ mod tests {
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::B)],
-                dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+                dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
@@ -226,7 +226,7 @@ mod tests {
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
-                aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))],
+                aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::from_electrons(vec![1, 2]))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
@@ -245,7 +245,7 @@ mod tests {
                     AtomForm::from_element(Element::H),
                     AtomForm::from_element(Element::B),
                 ],
-                multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst::from_electrons(vec![3, 5, 7]))],
+                multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondForm::from_electrons(vec![3, 5, 7]))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
@@ -260,7 +260,7 @@ mod tests {
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),

@@ -1,4 +1,4 @@
-//! Multicenter-bond resolver: fills `MulticenterBondAst` charge and unpaired-electron
+//! Multicenter-bond resolver: fills `MulticenterBondForm` charge and unpaired-electron
 //! defaults parallel to `BondsResolver`.
 
 use thiserror::Error;

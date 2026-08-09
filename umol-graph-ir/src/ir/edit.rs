@@ -14,7 +14,7 @@ use std::vec::IntoIter;
 
 use thiserror::Error;
 
-use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
+use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
@@ -23,7 +23,7 @@ use super::constraint::{
     NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
     StereoBondConstraintAst,
 };
-use super::dative::{DativeBondAst, DativeBondUpdate};
+use super::dative::{DativeBondForm, DativeBondUpdate};
 use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::id::{
@@ -31,8 +31,8 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindForm, NoncovalentBondUpdate};
+use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
+use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
 use super::remap::{IdCompaction, IdRemapping, UndoCompaction};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
@@ -306,10 +306,10 @@ pub enum Edit {
     // Dative bonds
     AddDativeBond {
         atoms: Vec<AtomHandle>,
-        ast: DativeBondAst,
+        ast: DativeBondForm,
     },
     RemoveDativeBonds {
-        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondAst)>,
+        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)>,
     },
     ModifyDativeBondField {
         id: DativeBondHandle,
@@ -319,10 +319,10 @@ pub enum Edit {
     // Aromatic systems
     AddAromaticSystem {
         atoms: Vec<AtomHandle>,
-        ast: AromaticSystemAst,
+        ast: AromaticSystemForm,
     },
     RemoveAromaticSystems {
-        removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemAst)>,
+        removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)>,
     },
     ModifyAromaticSystemField {
         id: AromaticSystemHandle,
@@ -332,10 +332,10 @@ pub enum Edit {
     // Multicenter bonds
     AddMulticenterBond {
         atoms: Vec<AtomHandle>,
-        ast: MulticenterBondAst,
+        ast: MulticenterBondForm,
     },
     RemoveMulticenterBonds {
-        removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondAst)>,
+        removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondForm)>,
     },
     ModifyMulticenterBondField {
         id: MulticenterBondHandle,
@@ -345,10 +345,10 @@ pub enum Edit {
     // Noncovalent bonds
     AddNoncovalentBond {
         atoms: [AtomHandle; 2],
-        ast: NoncovalentBondAst,
+        ast: NoncovalentBondForm,
     },
     RemoveNoncovalentBonds {
-        removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondAst)>,
+        removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondForm)>,
     },
     ModifyNoncovalentBondField {
         id: NoncovalentBondHandle,
@@ -540,7 +540,7 @@ impl Edits {
     pub fn add_dative_bond(
         &mut self,
         atoms: Vec<AtomHandle>,
-        ast: DativeBondAst,
+        ast: DativeBondForm,
     ) -> DativeBondHandle {
         let handle = DativeBondHandle::New(self.created_dative_bonds);
         self.push(Edit::AddDativeBond { atoms, ast });
@@ -549,7 +549,7 @@ impl Edits {
 
     pub fn add_dative_bonds(
         &mut self,
-        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, DativeBondAst)>,
+        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, DativeBondForm)>,
     ) -> Vec<DativeBondHandle> {
         bonds
             .into_iter()
@@ -560,7 +560,7 @@ impl Edits {
     pub fn add_aromatic_system(
         &mut self,
         atoms: Vec<AtomHandle>,
-        ast: AromaticSystemAst,
+        ast: AromaticSystemForm,
     ) -> AromaticSystemHandle {
         let handle = AromaticSystemHandle::New(self.created_aromatic_systems);
         self.push(Edit::AddAromaticSystem { atoms, ast });
@@ -569,7 +569,7 @@ impl Edits {
 
     pub fn add_aromatic_systems(
         &mut self,
-        systems: impl IntoIterator<Item = (Vec<AtomHandle>, AromaticSystemAst)>,
+        systems: impl IntoIterator<Item = (Vec<AtomHandle>, AromaticSystemForm)>,
     ) -> Vec<AromaticSystemHandle> {
         systems
             .into_iter()
@@ -580,7 +580,7 @@ impl Edits {
     pub fn add_multicenter_bond(
         &mut self,
         atoms: Vec<AtomHandle>,
-        ast: MulticenterBondAst,
+        ast: MulticenterBondForm,
     ) -> MulticenterBondHandle {
         let handle = MulticenterBondHandle::New(self.created_multicenter_bonds);
         self.push(Edit::AddMulticenterBond { atoms, ast });
@@ -589,7 +589,7 @@ impl Edits {
 
     pub fn add_multicenter_bonds(
         &mut self,
-        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, MulticenterBondAst)>,
+        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, MulticenterBondForm)>,
     ) -> Vec<MulticenterBondHandle> {
         bonds
             .into_iter()
@@ -600,7 +600,7 @@ impl Edits {
     pub fn add_noncovalent_bond(
         &mut self,
         atoms: [AtomHandle; 2],
-        ast: NoncovalentBondAst,
+        ast: NoncovalentBondForm,
     ) -> NoncovalentBondHandle {
         let handle = NoncovalentBondHandle::New(self.created_noncovalent_bonds);
         self.push(Edit::AddNoncovalentBond { atoms, ast });
@@ -609,7 +609,7 @@ impl Edits {
 
     pub fn add_noncovalent_bonds(
         &mut self,
-        bonds: impl IntoIterator<Item = ([AtomHandle; 2], NoncovalentBondAst)>,
+        bonds: impl IntoIterator<Item = ([AtomHandle; 2], NoncovalentBondForm)>,
     ) -> Vec<NoncovalentBondHandle> {
         bonds
             .into_iter()
@@ -685,28 +685,28 @@ impl Edits {
 
     pub fn remove_dative_bonds(
         &mut self,
-        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondAst)>,
+        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)>,
     ) {
         self.push(Edit::RemoveDativeBonds { removes });
     }
 
     pub fn remove_aromatic_systems(
         &mut self,
-        removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemAst)>,
+        removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)>,
     ) {
         self.push(Edit::RemoveAromaticSystems { removes });
     }
 
     pub fn remove_multicenter_bonds(
         &mut self,
-        removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondAst)>,
+        removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondForm)>,
     ) {
         self.push(Edit::RemoveMulticenterBonds { removes });
     }
 
     pub fn remove_noncovalent_bonds(
         &mut self,
-        removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondAst)>,
+        removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondForm)>,
     ) {
         self.push(Edit::RemoveNoncovalentBonds { removes });
     }
@@ -899,7 +899,7 @@ impl Edits {
     pub fn update_dative_bond(
         &mut self,
         id: DativeBondHandle,
-        current: &DativeBondAst,
+        current: &DativeBondForm,
         update: &DativeBondUpdate,
     ) {
         if let Some(new) = &update.order {
@@ -935,7 +935,7 @@ impl Edits {
     pub fn update_aromatic_system(
         &mut self,
         id: AromaticSystemHandle,
-        current: &AromaticSystemAst,
+        current: &AromaticSystemForm,
         update: &AromaticSystemUpdate,
     ) {
         if let Some(new) = &update.electrons {
@@ -997,7 +997,7 @@ impl Edits {
     pub fn update_multicenter_bond(
         &mut self,
         id: MulticenterBondHandle,
-        current: &MulticenterBondAst,
+        current: &MulticenterBondForm,
         update: &MulticenterBondUpdate,
     ) {
         if let Some(new) = &update.electrons {
@@ -1059,7 +1059,7 @@ impl Edits {
     pub fn update_noncovalent_bond(
         &mut self,
         id: NoncovalentBondHandle,
-        current: &NoncovalentBondAst,
+        current: &NoncovalentBondForm,
         update: &NoncovalentBondUpdate,
     ) {
         if let Some(new) = &update.kind {
@@ -1687,56 +1687,56 @@ pub struct RemovedBond {
 pub struct AddedDativeBond {
     pub id: DativeBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: DativeBondAst,
+    pub ast: DativeBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedDativeBond {
     pub id: DativeBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: DativeBondAst,
+    pub ast: DativeBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedAromaticSystem {
     pub id: AromaticSystemId,
     pub atoms: Vec<AtomId>,
-    pub ast: AromaticSystemAst,
+    pub ast: AromaticSystemForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedAromaticSystem {
     pub id: AromaticSystemId,
     pub atoms: Vec<AtomId>,
-    pub ast: AromaticSystemAst,
+    pub ast: AromaticSystemForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedMulticenterBond {
     pub id: MulticenterBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: MulticenterBondAst,
+    pub ast: MulticenterBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedMulticenterBond {
     pub id: MulticenterBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: MulticenterBondAst,
+    pub ast: MulticenterBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedNoncovalentBond {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: NoncovalentBondAst,
+    pub ast: NoncovalentBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedNoncovalentBond {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: NoncovalentBondAst,
+    pub ast: NoncovalentBondForm,
 }
 
 // Stereo elements carry both factors: the `site` (atom/bond) and the ordered
@@ -2024,10 +2024,10 @@ mod tests {
     fn test_edits_add_methods() {
         let atom = AtomForm::from_element(Element::C);
         let bond = BondForm::from_order(1);
-        let dative = DativeBondAst::default();
-        let aromatic = AromaticSystemAst::default();
-        let multicenter = MulticenterBondAst::default();
-        let noncovalent = NoncovalentBondAst::default();
+        let dative = DativeBondForm::default();
+        let aromatic = AromaticSystemForm::default();
+        let multicenter = MulticenterBondForm::default();
+        let noncovalent = NoncovalentBondForm::default();
         let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0));
         let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0));
         let mut edits = Edits::new();
@@ -2186,8 +2186,8 @@ mod tests {
 
         assert_eq!(
             edits.add_dative_bonds([
-                (vec![AtomHandle::Id(AtomId(0))], DativeBondAst::default()),
-                (vec![AtomHandle::Id(AtomId(1))], DativeBondAst::default()),
+                (vec![AtomHandle::Id(AtomId(0))], DativeBondForm::default()),
+                (vec![AtomHandle::Id(AtomId(1))], DativeBondForm::default()),
             ]),
             vec![DativeBondHandle::New(0), DativeBondHandle::New(1)],
         );
@@ -2195,11 +2195,11 @@ mod tests {
             edits.add_aromatic_systems([
                 (
                     vec![AtomHandle::Id(AtomId(0))],
-                    AromaticSystemAst::default(),
+                    AromaticSystemForm::default(),
                 ),
                 (
                     vec![AtomHandle::Id(AtomId(1))],
-                    AromaticSystemAst::default(),
+                    AromaticSystemForm::default(),
                 ),
             ]),
             vec![AromaticSystemHandle::New(0), AromaticSystemHandle::New(1)],
@@ -2208,11 +2208,11 @@ mod tests {
             edits.add_multicenter_bonds([
                 (
                     vec![AtomHandle::Id(AtomId(0))],
-                    MulticenterBondAst::default(),
+                    MulticenterBondForm::default(),
                 ),
                 (
                     vec![AtomHandle::Id(AtomId(1))],
-                    MulticenterBondAst::default(),
+                    MulticenterBondForm::default(),
                 ),
             ]),
             vec![MulticenterBondHandle::New(0), MulticenterBondHandle::New(1)],
@@ -2221,11 +2221,11 @@ mod tests {
             edits.add_noncovalent_bonds([
                 (
                     [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    NoncovalentBondAst::default(),
+                    NoncovalentBondForm::default(),
                 ),
                 (
                     [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-                    NoncovalentBondAst::default(),
+                    NoncovalentBondForm::default(),
                 ),
             ]),
             vec![NoncovalentBondHandle::New(0), NoncovalentBondHandle::New(1),],
@@ -2266,35 +2266,35 @@ mod tests {
             vec![
                 Edit::AddDativeBond {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: DativeBondAst::default(),
+                    ast: DativeBondForm::default(),
                 },
                 Edit::AddDativeBond {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
-                    ast: DativeBondAst::default(),
+                    ast: DativeBondForm::default(),
                 },
                 Edit::AddAromaticSystem {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: AromaticSystemAst::default(),
+                    ast: AromaticSystemForm::default(),
                 },
                 Edit::AddAromaticSystem {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
-                    ast: AromaticSystemAst::default(),
+                    ast: AromaticSystemForm::default(),
                 },
                 Edit::AddMulticenterBond {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: MulticenterBondAst::default(),
+                    ast: MulticenterBondForm::default(),
                 },
                 Edit::AddMulticenterBond {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
-                    ast: MulticenterBondAst::default(),
+                    ast: MulticenterBondForm::default(),
                 },
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    ast: NoncovalentBondAst::default(),
+                    ast: NoncovalentBondForm::default(),
                 },
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-                    ast: NoncovalentBondAst::default(),
+                    ast: NoncovalentBondForm::default(),
                 },
                 Edit::AddStereoAtom {
                     site: AtomHandle::Id(AtomId(0)),
@@ -2352,22 +2352,22 @@ mod tests {
         edits.remove_dative_bonds(vec![(
             DativeBondHandle::Id(DativeBondId(0)),
             vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-            DativeBondAst::default(),
+            DativeBondForm::default(),
         )]);
         edits.remove_aromatic_systems(vec![(
             AromaticSystemHandle::New(0),
             vec![AtomHandle::Id(AtomId(0))],
-            AromaticSystemAst::default(),
+            AromaticSystemForm::default(),
         )]);
         edits.remove_multicenter_bonds(vec![(
             MulticenterBondHandle::Id(MulticenterBondId(0)),
             vec![AtomHandle::Id(AtomId(0))],
-            MulticenterBondAst::default(),
+            MulticenterBondForm::default(),
         )]);
         edits.remove_noncovalent_bonds(vec![(
             NoncovalentBondHandle::New(0),
             [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-            NoncovalentBondAst::default(),
+            NoncovalentBondForm::default(),
         )]);
         edits.remove_stereo_atoms(vec![(
             StereoAtomHandle::Id(StereoAtomId(0)),
@@ -2389,28 +2389,28 @@ mod tests {
                     removes: vec![(
                         DativeBondHandle::Id(DativeBondId(0)),
                         vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                        DativeBondAst::default(),
+                        DativeBondForm::default(),
                     )],
                 },
                 Edit::RemoveAromaticSystems {
                     removes: vec![(
                         AromaticSystemHandle::New(0),
                         vec![AtomHandle::Id(AtomId(0))],
-                        AromaticSystemAst::default(),
+                        AromaticSystemForm::default(),
                     )],
                 },
                 Edit::RemoveMulticenterBonds {
                     removes: vec![(
                         MulticenterBondHandle::Id(MulticenterBondId(0)),
                         vec![AtomHandle::Id(AtomId(0))],
-                        MulticenterBondAst::default(),
+                        MulticenterBondForm::default(),
                     )],
                 },
                 Edit::RemoveNoncovalentBonds {
                     removes: vec![(
                         NoncovalentBondHandle::New(0),
                         [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                        NoncovalentBondAst::default(),
+                        NoncovalentBondForm::default(),
                     )],
                 },
                 Edit::RemoveStereoAtoms {
@@ -2494,19 +2494,19 @@ mod tests {
             },
             Edit::AddDativeBond {
                 atoms: Vec::new(),
-                ast: DativeBondAst::default(),
+                ast: DativeBondForm::default(),
             },
             Edit::AddAromaticSystem {
                 atoms: Vec::new(),
-                ast: AromaticSystemAst::default(),
+                ast: AromaticSystemForm::default(),
             },
             Edit::AddMulticenterBond {
                 atoms: Vec::new(),
-                ast: MulticenterBondAst::default(),
+                ast: MulticenterBondForm::default(),
             },
             Edit::AddNoncovalentBond {
                 atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                ast: NoncovalentBondAst::default(),
+                ast: NoncovalentBondForm::default(),
             },
             Edit::AddStereoAtom {
                 site: AtomHandle::Id(AtomId(0)),
@@ -2532,21 +2532,21 @@ mod tests {
             BondHandle::New(2),
         );
         assert_eq!(
-            edits.add_dative_bond(Vec::new(), DativeBondAst::default()),
+            edits.add_dative_bond(Vec::new(), DativeBondForm::default()),
             DativeBondHandle::New(1),
         );
         assert_eq!(
-            edits.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
+            edits.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
             AromaticSystemHandle::New(1),
         );
         assert_eq!(
-            edits.add_multicenter_bond(Vec::new(), MulticenterBondAst::default()),
+            edits.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             MulticenterBondHandle::New(1),
         );
         assert_eq!(
             edits.add_noncovalent_bond(
                 [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                NoncovalentBondAst::default(),
+                NoncovalentBondForm::default(),
             ),
             NoncovalentBondHandle::New(1),
         );
@@ -2796,7 +2796,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
-        DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
         DativeBondUpdate {
             order: Some(NumForm::Lit(2)),
             constraints: DativeBondConstraintsAst::from_iter([
@@ -2822,7 +2822,7 @@ mod tests {
         ],
     )]
     fn test_edits_update_dative_bond(
-        #[case] current: DativeBondAst,
+        #[case] current: DativeBondForm,
         #[case] update: DativeBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
@@ -2857,11 +2857,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(DativeBondAst::from_order(1), DativeBondUpdate::default())]
-    #[case::canonical_field(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(DativeBondAst::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    #[case::empty(DativeBondForm::from_order(1), DativeBondUpdate::default())]
+    #[case::canonical_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_dative_bond_identity(
-        #[case] current: DativeBondAst,
+        #[case] current: DativeBondForm,
         #[case] update: DativeBondUpdate,
     ) {
         let mut edits = Edits::new();
@@ -2877,7 +2877,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
@@ -2905,7 +2905,7 @@ mod tests {
         ],
     )]
     fn test_edits_update_aromatic_system(
-        #[case] current: AromaticSystemAst,
+        #[case] current: AromaticSystemForm,
         #[case] update: AromaticSystemUpdate,
         #[case] expected: Vec<Edit>,
     ) {
@@ -2947,11 +2947,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
-    #[case::canonical_field(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
+    #[case::empty(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
+    #[case::canonical_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_aromatic_system_identity(
-        #[case] current: AromaticSystemAst,
+        #[case] current: AromaticSystemForm,
         #[case] update: AromaticSystemUpdate,
     ) {
         let mut edits = Edits::new();
@@ -2967,7 +2967,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
@@ -2995,7 +2995,7 @@ mod tests {
         ],
     )]
     fn test_edits_update_multicenter_bond(
-        #[case] current: MulticenterBondAst,
+        #[case] current: MulticenterBondForm,
         #[case] update: MulticenterBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
@@ -3037,11 +3037,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
-    #[case::canonical_field(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
+    #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
+    #[case::canonical_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_multicenter_bond_identity(
-        #[case] current: MulticenterBondAst,
+        #[case] current: MulticenterBondForm,
         #[case] update: MulticenterBondUpdate,
     ) {
         let mut edits = Edits::new();
@@ -3057,7 +3057,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_and_constraint(
-        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
         NoncovalentBondUpdate {
             kind: Some(NoncovalentBondKindForm::Undetermined),
             constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)),
@@ -3075,7 +3075,7 @@ mod tests {
         ],
     )]
     fn test_edits_update_noncovalent_bond(
-        #[case] current: NoncovalentBondAst,
+        #[case] current: NoncovalentBondForm,
         #[case] update: NoncovalentBondUpdate,
         #[case] expected: Vec<Edit>,
     ) {
@@ -3113,11 +3113,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
-    #[case::same_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
-    #[case::absent_constraint_removal(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
+    #[case::empty(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
+    #[case::same_kind(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
+    #[case::absent_constraint_removal(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_noncovalent_bond_identity(
-        #[case] current: NoncovalentBondAst,
+        #[case] current: NoncovalentBondForm,
         #[case] update: NoncovalentBondUpdate,
     ) {
         let mut edits = Edits::new();

@@ -36,7 +36,7 @@ pub(crate) mod validate;
 pub(crate) mod value;
 pub(crate) mod view;
 
-pub use aromatic::{AromaticSystemAst, AromaticSystemUpdate};
+pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 pub use atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
@@ -56,7 +56,7 @@ pub use constraint::{
     StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
 pub use correspondence::MoleculeCorrespondence;
-pub use dative::{DativeBondAst, DativeBondUpdate};
+pub use dative::{DativeBondForm, DativeBondUpdate};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
@@ -89,9 +89,9 @@ pub use molecule::{
     spec, AtomArg, Fragment, MoleculeAst, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
     MoleculeEntriesError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
-pub use multicenter::{MulticenterBondAst, MulticenterBondUpdate};
+pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 pub use noncovalent::{
-    NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
+    NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
 };
 pub use operators::{MemOp, RelOp};
 pub use reaction::ReactionAst;

@@ -7,7 +7,7 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
-    AromaticSystemAst as GraphIrAromaticSystemAst, AromaticSystemId as GraphIrAromaticSystemId,
+    AromaticSystemForm as GraphIrAromaticSystemForm, AromaticSystemId as GraphIrAromaticSystemId,
     AromaticSystemUpdate as GraphIrAromaticSystemUpdate,
     AromaticSystemView as GraphIrAromaticSystemView, AtomId as GraphIrAtomId,
     MoleculeAst as GraphIrMoleculeAst,
@@ -114,7 +114,7 @@ impl AromaticSystemUpdate {
 /// `electrons` vector is positional, aligned to that atom order.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct AromaticSystemAst(GraphIrAromaticSystemAst);
+pub struct AromaticSystemAst(GraphIrAromaticSystemForm);
 
 #[pymethods]
 impl AromaticSystemAst {
@@ -129,7 +129,7 @@ impl AromaticSystemAst {
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsAst>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
-        let mut system = GraphIrAromaticSystemAst::new(electrons.to_rust(py));
+        let mut system = GraphIrAromaticSystemForm::new(electrons.to_rust(py));
         if let Some(charge) = charge {
             system = system.with_charge(charge.to_rust(py));
         }
@@ -145,7 +145,7 @@ impl AromaticSystemAst {
     /// Parse an aromatic-system-DSL string (e.g. `"[1,1,1]#e6"`) into an `AromaticSystemAst`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        GraphIrAromaticSystemAst::from_str(s)
+        GraphIrAromaticSystemForm::from_str(s)
             .map(Self)
             .map_err(parse_error)
     }
@@ -227,29 +227,29 @@ impl AromaticSystemAst {
 
 impl AromaticSystemAst {
     /// The wrapped AST system — read access for the system-backed constraints view.
-    pub(crate) fn inner(&self) -> &GraphIrAromaticSystemAst {
+    pub(crate) fn inner(&self) -> &GraphIrAromaticSystemForm {
         &self.0
     }
 
     /// Mutable access to the wrapped AST system — write access for the system-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrAromaticSystemAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrAromaticSystemForm {
         &mut self.0
     }
 
     /// Wrap an owned Rust aromatic-system AST.
-    pub(crate) fn from_inner(system: GraphIrAromaticSystemAst) -> Self {
+    pub(crate) fn from_inner(system: GraphIrAromaticSystemForm) -> Self {
         AromaticSystemAst(system)
     }
 }
 
 impl_py_lattice!(
     AromaticSystemAst,
-    GraphIrAromaticSystemAst,
-    |value: &AromaticSystemAst, _py: Python<'_>| -> PyResult<GraphIrAromaticSystemAst> {
+    GraphIrAromaticSystemForm,
+    |value: &AromaticSystemAst, _py: Python<'_>| -> PyResult<GraphIrAromaticSystemForm> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: GraphIrAromaticSystemAst| -> PyResult<AromaticSystemAst> {
+    |_py: Python<'_>, value: GraphIrAromaticSystemForm| -> PyResult<AromaticSystemAst> {
         Ok(AromaticSystemAst::from_inner(value))
     }
 );
@@ -583,7 +583,7 @@ mod tests {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 6],
             aromatic: vec![(
                 (0u32..6).map(GraphIrAtomId).collect(),
-                GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1]),
+                GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1]),
             )],
             ..Default::default()
         });
@@ -664,7 +664,7 @@ mod tests {
     fn test_aromatic_system_ast_electrons() {
         Python::attach(|py| {
             let mut system =
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             assert_eq!(
@@ -683,7 +683,7 @@ mod tests {
     fn test_aromatic_system_ast_charge() {
         Python::attach(|py| {
             let mut system =
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             system.set_charge(py, NumLike::Lit(-1));
@@ -704,7 +704,7 @@ mod tests {
             )
             .unwrap();
             let mut system =
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             system.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
@@ -721,7 +721,7 @@ mod tests {
             let src = Py::new(
                 py,
                 AromaticSystemAst::from_inner(
-                    GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                    GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintAst::electron_count(6)),
                 ),
             )
@@ -735,7 +735,7 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -757,7 +757,7 @@ mod tests {
     fn test_aromatic_system_ast_asdict() {
         Python::attach(|py| {
             let system = AromaticSystemAst::from_inner(
-                GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                     .with_constraint(GraphIrAromaticSystemConstraintAst::electron_count(6)),
             );
             let dict = system.asdict(py).unwrap();
@@ -960,7 +960,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     2, 2, 2, 2, 2, 2,
                 ])),
             )
@@ -985,7 +985,7 @@ mod tests {
             let views = AromaticSystemViews { owner: benzene(py) };
             let replacement = Py::new(
                 py,
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1014,7 +1014,7 @@ mod tests {
                 atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 7],
                 aromatic: vec![(
                     (0u32..6).map(GraphIrAtomId).collect(),
-                    GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1]),
+                    GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1]),
                 )],
                 ..Default::default()
             });
@@ -1264,7 +1264,7 @@ mod tests {
             let system = Py::new(
                 py,
                 AromaticSystemAst::from_inner(
-                    GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                    GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintAst::electron_count(6)),
                 ),
             )
@@ -1302,7 +1302,7 @@ mod tests {
             let system = Py::new(
                 py,
                 AromaticSystemAst::from_inner(
-                    GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                    GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintAst::electron_count(6)),
                 ),
             )
@@ -1539,7 +1539,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1575,7 +1575,7 @@ mod tests {
             let system = Py::new(
                 py,
                 AromaticSystemAst::from_inner(
-                    GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                    GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintAst::electron_count(6)),
                 ),
             )
@@ -1607,7 +1607,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1640,7 +1640,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemAst::from_inner(GraphIrAromaticSystemAst::from_electrons(vec![
+                AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )

@@ -5,24 +5,23 @@ use std::vec::IntoIter;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    AromaticSystemAst as GraphIrAromaticSystemAst,
     AromaticSystemDelta as GraphIrAromaticSystemDelta,
     AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange,
-    AromaticSystemId as GraphIrAromaticSystemId, AtomDelta as GraphIrAtomDelta,
-    AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
-    AtomId as GraphIrAtomId, BondDelta as GraphIrBondDelta,
+    AromaticSystemForm as GraphIrAromaticSystemForm, AromaticSystemId as GraphIrAromaticSystemId,
+    AtomDelta as GraphIrAtomDelta, AtomFieldChange as GraphIrAtomFieldChange,
+    AtomForm as GraphIrAtomForm, AtomId as GraphIrAtomId, BondDelta as GraphIrBondDelta,
     BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
     BondId as GraphIrBondId, Constraint as GraphIrConstraint,
-    ConstraintDelta as GraphIrConstraintDelta, DativeBondAst as GraphIrDativeBondAst,
-    DativeBondDelta as GraphIrDativeBondDelta,
-    DativeBondFieldChange as GraphIrDativeBondFieldChange, DativeBondId as GraphIrDativeBondId,
-    Delta as GraphIrDelta, Deltas as GraphIrDeltas,
-    MulticenterBondAst as GraphIrMulticenterBondAst,
+    ConstraintDelta as GraphIrConstraintDelta, DativeBondDelta as GraphIrDativeBondDelta,
+    DativeBondFieldChange as GraphIrDativeBondFieldChange, DativeBondForm as GraphIrDativeBondForm,
+    DativeBondId as GraphIrDativeBondId, Delta as GraphIrDelta, Deltas as GraphIrDeltas,
     MulticenterBondDelta as GraphIrMulticenterBondDelta,
     MulticenterBondFieldChange as GraphIrMulticenterBondFieldChange,
-    MulticenterBondId as GraphIrMulticenterBondId, NoncovalentBondAst as GraphIrNoncovalentBondAst,
+    MulticenterBondForm as GraphIrMulticenterBondForm,
+    MulticenterBondId as GraphIrMulticenterBondId,
     NoncovalentBondDelta as GraphIrNoncovalentBondDelta,
     NoncovalentBondFieldChange as GraphIrNoncovalentBondFieldChange,
+    NoncovalentBondForm as GraphIrNoncovalentBondForm,
     NoncovalentBondId as GraphIrNoncovalentBondId, StereoAtomAst as GraphIrStereoAtomAst,
     StereoAtomDelta as GraphIrStereoAtomDelta,
     StereoAtomFieldChange as GraphIrStereoAtomFieldChange, StereoAtomId as GraphIrStereoAtomId,
@@ -766,11 +765,11 @@ impl<'py> IntoPyObject<'py> for &DativeBondDeltaAstValue {
 }
 
 impl DativeBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrDativeBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrDativeBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(py, DativeBondAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -935,14 +934,14 @@ impl<'py> IntoPyObject<'py> for &AromaticSystemDeltaAstValue {
 }
 
 impl AromaticSystemDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrAromaticSystemAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrAromaticSystemForm) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
             AromaticSystemAst::from_inner(ast.clone()),
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1099,14 +1098,14 @@ impl<'py> IntoPyObject<'py> for &MulticenterBondDeltaAstValue {
 }
 
 impl MulticenterBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrMulticenterBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrMulticenterBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
             MulticenterBondAst::from_inner(ast.clone()),
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -1263,14 +1262,14 @@ impl<'py> IntoPyObject<'py> for &NoncovalentBondDeltaAstValue {
 }
 
 impl NoncovalentBondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrNoncovalentBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrNoncovalentBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
             NoncovalentBondAst::from_inner(ast.clone()),
         )?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -3388,13 +3387,13 @@ mod tests {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrDativeBondDelta::Remove {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrDativeBondDelta::ModifyField {
         id: GraphIrDativeBondId(1),
@@ -3433,13 +3432,13 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrDativeBondDelta::Add {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
         true,
     )]
@@ -3448,13 +3447,13 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrDativeBondDelta::Add {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
         false,
     )]
@@ -3476,7 +3475,7 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
         "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
     )]
@@ -3485,7 +3484,7 @@ mod tests {
             id: GraphIrDativeBondId(1),
             donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             acceptor: GraphIrAtomId(3),
-            ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
         "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
     )]
@@ -3529,13 +3528,13 @@ mod tests {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrDativeBondDelta::Remove {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrDativeBondDelta::ModifyField {
         id: GraphIrDativeBondId(1),
@@ -3576,12 +3575,12 @@ mod tests {
     #[case::add(GraphIrAromaticSystemDelta::Add {
         id: GraphIrAromaticSystemId(2),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::remove(GraphIrAromaticSystemDelta::Remove {
         id: GraphIrAromaticSystemId(2),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::modify_field(GraphIrAromaticSystemDelta::ModifyField {
         id: GraphIrAromaticSystemId(2),
@@ -3621,12 +3620,12 @@ mod tests {
         GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(2),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
         GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(2),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
         true,
     )]
@@ -3634,12 +3633,12 @@ mod tests {
         GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(2),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
         GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(2),
             atoms: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
         false,
     )]
@@ -3660,7 +3659,7 @@ mod tests {
         GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(2),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
         "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
     )]
@@ -3668,7 +3667,7 @@ mod tests {
         GraphIrAromaticSystemDelta::Remove {
             id: GraphIrAromaticSystemId(2),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
         "AromaticSystemDelta.Remove(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
     )]
@@ -3714,12 +3713,12 @@ mod tests {
     #[case::add(GraphIrAromaticSystemDelta::Add {
         id: GraphIrAromaticSystemId(2),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::remove(GraphIrAromaticSystemDelta::Remove {
         id: GraphIrAromaticSystemId(2),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::modify_field(GraphIrAromaticSystemDelta::ModifyField {
         id: GraphIrAromaticSystemId(2),
@@ -3760,12 +3759,12 @@ mod tests {
     #[case::add(GraphIrMulticenterBondDelta::Add {
         id: GraphIrMulticenterBondId(3),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::remove(GraphIrMulticenterBondDelta::Remove {
         id: GraphIrMulticenterBondId(3),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::modify_field(GraphIrMulticenterBondDelta::ModifyField {
         id: GraphIrMulticenterBondId(3),
@@ -3805,12 +3804,12 @@ mod tests {
         GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(3),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
         GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(3),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
         true,
     )]
@@ -3818,12 +3817,12 @@ mod tests {
         GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(3),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
         GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(3),
             atoms: vec![GraphIrAtomId(2), GraphIrAtomId(4), GraphIrAtomId(4)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
         false,
     )]
@@ -3844,7 +3843,7 @@ mod tests {
         GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(3),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
         "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
     )]
@@ -3852,7 +3851,7 @@ mod tests {
         GraphIrMulticenterBondDelta::Remove {
             id: GraphIrMulticenterBondId(3),
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-            ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
         "MulticenterBondDelta.Remove(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
     )]
@@ -3898,12 +3897,12 @@ mod tests {
     #[case::add(GraphIrMulticenterBondDelta::Add {
         id: GraphIrMulticenterBondId(3),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::remove(GraphIrMulticenterBondDelta::Remove {
         id: GraphIrMulticenterBondId(3),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
-        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
     })]
     #[case::modify_field(GraphIrMulticenterBondDelta::ModifyField {
         id: GraphIrMulticenterBondId(3),
@@ -3944,12 +3943,12 @@ mod tests {
     #[case::add(GraphIrNoncovalentBondDelta::Add {
         id: GraphIrNoncovalentBondId(4),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+        ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
     #[case::remove(GraphIrNoncovalentBondDelta::Remove {
         id: GraphIrNoncovalentBondId(4),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+        ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
     #[case::modify_field(GraphIrNoncovalentBondDelta::ModifyField {
         id: GraphIrNoncovalentBondId(4),
@@ -3989,12 +3988,12 @@ mod tests {
         GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(4),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(4),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         true,
     )]
@@ -4002,12 +4001,12 @@ mod tests {
         GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(4),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(4),
             atoms: [GraphIrAtomId(2), GraphIrAtomId(5)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         false,
     )]
@@ -4028,7 +4027,7 @@ mod tests {
         GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(4),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
     )]
@@ -4036,7 +4035,7 @@ mod tests {
         GraphIrNoncovalentBondDelta::Remove {
             id: GraphIrNoncovalentBondId(4),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-            ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+            ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
         "NoncovalentBondDelta.Remove(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
     )]
@@ -4082,12 +4081,12 @@ mod tests {
     #[case::add(GraphIrNoncovalentBondDelta::Add {
         id: GraphIrNoncovalentBondId(4),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+        ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
     #[case::remove(GraphIrNoncovalentBondDelta::Remove {
         id: GraphIrNoncovalentBondId(4),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+        ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     })]
     #[case::modify_field(GraphIrNoncovalentBondDelta::ModifyField {
         id: GraphIrNoncovalentBondId(4),
@@ -4893,22 +4892,22 @@ mod tests {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::aromatic_system(GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
         id: GraphIrAromaticSystemId(2),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
-        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1]),
+        ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1]),
     }))]
     #[case::multicenter_bond(GraphIrDelta::MulticenterBond(GraphIrMulticenterBondDelta::Add {
         id: GraphIrMulticenterBondId(3),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
-        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1]),
+        ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1]),
     }))]
     #[case::noncovalent_bond(GraphIrDelta::NoncovalentBond(GraphIrNoncovalentBondDelta::Add {
         id: GraphIrNoncovalentBondId(4),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+        ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     }))]
     #[case::stereo_atom(GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
         id: GraphIrStereoAtomId(5),
@@ -5044,22 +5043,22 @@ mod tests {
         id: GraphIrDativeBondId(1),
         donors: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
         acceptor: GraphIrAtomId(3),
-        ast: GraphIrDativeBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::aromatic_system(GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
         id: GraphIrAromaticSystemId(2),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
-        ast: GraphIrAromaticSystemAst::from_electrons(vec![1, 1]),
+        ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1]),
     }))]
     #[case::multicenter_bond(GraphIrDelta::MulticenterBond(GraphIrMulticenterBondDelta::Add {
         id: GraphIrMulticenterBondId(3),
         atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2)],
-        ast: GraphIrMulticenterBondAst::from_electrons(vec![1, 1]),
+        ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1]),
     }))]
     #[case::noncovalent_bond(GraphIrDelta::NoncovalentBond(GraphIrNoncovalentBondDelta::Add {
         id: GraphIrNoncovalentBondId(4),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
-        ast: GraphIrNoncovalentBondAst::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
+        ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
     }))]
     #[case::stereo_atom(GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
         id: GraphIrStereoAtomId(5),

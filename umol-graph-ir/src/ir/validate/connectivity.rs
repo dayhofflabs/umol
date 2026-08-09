@@ -196,11 +196,11 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::aromatic::AromaticSystemAst;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::Constraints;
-    use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 
     #[rstest]
     fn test_connectivity_model_default() {
@@ -271,7 +271,7 @@ mod tests {
             ],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(2)],
-                AromaticSystemAst::from_electrons(vec![1, 1]),
+                AromaticSystemForm::from_electrons(vec![1, 1]),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -300,7 +300,7 @@ mod tests {
             noncovalent: vec![(
                 AtomId(0),
                 AtomId(2),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: Constraints::new(),
             ..Default::default()
