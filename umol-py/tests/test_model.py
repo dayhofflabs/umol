@@ -5,7 +5,7 @@ import pytest
 from umol import (
     AromaticityConfig,
     AromaticityModel,
-    AtomAst,
+    AtomForm,
     AtomTypeRegistry,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
@@ -32,23 +32,23 @@ def test_atom_type_registry_default():
 
 
 def test_atom_type_registry_from_atoms():
-    atom = AtomAst.parse("C#c0#v4")
+    atom = AtomForm.parse("C#c0#v4")
     registry = AtomTypeRegistry.from_atoms(
-        [atom, AtomAst.parse("C#c+#v3"), AtomAst.parse("O#c0#v2")]
+        [atom, AtomForm.parse("C#c+#v3"), AtomForm.parse("O#c0#v2")]
     )
 
     assert registry == AtomTypeRegistry.from_atoms(
         [
-            AtomAst.parse("C#c0#v4"),
-            AtomAst.parse("C#c+#v3"),
-            AtomAst.parse("O#c0#v2"),
+            AtomForm.parse("C#c0#v4"),
+            AtomForm.parse("C#c+#v3"),
+            AtomForm.parse("O#c0#v2"),
         ]
     )
-    assert registry != AtomTypeRegistry.from_atoms([AtomAst.parse("C#c0#v4")])
+    assert registry != AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
 
     atom.charge = 1
     assert registry.patterns_for_element_and_charge(Element("C"), 0) == [
-        AtomAst.parse("C#c0#v4")
+        AtomForm.parse("C#c0#v4")
     ]
 
 
@@ -56,15 +56,15 @@ def test_atom_type_registry_from_atoms():
     ("atom", "message"),
     [
         (
-            AtomAst.parse("*#c0"),
+            AtomForm.parse("*#c0"),
             "atom type registry entry 0 must have a literal element",
         ),
         (
-            AtomAst.parse("C"),
+            AtomForm.parse("C"),
             "atom type registry entry 0 must have a literal charge",
         ),
         (
-            AtomAst.parse("C#c128"),
+            AtomForm.parse("C#c128"),
             "atom type registry entry 0 charge 128 is outside -128..=127",
         ),
     ],
@@ -80,11 +80,11 @@ def test_atom_type_registry_from_toml():
     )
 
     assert registry.patterns_for_element(Element("C")) == [
-        AtomAst.parse("C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
-        AtomAst.parse("C#i=#c+#h0#n0#u0#s#v3#d0#t0#a!#m!"),
+        AtomForm.parse("C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
+        AtomForm.parse("C#i=#c+#h0#n0#u0#s#v3#d0#t0#a!#m!"),
     ]
     assert registry.patterns_for_element_and_charge(Element("O"), 0) == [
-        AtomAst.parse("O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!")
+        AtomForm.parse("O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!")
     ]
 
 
@@ -98,7 +98,7 @@ def test_atom_type_registry_from_toml_error():
 
 def test_atom_type_registry_patterns():
     registry = AtomTypeRegistry.from_atoms(
-        [AtomAst.parse("C#c0#v4"), AtomAst.parse("C#c+#v3")]
+        [AtomForm.parse("C#c0#v4"), AtomForm.parse("C#c+#v3")]
     )
     patterns = registry.patterns_for_element(Element("C"))
 
@@ -106,19 +106,19 @@ def test_atom_type_registry_patterns():
     patterns.pop()
 
     assert registry.patterns_for_element(Element("C")) == [
-        AtomAst.parse("C#c0#v4"),
-        AtomAst.parse("C#c+#v3"),
+        AtomForm.parse("C#c0#v4"),
+        AtomForm.parse("C#c+#v3"),
     ]
 
 
 def test_atom_type_registry_repr():
     registry = AtomTypeRegistry.from_atoms(
-        [AtomAst.parse("C#c0#v4"), AtomAst.parse("O#c0#v2")]
+        [AtomForm.parse("C#c0#v4"), AtomForm.parse("O#c0#v2")]
     )
 
     assert repr(registry) == (
-        'AtomTypeRegistry.from_atoms([AtomAst.parse("C#c0#v4"), '
-        'AtomAst.parse("O#c0#v2")])'
+        'AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4"), '
+        'AtomForm.parse("O#c0#v2")])'
     )
 
 
@@ -282,7 +282,7 @@ def test_valence_table_mutation():
 
 def test_valence_model_atom_typing():
     registry = AtomTypeRegistry.from_atoms(
-        [AtomAst.parse("C#c0#v4"), AtomAst.parse("O#c0#v2")]
+        [AtomForm.parse("C#c0#v4"), AtomForm.parse("O#c0#v2")]
     )
     model = ValenceModel.AtomTyping(registry=registry)
 
@@ -325,10 +325,10 @@ def test_valence_model_new_error(variant, payload):
     [
         (
             ValenceModel.AtomTyping(
-                registry=AtomTypeRegistry.from_atoms([AtomAst.parse("C#c0#v4")])
+                registry=AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
             ),
             'ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms(['
-            'AtomAst.parse("C#c0#v4")]))',
+            'AtomForm.parse("C#c0#v4")]))',
         ),
         (
             ValenceModel.Counts(

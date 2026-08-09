@@ -8,7 +8,7 @@ import umol._native as native
 PUBLIC_EXPORTS = frozenset(
     """
     AromaticBondConstraintMismatchPolicy
-    AromaticSystemAst
+    AromaticSystemForm
     AromaticSystemUpdate
     AromaticSystemConstraintAst
     AromaticSystemConstraintKey
@@ -25,7 +25,7 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityMismatchPolicy
     AromaticityModel
     AromaticityResolveConfig
-    AtomAst
+    AtomForm
     AtomUpdate
     AtomConstraintAst
     AtomConstraintKey
@@ -39,7 +39,7 @@ PUBLIC_EXPORTS = frozenset(
     AtomViews
     AutomorphismAlgorithm
     BitFp
-    BondAst
+    BondForm
     BondUpdate
     BondConstraintAst
     BondConstraintKey
@@ -65,7 +65,7 @@ PUBLIC_EXPORTS = frozenset(
     ContradictionError
     Correspondence
     CountedHashedFeatureSet
-    DativeBondAst
+    DativeBondForm
     DativeBondUpdate
     DativeBondConstraintAst
     DativeBondConstraintKey
@@ -105,7 +105,7 @@ PUBLIC_EXPORTS = frozenset(
     MoleculeDefaults
     MoleculeEditor
     MoleculeMetadata
-    MulticenterBondAst
+    MulticenterBondForm
     MulticenterBondUpdate
     MulticenterBondConstraintAst
     MulticenterBondConstraintKey
@@ -118,7 +118,7 @@ PUBLIC_EXPORTS = frozenset(
     MulticenterValence
     MulticenterValenceAst
     New
-    NoncovalentBondAst
+    NoncovalentBondForm
     NoncovalentBondConstraintAst
     NoncovalentBondConstraintKey
     NoncovalentBondConstraintsAst
@@ -160,7 +160,7 @@ PUBLIC_EXPORTS = frozenset(
     SmilesIoConfig
     SmilesSyntaxFlags
     SpinState
-    StereoAtomAst
+    StereoAtomForm
     StereoAtomUpdate
     StereoAtomConstraintAst
     StereoAtomConstraintKey
@@ -170,7 +170,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoAtomFieldChange
     StereoAtomView
     StereoAtomViews
-    StereoBondAst
+    StereoBondForm
     StereoBondUpdate
     StereoBondConstraintAst
     StereoBondConstraintKey

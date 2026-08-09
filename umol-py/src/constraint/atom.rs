@@ -16,7 +16,7 @@ use umol_graph_ir::ir::{
 };
 
 use super::ring::{RingMembershipAst, RingScope};
-use crate::atom::AtomAst;
+use crate::atom::AtomForm;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -637,7 +637,7 @@ impl AtomConstraintsLike {
 }
 
 /// The atom-scope constraints on an atom, in kind-sorted order. Mutable, hence
-/// value-equal but unhashable (matching `AtomAst`).
+/// value-equal but unhashable (matching `AtomForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct AtomConstraintsAst(GraphIrAtomConstraintsForm);
@@ -1145,17 +1145,17 @@ pub(crate) fn atom_constraints_asdict<'py>(
 }
 
 /// What an `AtomConstraintsView` writes through to: an atom within a molecule
-/// (by index) or a standalone `AtomAst`.
+/// (by index) or a standalone `AtomForm`.
 pub(crate) enum AtomConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrAtomId,
     },
-    Atom(Py<AtomAst>),
+    Atom(Py<AtomForm>),
 }
 
 /// A live handle onto one atom's constraints, backed by either a molecule-atom or
-/// a standalone `AtomAst`. Reads borrow the atom's constraints and read only the
+/// a standalone `AtomForm`. Reads borrow the atom's constraints and read only the
 /// item they need (no whole-container clone); mutators write through to the atom in
 /// place, without a clone-and-writeback.
 #[pyclass]
@@ -1609,13 +1609,13 @@ impl AtomConstraintsView {
 }
 
 /// What a `AtomRingSizeCounts` proxy reads/writes through to: an atom within a molecule,
-/// a standalone `AtomAst`, or a standalone `AtomConstraintsAst` value.
+/// a standalone `AtomForm`, or a standalone `AtomConstraintsAst` value.
 pub(crate) enum AtomRingSizeBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrAtomId,
     },
-    Atom(Py<AtomAst>),
+    Atom(Py<AtomForm>),
     Value(Py<AtomConstraintsAst>),
 }
 

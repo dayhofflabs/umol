@@ -221,10 +221,10 @@ impl NoncovalentBondUpdate {
 /// not part of the value.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct NoncovalentBondAst(GraphIrNoncovalentBondForm);
+pub struct NoncovalentBondForm(GraphIrNoncovalentBondForm);
 
 #[pymethods]
-impl NoncovalentBondAst {
+impl NoncovalentBondForm {
     /// Construct from an interaction kind — a `NoncovalentBondKind` or a
     /// `NoncovalentBondKindForm` — optionally setting constraints.
     #[new]
@@ -238,10 +238,10 @@ impl NoncovalentBondAst {
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
-        NoncovalentBondAst(bond)
+        NoncovalentBondForm(bond)
     }
 
-    /// Parse a noncovalent-bond-DSL string (e.g. `"Hbd#I"`) into a `NoncovalentBondAst`.
+    /// Parse a noncovalent-bond-DSL string (e.g. `"Hbd#I"`) into a `NoncovalentBondForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrNoncovalentBondForm::from_str(s)
@@ -254,7 +254,7 @@ impl NoncovalentBondAst {
     }
 
     fn __repr__(&self) -> String {
-        format!("NoncovalentBondAst.parse('{}')", self.0)
+        format!("NoncovalentBondForm.parse('{}')", self.0)
     }
 
     /// The interaction kind.
@@ -304,7 +304,7 @@ impl NoncovalentBondAst {
     }
 }
 
-impl NoncovalentBondAst {
+impl NoncovalentBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondForm {
         &self.0
@@ -318,18 +318,18 @@ impl NoncovalentBondAst {
 
     /// Wrap an owned Rust noncovalent-bond AST.
     pub(crate) fn from_inner(bond: GraphIrNoncovalentBondForm) -> Self {
-        NoncovalentBondAst(bond)
+        NoncovalentBondForm(bond)
     }
 }
 
 impl_py_lattice!(
-    NoncovalentBondAst,
+    NoncovalentBondForm,
     GraphIrNoncovalentBondForm,
-    |value: &NoncovalentBondAst, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondForm> {
+    |value: &NoncovalentBondForm, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondForm> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: GraphIrNoncovalentBondForm| -> PyResult<NoncovalentBondAst> {
-        Ok(NoncovalentBondAst::from_inner(value))
+    |_py: Python<'_>, value: GraphIrNoncovalentBondForm| -> PyResult<NoncovalentBondForm> {
+        Ok(NoncovalentBondForm::from_inner(value))
     }
 );
 
@@ -424,7 +424,7 @@ impl NoncovalentBondView {
     }
 
     /// The value fields as a dict keyed by field name; values are Python objects —
-    /// symmetric with `NoncovalentBondAst.asdict`, read through the view.
+    /// symmetric with `NoncovalentBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.noncovalent_bond(molecule.inner())?.ast;
@@ -505,7 +505,7 @@ impl NoncovalentBondViews {
         &self,
         py: Python<'_>,
         index: isize,
-        bond: PyRef<'_, NoncovalentBondAst>,
+        bond: PyRef<'_, NoncovalentBondForm>,
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_noncovalent_bond_index(molecule.inner(), index)?;
@@ -602,7 +602,7 @@ mod tests {
     #[case(GraphIrNoncovalentBondKindForm::Undetermined)]
     #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond))]
     #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::VanDerWaals))]
-    fn test_noncovalent_bond_kind_ast_roundtrip(#[case] ast: GraphIrNoncovalentBondKindForm) {
+    fn test_noncovalent_bond_kind_form_roundtrip(#[case] ast: GraphIrNoncovalentBondKindForm) {
         assert_eq!(NoncovalentBondKindForm::from_rust(&ast).to_rust(), ast);
     }
 
@@ -612,7 +612,7 @@ mod tests {
         GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic),
         Some(NoncovalentBondKind::Ionic)
     )]
-    fn test_noncovalent_bond_kind_ast_as_lit(
+    fn test_noncovalent_bond_kind_form_as_lit(
         #[case] ast: GraphIrNoncovalentBondKindForm,
         #[case] expected: Option<NoncovalentBondKind>,
     ) {
@@ -931,11 +931,11 @@ mod tests {
         });
     }
 
-    /// A standalone `NoncovalentBondAst` value pyclass (hydrogen bond, no constraints).
-    fn hbond(py: Python<'_>) -> Py<NoncovalentBondAst> {
+    /// A standalone `NoncovalentBondForm` value pyclass (hydrogen bond, no constraints).
+    fn hbond(py: Python<'_>) -> Py<NoncovalentBondForm> {
         Py::new(
             py,
-            NoncovalentBondAst::from_inner(GraphIrNoncovalentBondForm::from_kind(
+            NoncovalentBondForm::from_inner(GraphIrNoncovalentBondForm::from_kind(
                 GraphIrNoncovalentBondKind::HydrogenBond,
             )),
         )
@@ -943,9 +943,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_new() {
+    fn test_noncovalent_bond_form_new() {
         Python::attach(|py| {
-            let bond = NoncovalentBondAst::new(
+            let bond = NoncovalentBondForm::new(
                 py,
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::HydrogenBond),
                 None,
@@ -959,14 +959,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_new_constraints() {
+    fn test_noncovalent_bond_form_new_constraints() {
         Python::attach(|py| {
             let constraints = Py::new(
                 py,
                 NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
             )
             .unwrap();
-            let bond = NoncovalentBondAst::new(
+            let bond = NoncovalentBondForm::new(
                 py,
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::HalogenBond),
                 Some(constraints),
@@ -983,24 +983,24 @@ mod tests {
     #[case("Hbd#I")]
     #[case("Hbd#I!")]
     #[case("*")]
-    fn test_noncovalent_bond_ast_parse(#[case] dsl: &str) {
-        let bond = NoncovalentBondAst::parse(dsl).unwrap();
+    fn test_noncovalent_bond_form_parse(#[case] dsl: &str) {
+        let bond = NoncovalentBondForm::parse(dsl).unwrap();
         assert_eq!(bond.__str__(), dsl);
         assert_eq!(
             bond.__repr__(),
-            format!("NoncovalentBondAst.parse('{dsl}')")
+            format!("NoncovalentBondForm.parse('{dsl}')")
         );
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_parse_error() {
-        assert!(NoncovalentBondAst::parse("z").is_err());
+    fn test_noncovalent_bond_form_parse_error() {
+        assert!(NoncovalentBondForm::parse("z").is_err());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_kind() {
+    fn test_noncovalent_bond_form_kind() {
         Python::attach(|py| {
-            let mut bond = NoncovalentBondAst::from_inner(GraphIrNoncovalentBondForm::from_kind(
+            let mut bond = NoncovalentBondForm::from_inner(GraphIrNoncovalentBondForm::from_kind(
                 GraphIrNoncovalentBondKind::HydrogenBond,
             ));
             assert_eq!(
@@ -1019,7 +1019,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_set_constraints() {
+    fn test_noncovalent_bond_form_set_constraints() {
         Python::attach(|py| {
             let bond = hbond(py);
             let constraints = Py::new(
@@ -1027,7 +1027,7 @@ mod tests {
                 NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
             )
             .unwrap();
-            NoncovalentBondAst::set_constraints(
+            NoncovalentBondForm::set_constraints(
                 bond.clone_ref(py),
                 py,
                 NoncovalentBondConstraintsLike::Container(constraints),
@@ -1041,12 +1041,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_set_constraints_from_view() {
+    fn test_noncovalent_bond_form_set_constraints_from_view() {
         Python::attach(|py| {
             // source bond carrying a constraint, exposed as a live view
             let source = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(
+                NoncovalentBondForm::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
                         .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
                             true,
@@ -1054,9 +1054,9 @@ mod tests {
                 ),
             )
             .unwrap();
-            let view = NoncovalentBondAst::constraints(source);
+            let view = NoncovalentBondForm::constraints(source);
             let dest = hbond(py);
-            NoncovalentBondAst::set_constraints(
+            NoncovalentBondForm::set_constraints(
                 dest.clone_ref(py),
                 py,
                 NoncovalentBondConstraintsLike::View(Py::new(py, view).unwrap()),
@@ -1073,11 +1073,11 @@ mod tests {
     /// the write borrow, so it is a no-op, not a RefCell double-borrow panic
     /// (`bond.constraints = bond.constraints`).
     #[rstest]
-    fn test_noncovalent_bond_ast_set_constraints_self() {
+    fn test_noncovalent_bond_form_set_constraints_self() {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(
+                NoncovalentBondForm::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
                         .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
                             true,
@@ -1085,8 +1085,8 @@ mod tests {
                 ),
             )
             .unwrap();
-            let own_view = NoncovalentBondAst::constraints(bond.clone_ref(py));
-            NoncovalentBondAst::set_constraints(
+            let own_view = NoncovalentBondForm::constraints(bond.clone_ref(py));
+            NoncovalentBondForm::set_constraints(
                 bond.clone_ref(py),
                 py,
                 NoncovalentBondConstraintsLike::View(Py::new(py, own_view).unwrap()),
@@ -1100,10 +1100,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_constraints_write_through() {
+    fn test_noncovalent_bond_form_constraints_write_through() {
         Python::attach(|py| {
             let bond = hbond(py);
-            let view = NoncovalentBondAst::constraints(bond.clone_ref(py));
+            let view = NoncovalentBondForm::constraints(bond.clone_ref(py));
             view.set(py, intramolecular(py, true));
             // the write hit the standalone bond, not a copy
             assert_eq!(
@@ -1114,9 +1114,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_asdict() {
+    fn test_noncovalent_bond_form_asdict() {
         Python::attach(|py| {
-            let bond = NoncovalentBondAst::from_inner(
+            let bond = NoncovalentBondForm::from_inner(
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
                     .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(true)),
             );
@@ -1158,7 +1158,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(
+                NoncovalentBondForm::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
                         .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
                             true,
@@ -1210,7 +1210,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(
+                NoncovalentBondForm::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
                         .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
                             true,
@@ -1480,7 +1480,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(GraphIrNoncovalentBondForm::from_kind(
+                NoncovalentBondForm::from_inner(GraphIrNoncovalentBondForm::from_kind(
                     GraphIrNoncovalentBondKind::Ionic,
                 )),
             )
@@ -1506,7 +1506,7 @@ mod tests {
             };
             let bond = Py::new(
                 py,
-                NoncovalentBondAst::from_inner(GraphIrNoncovalentBondForm::from_kind(
+                NoncovalentBondForm::from_inner(GraphIrNoncovalentBondForm::from_kind(
                     GraphIrNoncovalentBondKind::Ionic,
                 )),
             )

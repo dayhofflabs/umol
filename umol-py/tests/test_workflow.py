@@ -7,11 +7,11 @@ from umol import (
     AromaticityFailurePolicy,
     AromaticityMismatchPolicy,
     AromaticityResolveConfig,
-    AtomAst,
+    AtomForm,
     AtomFieldChange,
     AtomUpdate,
     AutomorphismAlgorithm,
-    BondAst,
+    BondForm,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     Correspondence,
@@ -136,11 +136,11 @@ def test_molecule_editing_workflow():
     edits = Edits()
     edits.update_atom(
         0,
-        AtomAst.parse("N#h3"),
+        AtomForm.parse("N#h3"),
         AtomUpdate(implicit_hydrogens=2),
     )
-    methyl = edits.add_atom(AtomAst.parse("C#h3"))
-    edits.add_bond(0, methyl, BondAst(1))
+    methyl = edits.add_atom(AtomForm.parse("C#h3"))
+    edits.add_bond(0, methyl, BondForm(1))
 
     rendered = edits.render()
     parsed = Edits.parse(rendered)
@@ -169,7 +169,7 @@ def test_molecule_editing_workflow():
     assert molecule == original
 
     failing = Edits()
-    failing.add_atom(AtomAst.parse("O"))
+    failing.add_atom(AtomForm.parse("O"))
     failing.append(
         Edit.ModifyAtomField(
             id=7,

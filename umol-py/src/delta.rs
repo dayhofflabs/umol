@@ -29,9 +29,9 @@ use umol_graph_ir::ir::{
     StereoBondId as GraphIrStereoBondId,
 };
 
-use crate::aromatic::AromaticSystemAst;
-use crate::atom::{AtomAst, ElementForm, IsotopeMassForm};
-use crate::bond::BondAst;
+use crate::aromatic::AromaticSystemForm;
+use crate::atom::{AtomForm, ElementForm, IsotopeMassForm};
+use crate::bond::BondForm;
 use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
@@ -41,14 +41,14 @@ use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::{into_py_variant, variant_repr};
-use crate::dative::DativeBondAst;
+use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
 use crate::lattice::impl_py_canonicalize;
-use crate::multicenter::MulticenterBondAst;
-use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindForm};
+use crate::multicenter::MulticenterBondForm;
+use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
-    Permutation, StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind, StereoLigand,
+    Permutation, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, StereoLigand,
 };
 use crate::value::NumForm;
 
@@ -461,22 +461,22 @@ impl StereoBondFieldChange {
     }
 }
 
-pub struct AtomDeltaAstValue(Py<AtomAst>);
+pub struct AtomDeltaAstValue(Py<AtomForm>);
 
 impl FromPyObject<'_, '_> for AtomDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, AtomAst>>()?;
+        let source = obj.extract::<PyRef<'_, AtomForm>>()?;
         let ast = source.inner().clone();
         drop(source);
-        Ok(Self(Py::new(obj.py(), AtomAst::from_inner(ast))?))
+        Ok(Self(Py::new(obj.py(), AtomForm::from_inner(ast))?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &AtomDeltaAstValue {
-    type Target = AtomAst;
-    type Output = Bound<'py, AtomAst>;
+    type Target = AtomForm;
+    type Output = Bound<'py, AtomForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -486,7 +486,7 @@ impl<'py> IntoPyObject<'py> for &AtomDeltaAstValue {
 
 impl AtomDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrAtomForm) -> PyResult<Self> {
-        Ok(Self(Py::new(py, AtomAst::from_inner(ast.clone()))?))
+        Ok(Self(Py::new(py, AtomForm::from_inner(ast.clone()))?))
     }
 
     fn to_rust(&self, py: Python<'_>) -> GraphIrAtomForm {
@@ -598,22 +598,22 @@ impl AtomDelta {
     }
 }
 
-pub struct BondDeltaAstValue(Py<BondAst>);
+pub struct BondDeltaAstValue(Py<BondForm>);
 
 impl FromPyObject<'_, '_> for BondDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, BondAst>>()?;
+        let source = obj.extract::<PyRef<'_, BondForm>>()?;
         let ast = source.inner().clone();
         drop(source);
-        Ok(Self(Py::new(obj.py(), BondAst::from_inner(ast))?))
+        Ok(Self(Py::new(obj.py(), BondForm::from_inner(ast))?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &BondDeltaAstValue {
-    type Target = BondAst;
-    type Output = Bound<'py, BondAst>;
+    type Target = BondForm;
+    type Output = Bound<'py, BondForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -623,7 +623,7 @@ impl<'py> IntoPyObject<'py> for &BondDeltaAstValue {
 
 impl BondDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrBondForm) -> PyResult<Self> {
-        Ok(Self(Py::new(py, BondAst::from_inner(ast.clone()))?))
+        Ok(Self(Py::new(py, BondForm::from_inner(ast.clone()))?))
     }
 
     fn to_rust(&self, py: Python<'_>) -> GraphIrBondForm {
@@ -741,22 +741,22 @@ impl BondDelta {
     }
 }
 
-pub struct DativeBondDeltaAstValue(Py<DativeBondAst>);
+pub struct DativeBondDeltaAstValue(Py<DativeBondForm>);
 
 impl FromPyObject<'_, '_> for DativeBondDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, DativeBondAst>>()?;
+        let source = obj.extract::<PyRef<'_, DativeBondForm>>()?;
         let ast = source.inner().clone();
         drop(source);
-        Ok(Self(Py::new(obj.py(), DativeBondAst::from_inner(ast))?))
+        Ok(Self(Py::new(obj.py(), DativeBondForm::from_inner(ast))?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &DativeBondDeltaAstValue {
-    type Target = DativeBondAst;
-    type Output = Bound<'py, DativeBondAst>;
+    type Target = DativeBondForm;
+    type Output = Bound<'py, DativeBondForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -766,7 +766,7 @@ impl<'py> IntoPyObject<'py> for &DativeBondDeltaAstValue {
 
 impl DativeBondDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrDativeBondForm) -> PyResult<Self> {
-        Ok(Self(Py::new(py, DativeBondAst::from_inner(ast.clone()))?))
+        Ok(Self(Py::new(py, DativeBondForm::from_inner(ast.clone()))?))
     }
 
     fn to_rust(&self, py: Python<'_>) -> GraphIrDativeBondForm {
@@ -910,22 +910,25 @@ impl DativeBondDelta {
     }
 }
 
-pub struct AromaticSystemDeltaAstValue(Py<AromaticSystemAst>);
+pub struct AromaticSystemDeltaAstValue(Py<AromaticSystemForm>);
 
 impl FromPyObject<'_, '_> for AromaticSystemDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, AromaticSystemAst>>()?;
+        let source = obj.extract::<PyRef<'_, AromaticSystemForm>>()?;
         let ast = source.inner().clone();
         drop(source);
-        Ok(Self(Py::new(obj.py(), AromaticSystemAst::from_inner(ast))?))
+        Ok(Self(Py::new(
+            obj.py(),
+            AromaticSystemForm::from_inner(ast),
+        )?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &AromaticSystemDeltaAstValue {
-    type Target = AromaticSystemAst;
-    type Output = Bound<'py, AromaticSystemAst>;
+    type Target = AromaticSystemForm;
+    type Output = Bound<'py, AromaticSystemForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -937,7 +940,7 @@ impl AromaticSystemDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrAromaticSystemForm) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
-            AromaticSystemAst::from_inner(ast.clone()),
+            AromaticSystemForm::from_inner(ast.clone()),
         )?))
     }
 
@@ -1071,25 +1074,25 @@ impl AromaticSystemDelta {
     }
 }
 
-pub struct MulticenterBondDeltaAstValue(Py<MulticenterBondAst>);
+pub struct MulticenterBondDeltaAstValue(Py<MulticenterBondForm>);
 
 impl FromPyObject<'_, '_> for MulticenterBondDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, MulticenterBondAst>>()?;
+        let source = obj.extract::<PyRef<'_, MulticenterBondForm>>()?;
         let ast = source.inner().clone();
         drop(source);
         Ok(Self(Py::new(
             obj.py(),
-            MulticenterBondAst::from_inner(ast),
+            MulticenterBondForm::from_inner(ast),
         )?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &MulticenterBondDeltaAstValue {
-    type Target = MulticenterBondAst;
-    type Output = Bound<'py, MulticenterBondAst>;
+    type Target = MulticenterBondForm;
+    type Output = Bound<'py, MulticenterBondForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -1101,7 +1104,7 @@ impl MulticenterBondDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrMulticenterBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
-            MulticenterBondAst::from_inner(ast.clone()),
+            MulticenterBondForm::from_inner(ast.clone()),
         )?))
     }
 
@@ -1235,25 +1238,25 @@ impl MulticenterBondDelta {
     }
 }
 
-pub struct NoncovalentBondDeltaAstValue(Py<NoncovalentBondAst>);
+pub struct NoncovalentBondDeltaAstValue(Py<NoncovalentBondForm>);
 
 impl FromPyObject<'_, '_> for NoncovalentBondDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, NoncovalentBondAst>>()?;
+        let source = obj.extract::<PyRef<'_, NoncovalentBondForm>>()?;
         let ast = source.inner().clone();
         drop(source);
         Ok(Self(Py::new(
             obj.py(),
-            NoncovalentBondAst::from_inner(ast),
+            NoncovalentBondForm::from_inner(ast),
         )?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &NoncovalentBondDeltaAstValue {
-    type Target = NoncovalentBondAst;
-    type Output = Bound<'py, NoncovalentBondAst>;
+    type Target = NoncovalentBondForm;
+    type Output = Bound<'py, NoncovalentBondForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -1265,7 +1268,7 @@ impl NoncovalentBondDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrNoncovalentBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(
             py,
-            NoncovalentBondAst::from_inner(ast.clone()),
+            NoncovalentBondForm::from_inner(ast.clone()),
         )?))
     }
 
@@ -1399,22 +1402,22 @@ impl NoncovalentBondDelta {
     }
 }
 
-pub struct StereoAtomDeltaAstValue(Py<StereoAtomAst>);
+pub struct StereoAtomDeltaAstValue(Py<StereoAtomForm>);
 
 impl FromPyObject<'_, '_> for StereoAtomDeltaAstValue {
     type Error = PyErr;
 
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, StereoAtomAst>>()?;
+        let source = obj.extract::<PyRef<'_, StereoAtomForm>>()?;
         let ast = source.inner().clone();
         drop(source);
-        Ok(Self(Py::new(obj.py(), StereoAtomAst::from_inner(ast))?))
+        Ok(Self(Py::new(obj.py(), StereoAtomForm::from_inner(ast))?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &StereoAtomDeltaAstValue {
-    type Target = StereoAtomAst;
-    type Output = Bound<'py, StereoAtomAst>;
+    type Target = StereoAtomForm;
+    type Output = Bound<'py, StereoAtomForm>;
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
@@ -1424,7 +1427,7 @@ impl<'py> IntoPyObject<'py> for &StereoAtomDeltaAstValue {
 
 impl StereoAtomDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrStereoAtomForm) -> PyResult<Self> {
-        Ok(Self(Py::new(py, StereoAtomAst::from_inner(ast.clone()))?))
+        Ok(Self(Py::new(py, StereoAtomForm::from_inner(ast.clone()))?))
     }
 
     fn to_rust(&self, py: Python<'_>) -> GraphIrStereoAtomForm {
@@ -1633,21 +1636,21 @@ impl StereoAtomDelta {
     }
 }
 
-pub struct StereoBondDeltaAstValue(Py<StereoBondAst>);
+pub struct StereoBondDeltaAstValue(Py<StereoBondForm>);
 
 impl FromPyObject<'_, '_> for StereoBondDeltaAstValue {
     type Error = PyErr;
     fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
-        let source = obj.extract::<PyRef<'_, StereoBondAst>>()?;
+        let source = obj.extract::<PyRef<'_, StereoBondForm>>()?;
         let ast = source.inner().clone();
         drop(source);
-        Ok(Self(Py::new(obj.py(), StereoBondAst::from_inner(ast))?))
+        Ok(Self(Py::new(obj.py(), StereoBondForm::from_inner(ast))?))
     }
 }
 
 impl<'py> IntoPyObject<'py> for &StereoBondDeltaAstValue {
-    type Target = StereoBondAst;
-    type Output = Bound<'py, StereoBondAst>;
+    type Target = StereoBondForm;
+    type Output = Bound<'py, StereoBondForm>;
     type Error = PyErr;
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
         Ok(self.0.clone_ref(py).into_bound(py))
@@ -1656,7 +1659,7 @@ impl<'py> IntoPyObject<'py> for &StereoBondDeltaAstValue {
 
 impl StereoBondDeltaAstValue {
     fn from_rust(py: Python<'_>, ast: &GraphIrStereoBondForm) -> PyResult<Self> {
-        Ok(Self(Py::new(py, StereoBondAst::from_inner(ast.clone()))?))
+        Ok(Self(Py::new(py, StereoBondForm::from_inner(ast.clone()))?))
     }
     fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondForm {
         self.0.bind(py).borrow().inner().clone()
@@ -3120,14 +3123,14 @@ mod tests {
             id: GraphIrAtomId(3),
             ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
-        "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))",
+        "AtomDelta.Add(id=3, ast=AtomForm.parse('C'))",
     )]
     #[case::remove(
         GraphIrAtomDelta::Remove {
             id: GraphIrAtomId(3),
             ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
-        "AtomDelta.Remove(id=3, ast=AtomAst.parse('C'))",
+        "AtomDelta.Remove(id=3, ast=AtomForm.parse('C'))",
     )]
     #[case::modify_field(
         GraphIrAtomDelta::ModifyField {
@@ -3292,7 +3295,7 @@ mod tests {
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
             ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
-        "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
+        "BondDelta.Add(id=2, atoms=(5, 1), ast=BondForm.parse('1'))",
     )]
     #[case::remove(
         GraphIrBondDelta::Remove {
@@ -3300,7 +3303,7 @@ mod tests {
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
             ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
-        "BondDelta.Remove(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
+        "BondDelta.Remove(id=2, atoms=(5, 1), ast=BondForm.parse('1'))",
     )]
     #[case::modify_field(
         GraphIrBondDelta::ModifyField {
@@ -3477,7 +3480,7 @@ mod tests {
             acceptor: GraphIrAtomId(3),
             ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
-        "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
+        "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondForm.parse('1'))",
     )]
     #[case::remove(
         GraphIrDativeBondDelta::Remove {
@@ -3486,7 +3489,7 @@ mod tests {
             acceptor: GraphIrAtomId(3),
             ast: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
-        "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
+        "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondForm.parse('1'))",
     )]
     #[case::modify_field(
         GraphIrDativeBondDelta::ModifyField {
@@ -3661,7 +3664,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
-        "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
+        "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], ast=AromaticSystemForm.parse('[1,1,1]'))",
     )]
     #[case::remove(
         GraphIrAromaticSystemDelta::Remove {
@@ -3669,7 +3672,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             ast: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
-        "AromaticSystemDelta.Remove(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
+        "AromaticSystemDelta.Remove(id=2, atoms=[4, 2, 4], ast=AromaticSystemForm.parse('[1,1,1]'))",
     )]
     #[case::modify_field(
         GraphIrAromaticSystemDelta::ModifyField {
@@ -3845,7 +3848,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
-        "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
+        "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], ast=MulticenterBondForm.parse('[1,1,1]'))",
     )]
     #[case::remove(
         GraphIrMulticenterBondDelta::Remove {
@@ -3853,7 +3856,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             ast: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
-        "MulticenterBondDelta.Remove(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
+        "MulticenterBondDelta.Remove(id=3, atoms=[4, 2, 4], ast=MulticenterBondForm.parse('[1,1,1]'))",
     )]
     #[case::modify_field(
         GraphIrMulticenterBondDelta::ModifyField {
@@ -4029,7 +4032,7 @@ mod tests {
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
             ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
-        "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
+        "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=NoncovalentBondForm.parse('Hbd'))",
     )]
     #[case::remove(
         GraphIrNoncovalentBondDelta::Remove {
@@ -4037,7 +4040,7 @@ mod tests {
             atoms: [GraphIrAtomId(5), GraphIrAtomId(2)],
             ast: GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
         },
-        "NoncovalentBondDelta.Remove(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
+        "NoncovalentBondDelta.Remove(id=4, atoms=(5, 2), ast=NoncovalentBondForm.parse('Hbd'))",
     )]
     #[case::modify_field(
         GraphIrNoncovalentBondDelta::ModifyField {
@@ -4282,7 +4285,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomAst.parse('Th0'))",
+        "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomForm.parse('Th0'))",
     )]
     #[case::remove(
         GraphIrStereoAtomDelta::Remove {
@@ -4297,7 +4300,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomAst.parse('Th0'))",
+        "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomForm.parse('Th0'))",
     )]
     #[case::modify_field(
         GraphIrStereoAtomDelta::ModifyField {
@@ -4601,7 +4604,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
+        "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondForm.parse('Ct0'))",
     )]
     #[case::remove(
         GraphIrStereoBondDelta::Remove {
@@ -4616,7 +4619,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
+        "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondForm.parse('Ct0'))",
     )]
     #[case::modify_field(
         GraphIrStereoBondDelta::ModifyField {
@@ -4989,7 +4992,7 @@ mod tests {
             id: GraphIrAtomId(3),
             ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
-        "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))"
+        "Delta.Atom(AtomDelta.Add(id=3, ast=AtomForm.parse('C')))"
     )]
     #[case::stereo_atom(
         GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
@@ -5004,7 +5007,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         }),
-        "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0')))"
+        "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomForm.parse('Th0')))"
     )]
     #[case::constraint(
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
@@ -5191,7 +5194,7 @@ mod tests {
                 GraphIrAtomConstraintForm::degree(2),
             ))),
         ],
-        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))])",
+        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomForm.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))])",
     )]
     fn test_deltas_repr(#[case] entries: Vec<GraphIrDelta>, #[case] expected: &str) {
         Python::attach(|py| {

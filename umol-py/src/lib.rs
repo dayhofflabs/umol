@@ -11,9 +11,9 @@ use crate::{
         SimpleCycleEnumerationAlgorithm, SubgraphEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
-    aromatic::{AromaticSystemAst, AromaticSystemUpdate, AromaticSystemView, AromaticSystemViews},
-    atom::{AtomAst, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
-    bond::{BondAst, BondUpdate, BondView, BondViews},
+    aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystemView, AromaticSystemViews},
+    atom::{AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
+    bond::{BondForm, BondUpdate, BondView, BondViews},
     boolean::BooleanForm,
     constraint::{
         aromatic::{
@@ -54,7 +54,7 @@ use crate::{
         },
     },
     correspondence::{Correspondence, MoleculeCorrespondence},
-    dative::{DativeBondAst, DativeBondUpdate, DativeBondView, DativeBondViews},
+    dative::{DativeBondForm, DativeBondUpdate, DativeBondView, DativeBondViews},
     defaults::{MoleculeDefaults, ReactionDefaults},
     delta::{
         AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta,
@@ -89,10 +89,10 @@ use crate::{
     },
     molecule::MoleculeAst,
     multicenter::{
-        MulticenterBondAst, MulticenterBondUpdate, MulticenterBondView, MulticenterBondViews,
+        MulticenterBondForm, MulticenterBondUpdate, MulticenterBondView, MulticenterBondViews,
     },
     noncovalent::{
-        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
+        NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
         NoncovalentBondView, NoncovalentBondViews,
     },
     reaction::{
@@ -109,8 +109,8 @@ use crate::{
     spin::{SpinState, UnpairedElectrons, UnpairedElectronsForm, UnpairedElectronsUpdate},
     stereo::{
         CisTransConfiguration, CisTransStereo, CisTransStereoForm, LigandPermutation, Orientation,
-        OrientedLigandPermutation, Permutation, StereoAtomAst, StereoAtomUpdate, StereoAtomView,
-        StereoAtomViews, StereoBondAst, StereoBondUpdate, StereoBondView, StereoBondViews,
+        OrientedLigandPermutation, Permutation, StereoAtomForm, StereoAtomUpdate, StereoAtomView,
+        StereoAtomViews, StereoBondForm, StereoBondUpdate, StereoBondView, StereoBondViews,
         StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand,
         StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity, TetrahedralConfiguration,
         TetrahedralStereo, TetrahedralStereoForm, Topicity,
@@ -318,7 +318,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<SpinState>()?;
         module.add_class::<UnpairedElectronsForm>()?;
         module.add_class::<UnpairedElectronsUpdate>()?;
-        module.add_class::<AtomAst>()?;
+        module.add_class::<AtomForm>()?;
         module.add_class::<AtomUpdate>()?;
         module.add_class::<AtomView>()?;
         module.add_class::<AtomViews>()?;
@@ -333,7 +333,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AtomConstraintsAst>()?;
         module.add_class::<AtomConstraintsView>()?;
         module.add_class::<AtomRingSizeCounts>()?;
-        module.add_class::<BondAst>()?;
+        module.add_class::<BondForm>()?;
         module.add_class::<BondUpdate>()?;
         module.add_class::<BondConstraintAst>()?;
         module.add_class::<BondConstraintKey>()?;
@@ -342,7 +342,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<BondRingSizeCounts>()?;
         module.add_class::<BondView>()?;
         module.add_class::<BondViews>()?;
-        module.add_class::<DativeBondAst>()?;
+        module.add_class::<DativeBondForm>()?;
         module.add_class::<DativeBondUpdate>()?;
         module.add_class::<DativeBondConstraintAst>()?;
         module.add_class::<DativeBondConstraintKey>()?;
@@ -352,7 +352,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<DativeBondView>()?;
         module.add_class::<DativeBondViews>()?;
         module.add_class::<ElectronCountsForm>()?;
-        module.add_class::<AromaticSystemAst>()?;
+        module.add_class::<AromaticSystemForm>()?;
         module.add_class::<AromaticSystemUpdate>()?;
         module.add_class::<AromaticSystemConstraintAst>()?;
         module.add_class::<AromaticSystemConstraintKey>()?;
@@ -360,7 +360,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticSystemConstraintsView>()?;
         module.add_class::<AromaticSystemView>()?;
         module.add_class::<AromaticSystemViews>()?;
-        module.add_class::<MulticenterBondAst>()?;
+        module.add_class::<MulticenterBondForm>()?;
         module.add_class::<MulticenterBondUpdate>()?;
         module.add_class::<MulticenterBondConstraintAst>()?;
         module.add_class::<MulticenterBondConstraintKey>()?;
@@ -370,7 +370,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MulticenterBondViews>()?;
         module.add_class::<NoncovalentBondKind>()?;
         module.add_class::<NoncovalentBondKindForm>()?;
-        module.add_class::<NoncovalentBondAst>()?;
+        module.add_class::<NoncovalentBondForm>()?;
         module.add_class::<NoncovalentBondUpdate>()?;
         module.add_class::<NoncovalentBondConstraintAst>()?;
         module.add_class::<NoncovalentBondConstraintKey>()?;
@@ -410,9 +410,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoBondConstraintKey>()?;
         module.add_class::<StereoBondConstraintAst>()?;
         module.add_class::<StereoBondConstraintsAst>()?;
-        module.add_class::<StereoAtomAst>()?;
+        module.add_class::<StereoAtomForm>()?;
         module.add_class::<StereoAtomUpdate>()?;
-        module.add_class::<StereoBondAst>()?;
+        module.add_class::<StereoBondForm>()?;
         module.add_class::<StereoBondUpdate>()?;
         module.add_class::<StereoAtomConstraintsView>()?;
         module.add_class::<StereoBondConstraintsView>()?;

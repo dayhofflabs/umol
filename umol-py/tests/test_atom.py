@@ -1,7 +1,7 @@
 import pytest
 
 from umol import (
-    AtomAst,
+    AtomForm,
     AtomConstraintAst,
     AtomConstraintKey,
     AtomConstraintsAst,
@@ -104,7 +104,7 @@ def test_atom_update_parse_error():
 
 def carbon_oxygen():
     return MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("O"))]
+        [AtomForm(Element("C")), AtomForm(Element("O"))]
     )
 
 
@@ -180,43 +180,43 @@ def test_unpairedelectronsast_undetermined():
 
 
 def test_atomast_new_from_element():
-    assert AtomAst(Element("C")).element == ElementForm.Lit(Element("C"))
+    assert AtomForm(Element("C")).element == ElementForm.Lit(Element("C"))
 
 
 def test_atomast_new_from_elementast():
-    assert AtomAst(ElementForm.Lit(Element("N"))).element == ElementForm.Lit(Element("N"))
+    assert AtomForm(ElementForm.Lit(Element("N"))).element == ElementForm.Lit(Element("N"))
 
 
 def test_atomast_default_charge_undetermined():
-    assert AtomAst(Element("C")).charge == NumForm.Undetermined()
+    assert AtomForm(Element("C")).charge == NumForm.Undetermined()
 
 
 def test_atomast_set_charge():
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.charge = NumForm.Lit(1)
     assert atom.charge == NumForm.Lit(1)
 
 
 def test_atomast_set_unpaired_electrons():
     unpaired_electrons = UnpairedElectronsForm(NumForm.Lit(1), NumForm.Lit(2))
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.unpaired_electrons = unpaired_electrons
     assert atom.unpaired_electrons.count._0 == 1
     assert atom.unpaired_electrons.multiplicity._0 == 2
 
 
 def test_atomast_new_from_element_kwargs():
-    atom = AtomAst(Element("C"), charge=NumForm.Lit(-1))
+    atom = AtomForm(Element("C"), charge=NumForm.Lit(-1))
     assert atom.charge == NumForm.Lit(-1)
 
 
 def test_atomast_new_bad_element_type():
     with pytest.raises(TypeError):
-        AtomAst("C")
+        AtomForm("C")
 
 
 def test_atomast_new_kwargs():
-    atom = AtomAst(
+    atom = AtomForm(
         ElementForm.Lit(Element("N")),
         charge=NumForm.Lit(1),
         unpaired_electrons=UnpairedElectronsForm(1, 2),
@@ -227,25 +227,25 @@ def test_atomast_new_kwargs():
 
 
 def test_atomast_charge_int_literal():
-    assert AtomAst(Element("C"), charge=-1).charge == NumForm.Lit(-1)
+    assert AtomForm(Element("C"), charge=-1).charge == NumForm.Lit(-1)
 
 
 def test_atomast_isotope_mass_int_literal():
-    assert AtomAst(Element("C"), isotope_mass=13).isotope_mass == IsotopeMassForm.Lit(13)
+    assert AtomForm(Element("C"), isotope_mass=13).isotope_mass == IsotopeMassForm.Lit(13)
 
 
 def test_atomast_set_charge_int_literal():
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.charge = 1
     assert atom.charge == NumForm.Lit(1)
 
 
 def test_atomast_constraints_empty():
-    assert len(AtomAst(Element("C")).constraints) == 0
+    assert len(AtomForm(Element("C")).constraints) == 0
 
 
 def test_atomast_constraints_kwarg():
-    atom = AtomAst(
+    atom = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
@@ -256,7 +256,7 @@ def test_atomast_constraints_kwarg():
 
 
 def test_atomview_constraints():
-    atom = AtomAst(
+    atom = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
@@ -265,7 +265,7 @@ def test_atomview_constraints():
 
 
 def test_atomast_asdict():
-    d = AtomAst(Element("C"), charge=NumForm.Lit(-1)).asdict()
+    d = AtomForm(Element("C"), charge=NumForm.Lit(-1)).asdict()
     assert set(d.keys()) == {
         "element",
         "isotope_mass",
@@ -280,7 +280,7 @@ def test_atomast_asdict():
 
 
 def test_atomast_asdict_constraints():
-    atom = AtomAst(
+    atom = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
@@ -291,8 +291,8 @@ def test_atomast_asdict_constraints():
 
 
 def test_atomast_eq():
-    assert AtomAst(Element("C")) == AtomAst(Element("C"))
-    assert AtomAst(Element("C")) != AtomAst(Element("N"))
+    assert AtomForm(Element("C")) == AtomForm(Element("C"))
+    assert AtomForm(Element("C")) != AtomForm(Element("N"))
 
 
 def test_molecule_atoms_len():
@@ -314,7 +314,7 @@ def test_molecule_atoms_negative_index():
     mol = carbon_oxygen()
     assert mol.atoms[-1].id == 1
     assert mol.atoms[-2].id == 0
-    mol.atoms[-1] = AtomAst(Element("N"))
+    mol.atoms[-1] = AtomForm(Element("N"))
     assert mol.atoms[1].element == ElementForm.Lit(Element("N"))
     with pytest.raises(IndexError):
         mol.atoms[-3]
@@ -322,13 +322,13 @@ def test_molecule_atoms_negative_index():
 
 def test_molecule_atoms_setitem():
     mol = carbon_oxygen()
-    mol.atoms[0] = AtomAst(Element("N"))
+    mol.atoms[0] = AtomForm(Element("N"))
     assert mol.atoms[0].element == ElementForm.Lit(Element("N"))
 
 
 def test_molecule_atoms_setitem_out_of_range():
     with pytest.raises(IndexError):
-        carbon_oxygen().atoms[5] = AtomAst(Element("N"))
+        carbon_oxygen().atoms[5] = AtomForm(Element("N"))
 
 
 def test_molecule_atoms_iter():
@@ -341,7 +341,7 @@ def test_molecule_atoms_iter():
 
 
 def test_atomview_charge_through_handle():
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.charge = NumForm.Lit(-1)
     mol = MoleculeAst.from_entries([atom])
     assert mol.atoms[0].charge == NumForm.Lit(-1)
@@ -351,7 +351,7 @@ def test_atomast_charge_nested_variant_readable():
     # A conversion-built nested child (ArithExpr inside NumForm.ArithExpr) must read back
     # as a proper variant from Python, not a base instance — regression for the
     # Py::new-vs-IntoPyObject bug.
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.charge = NumForm.ArithExpr(ArithExpr.Var("h"))
     match atom.charge:
         case NumForm.ArithExpr(term):
@@ -366,55 +366,55 @@ def test_atomast_charge_nested_variant_readable():
 
 @pytest.mark.parametrize("dsl", ["C", "N#c+", "C#v4", "O#n2", "C#R(6)"])
 def test_atomast_parse(dsl):
-    atom = AtomAst.parse(dsl)
+    atom = AtomForm.parse(dsl)
     assert str(atom) == dsl
-    assert repr(atom) == f"AtomAst.parse('{dsl}')"
+    assert repr(atom) == f"AtomForm.parse('{dsl}')"
 
 
 def test_atomast_parse_error():
     with pytest.raises(ParseError):
-        AtomAst.parse("Zz##")
+        AtomForm.parse("Zz##")
 
 
 def test_atomview_set_charge():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].charge = NumForm.Lit(-1)
     # a fresh view re-reads the molecule, proving the write landed on it
     assert mol.atoms[0].charge == NumForm.Lit(-1)
 
 
 def test_atomview_set_charge_int_literal():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].charge = -1
     assert mol.atoms[0].charge == NumForm.Lit(-1)
 
 
 def test_atomview_set_element():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].element = Element("N")
     assert mol.atoms[0].element == ElementForm.Lit(Element("N"))
 
 
 def test_atomview_set_isotope_mass():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].isotope_mass = 13
     assert mol.atoms[0].isotope_mass == IsotopeMassForm.Lit(13)
 
 
 def test_atomview_set_implicit_hydrogens():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].implicit_hydrogens = NumForm.Lit(3)
     assert mol.atoms[0].implicit_hydrogens == NumForm.Lit(3)
 
 
 def test_atomview_set_lone_pairs():
-    mol = MoleculeAst.from_entries([AtomAst(Element("O"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("O"))])
     mol.atoms[0].lone_pairs = NumForm.Lit(2)
     assert mol.atoms[0].lone_pairs == NumForm.Lit(2)
 
 
 def test_atomview_set_unpaired_electrons():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].unpaired_electrons = UnpairedElectronsForm(1, 2)
     unpaired_electrons = mol.atoms[0].unpaired_electrons
     assert unpaired_electrons.count._0 == 1
@@ -459,13 +459,13 @@ def test_unpairedelectronsast_eq_repr():
 
 
 def test_atomview_repr():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
     assert repr(mol.atoms[0]) == "AtomView(id=0)"
     assert repr(mol.atoms) == "AtomViews(len=2)"
 
 
 def test_atomview_asdict():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"), charge=NumForm.Lit(-1))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"), charge=NumForm.Lit(-1))])
     d = mol.atoms[0].asdict()
     assert set(d.keys()) == {
         "element",
@@ -482,7 +482,7 @@ def test_atomview_asdict():
 
 
 def test_atomview_set_constraints():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints = AtomConstraintsAst([AtomConstraintAst.Degree(NumForm.Lit(2))])
     assert len(mol.atoms[0].constraints) == 1
     assert mol.atoms[0].constraints.get(AtomConstraintKey.Degree()) == AtomConstraintAst.Degree(
@@ -491,7 +491,7 @@ def test_atomview_set_constraints():
 
 
 def test_atomast_set_constraints():
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
     assert len(atom.constraints) == 1
     atom.constraints = AtomConstraintsAst([])

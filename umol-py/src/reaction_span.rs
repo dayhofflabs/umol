@@ -12,20 +12,20 @@ use umol_graph_ir::ir::{
     ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
 
-use crate::aromatic::AromaticSystemAst;
-use crate::atom::AtomAst;
-use crate::bond::BondAst;
+use crate::aromatic::AromaticSystemForm;
+use crate::atom::AtomForm;
+use crate::bond::BondForm;
 use crate::constraint::molecule::Constraint;
 use crate::correspondence::MoleculeCorrespondence;
-use crate::dative::DativeBondAst;
+use crate::dative::DativeBondForm;
 use crate::defaults::MoleculeDefaults;
 use crate::error::{metadata_error, parse_error};
 use crate::metadata::MoleculeMetadata;
 use crate::molecule::MoleculeAst;
-use crate::multicenter::MulticenterBondAst;
-use crate::noncovalent::NoncovalentBondAst;
+use crate::multicenter::MulticenterBondForm;
+use crate::noncovalent::NoncovalentBondForm;
 use crate::reaction::ReactionAst;
-use crate::stereo::{StereoAtomAst, StereoBondAst, StereoLigand};
+use crate::stereo::{StereoAtomForm, StereoBondForm, StereoLigand};
 
 type SpanPair<T> = (Option<Py<T>>, Option<Py<T>>);
 
@@ -127,14 +127,14 @@ impl ReactionSpanAst {
     #[allow(clippy::too_many_arguments)] // one argument per entity family
     fn from_entries(
         py: Python<'_>,
-        atoms: Vec<SpanPair<AtomAst>>,
-        bonds: Vec<(u32, u32, SpanPair<BondAst>)>,
-        dative_bonds: Vec<(Vec<u32>, u32, SpanPair<DativeBondAst>)>,
-        aromatic_systems: Vec<(Vec<u32>, SpanPair<AromaticSystemAst>)>,
-        multicenter_bonds: Vec<(Vec<u32>, SpanPair<MulticenterBondAst>)>,
-        noncovalent_bonds: Vec<([u32; 2], SpanPair<NoncovalentBondAst>)>,
-        stereo_atoms: Vec<(u32, Vec<StereoLigand>, SpanPair<StereoAtomAst>)>,
-        stereo_bonds: Vec<(u32, Vec<StereoLigand>, SpanPair<StereoBondAst>)>,
+        atoms: Vec<SpanPair<AtomForm>>,
+        bonds: Vec<(u32, u32, SpanPair<BondForm>)>,
+        dative_bonds: Vec<(Vec<u32>, u32, SpanPair<DativeBondForm>)>,
+        aromatic_systems: Vec<(Vec<u32>, SpanPair<AromaticSystemForm>)>,
+        multicenter_bonds: Vec<(Vec<u32>, SpanPair<MulticenterBondForm>)>,
+        noncovalent_bonds: Vec<([u32; 2], SpanPair<NoncovalentBondForm>)>,
+        stereo_atoms: Vec<(u32, Vec<StereoLigand>, SpanPair<StereoAtomForm>)>,
+        stereo_bonds: Vec<(u32, Vec<StereoLigand>, SpanPair<StereoBondForm>)>,
         constraints: Vec<SpanPair<Constraint>>,
     ) -> PyResult<Self> {
         let atoms = atoms
@@ -566,36 +566,36 @@ mod tests {
                 py,
                 vec![
                     (
-                        Some(Py::new(py, AtomAst::from_inner(canonical_lhs.clone())).unwrap()),
-                        Some(Py::new(py, AtomAst::from_inner(canonical_rhs)).unwrap()),
+                        Some(Py::new(py, AtomForm::from_inner(canonical_lhs.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_inner(canonical_rhs)).unwrap()),
                     ),
                     (
-                        Some(Py::new(py, AtomAst::from_inner(modified_lhs.clone())).unwrap()),
-                        Some(Py::new(py, AtomAst::from_inner(modified_rhs.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_inner(modified_lhs.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_inner(modified_rhs.clone())).unwrap()),
                     ),
                     (
-                        Some(Py::new(py, AtomAst::from_inner(removed_atom.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_inner(removed_atom.clone())).unwrap()),
                         None,
                     ),
                     (
                         None,
-                        Some(Py::new(py, AtomAst::from_inner(added_atom.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_inner(added_atom.clone())).unwrap()),
                     ),
                 ],
                 vec![(
                     0,
                     1,
                     (
-                        Some(Py::new(py, BondAst::from_inner(unchanged_bond.clone())).unwrap()),
-                        Some(Py::new(py, BondAst::from_inner(unchanged_bond.clone())).unwrap()),
+                        Some(Py::new(py, BondForm::from_inner(unchanged_bond.clone())).unwrap()),
+                        Some(Py::new(py, BondForm::from_inner(unchanged_bond.clone())).unwrap()),
                     ),
                 )],
                 vec![(
                     vec![1],
                     0,
                     (
-                        Some(Py::new(py, DativeBondAst::from_inner(dative_lhs.clone())).unwrap()),
-                        Some(Py::new(py, DativeBondAst::from_inner(dative_rhs.clone())).unwrap()),
+                        Some(Py::new(py, DativeBondForm::from_inner(dative_lhs.clone())).unwrap()),
+                        Some(Py::new(py, DativeBondForm::from_inner(dative_rhs.clone())).unwrap()),
                     ),
                 )],
                 vec![(
@@ -603,7 +603,7 @@ mod tests {
                     (
                         None,
                         Some(
-                            Py::new(py, AromaticSystemAst::from_inner(added_aromatic.clone()))
+                            Py::new(py, AromaticSystemForm::from_inner(added_aromatic.clone()))
                                 .unwrap(),
                         ),
                     ),
@@ -614,7 +614,7 @@ mod tests {
                         Some(
                             Py::new(
                                 py,
-                                MulticenterBondAst::from_inner(removed_multicenter.clone()),
+                                MulticenterBondForm::from_inner(removed_multicenter.clone()),
                             )
                             .unwrap(),
                         ),
@@ -627,14 +627,14 @@ mod tests {
                         Some(
                             Py::new(
                                 py,
-                                NoncovalentBondAst::from_inner(unchanged_noncovalent.clone()),
+                                NoncovalentBondForm::from_inner(unchanged_noncovalent.clone()),
                             )
                             .unwrap(),
                         ),
                         Some(
                             Py::new(
                                 py,
-                                NoncovalentBondAst::from_inner(unchanged_noncovalent.clone()),
+                                NoncovalentBondForm::from_inner(unchanged_noncovalent.clone()),
                             )
                             .unwrap(),
                         ),
@@ -645,11 +645,11 @@ mod tests {
                     vec![StereoLigand::from_rust(ligand)],
                     (
                         Some(
-                            Py::new(py, StereoAtomAst::from_inner(stereo_atom_lhs.clone()))
+                            Py::new(py, StereoAtomForm::from_inner(stereo_atom_lhs.clone()))
                                 .unwrap(),
                         ),
                         Some(
-                            Py::new(py, StereoAtomAst::from_inner(stereo_atom_rhs.clone()))
+                            Py::new(py, StereoAtomForm::from_inner(stereo_atom_rhs.clone()))
                                 .unwrap(),
                         ),
                     ),
@@ -660,7 +660,7 @@ mod tests {
                     (
                         None,
                         Some(
-                            Py::new(py, StereoBondAst::from_inner(added_stereo_bond.clone()))
+                            Py::new(py, StereoBondForm::from_inner(added_stereo_bond.clone()))
                                 .unwrap(),
                         ),
                     ),
@@ -824,14 +824,14 @@ mod tests {
                 first_on_lhs.then(|| {
                     Py::new(
                         py,
-                        AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                        AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
                     )
                     .unwrap()
                 }),
                 first_on_rhs.then(|| {
                     Py::new(
                         py,
-                        AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                        AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
                     )
                     .unwrap()
                 }),
@@ -841,14 +841,14 @@ mod tests {
                     Some(
                         Py::new(
                             py,
-                            AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::O)),
+                            AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::O)),
                         )
                         .unwrap(),
                     ),
                     Some(
                         Py::new(
                             py,
-                            AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::O)),
+                            AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::O)),
                         )
                         .unwrap(),
                     ),
@@ -862,11 +862,11 @@ mod tests {
                     1,
                     (
                         Some(
-                            Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1)))
+                            Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1)))
                                 .unwrap(),
                         ),
                         Some(
-                            Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1)))
+                            Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1)))
                                 .unwrap(),
                         ),
                     ),

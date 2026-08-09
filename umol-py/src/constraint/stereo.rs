@@ -24,7 +24,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::stereo::{
-    LigandPermutation, OrientedLigandPermutation, StereoAtomAst, StereoBondAst, StereoLigandPair,
+    LigandPermutation, OrientedLigandPermutation, StereoAtomForm, StereoBondForm, StereoLigandPair,
     Stereogenicity, Topicity,
 };
 
@@ -1243,7 +1243,7 @@ stereo_constraints! {
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
-    StereoAtomAst, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
+    StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
     GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut, "stereo atom id out of range",
 }
 
@@ -1252,6 +1252,6 @@ stereo_constraints! {
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,
-    StereoBondAst, StereoBondConstraintsView, StereoBondConstraintsBacking,
+    StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsBacking,
     GraphIrStereoBondId, stereo_bonds, stereo_bond_mut, "stereo bond id out of range",
 }

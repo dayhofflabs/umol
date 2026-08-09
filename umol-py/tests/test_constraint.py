@@ -3,7 +3,7 @@ import pytest
 from umol import (
     AromaticValence,
     AromaticValenceAst,
-    AtomAst,
+    AtomForm,
     AtomConstraintAst,
     AtomConstraintKey,
     AtomConstraintsAst,
@@ -198,7 +198,7 @@ def test_atomconstraintsast_update():
 
 
 def test_atomconstraintsview_set():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.set(
         AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(NumForm.Lit(1)))
     )
@@ -211,7 +211,7 @@ def test_atomconstraintsview_set():
 
 
 def test_atomconstraintsview_pop():
-    atom = AtomAst(
+    atom = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
@@ -223,7 +223,7 @@ def test_atomconstraintsview_pop():
 
 
 def test_atomconstraintsview_update():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.update(
         AtomConstraintsAst(
             [
@@ -238,7 +238,7 @@ def test_atomconstraintsview_update():
 
 
 def test_atomconstraintsview_atom_backed_set():
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.constraints.set(AtomConstraintAst.Valence(NumForm.Lit(4)))
     # a fresh view proves the write mutated the standalone atom in place
     assert len(atom.constraints) == 1
@@ -248,7 +248,7 @@ def test_atomconstraintsview_atom_backed_set():
 
 
 def test_atomconstraintsview_atom_backed_pop():
-    atom = AtomAst(
+    atom = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
@@ -259,7 +259,7 @@ def test_atomconstraintsview_atom_backed_pop():
 
 
 def test_atomconstraintsview_atom_backed_update():
-    atom = AtomAst(Element("C"))
+    atom = AtomForm(Element("C"))
     atom.constraints.update(
         AtomConstraintsAst(
             [
@@ -273,7 +273,7 @@ def test_atomconstraintsview_atom_backed_update():
 
 
 def test_atomconstraintsview_reads():
-    atom = AtomAst(
+    atom = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
@@ -345,14 +345,14 @@ def test_atomconstraints_ring_size_count_subscript():
 
 
 def test_atomconstraintsview_property_on_molecule():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.aromatic_valence = 1
     # a fresh view proves the write hit the molecule
     assert mol.atoms[0].constraints.aromatic_valence == AromaticValenceAst.Aromatic(NumForm.Lit(1))
 
 
 def test_atomconstraintsview_ring_size_count_on_molecule():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.ring_size_count[6] = 3
     assert mol.atoms[0].constraints.ring_size_count[6].as_lit() == 3
     del mol.atoms[0].constraints.ring_size_count[6]
@@ -432,7 +432,7 @@ def test_atomconstraintsast_eq_repr():
 
 
 def test_atomconstraintsast_unhashable():
-    # mutable container: value-equal but unhashable, like AtomAst
+    # mutable container: value-equal but unhashable, like AtomForm
     with pytest.raises(TypeError):
         hash(AtomConstraintsAst([]))
 
@@ -450,7 +450,7 @@ def test_ringmembershipast_eq_repr():
 
 
 def test_atomconstraintsview_repr():
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     assert repr(mol.atoms[0].constraints) == "AtomConstraintsView(0 entries)"
 
 
@@ -487,7 +487,7 @@ def test_atomconstraints_update_container():
 def test_atomconstraintsview_getitem_delitem():
     mol = MoleculeAst.from_entries(
         [
-            AtomAst(
+            AtomForm(
                 Element("C"),
                 constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
             )
@@ -505,17 +505,17 @@ def test_atomconstraintsview_getitem_delitem():
 
 
 def test_atomconstraintsview_update_from_view():
-    src = AtomAst(
+    src = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
-    mol = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.update(src.constraints)
     assert AtomConstraintKey.Valence() in mol.atoms[0].constraints
 
 
 def test_atomast_set_constraints_from_value():
-    dst = AtomAst(Element("N"))
+    dst = AtomForm(Element("N"))
     dst.constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
     assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
         NumForm.Lit(4)
@@ -523,11 +523,11 @@ def test_atomast_set_constraints_from_value():
 
 
 def test_atomast_set_constraints_from_view():
-    src = AtomAst(
+    src = AtomForm(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
     )
-    dst = AtomAst(Element("N"))
+    dst = AtomForm(Element("N"))
     dst.constraints = src.constraints  # RHS is a live view, not a value container
     assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
         NumForm.Lit(4)

@@ -3,21 +3,21 @@ import re
 import pytest
 
 from umol import (
-    AromaticSystemAst,
+    AromaticSystemForm,
     AromaticValenceAst,
     AromaticityConfig,
     AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityResolveConfig,
-    AtomAst,
+    AtomForm,
     AtomTypeRegistry,
-    BondAst,
+    BondForm,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     Constraint,
     ContradictionError,
     Correspondence,
-    DativeBondAst,
+    DativeBondForm,
     ElectronCountsForm,
     Element,
     ElementForm,
@@ -31,8 +31,8 @@ from umol import (
     MoleculeCorrespondence,
     MoleculeDefaults,
     MoleculeMetadata,
-    MulticenterBondAst,
-    NoncovalentBondAst,
+    MulticenterBondForm,
+    NoncovalentBondForm,
     NoncovalentBondKind,
     ParseError,
     ResolveConfig,
@@ -42,8 +42,8 @@ from umol import (
     SimpleCycleEnumerationAlgorithm,
     SmilesIoConfig,
     SmilesSyntaxFlags,
-    StereoAtomAst,
-    StereoBondAst,
+    StereoAtomForm,
+    StereoBondForm,
     StereoCoset,
     StereoFailurePolicy,
     StereoKind,
@@ -87,13 +87,13 @@ def test_molecule_defaults(value, expected, expected_repr):
         (
             '{:atoms ["C"]}',
             MoleculeDefaults(),
-            MoleculeAst.from_entries([AtomAst.parse("C")]),
+            MoleculeAst.from_entries([AtomForm.parse("C")]),
         ),
         (
             '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
             MoleculeDefaults.ground(),
             MoleculeAst.from_entries(
-                [AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
+                [AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
             ),
         ),
     ],
@@ -127,7 +127,7 @@ def test_molecule_ast_parse_with_metadata():
 
     molecule, metadata = MoleculeAst.parse_with_metadata(source)
 
-    assert molecule == MoleculeAst.from_entries([AtomAst(Element("C"))])
+    assert molecule == MoleculeAst.from_entries([AtomForm(Element("C"))])
     assert metadata.keyword(Entity.Atom(0)) == "carbon"
     assert metadata.entity("carbon") == Entity.Atom(0)
     assert repr(metadata) == (
@@ -145,7 +145,7 @@ def test_molecule_ast_parse_with_metadata_defaults():
 
     assert molecule == MoleculeAst.from_entries(
         [
-            AtomAst.parse(
+            AtomForm.parse(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
             )
         ]
@@ -242,19 +242,19 @@ def test_molecule_ast_str():
 
 def test_molecule_ast_from_entries():
     molecule = MoleculeAst.from_entries(
-        [AtomAst(Element("C")) for _ in range(5)],
-        bonds=[(0, 1, BondAst(2))],
-        dative_bonds=[([2], 1, DativeBondAst(1))],
-        aromatic_systems=[([0, 1, 2], AromaticSystemAst([1, 1, 1]))],
-        multicenter_bonds=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
+        [AtomForm(Element("C")) for _ in range(5)],
+        bonds=[(0, 1, BondForm(2))],
+        dative_bonds=[([2], 1, DativeBondForm(1))],
+        aromatic_systems=[([0, 1, 2], AromaticSystemForm([1, 1, 1]))],
+        multicenter_bonds=[([0, 1, 2], MulticenterBondForm([1, 1, 1]))],
         noncovalent_bonds=[
-            ([0, 2], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))
+            ([0, 2], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))
         ],
         stereo_atoms=[
             (
                 0,
                 [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)],
-                StereoAtomAst(TetrahedralConfiguration.Ccw),
+                StereoAtomForm(TetrahedralConfiguration.Ccw),
             )
         ],
         stereo_bonds=[
@@ -264,7 +264,7 @@ def test_molecule_ast_from_entries():
                     StereoLigand(2, StereoLigandKind.Atom),
                     StereoLigand(3, StereoLigandKind.Atom),
                 ],
-                StereoBondAst.parse("Ct0"),
+                StereoBondForm.parse("Ct0"),
             )
         ],
         constraints=[
@@ -286,7 +286,7 @@ def test_molecule_ast_from_entries():
 
 
 def test_molecule_ast_from_entries_default():
-    molecule = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    molecule = MoleculeAst.from_entries([AtomForm(Element("C"))])
 
     assert len(molecule.atoms) == 1
     assert len(molecule.bonds) == 0
@@ -298,8 +298,8 @@ def test_molecule_ast_from_entries_atom_reference_error():
         match="^molecule entries reference unavailable atom 1$",
     ):
         MoleculeAst.from_entries(
-            [AtomAst(Element("C"))],
-            bonds=[(0, 1, BondAst(1))],
+            [AtomForm(Element("C"))],
+            bonds=[(0, 1, BondForm(1))],
         )
 
 
@@ -309,12 +309,12 @@ def test_molecule_ast_from_entries_bond_site_reference_error():
         match="^molecule entries reference unavailable bond 0$",
     ):
         MoleculeAst.from_entries(
-            [AtomAst(Element("C"))],
+            [AtomForm(Element("C"))],
             stereo_bonds=[
                 (
                     0,
                     [StereoLigand(0, StereoLigandKind.Atom)],
-                    StereoBondAst.parse("Ct0"),
+                    StereoBondForm.parse("Ct0"),
                 )
             ],
         )
@@ -326,12 +326,12 @@ def test_molecule_ast_from_entries_ligand_reference_error():
         match="^molecule entries reference unavailable atom 1$",
     ):
         MoleculeAst.from_entries(
-            [AtomAst(Element("C"))],
+            [AtomForm(Element("C"))],
             stereo_atoms=[
                 (
                     0,
                     [StereoLigand(1, StereoLigandKind.Atom)],
-                    StereoAtomAst(TetrahedralConfiguration.Ccw),
+                    StereoAtomForm(TetrahedralConfiguration.Ccw),
                 )
             ],
         )
@@ -343,7 +343,7 @@ def test_molecule_ast_from_entries_constraint_reference_error():
         match="^molecule entries reference unavailable atom 1$",
     ):
         MoleculeAst.from_entries(
-            [AtomAst(Element("C"))],
+            [AtomForm(Element("C"))],
             constraints=[Constraint.Molecule(MoleculeConstraint.Connected([1]))],
         )
 
@@ -407,14 +407,14 @@ def test_molecule_ast_from_smiles_io_config_error():
         (
             ValenceModel.AtomTyping(
                 registry=AtomTypeRegistry.from_atoms(
-                    [AtomAst.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
+                    [AtomForm.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
                 )
             ),
-            AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
+            AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
         ),
         (
             ValenceModel.Counts(table=ValenceTable.default()),
-            AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#a!"),
+            AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#a!"),
         ),
     ],
 )
@@ -782,26 +782,26 @@ def test_molecule_ast_from_smiles_ownership():
 
 
 def test_molecule_ast_combine():
-    left = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    left = MoleculeAst.from_entries([AtomForm(Element("C"))])
     right = MoleculeAst.from_entries(
-        [AtomAst(Element("O")), AtomAst(Element("N"))],
-        bonds=[(0, 1, BondAst(2))],
+        [AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(2))],
     )
-    left_before = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    left_before = MoleculeAst.from_entries([AtomForm(Element("C"))])
     right_before = MoleculeAst.from_entries(
-        [AtomAst(Element("O")), AtomAst(Element("N"))],
-        bonds=[(0, 1, BondAst(2))],
+        [AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(2))],
     )
 
     combined, correspondence = left.combine(right)
 
     assert combined == MoleculeAst.from_entries(
         [
-            AtomAst(Element("C")),
-            AtomAst(Element("O")),
-            AtomAst(Element("N")),
+            AtomForm(Element("C")),
+            AtomForm(Element("O")),
+            AtomForm(Element("N")),
         ],
-        bonds=[(1, 2, BondAst(2))],
+        bonds=[(1, 2, BondForm(2))],
     )
     assert isinstance(correspondence, MoleculeCorrespondence)
     assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
@@ -811,25 +811,25 @@ def test_molecule_ast_combine():
 
 
 def test_molecule_ast_combine_from():
-    recipient = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    recipient = MoleculeAst.from_entries([AtomForm(Element("C"))])
     other = MoleculeAst.from_entries(
-        [AtomAst(Element("O")), AtomAst(Element("N"))],
-        bonds=[(0, 1, BondAst(2))],
+        [AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(2))],
     )
     other_before = MoleculeAst.from_entries(
-        [AtomAst(Element("O")), AtomAst(Element("N"))],
-        bonds=[(0, 1, BondAst(2))],
+        [AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(2))],
     )
 
     correspondence = recipient.combine_from(other)
 
     assert recipient == MoleculeAst.from_entries(
         [
-            AtomAst(Element("C")),
-            AtomAst(Element("O")),
-            AtomAst(Element("N")),
+            AtomForm(Element("C")),
+            AtomForm(Element("O")),
+            AtomForm(Element("N")),
         ],
-        bonds=[(1, 2, BondAst(2))],
+        bonds=[(1, 2, BondForm(2))],
     )
     assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
     assert correspondence.bonds.matched_pairs == [(0, 0)]
@@ -838,20 +838,20 @@ def test_molecule_ast_combine_from():
 
 def test_molecule_ast_combine_from_alias():
     molecule = MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("O"))],
-        bonds=[(0, 1, BondAst(1))],
+        [AtomForm(Element("C")), AtomForm(Element("O"))],
+        bonds=[(0, 1, BondForm(1))],
     )
 
     correspondence = molecule.combine_from(molecule)
 
     assert molecule == MoleculeAst.from_entries(
         [
-            AtomAst(Element("C")),
-            AtomAst(Element("O")),
-            AtomAst(Element("C")),
-            AtomAst(Element("O")),
+            AtomForm(Element("C")),
+            AtomForm(Element("O")),
+            AtomForm(Element("C")),
+            AtomForm(Element("O")),
         ],
-        bonds=[(0, 1, BondAst(1)), (2, 3, BondAst(1))],
+        bonds=[(0, 1, BondForm(1)), (2, 3, BondForm(1))],
     )
     assert correspondence.atoms.matched_pairs == [(0, 2), (1, 3)]
     assert correspondence.bonds.matched_pairs == [(0, 1)]
@@ -859,20 +859,20 @@ def test_molecule_ast_combine_from_alias():
 
 def test_molecule_ast_combine_all():
     molecules = [
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
         MoleculeAst.from_entries(
-            [AtomAst(Element("O")), AtomAst(Element("N"))],
-            bonds=[(0, 1, BondAst(2))],
+            [AtomForm(Element("O")), AtomForm(Element("N"))],
+            bonds=[(0, 1, BondForm(2))],
         ),
-        MoleculeAst.from_entries([AtomAst(Element("F"))]),
+        MoleculeAst.from_entries([AtomForm(Element("F"))]),
     ]
     snapshots = [
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
         MoleculeAst.from_entries(
-            [AtomAst(Element("O")), AtomAst(Element("N"))],
-            bonds=[(0, 1, BondAst(2))],
+            [AtomForm(Element("O")), AtomForm(Element("N"))],
+            bonds=[(0, 1, BondForm(2))],
         ),
-        MoleculeAst.from_entries([AtomAst(Element("F"))]),
+        MoleculeAst.from_entries([AtomForm(Element("F"))]),
     ]
 
     combined, correspondences = MoleculeAst.combine_all(
@@ -881,12 +881,12 @@ def test_molecule_ast_combine_all():
 
     assert combined == MoleculeAst.from_entries(
         [
-            AtomAst(Element("C")),
-            AtomAst(Element("O")),
-            AtomAst(Element("N")),
-            AtomAst(Element("F")),
+            AtomForm(Element("C")),
+            AtomForm(Element("O")),
+            AtomForm(Element("N")),
+            AtomForm(Element("F")),
         ],
-        bonds=[(1, 2, BondAst(2))],
+        bonds=[(1, 2, BondForm(2))],
     )
     assert [correspondence.atoms.matched_pairs for correspondence in correspondences] == [
         [(0, 0)],
@@ -961,11 +961,11 @@ def test_correspondence_constructor_error(
 
 def test_correspondence_value():
     _, molecule_correspondence = MoleculeAst.from_entries(
-        [AtomAst(Element("C"))]
+        [AtomForm(Element("C"))]
     ).combine(
         MoleculeAst.from_entries(
-            [AtomAst(Element("O")), AtomAst(Element("N"))],
-            bonds=[(0, 1, BondAst(2))],
+            [AtomForm(Element("O")), AtomForm(Element("N"))],
+            bonds=[(0, 1, BondForm(2))],
         )
     )
     correspondence = molecule_correspondence.atoms
@@ -999,11 +999,11 @@ def test_correspondence_value():
 
 def test_molecule_correspondence_value():
     _, correspondence = MoleculeAst.from_entries(
-        [AtomAst(Element("C"))]
+        [AtomForm(Element("C"))]
     ).combine(
         MoleculeAst.from_entries(
-            [AtomAst(Element("O")), AtomAst(Element("N"))],
-            bonds=[(0, 1, BondAst(2))],
+            [AtomForm(Element("O")), AtomForm(Element("N"))],
+            bonds=[(0, 1, BondForm(2))],
         )
     )
 
@@ -1027,20 +1027,20 @@ def test_molecule_correspondence_value():
 def test_molecule_ast_split():
     molecule = MoleculeAst.from_entries(
         [
-            AtomAst(Element("C")),
-            AtomAst(Element("O")),
-            AtomAst(Element("N")),
+            AtomForm(Element("C")),
+            AtomForm(Element("O")),
+            AtomForm(Element("N")),
         ],
-        bonds=[(1, 2, BondAst(2))],
+        bonds=[(1, 2, BondForm(2))],
     )
 
     components = molecule.split()
 
     assert [component for component, _ in components] == [
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
         MoleculeAst.from_entries(
-            [AtomAst(Element("O")), AtomAst(Element("N"))],
-            bonds=[(0, 1, BondAst(2))],
+            [AtomForm(Element("O")), AtomForm(Element("N"))],
+            bonds=[(0, 1, BondForm(2))],
         ),
     ]
     assert [
@@ -1057,7 +1057,7 @@ def test_molecule_ast_split_empty():
 
 def test_molecule_ast_bonds_error():
     with pytest.raises(IndexError):
-        MoleculeAst.from_entries([AtomAst(Element("C"))]).bonds[0]
+        MoleculeAst.from_entries([AtomForm(Element("C"))]).bonds[0]
 
 
 def test_molecule_ast_eq():
@@ -1071,16 +1071,16 @@ def test_molecule_ast_eq():
         (
             MoleculeAst.from_entries(
                 [
-                    AtomAst(Element("C")),
-                    AtomAst(Element("C")),
-                    AtomAst(Element("O")),
+                    AtomForm(Element("C")),
+                    AtomForm(Element("C")),
+                    AtomForm(Element("O")),
                 ],
-                bonds=[(0, 1, BondAst(1))],
-                aromatic_systems=[([0, 1, 2], AromaticSystemAst([1, 1, 1]))],
+                bonds=[(0, 1, BondForm(1))],
+                aromatic_systems=[([0, 1, 2], AromaticSystemForm([1, 1, 1]))],
                 noncovalent_bonds=[
                     (
                         [0, 2],
-                        NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+                        NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
                     )
                 ],
             ),

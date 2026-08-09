@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
 use super::ring::{RingMembershipAst, RingScope};
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
-use crate::dative::DativeBondAst;
+use crate::dative::DativeBondForm;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::value::{NumForm, NumLike};
@@ -223,7 +223,7 @@ impl DativeBondConstraintsLike {
 }
 
 /// The dative-bond-scope constraints on a dative bond, in kind-sorted order.
-/// Mutable, hence value-equal but unhashable (matching `DativeBondAst`).
+/// Mutable, hence value-equal but unhashable (matching `DativeBondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct DativeBondConstraintsAst(GraphIrDativeBondConstraintsForm);
@@ -515,17 +515,17 @@ pub(crate) fn dative_bond_constraints_asdict<'py>(
 }
 
 /// What a `DativeBondConstraintsView` writes through to. Only the standalone
-/// `DativeBondAst` backing or a dative bond within a molecule (by index).
+/// `DativeBondForm` backing or a dative bond within a molecule (by index).
 pub(crate) enum DativeBondConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrDativeBondId,
     },
-    DativeBond(Py<DativeBondAst>),
+    DativeBond(Py<DativeBondForm>),
 }
 
 /// A live handle onto one dative bond's constraints, backed by either a
-/// molecule-bond or a standalone `DativeBondAst`. Reads borrow the bond's
+/// molecule-bond or a standalone `DativeBondForm`. Reads borrow the bond's
 /// constraints and read only the item they need (no whole-container clone);
 /// mutators write through to the bond in place, without a clone-and-writeback.
 #[pyclass]
@@ -782,14 +782,14 @@ impl DativeBondConstraintsView {
 }
 
 /// What a `DativeBondRingSizeCounts` proxy reads/writes through to: a dative bond
-/// within a molecule, a standalone `DativeBondAst`, or a standalone
+/// within a molecule, a standalone `DativeBondForm`, or a standalone
 /// `DativeBondConstraintsAst` value.
 pub(crate) enum DativeBondRingSizeBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrDativeBondId,
     },
-    DativeBond(Py<DativeBondAst>),
+    DativeBond(Py<DativeBondForm>),
     Value(Py<DativeBondConstraintsAst>),
 }
 

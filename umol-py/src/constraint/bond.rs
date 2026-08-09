@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
 };
 
 use super::ring::{RingMembershipAst, RingScope};
-use crate::bond::BondAst;
+use crate::bond::BondForm;
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
@@ -219,7 +219,7 @@ impl BondConstraintsLike {
 }
 
 /// The bond-scope constraints on a bond, in kind-sorted order. Mutable, hence
-/// value-equal but unhashable (matching `BondAst`).
+/// value-equal but unhashable (matching `BondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct BondConstraintsAst(GraphIrBondConstraintsForm);
@@ -525,17 +525,17 @@ pub(crate) fn bond_constraints_asdict<'py>(
 }
 
 /// What a `BondConstraintsView` writes through to: a bond within a molecule (by
-/// index) or a standalone `BondAst`.
+/// index) or a standalone `BondForm`.
 pub(crate) enum BondConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrBondId,
     },
-    Bond(Py<BondAst>),
+    Bond(Py<BondForm>),
 }
 
 /// A live handle onto one bond's constraints, backed by either a molecule-bond or a
-/// standalone `BondAst`. Reads borrow the bond's constraints and read only the item
+/// standalone `BondForm`. Reads borrow the bond's constraints and read only the item
 /// they need (no whole-container clone); mutators write through to the bond in place,
 /// without a clone-and-writeback.
 #[pyclass]
@@ -797,13 +797,13 @@ impl BondConstraintsView {
 }
 
 /// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
-/// molecule, a standalone `BondAst`, or a standalone `BondConstraintsAst` value.
+/// molecule, a standalone `BondForm`, or a standalone `BondConstraintsAst` value.
 pub(crate) enum BondRingSizeBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrBondId,
     },
-    Bond(Py<BondAst>),
+    Bond(Py<BondForm>),
     Value(Py<BondConstraintsAst>),
 }
 

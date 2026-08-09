@@ -16,12 +16,12 @@ use umol_graph_ir::ir::{
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
-use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
-use crate::atom::{AtomAst, AtomViews};
-use crate::bond::{BondAst, BondViews};
+use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
+use crate::atom::{AtomForm, AtomViews};
+use crate::bond::{BondForm, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
-use crate::dative::{DativeBondAst, DativeBondViews};
+use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
@@ -35,11 +35,13 @@ use crate::fingerprint::value::{
 };
 use crate::metadata::MoleculeMetadata;
 use crate::model::ChemistryModel;
-use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
-use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
+use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
+use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
-use crate::stereo::{StereoAtomAst, StereoAtomViews, StereoBondAst, StereoBondViews, StereoLigand};
+use crate::stereo::{
+    StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand,
+};
 use crate::substructure::SubstructureSearchConfig;
 use crate::transaction::MoleculeEditor;
 
@@ -113,28 +115,28 @@ impl MoleculeAst {
     }
 
     /// A molecule from its entries. Each bond is a `(first, second, bond)` triple:
-    /// two atom indices into `atoms` and a `BondAst`. Each dative bond is a
+    /// two atom indices into `atoms` and a `BondForm`. Each dative bond is a
     /// `(donors, acceptor, bond)` triple: a list of donor atom indices, one
-    /// acceptor atom index, and a `DativeBondAst`. Each aromatic system is an
-    /// `(atoms, system)` pair: a list of member atom indices and an `AromaticSystemAst`.
+    /// acceptor atom index, and a `DativeBondForm`. Each aromatic system is an
+    /// `(atoms, system)` pair: a list of member atom indices and an `AromaticSystemForm`.
     /// Each multicenter bond is an `(atoms, bond)` pair: a list of member atom indices
-    /// and a `MulticenterBondAst`. Each noncovalent bond is a `([first, second], bond)`
-    /// pair: the two (unordered) endpoint atom indices and a `NoncovalentBondAst`. Each
+    /// and a `MulticenterBondForm`. Each noncovalent bond is a `([first, second], bond)`
+    /// pair: the two (unordered) endpoint atom indices and a `NoncovalentBondForm`. Each
     /// stereo atom / stereo bond is a `(site, ligands, value)` triple: the site atom / bond
-    /// index, a list of `StereoLigand`s in frame order, and a `StereoAtomAst` / `StereoBondAst`.
+    /// index, a list of `StereoLigand`s in frame order, and a `StereoAtomForm` / `StereoBondForm`.
     #[staticmethod]
     #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
     #[allow(clippy::too_many_arguments)] // one argument per entity family — the full molecule surface
     fn from_entries(
         py: Python<'_>,
-        atoms: Vec<Py<AtomAst>>,
-        bonds: Vec<(u32, u32, Py<BondAst>)>,
-        dative_bonds: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
-        aromatic_systems: Vec<(Vec<u32>, Py<AromaticSystemAst>)>,
-        multicenter_bonds: Vec<(Vec<u32>, Py<MulticenterBondAst>)>,
-        noncovalent_bonds: Vec<([u32; 2], Py<NoncovalentBondAst>)>,
-        stereo_atoms: Vec<(u32, Vec<StereoLigand>, Py<StereoAtomAst>)>,
-        stereo_bonds: Vec<(u32, Vec<StereoLigand>, Py<StereoBondAst>)>,
+        atoms: Vec<Py<AtomForm>>,
+        bonds: Vec<(u32, u32, Py<BondForm>)>,
+        dative_bonds: Vec<(Vec<u32>, u32, Py<DativeBondForm>)>,
+        aromatic_systems: Vec<(Vec<u32>, Py<AromaticSystemForm>)>,
+        multicenter_bonds: Vec<(Vec<u32>, Py<MulticenterBondForm>)>,
+        noncovalent_bonds: Vec<([u32; 2], Py<NoncovalentBondForm>)>,
+        stereo_atoms: Vec<(u32, Vec<StereoLigand>, Py<StereoAtomForm>)>,
+        stereo_bonds: Vec<(u32, Vec<StereoLigand>, Py<StereoBondForm>)>,
         constraints: Vec<Py<Constraint>>,
     ) -> PyResult<Self> {
         let ast_atoms = atoms
@@ -531,7 +533,7 @@ mod tests {
     use umol_graph_ir::mol_dsl;
 
     use super::*;
-    use crate::atom::AtomAst as PyAtomAst;
+    use crate::atom::AtomForm as PyAtomForm;
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
     use crate::error::{MetadataError, ParseError, TransactionError, UnderdeterminedError};
@@ -706,31 +708,31 @@ mod tests {
             let atoms = vec![
                 Py::new(
                     py,
-                    PyAtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                    PyAtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
                 )
                 .unwrap(),
                 Py::new(
                     py,
-                    PyAtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::B)),
+                    PyAtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::B)),
                 )
                 .unwrap(),
                 Py::new(
                     py,
-                    PyAtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
+                    PyAtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
                 )
                 .unwrap(),
             ];
             let bonds = vec![(
                 0,
                 1,
-                Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap(),
+                Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap(),
             )];
             let dative = vec![(
                 vec![2],
                 1,
                 Py::new(
                     py,
-                    DativeBondAst::from_inner(GraphIrDativeBondForm::from_order(1)),
+                    DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1)),
                 )
                 .unwrap(),
             )];
@@ -738,9 +740,9 @@ mod tests {
                 vec![0, 1, 2],
                 Py::new(
                     py,
-                    AromaticSystemAst::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
-                        1, 1, 1,
-                    ])),
+                    AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(
+                        vec![1, 1, 1],
+                    )),
                 )
                 .unwrap(),
             )];
@@ -748,7 +750,7 @@ mod tests {
                 vec![0, 1, 2],
                 Py::new(
                     py,
-                    MulticenterBondAst::from_inner(GraphIrMulticenterBondForm::from_electrons(
+                    MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(
                         vec![1, 1, 1],
                     )),
                 )
@@ -758,7 +760,7 @@ mod tests {
                 [0, 2],
                 Py::new(
                     py,
-                    NoncovalentBondAst::from_inner(GraphIrNoncovalentBondForm::from_kind(
+                    NoncovalentBondForm::from_inner(GraphIrNoncovalentBondForm::from_kind(
                         GraphIrNoncovalentBondKind::HydrogenBond,
                     )),
                 )

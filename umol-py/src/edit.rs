@@ -22,9 +22,9 @@ use umol_graph_ir::ir::{
     StereoBondId as GraphIrStereoBondId,
 };
 
-use crate::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
-use crate::atom::{AtomAst, AtomUpdate};
-use crate::bond::{BondAst, BondUpdate};
+use crate::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
+use crate::atom::{AtomForm, AtomUpdate};
+use crate::bond::{BondForm, BondUpdate};
 use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
@@ -34,7 +34,7 @@ use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::into_py_variant;
-use crate::dative::{DativeBondAst, DativeBondUpdate};
+use crate::dative::{DativeBondForm, DativeBondUpdate};
 use crate::defaults::MoleculeDefaults;
 use crate::delta::{
     AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
@@ -43,10 +43,11 @@ use crate::delta::{
 };
 use crate::error::parse_error;
 use crate::metadata::Entity;
-use crate::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
+use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
+use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
 use crate::stereo::{
-    StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate, StereoKind, StereoLigandKind,
+    StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoKind,
+    StereoLigandKind,
 };
 
 /// A same-kind creation ordinal in an edit sequence.
@@ -314,29 +315,33 @@ impl ConstraintEdit {
     }
 }
 
-type BondAddition = ((HandleLike, HandleLike), Py<BondAst>);
-type DativeBondAddition = (Vec<HandleLike>, Py<DativeBondAst>);
-type AromaticSystemAddition = (Vec<HandleLike>, Py<AromaticSystemAst>);
-type MulticenterBondAddition = (Vec<HandleLike>, Py<MulticenterBondAst>);
-type NoncovalentBondAddition = ((HandleLike, HandleLike), Py<NoncovalentBondAst>);
-type StereoAtomAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoAtomAst>);
-type StereoBondAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoBondAst>);
-type DativeBondRemoval = (HandleLike, Vec<HandleLike>, Py<DativeBondAst>);
-type AromaticSystemRemoval = (HandleLike, Vec<HandleLike>, Py<AromaticSystemAst>);
-type MulticenterBondRemoval = (HandleLike, Vec<HandleLike>, Py<MulticenterBondAst>);
-type NoncovalentBondRemoval = (HandleLike, (HandleLike, HandleLike), Py<NoncovalentBondAst>);
+type BondAddition = ((HandleLike, HandleLike), Py<BondForm>);
+type DativeBondAddition = (Vec<HandleLike>, Py<DativeBondForm>);
+type AromaticSystemAddition = (Vec<HandleLike>, Py<AromaticSystemForm>);
+type MulticenterBondAddition = (Vec<HandleLike>, Py<MulticenterBondForm>);
+type NoncovalentBondAddition = ((HandleLike, HandleLike), Py<NoncovalentBondForm>);
+type StereoAtomAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoAtomForm>);
+type StereoBondAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoBondForm>);
+type DativeBondRemoval = (HandleLike, Vec<HandleLike>, Py<DativeBondForm>);
+type AromaticSystemRemoval = (HandleLike, Vec<HandleLike>, Py<AromaticSystemForm>);
+type MulticenterBondRemoval = (HandleLike, Vec<HandleLike>, Py<MulticenterBondForm>);
+type NoncovalentBondRemoval = (
+    HandleLike,
+    (HandleLike, HandleLike),
+    Py<NoncovalentBondForm>,
+);
 type StereoLigandInput = (HandleLike, StereoLigandKind);
 type StereoAtomRemovalEntry = (
     HandleLike,
     HandleLike,
     Vec<StereoLigandInput>,
-    Py<StereoAtomAst>,
+    Py<StereoAtomForm>,
 );
 type StereoBondRemovalEntry = (
     HandleLike,
     HandleLike,
     Vec<StereoLigandInput>,
-    Py<StereoBondAst>,
+    Py<StereoBondForm>,
 );
 
 struct StereoAtomRemovals(Vec<StereoAtomRemovalEntry>);
@@ -401,7 +406,7 @@ impl<'py> IntoPyObject<'py> for &StereoBondRemovals {
 )]
 pub enum Edit {
     AddAtoms {
-        atoms: Vec<Py<AtomAst>>,
+        atoms: Vec<Py<AtomForm>>,
     },
     AddBonds {
         bonds: Vec<BondAddition>,
@@ -420,7 +425,7 @@ pub enum Edit {
     },
     AddDativeBond {
         atoms: Vec<HandleLike>,
-        ast: Py<DativeBondAst>,
+        ast: Py<DativeBondForm>,
     },
     RemoveDativeBonds {
         removes: Vec<DativeBondRemoval>,
@@ -431,7 +436,7 @@ pub enum Edit {
     },
     AddAromaticSystem {
         atoms: Vec<HandleLike>,
-        ast: Py<AromaticSystemAst>,
+        ast: Py<AromaticSystemForm>,
     },
     RemoveAromaticSystems {
         removes: Vec<AromaticSystemRemoval>,
@@ -442,7 +447,7 @@ pub enum Edit {
     },
     AddMulticenterBond {
         atoms: Vec<HandleLike>,
-        ast: Py<MulticenterBondAst>,
+        ast: Py<MulticenterBondForm>,
     },
     RemoveMulticenterBonds {
         removes: Vec<MulticenterBondRemoval>,
@@ -453,7 +458,7 @@ pub enum Edit {
     },
     AddNoncovalentBond {
         atoms: (HandleLike, HandleLike),
-        ast: Py<NoncovalentBondAst>,
+        ast: Py<NoncovalentBondForm>,
     },
     RemoveNoncovalentBonds {
         removes: Vec<NoncovalentBondRemoval>,
@@ -465,7 +470,7 @@ pub enum Edit {
     AddStereoAtom {
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoAtomAst>,
+        ast: Py<StereoAtomForm>,
     },
     RemoveStereoAtoms {
         removes: StereoAtomRemovals,
@@ -477,7 +482,7 @@ pub enum Edit {
     AddStereoBond {
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoBondAst>,
+        ast: Py<StereoBondForm>,
     },
     RemoveStereoBonds {
         removes: StereoBondRemovals,
@@ -624,7 +629,7 @@ impl Edit {
                 atoms: atoms
                     .iter()
                     .cloned()
-                    .map(|atom| Py::new(py, AtomAst::from_inner(atom)))
+                    .map(|atom| Py::new(py, AtomForm::from_inner(atom)))
                     .collect::<PyResult<_>>()?,
             },
             GraphIrEdit::AddBonds { bonds } => Self::AddBonds {
@@ -636,7 +641,7 @@ impl Edit {
                                 HandleLike::from_atom_handle(&bond.endpoints[0]),
                                 HandleLike::from_atom_handle(&bond.endpoints[1]),
                             ),
-                            Py::new(py, BondAst::from_inner(bond.ast.clone()))?,
+                            Py::new(py, BondForm::from_inner(bond.ast.clone()))?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -655,7 +660,7 @@ impl Edit {
             },
             GraphIrEdit::AddDativeBond { atoms, ast } => Self::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, DativeBondAst::from_inner(ast.clone()))?,
+                ast: Py::new(py, DativeBondForm::from_inner(ast.clone()))?,
             },
             GraphIrEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
                 removes: removes
@@ -664,7 +669,7 @@ impl Edit {
                         Ok((
                             HandleLike::from_dative_bond_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Py::new(py, DativeBondAst::from_inner(ast.clone()))?,
+                            Py::new(py, DativeBondForm::from_inner(ast.clone()))?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -675,7 +680,7 @@ impl Edit {
             },
             GraphIrEdit::AddAromaticSystem { atoms, ast } => Self::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, AromaticSystemAst::from_inner(ast.clone()))?,
+                ast: Py::new(py, AromaticSystemForm::from_inner(ast.clone()))?,
             },
             GraphIrEdit::RemoveAromaticSystems { removes } => Self::RemoveAromaticSystems {
                 removes: removes
@@ -684,7 +689,7 @@ impl Edit {
                         Ok((
                             HandleLike::from_aromatic_system_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Py::new(py, AromaticSystemAst::from_inner(ast.clone()))?,
+                            Py::new(py, AromaticSystemForm::from_inner(ast.clone()))?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -697,7 +702,7 @@ impl Edit {
             }
             GraphIrEdit::AddMulticenterBond { atoms, ast } => Self::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, MulticenterBondAst::from_inner(ast.clone()))?,
+                ast: Py::new(py, MulticenterBondForm::from_inner(ast.clone()))?,
             },
             GraphIrEdit::RemoveMulticenterBonds { removes } => Self::RemoveMulticenterBonds {
                 removes: removes
@@ -706,7 +711,7 @@ impl Edit {
                         Ok((
                             HandleLike::from_multicenter_bond_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Py::new(py, MulticenterBondAst::from_inner(ast.clone()))?,
+                            Py::new(py, MulticenterBondForm::from_inner(ast.clone()))?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -725,7 +730,7 @@ impl Edit {
                     HandleLike::from_atom_handle(&atoms[0]),
                     HandleLike::from_atom_handle(&atoms[1]),
                 ),
-                ast: Py::new(py, NoncovalentBondAst::from_inner(ast.clone()))?,
+                ast: Py::new(py, NoncovalentBondForm::from_inner(ast.clone()))?,
             },
             GraphIrEdit::RemoveNoncovalentBonds { removes } => Self::RemoveNoncovalentBonds {
                 removes: removes
@@ -737,7 +742,7 @@ impl Edit {
                                 HandleLike::from_atom_handle(&atoms[0]),
                                 HandleLike::from_atom_handle(&atoms[1]),
                             ),
-                            Py::new(py, NoncovalentBondAst::from_inner(ast.clone()))?,
+                            Py::new(py, NoncovalentBondForm::from_inner(ast.clone()))?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -762,7 +767,7 @@ impl Edit {
                         )
                     })
                     .collect(),
-                ast: Py::new(py, StereoAtomAst::from_inner(ast.clone()))?,
+                ast: Py::new(py, StereoAtomForm::from_inner(ast.clone()))?,
             },
             GraphIrEdit::RemoveStereoAtoms { removes } => Self::RemoveStereoAtoms {
                 removes: StereoAtomRemovals(
@@ -781,7 +786,7 @@ impl Edit {
                                         )
                                     })
                                     .collect(),
-                                Py::new(py, StereoAtomAst::from_inner(ast.clone()))?,
+                                Py::new(py, StereoAtomForm::from_inner(ast.clone()))?,
                             ))
                         })
                         .collect::<PyResult<_>>()?,
@@ -802,7 +807,7 @@ impl Edit {
                         )
                     })
                     .collect(),
-                ast: Py::new(py, StereoBondAst::from_inner(ast.clone()))?,
+                ast: Py::new(py, StereoBondForm::from_inner(ast.clone()))?,
             },
             GraphIrEdit::RemoveStereoBonds { removes } => Self::RemoveStereoBonds {
                 removes: StereoBondRemovals(
@@ -821,7 +826,7 @@ impl Edit {
                                         )
                                     })
                                     .collect(),
-                                Py::new(py, StereoBondAst::from_inner(ast.clone()))?,
+                                Py::new(py, StereoBondForm::from_inner(ast.clone()))?,
                             ))
                         })
                         .collect::<PyResult<_>>()?,
@@ -1331,13 +1336,13 @@ impl Edits {
         edit_iter(py, &self.0)
     }
 
-    fn add_atom(&mut self, py: Python<'_>, ast: Py<AtomAst>) -> New {
+    fn add_atom(&mut self, py: Python<'_>, ast: Py<AtomForm>) -> New {
         New::from_rust(GraphIrEntityHandle::Atom(
             self.0.add_atom(ast.bind(py).borrow().inner().clone()),
         ))
     }
 
-    fn add_atoms(&mut self, py: Python<'_>, atoms: Vec<Py<AtomAst>>) -> Vec<New> {
+    fn add_atoms(&mut self, py: Python<'_>, atoms: Vec<Py<AtomForm>>) -> Vec<New> {
         self.0
             .add_atoms(
                 atoms
@@ -1354,7 +1359,7 @@ impl Edits {
         py: Python<'_>,
         first: HandleLike,
         second: HandleLike,
-        ast: Py<BondAst>,
+        ast: Py<BondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::Bond(self.0.add_bond(
             first.to_atom_handle(),
@@ -1382,7 +1387,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: Vec<HandleLike>,
-        ast: Py<DativeBondAst>,
+        ast: Py<DativeBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::DativeBond(self.0.add_dative_bond(
             atoms.iter().map(HandleLike::to_atom_handle).collect(),
@@ -1407,7 +1412,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: Vec<HandleLike>,
-        ast: Py<AromaticSystemAst>,
+        ast: Py<AromaticSystemForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::AromaticSystem(
             self.0.add_aromatic_system(
@@ -1438,7 +1443,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: Vec<HandleLike>,
-        ast: Py<MulticenterBondAst>,
+        ast: Py<MulticenterBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::MulticenterBond(
             self.0.add_multicenter_bond(
@@ -1469,7 +1474,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: (HandleLike, HandleLike),
-        ast: Py<NoncovalentBondAst>,
+        ast: Py<NoncovalentBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::NoncovalentBond(
             self.0.add_noncovalent_bond(
@@ -1501,7 +1506,7 @@ impl Edits {
         py: Python<'_>,
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoAtomAst>,
+        ast: Py<StereoAtomForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::StereoAtom(
             self.0.add_stereo_atom(
@@ -1537,7 +1542,7 @@ impl Edits {
         py: Python<'_>,
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoBondAst>,
+        ast: Py<StereoBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::StereoBond(
             self.0.add_stereo_bond(
@@ -1689,7 +1694,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<AtomAst>,
+        current: Py<AtomForm>,
         update: Py<AtomUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1702,7 +1707,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<BondAst>,
+        current: Py<BondForm>,
         update: Py<BondUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1715,7 +1720,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<DativeBondAst>,
+        current: Py<DativeBondForm>,
         update: Py<DativeBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1728,7 +1733,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<AromaticSystemAst>,
+        current: Py<AromaticSystemForm>,
         update: Py<AromaticSystemUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1741,7 +1746,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<MulticenterBondAst>,
+        current: Py<MulticenterBondForm>,
         update: Py<MulticenterBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1754,7 +1759,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<NoncovalentBondAst>,
+        current: Py<NoncovalentBondForm>,
         update: Py<NoncovalentBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1767,7 +1772,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<StereoAtomAst>,
+        current: Py<StereoAtomForm>,
         update: Py<StereoAtomUpdate>,
     ) {
         let current = current.bind(py).borrow();
@@ -1780,7 +1785,7 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         id: HandleLike,
-        current: Py<StereoBondAst>,
+        current: Py<StereoBondForm>,
         update: Py<StereoBondUpdate>,
     ) {
         let current = current.bind(py).borrow();

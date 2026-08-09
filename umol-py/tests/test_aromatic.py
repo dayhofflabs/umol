@@ -1,12 +1,12 @@
 import pytest
 
 from umol import (
-    AromaticSystemAst,
+    AromaticSystemForm,
     AromaticSystemConstraintAst,
     AromaticSystemConstraintKey,
     AromaticSystemConstraintsAst,
     AromaticSystemUpdate,
-    AtomAst,
+    AtomForm,
     ElectronCountsForm,
     Element,
     MoleculeAst,
@@ -101,20 +101,20 @@ def test_aromatic_system_update_parse_error():
 def benzene():
     # six aromatic carbons (atom ids 0-5), one aromatic system over all six
     return MoleculeAst.from_entries(
-        [AtomAst(Element("C")) for _ in range(6)],
-        aromatic_systems=[([0, 1, 2, 3, 4, 5], AromaticSystemAst([1, 1, 1, 1, 1, 1]))],
+        [AtomForm(Element("C")) for _ in range(6)],
+        aromatic_systems=[([0, 1, 2, 3, 4, 5], AromaticSystemForm([1, 1, 1, 1, 1, 1]))],
     )
 
 
 def test_aromaticsystemast_new():
-    system = AromaticSystemAst([1, 1, 1])
+    system = AromaticSystemForm([1, 1, 1])
     assert system.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert system.charge == NumForm.Undetermined()
     assert len(system.constraints) == 0
 
 
 def test_aromaticsystemast_new_kwargs():
-    system = AromaticSystemAst(
+    system = AromaticSystemForm(
         [1, 1, 1],
         charge=-1,
         unpaired_electrons=UnpairedElectronsForm(0, 1),
@@ -124,7 +124,7 @@ def test_aromaticsystemast_new_kwargs():
 
 
 def test_aromaticsystemast_constraints_kwarg():
-    system = AromaticSystemAst(
+    system = AromaticSystemForm(
         [1, 1, 1],
         constraints=AromaticSystemConstraintsAst(
             [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
@@ -135,37 +135,37 @@ def test_aromaticsystemast_constraints_kwarg():
 
 
 def test_aromaticsystemast_electrons_setter():
-    system = AromaticSystemAst([1, 1, 1])
+    system = AromaticSystemForm([1, 1, 1])
     system.electrons = [2, 2]
     assert system.electrons == ElectronCountsForm.Lit([2, 2])
 
 
 def test_aromaticsystemast_charge_setter():
-    system = AromaticSystemAst([1, 1, 1])
+    system = AromaticSystemForm([1, 1, 1])
     system.charge = -1
     assert system.charge == NumForm.Lit(-1)
 
 
 def test_aromaticsystemast_unpaired_electrons_setter():
-    system = AromaticSystemAst([1, 1, 1])
+    system = AromaticSystemForm([1, 1, 1])
     system.unpaired_electrons = UnpairedElectronsForm(0, 1)
     assert system.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
 def test_aromaticsystemast_parse_roundtrip(dsl):
-    system = AromaticSystemAst.parse(dsl)
+    system = AromaticSystemForm.parse(dsl)
     assert str(system) == dsl
-    assert repr(system) == f"AromaticSystemAst.parse('{dsl}')"
+    assert repr(system) == f"AromaticSystemForm.parse('{dsl}')"
 
 
 def test_aromaticsystemast_parse_error():
     with pytest.raises(ParseError):
-        AromaticSystemAst.parse("z")
+        AromaticSystemForm.parse("z")
 
 
 def test_aromaticsystemast_asdict():
-    system = AromaticSystemAst(
+    system = AromaticSystemForm(
         [1, 1, 1],
         constraints=AromaticSystemConstraintsAst(
             [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
@@ -183,7 +183,7 @@ def test_aromaticsystemast_asdict():
 
 
 def test_aromaticsystemast_set_constraints():
-    system = AromaticSystemAst([1, 1, 1])
+    system = AromaticSystemForm([1, 1, 1])
     system.constraints = AromaticSystemConstraintsAst(
         [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
@@ -313,7 +313,7 @@ def test_aromaticsystemviews_len_getitem():
 
 def test_aromaticsystemviews_setitem():
     mol = benzene()
-    mol.aromatic_systems[0] = AromaticSystemAst([2, 2, 2, 2, 2, 2])
+    mol.aromatic_systems[0] = AromaticSystemForm([2, 2, 2, 2, 2, 2])
     view = mol.aromatic_systems[0]
     # value replaced, members preserved
     assert view.electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
@@ -322,7 +322,7 @@ def test_aromaticsystemviews_setitem():
 
 def test_aromaticsystemviews_setitem_out_of_range():
     with pytest.raises(IndexError):
-        benzene().aromatic_systems[5] = AromaticSystemAst([1, 1, 1])
+        benzene().aromatic_systems[5] = AromaticSystemForm([1, 1, 1])
 
 
 def test_aromaticsystemviews_iter():
@@ -340,8 +340,8 @@ def test_aromaticsystemviews_of():
 def test_aromaticsystemviews_incident():
     # benzene's six carbons plus one isolated carbon (atom id 6)
     mol = MoleculeAst.from_entries(
-        [AtomAst(Element("C")) for _ in range(7)],
-        aromatic_systems=[([0, 1, 2, 3, 4, 5], AromaticSystemAst([1, 1, 1, 1, 1, 1]))],
+        [AtomForm(Element("C")) for _ in range(7)],
+        aromatic_systems=[([0, 1, 2, 3, 4, 5], AromaticSystemForm([1, 1, 1, 1, 1, 1]))],
     )
     assert [view.id for view in mol.aromatic_systems.incident(0)] == [0]
     assert mol.aromatic_systems.incident(6) == []

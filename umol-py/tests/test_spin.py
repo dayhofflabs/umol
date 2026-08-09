@@ -134,7 +134,7 @@ def test_spin_state_assignment_error(attribute):
         ),
     ],
 )
-def test_unpaired_electrons_ast_as_lit(ast, expected):
+def test_unpaired_electrons_form_as_lit(ast, expected):
     assert ast.as_lit() == expected
 
 

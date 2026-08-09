@@ -1,20 +1,20 @@
 import pytest
 
 from umol import (
-    AromaticSystemAst,
+    AromaticSystemForm,
     AromaticSystemFieldChange,
     AromaticSystemUpdate,
-    AtomAst,
+    AtomForm,
     AtomConstraintAst,
     AtomConstraintsAst,
     AtomFieldChange,
     AtomUpdate,
-    BondAst,
+    BondForm,
     BondFieldChange,
     BondUpdate,
     Constraint,
     ConstraintEdit,
-    DativeBondAst,
+    DativeBondForm,
     DativeBondFieldChange,
     DativeBondUpdate,
     Edit,
@@ -23,20 +23,20 @@ from umol import (
     Entity,
     MoleculeDefaults,
     MoleculeConstraint,
-    MulticenterBondAst,
+    MulticenterBondForm,
     MulticenterBondFieldChange,
     MulticenterBondUpdate,
     New,
-    NoncovalentBondAst,
+    NoncovalentBondForm,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
     NoncovalentBondKindForm,
     NoncovalentBondUpdate,
     ParseError,
-    StereoAtomAst,
+    StereoAtomForm,
     StereoAtomFieldChange,
     StereoAtomUpdate,
-    StereoBondAst,
+    StereoBondForm,
     StereoBondFieldChange,
     StereoBondUpdate,
     StereoConfigurationForm,
@@ -95,8 +95,8 @@ def test_constraint_edit():
 @pytest.mark.parametrize(
     "edit",
     [
-        Edit.AddAtoms(atoms=[AtomAst.parse("C")]),
-        Edit.AddBonds(bonds=[((0, New(0)), BondAst.parse("1"))]),
+        Edit.AddAtoms(atoms=[AtomForm.parse("C")]),
+        Edit.AddBonds(bonds=[((0, New(0)), BondForm.parse("1"))]),
         Edit.RemoveTopology(atoms=[New(0)], bonds=[1]),
         Edit.ModifyAtomField(
             id=New(0),
@@ -117,8 +117,8 @@ def test_edit(edit):
 
 
 def test_edits():
-    first = Edit.AddAtoms(atoms=[AtomAst.parse("C")])
-    second = Edit.AddAtoms(atoms=[AtomAst.parse("N")])
+    first = Edit.AddAtoms(atoms=[AtomForm.parse("C")])
+    second = Edit.AddAtoms(atoms=[AtomForm.parse("N")])
     edits = Edits([first, first])
     iterator = iter(edits)
 
@@ -136,9 +136,9 @@ def test_edits():
 def test_edits_getitem_error(index):
     edits = Edits(
         [
-            Edit.AddAtoms(atoms=[AtomAst.parse("C")]),
-            Edit.AddAtoms(atoms=[AtomAst.parse("N")]),
-            Edit.AddAtoms(atoms=[AtomAst.parse("O")]),
+            Edit.AddAtoms(atoms=[AtomForm.parse("C")]),
+            Edit.AddAtoms(atoms=[AtomForm.parse("N")]),
+            Edit.AddAtoms(atoms=[AtomForm.parse("O")]),
         ]
     )
 
@@ -148,14 +148,14 @@ def test_edits_getitem_error(index):
 
 def test_edits_add():
     edits = Edits()
-    atom = AtomAst.parse("C")
-    bond = BondAst.parse("1")
-    dative = DativeBondAst(1)
-    aromatic = AromaticSystemAst([1, 1])
-    multicenter = MulticenterBondAst([1, 1])
-    noncovalent = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
-    stereo_atom = StereoAtomAst.parse("Th0")
-    stereo_bond = StereoBondAst.parse("Ct0")
+    atom = AtomForm.parse("C")
+    bond = BondForm.parse("1")
+    dative = DativeBondForm(1)
+    aromatic = AromaticSystemForm([1, 1])
+    multicenter = MulticenterBondForm([1, 1])
+    noncovalent = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
+    stereo_atom = StereoAtomForm.parse("Th0")
+    stereo_bond = StereoBondForm.parse("Ct0")
     ligands = [(0, StereoLigandKind.Atom)]
 
     handles = (
@@ -184,14 +184,14 @@ def test_edits_add():
 
 def test_edits_add_many():
     edits = Edits()
-    atoms = [AtomAst.parse("C"), AtomAst.parse("N")]
-    bond = BondAst.parse("1")
-    dative = DativeBondAst(1)
-    aromatic = AromaticSystemAst([1, 1])
-    multicenter = MulticenterBondAst([1, 1])
-    noncovalent = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
-    stereo_atom = StereoAtomAst.parse("Th0")
-    stereo_bond = StereoBondAst.parse("Ct0")
+    atoms = [AtomForm.parse("C"), AtomForm.parse("N")]
+    bond = BondForm.parse("1")
+    dative = DativeBondForm(1)
+    aromatic = AromaticSystemForm([1, 1])
+    multicenter = MulticenterBondForm([1, 1])
+    noncovalent = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
+    stereo_atom = StereoAtomForm.parse("Th0")
+    stereo_bond = StereoBondForm.parse("Ct0")
     ligands = [(0, StereoLigandKind.Atom)]
     atom_handles = edits.add_atoms(atoms)
     bond_handles = edits.add_bonds(
@@ -253,14 +253,14 @@ def test_edits_add_many():
 
 
 def test_edits_constructor_counters():
-    atom = AtomAst.parse("C")
-    bond = BondAst.parse("1")
-    dative = DativeBondAst(1)
-    aromatic = AromaticSystemAst([1, 1])
-    multicenter = MulticenterBondAst([1, 1])
-    noncovalent = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
-    stereo_atom = StereoAtomAst.parse("Th0")
-    stereo_bond = StereoBondAst.parse("Ct0")
+    atom = AtomForm.parse("C")
+    bond = BondForm.parse("1")
+    dative = DativeBondForm(1)
+    aromatic = AromaticSystemForm([1, 1])
+    multicenter = MulticenterBondForm([1, 1])
+    noncovalent = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
+    stereo_atom = StereoAtomForm.parse("Th0")
+    stereo_bond = StereoBondForm.parse("Ct0")
     ligands = [(0, StereoLigandKind.Atom)]
     edits = Edits(
         [
@@ -289,12 +289,12 @@ def test_edits_constructor_counters():
 
 def test_edits_remove():
     edits = Edits()
-    dative = DativeBondAst(1)
-    aromatic = AromaticSystemAst([1, 1])
-    multicenter = MulticenterBondAst([1, 1])
-    noncovalent = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
-    stereo_atom = StereoAtomAst.parse("Th0")
-    stereo_bond = StereoBondAst.parse("Ct0")
+    dative = DativeBondForm(1)
+    aromatic = AromaticSystemForm([1, 1])
+    multicenter = MulticenterBondForm([1, 1])
+    noncovalent = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
+    stereo_atom = StereoAtomForm.parse("Th0")
+    stereo_bond = StereoBondForm.parse("Ct0")
     ligands = [(New(0), StereoLigandKind.Atom)]
 
     edits.remove_topology([0, New(0)], [1, New(0)])
@@ -348,25 +348,25 @@ def test_edits_molecule_constraint():
 def test_edits_update_empty():
     edits = Edits()
 
-    edits.update_atom(0, AtomAst.parse("C"), AtomUpdate())
-    edits.update_bond(0, BondAst.parse("1"), BondUpdate())
-    edits.update_dative_bond(0, DativeBondAst(1), DativeBondUpdate())
+    edits.update_atom(0, AtomForm.parse("C"), AtomUpdate())
+    edits.update_bond(0, BondForm.parse("1"), BondUpdate())
+    edits.update_dative_bond(0, DativeBondForm(1), DativeBondUpdate())
     edits.update_aromatic_system(
-        0, AromaticSystemAst([1, 1]), AromaticSystemUpdate()
+        0, AromaticSystemForm([1, 1]), AromaticSystemUpdate()
     )
     edits.update_multicenter_bond(
-        0, MulticenterBondAst([1, 1]), MulticenterBondUpdate()
+        0, MulticenterBondForm([1, 1]), MulticenterBondUpdate()
     )
     edits.update_noncovalent_bond(
         0,
-        NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+        NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
         NoncovalentBondUpdate(),
     )
     edits.update_stereo_atom(
-        0, StereoAtomAst.parse("Th0"), StereoAtomUpdate()
+        0, StereoAtomForm.parse("Th0"), StereoAtomUpdate()
     )
     edits.update_stereo_bond(
-        0, StereoBondAst.parse("Ct0"), StereoBondUpdate()
+        0, StereoBondForm.parse("Ct0"), StereoBondUpdate()
     )
 
     assert list(edits) == []
@@ -380,7 +380,7 @@ def test_edits_update():
 
     edits.update_atom(
         New(0),
-        AtomAst.parse("C#c0#h3#v3"),
+        AtomForm.parse("C#c0#h3#v3"),
         AtomUpdate(
             charge=1,
             implicit_hydrogens=2,
@@ -389,30 +389,30 @@ def test_edits_update():
     )
     edits.update_bond(
         0,
-        BondAst.parse("1#c0"),
+        BondForm.parse("1#c0"),
         BondUpdate(order=2, charge=1),
     )
     edits.update_dative_bond(
-        New(0), DativeBondAst(1), DativeBondUpdate(order=2)
+        New(0), DativeBondForm(1), DativeBondUpdate(order=2)
     )
     edits.update_aromatic_system(
         0,
-        AromaticSystemAst([1, 1], charge=0),
+        AromaticSystemForm([1, 1], charge=0),
         AromaticSystemUpdate(electrons=[2, 0], charge=1),
     )
     edits.update_multicenter_bond(
         New(0),
-        MulticenterBondAst([1, 1], charge=0),
+        MulticenterBondForm([1, 1], charge=0),
         MulticenterBondUpdate(electrons=[2, 0], charge=1),
     )
     edits.update_noncovalent_bond(
         0,
-        NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+        NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
         NoncovalentBondUpdate(kind=NoncovalentBondKind.Ionic),
     )
     edits.update_stereo_atom(
         New(0),
-        StereoAtomAst.parse("Th0"),
+        StereoAtomForm.parse("Th0"),
         StereoAtomUpdate(
             configuration=StereoConfigurationUpdate.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Lit(1)
@@ -421,7 +421,7 @@ def test_edits_update():
     )
     edits.update_stereo_bond(
         0,
-        StereoBondAst.parse("Ct0"),
+        StereoBondForm.parse("Ct0"),
         StereoBondUpdate(
             configuration=StereoConfigurationUpdate.Kinded(
                 StereoKind.CisTrans, StereoCoset.Lit(1)
@@ -527,24 +527,24 @@ def test_edits_update():
 
 def test_edits_parse_render():
     edits = Edits()
-    atom = edits.add_atom(AtomAst.parse("C#h3"))
-    bond = edits.add_bond(0, atom, BondAst(1))
-    edits.add_dative_bond([0, atom], DativeBondAst(1))
-    edits.add_aromatic_system([0, atom], AromaticSystemAst([1, 1]))
-    edits.add_multicenter_bond([0, atom], MulticenterBondAst([1, 1]))
+    atom = edits.add_atom(AtomForm.parse("C#h3"))
+    bond = edits.add_bond(0, atom, BondForm(1))
+    edits.add_dative_bond([0, atom], DativeBondForm(1))
+    edits.add_aromatic_system([0, atom], AromaticSystemForm([1, 1]))
+    edits.add_multicenter_bond([0, atom], MulticenterBondForm([1, 1]))
     edits.add_noncovalent_bond(
         (0, atom),
-        NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+        NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
     )
     edits.add_stereo_atom(
         atom,
         [(0, StereoLigandKind.Atom)],
-        StereoAtomAst.parse("Th0"),
+        StereoAtomForm.parse("Th0"),
     )
     edits.add_stereo_bond(
         bond,
         [(atom, StereoLigandKind.Atom)],
-        StereoBondAst.parse("Ct0"),
+        StereoBondForm.parse("Ct0"),
     )
     edits.add_molecule_constraint(
         ConstraintEdit(
@@ -564,7 +564,7 @@ def test_edits_parse_render_defaults():
     expected = Edits(
         [
             Edit.AddAtoms(
-                atoms=[AtomAst.parse("O#i=#c0#h0#n0#u0#s")]
+                atoms=[AtomForm.parse("O#i=#c0#h0#n0#u0#s")]
             )
         ]
     )

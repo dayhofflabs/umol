@@ -1,11 +1,11 @@
 import pytest
 
 from umol import (
-    AtomAst,
+    AtomForm,
     BooleanForm,
     Element,
     MoleculeAst,
-    NoncovalentBondAst,
+    NoncovalentBondForm,
     NoncovalentBondConstraintAst,
     NoncovalentBondConstraintKey,
     NoncovalentBondConstraintsAst,
@@ -82,8 +82,8 @@ def test_noncovalent_bond_update_parse_error():
 def hbond_molecule():
     # two oxygens (atom ids 0-1), one hydrogen bond over them (noncovalent id 0)
     return MoleculeAst.from_entries(
-        [AtomAst(Element("O")) for _ in range(2)],
-        noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        [AtomForm(Element("O")) for _ in range(2)],
+        noncovalent_bonds=[([0, 1], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))],
     )
 
 
@@ -108,13 +108,13 @@ def test_noncovalentbondkindast_as_lit():
 
 
 def test_noncovalentbondast_new():
-    bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+    bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     assert bond.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
     assert len(bond.constraints) == 0
 
 
 def test_noncovalentbondast_new_constraints_kwarg():
-    bond = NoncovalentBondAst(
+    bond = NoncovalentBondForm(
         NoncovalentBondKind.HalogenBond,
         constraints=NoncovalentBondConstraintsAst(
             [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))]
@@ -124,25 +124,25 @@ def test_noncovalentbondast_new_constraints_kwarg():
 
 
 def test_noncovalentbondast_kind_setter():
-    bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+    bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     bond.kind = NoncovalentBondKind.Ionic
     assert bond.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic)
 
 
 @pytest.mark.parametrize("dsl", ["Hbd", "Hbd#I", "Hbd#I!", "*"])
 def test_noncovalentbondast_parse_roundtrip(dsl):
-    bond = NoncovalentBondAst.parse(dsl)
+    bond = NoncovalentBondForm.parse(dsl)
     assert str(bond) == dsl
-    assert repr(bond) == f"NoncovalentBondAst.parse('{dsl}')"
+    assert repr(bond) == f"NoncovalentBondForm.parse('{dsl}')"
 
 
 def test_noncovalentbondast_parse_error():
     with pytest.raises(ParseError):
-        NoncovalentBondAst.parse("z")
+        NoncovalentBondForm.parse("z")
 
 
 def test_noncovalentbondast_asdict():
-    bond = NoncovalentBondAst.parse("Hbd#I")
+    bond = NoncovalentBondForm.parse("Hbd#I")
     d = bond.asdict()
     assert set(d.keys()) == {"kind", "constraints"}
     assert d["kind"] == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
@@ -150,7 +150,7 @@ def test_noncovalentbondast_asdict():
 
 
 def test_noncovalentbondast_set_constraints():
-    bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+    bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     bond.constraints = NoncovalentBondConstraintsAst(
         [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(False))]
     )
@@ -159,7 +159,7 @@ def test_noncovalentbondast_set_constraints():
 
 def test_noncovalentbondast_constraints_self_assign():
     # regression: assigning the bond's own constraints view back to it is a no-op, not a panic
-    bond = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+    bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     bond.constraints.intramolecular = True
     bond.constraints = bond.constraints
     bond.constraints.update(bond.constraints)
@@ -262,7 +262,7 @@ def test_noncovalentbondviews_len_getitem():
 
 def test_noncovalentbondviews_setitem():
     mol = hbond_molecule()
-    mol.noncovalent_bonds[0] = NoncovalentBondAst(NoncovalentBondKind.Ionic)
+    mol.noncovalent_bonds[0] = NoncovalentBondForm(NoncovalentBondKind.Ionic)
     view = mol.noncovalent_bonds[0]
     # value replaced, endpoints preserved
     assert view.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic)
@@ -271,7 +271,7 @@ def test_noncovalentbondviews_setitem():
 
 def test_noncovalentbondviews_setitem_out_of_range():
     with pytest.raises(IndexError):
-        hbond_molecule().noncovalent_bonds[5] = NoncovalentBondAst(
+        hbond_molecule().noncovalent_bonds[5] = NoncovalentBondForm(
             NoncovalentBondKind.HydrogenBond
         )
 
@@ -284,8 +284,8 @@ def test_noncovalentbondviews_iter():
 def test_noncovalentbondviews_of():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
     mol = MoleculeAst.from_entries(
-        [AtomAst(Element("O")) for _ in range(3)],
-        noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        [AtomForm(Element("O")) for _ in range(3)],
+        noncovalent_bonds=[([0, 1], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))],
     )
     # unordered pair — both orders find the same bond
     assert mol.noncovalent_bonds.of(0, 1).id == 0
@@ -297,8 +297,8 @@ def test_noncovalentbondviews_of():
 def test_noncovalentbondviews_incident():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
     mol = MoleculeAst.from_entries(
-        [AtomAst(Element("O")) for _ in range(3)],
-        noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        [AtomForm(Element("O")) for _ in range(3)],
+        noncovalent_bonds=[([0, 1], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))],
     )
     assert [view.id for view in mol.noncovalent_bonds.incident(0)] == [0]
     assert mol.noncovalent_bonds.incident(2) == []

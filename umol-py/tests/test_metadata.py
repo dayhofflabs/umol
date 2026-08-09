@@ -1,8 +1,8 @@
 import pytest
 
 from umol import (
-    AtomAst,
-    BondAst,
+    AtomForm,
+    BondForm,
     Element,
     Entity,
     MetadataError,
@@ -62,11 +62,11 @@ def test_molecule_metadata_set_keyword_error():
 
 def test_molecule_metadata_remap():
     source = MoleculeAst.from_entries(
-        [AtomAst(Element("O")), AtomAst(Element("N"))],
-        bonds=[(0, 1, BondAst(2))],
+        [AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(2))],
     )
     _, correspondence = MoleculeAst.from_entries(
-        [AtomAst(Element("C"))]
+        [AtomForm(Element("C"))]
     ).combine(source)
     metadata = MoleculeMetadata()
     metadata.set_keyword(Entity.Atom(0), "oxygen")

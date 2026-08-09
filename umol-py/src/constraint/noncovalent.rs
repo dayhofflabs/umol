@@ -16,7 +16,7 @@ use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::noncovalent::NoncovalentBondAst;
+use crate::noncovalent::NoncovalentBondForm;
 
 /// The key (identity) of a noncovalent-bond constraint, for keyed lookup. The single
 /// key `Intramolecular` is the bare discriminant (no sub-key).
@@ -199,7 +199,7 @@ impl ResolvedNoncovalentBondConstraintsUpdate {
 }
 
 /// The noncovalent-bond-scope constraints on a noncovalent bond, in kind-sorted order.
-/// Mutable, hence value-equal but unhashable (matching `NoncovalentBondAst`).
+/// Mutable, hence value-equal but unhashable (matching `NoncovalentBondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct NoncovalentBondConstraintsAst(GraphIrNoncovalentBondConstraintsForm);
@@ -541,17 +541,17 @@ impl NoncovalentBondConstraintsLike {
 }
 
 /// What a `NoncovalentBondConstraintsView` writes through to: a noncovalent bond within
-/// a molecule (by index) or a standalone `NoncovalentBondAst`.
+/// a molecule (by index) or a standalone `NoncovalentBondForm`.
 pub(crate) enum NoncovalentBondConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrNoncovalentBondId,
     },
-    Noncovalent(Py<NoncovalentBondAst>),
+    Noncovalent(Py<NoncovalentBondForm>),
 }
 
 /// A live handle onto one noncovalent bond's constraints, backed by either a
-/// molecule-bond or a standalone `NoncovalentBondAst`. Reads borrow the constraints and
+/// molecule-bond or a standalone `NoncovalentBondForm`. Reads borrow the constraints and
 /// read only the item they need (no whole-container clone); mutators write through to the
 /// bond in place, without a clone-and-writeback.
 #[pyclass]

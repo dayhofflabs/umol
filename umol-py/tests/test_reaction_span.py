@@ -1,7 +1,7 @@
 import pytest
 from umol import (
-    AtomAst,
-    BondAst,
+    AtomForm,
+    BondForm,
     BondDelta,
     BondFieldChange,
     ContradictionError,
@@ -25,8 +25,8 @@ def test_reaction_span_ast_parse():
 
     assert span == ReactionSpanAst.from_entries(
         [
-            (AtomAst(Element("C")), AtomAst(Element("C"))),
-            (None, AtomAst(Element("O"))),
+            (AtomForm(Element("C")), AtomForm(Element("C"))),
+            (None, AtomForm(Element("O"))),
         ]
     )
 
@@ -45,7 +45,7 @@ def test_reaction_span_ast_parse_defaults():
         defaults=MoleculeDefaults.ground(),
     )
 
-    atom = AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")
+    atom = AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")
     assert span == ReactionSpanAst.from_entries([(atom, atom)])
 
 
@@ -68,8 +68,8 @@ def test_reaction_span_ast_parse_with_metadata_roundtrip():
 def test_reaction_span_ast_render():
     span = ReactionSpanAst.from_entries(
         [
-            (AtomAst(Element("C")), AtomAst(Element("C"))),
-            (None, AtomAst(Element("O"))),
+            (AtomForm(Element("C")), AtomForm(Element("C"))),
+            (None, AtomForm(Element("O"))),
         ]
     )
 
@@ -79,7 +79,7 @@ def test_reaction_span_ast_render():
 
 def test_reaction_span_ast_render_with_metadata_error():
     span = ReactionSpanAst.from_entries(
-        [(AtomAst(Element("C")), AtomAst(Element("C")))]
+        [(AtomForm(Element("C")), AtomForm(Element("C")))]
     )
     metadata = MoleculeMetadata()
     metadata.set_keyword(Entity.Atom(1), "outside")
@@ -92,8 +92,8 @@ def test_reaction_span_ast_render_with_metadata_error():
 
 
 def test_reaction_span_ast_from_entries():
-    lhs = AtomAst(Element("C"), charge=NumForm.Lit(1))
-    rhs = AtomAst(Element("C"), charge=NumForm.LitSet({1}))
+    lhs = AtomForm(Element("C"), charge=NumForm.Lit(1))
+    rhs = AtomForm(Element("C"), charge=NumForm.LitSet({1}))
 
     span = ReactionSpanAst.from_entries([(lhs, rhs)])
 
@@ -114,8 +114,8 @@ def test_reaction_span_ast_from_entries_reference_error():
         match="^reaction span entries reference unavailable atom 1$",
     ):
         ReactionSpanAst.from_entries(
-            [(AtomAst(Element("C")), AtomAst(Element("C")))],
-            bonds=[(0, 1, (BondAst(1), BondAst(1)))],
+            [(AtomForm(Element("C")), AtomForm(Element("C")))],
+            bonds=[(0, 1, (BondForm(1), BondForm(1)))],
         )
 
 
@@ -175,8 +175,8 @@ def test_reaction_span_ast_to_reaction_roundtrip():
 def test_reaction_ast_to_reaction_span_error():
     reaction = ReactionAst(
         MoleculeAst.from_entries(
-            [AtomAst(Element("C")), AtomAst(Element("C"))],
-            bonds=[(0, 1, BondAst(1))],
+            [AtomForm(Element("C")), AtomForm(Element("C"))],
+            bonds=[(0, 1, BondForm(1))],
         ),
         Deltas(
             [

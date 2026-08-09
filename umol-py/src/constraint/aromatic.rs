@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
     AromaticSystemId as GraphIrAromaticSystemId,
 };
 
-use crate::aromatic::AromaticSystemAst;
+use crate::aromatic::AromaticSystemForm;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -63,7 +63,7 @@ impl AromaticSystemConstraintKey {
 }
 
 /// An aromatic-system-scope constraint: the asserted total π-electron count of the
-/// system (cross-checked against `sum(AromaticSystemAst::electrons)`).
+/// system (cross-checked against `sum(AromaticSystemForm::electrons)`).
 #[pyclass]
 pub enum AromaticSystemConstraintAst {
     ElectronCount(Py<NumForm>),
@@ -217,7 +217,7 @@ impl AromaticSystemConstraintsLike {
 }
 
 /// The aromatic-system-scope constraints on an aromatic system, in kind-sorted order.
-/// Mutable, hence value-equal but unhashable (matching `AromaticSystemAst`).
+/// Mutable, hence value-equal but unhashable (matching `AromaticSystemForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct AromaticSystemConstraintsAst(GraphIrAromaticSystemConstraintsForm);
@@ -479,17 +479,17 @@ pub(crate) fn aromatic_system_constraints_asdict<'py>(
 }
 
 /// What an `AromaticSystemConstraintsView` writes through to: an aromatic system
-/// within a molecule (by index) or a standalone `AromaticSystemAst`.
+/// within a molecule (by index) or a standalone `AromaticSystemForm`.
 pub(crate) enum AromaticSystemConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrAromaticSystemId,
     },
-    AromaticSystem(Py<AromaticSystemAst>),
+    AromaticSystem(Py<AromaticSystemForm>),
 }
 
 /// A live handle onto one aromatic system's constraints, backed by either a
-/// molecule-system or a standalone `AromaticSystemAst`. Reads borrow the constraints
+/// molecule-system or a standalone `AromaticSystemForm`. Reads borrow the constraints
 /// and read only the item they need (no whole-container clone); mutators write through
 /// to the system in place, without a clone-and-writeback.
 #[pyclass]

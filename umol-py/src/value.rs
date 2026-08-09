@@ -462,7 +462,7 @@ mod tests {
         GraphIrRelOp::Le,
         GraphIrArithExpr::Lit(3),
     ))))]
-    fn test_value_ast_roundtrip(#[case] ast: GraphIrNumForm) {
+    fn test_num_form_roundtrip(#[case] ast: GraphIrNumForm) {
         Python::attach(|py| {
             let value = NumForm::from_rust(py, &ast).unwrap();
             assert_eq!(value.to_rust(py), ast);
@@ -475,7 +475,7 @@ mod tests {
     #[case(GraphIrNumForm::Undetermined, None)]
     #[case(GraphIrNumForm::RangeFrom(1), None)]
     #[case(GraphIrNumForm::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
-    fn test_value_ast_as_lit(#[case] ast: GraphIrNumForm, #[case] expected: Option<i64>) {
+    fn test_num_form_as_lit(#[case] ast: GraphIrNumForm, #[case] expected: Option<i64>) {
         Python::attach(|py| {
             assert_eq!(NumForm::from_rust(py, &ast).unwrap().as_lit(py), expected);
         });

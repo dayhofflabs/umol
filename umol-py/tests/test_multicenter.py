@@ -1,11 +1,11 @@
 import pytest
 
 from umol import (
-    AtomAst,
+    AtomForm,
     ElectronCountsForm,
     Element,
     MoleculeAst,
-    MulticenterBondAst,
+    MulticenterBondForm,
     MulticenterBondConstraintAst,
     MulticenterBondConstraintKey,
     MulticenterBondConstraintsAst,
@@ -101,20 +101,20 @@ def test_multicenter_bond_update_parse_error():
 def three_center_bond():
     # three borons (atom ids 0-2), one 3-center multicenter bond over all three
     return MoleculeAst.from_entries(
-        [AtomAst(Element("B")) for _ in range(3)],
-        multicenter_bonds=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
+        [AtomForm(Element("B")) for _ in range(3)],
+        multicenter_bonds=[([0, 1, 2], MulticenterBondForm([1, 1, 1]))],
     )
 
 
 def test_multicenterbondast_new():
-    bond = MulticenterBondAst([1, 1, 1])
+    bond = MulticenterBondForm([1, 1, 1])
     assert bond.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert bond.charge == NumForm.Undetermined()
     assert len(bond.constraints) == 0
 
 
 def test_multicenterbondast_new_kwargs():
-    bond = MulticenterBondAst(
+    bond = MulticenterBondForm(
         [1, 1, 1],
         charge=-1,
         unpaired_electrons=UnpairedElectronsForm(0, 1),
@@ -124,7 +124,7 @@ def test_multicenterbondast_new_kwargs():
 
 
 def test_multicenterbondast_constraints_kwarg():
-    bond = MulticenterBondAst(
+    bond = MulticenterBondForm(
         [1, 1, 1],
         constraints=MulticenterBondConstraintsAst(
             [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
@@ -135,37 +135,37 @@ def test_multicenterbondast_constraints_kwarg():
 
 
 def test_multicenterbondast_electrons_setter():
-    bond = MulticenterBondAst([1, 1, 1])
+    bond = MulticenterBondForm([1, 1, 1])
     bond.electrons = [2, 2]
     assert bond.electrons == ElectronCountsForm.Lit([2, 2])
 
 
 def test_multicenterbondast_charge_setter():
-    bond = MulticenterBondAst([1, 1, 1])
+    bond = MulticenterBondForm([1, 1, 1])
     bond.charge = -1
     assert bond.charge == NumForm.Lit(-1)
 
 
 def test_multicenterbondast_unpaired_electrons_setter():
-    bond = MulticenterBondAst([1, 1, 1])
+    bond = MulticenterBondForm([1, 1, 1])
     bond.unpaired_electrons = UnpairedElectronsForm(0, 1)
     assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
 def test_multicenterbondast_parse_roundtrip(dsl):
-    bond = MulticenterBondAst.parse(dsl)
+    bond = MulticenterBondForm.parse(dsl)
     assert str(bond) == dsl
-    assert repr(bond) == f"MulticenterBondAst.parse('{dsl}')"
+    assert repr(bond) == f"MulticenterBondForm.parse('{dsl}')"
 
 
 def test_multicenterbondast_parse_error():
     with pytest.raises(ParseError):
-        MulticenterBondAst.parse("z")
+        MulticenterBondForm.parse("z")
 
 
 def test_multicenterbondast_asdict():
-    bond = MulticenterBondAst(
+    bond = MulticenterBondForm(
         [1, 1, 1],
         constraints=MulticenterBondConstraintsAst(
             [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
@@ -183,7 +183,7 @@ def test_multicenterbondast_asdict():
 
 
 def test_multicenterbondast_set_constraints():
-    bond = MulticenterBondAst([1, 1, 1])
+    bond = MulticenterBondForm([1, 1, 1])
     bond.constraints = MulticenterBondConstraintsAst(
         [MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))]
     )
@@ -313,7 +313,7 @@ def test_multicenterbondviews_len_getitem():
 
 def test_multicenterbondviews_setitem():
     mol = three_center_bond()
-    mol.multicenter_bonds[0] = MulticenterBondAst([2, 2, 2])
+    mol.multicenter_bonds[0] = MulticenterBondForm([2, 2, 2])
     view = mol.multicenter_bonds[0]
     # value replaced, members preserved
     assert view.electrons == ElectronCountsForm.Lit([2, 2, 2])
@@ -322,7 +322,7 @@ def test_multicenterbondviews_setitem():
 
 def test_multicenterbondviews_setitem_out_of_range():
     with pytest.raises(IndexError):
-        three_center_bond().multicenter_bonds[5] = MulticenterBondAst([1, 1, 1])
+        three_center_bond().multicenter_bonds[5] = MulticenterBondForm([1, 1, 1])
 
 
 def test_multicenterbondviews_iter():
@@ -340,8 +340,8 @@ def test_multicenterbondviews_of():
 def test_multicenterbondviews_incident():
     # three bonded borons plus one isolated boron (atom id 3)
     mol = MoleculeAst.from_entries(
-        [AtomAst(Element("B")) for _ in range(4)],
-        multicenter_bonds=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
+        [AtomForm(Element("B")) for _ in range(4)],
+        multicenter_bonds=[([0, 1, 2], MulticenterBondForm([1, 1, 1]))],
     )
     assert [view.id for view in mol.multicenter_bonds.incident(0)] == [0]
     assert mol.multicenter_bonds.incident(3) == []

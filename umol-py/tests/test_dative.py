@@ -1,9 +1,9 @@
 import pytest
 
 from umol import (
-    AtomAst,
+    AtomForm,
     BooleanForm,
-    DativeBondAst,
+    DativeBondForm,
     DativeBondConstraintAst,
     DativeBondConstraintKey,
     DativeBondConstraintsAst,
@@ -65,19 +65,19 @@ def test_dative_bond_update_parse_error():
 def ammonia_borane():
     # borane B (id 0) accepts from ammonia N (id 1); dative bond id 0
     return MoleculeAst.from_entries(
-        [AtomAst(Element("B")), AtomAst(Element("N"))],
-        dative_bonds=[([1], 0, DativeBondAst(1))],
+        [AtomForm(Element("B")), AtomForm(Element("N"))],
+        dative_bonds=[([1], 0, DativeBondForm(1))],
     )
 
 
 def test_dativebondast_new():
-    bond = DativeBondAst(1)
+    bond = DativeBondForm(1)
     assert bond.order == NumForm.Lit(1)
     assert len(bond.constraints) == 0
 
 
 def test_dativebondast_constraints_kwarg():
-    bond = DativeBondAst(
+    bond = DativeBondForm(
         1,
         constraints=DativeBondConstraintsAst(
             [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
@@ -88,25 +88,25 @@ def test_dativebondast_constraints_kwarg():
 
 
 def test_dativebondast_order_setter():
-    bond = DativeBondAst(1)
+    bond = DativeBondForm(1)
     bond.order = 2
     assert bond.order == NumForm.Lit(2)
 
 
 @pytest.mark.parametrize("dsl", ["1", "1#a", "1#R(6)"])
 def test_dativebondast_parse_roundtrip(dsl):
-    bond = DativeBondAst.parse(dsl)
+    bond = DativeBondForm.parse(dsl)
     assert str(bond) == dsl
-    assert repr(bond) == f"DativeBondAst.parse('{dsl}')"
+    assert repr(bond) == f"DativeBondForm.parse('{dsl}')"
 
 
 def test_dativebondast_parse_error():
     with pytest.raises(ParseError):
-        DativeBondAst.parse("x#")
+        DativeBondForm.parse("x#")
 
 
 def test_dativebondast_asdict():
-    bond = DativeBondAst(
+    bond = DativeBondForm(
         1,
         constraints=DativeBondConstraintsAst(
             [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
@@ -119,7 +119,7 @@ def test_dativebondast_asdict():
 
 
 def test_dativebondast_set_constraints():
-    bond = DativeBondAst(1)
+    bond = DativeBondForm(1)
     bond.constraints = DativeBondConstraintsAst(
         [DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))]
     )
@@ -266,7 +266,7 @@ def test_dativebondviews_len_getitem():
 
 def test_dativebondviews_setitem():
     mol = ammonia_borane()
-    mol.dative_bonds[0] = DativeBondAst(2)
+    mol.dative_bonds[0] = DativeBondForm(2)
     view = mol.dative_bonds[0]
     # value replaced, participants preserved
     assert view.order == NumForm.Lit(2)
@@ -276,7 +276,7 @@ def test_dativebondviews_setitem():
 
 def test_dativebondviews_setitem_out_of_range():
     with pytest.raises(IndexError):
-        ammonia_borane().dative_bonds[5] = DativeBondAst(2)
+        ammonia_borane().dative_bonds[5] = DativeBondForm(2)
 
 
 def test_dativebondviews_iter():
@@ -294,8 +294,8 @@ def test_dativebondviews_of():
 def test_dativebondviews_incident():
     # B(0) accepts from N(1); C(2) isolated
     mol = MoleculeAst.from_entries(
-        [AtomAst(Element("B")), AtomAst(Element("N")), AtomAst(Element("C"))],
-        dative_bonds=[([1], 0, DativeBondAst(1))],
+        [AtomForm(Element("B")), AtomForm(Element("N")), AtomForm(Element("C"))],
+        dative_bonds=[([1], 0, DativeBondForm(1))],
     )
     assert [view.id for view in mol.dative_bonds.incident(0)] == [0]
     assert [view.id for view in mol.dative_bonds.incident(1)] == [0]

@@ -367,10 +367,10 @@ impl AtomUpdate {
 /// electrons, and atom-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct AtomAst(GraphIrAtomForm);
+pub struct AtomForm(GraphIrAtomForm);
 
 #[pymethods]
-impl AtomAst {
+impl AtomForm {
     /// Construct from an element — a single `Element` or an `ElementForm` expression —
     /// optionally setting fields.
     #[new]
@@ -387,7 +387,7 @@ impl AtomAst {
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
         let atom = GraphIrAtomForm::new(element.to_rust(py));
-        AtomAst(apply_fields(
+        AtomForm(apply_fields(
             atom,
             py,
             isotope_mass,
@@ -399,7 +399,7 @@ impl AtomAst {
         ))
     }
 
-    /// Parse an atom-DSL string (e.g. `"C#c-1#v4"`) into an `AtomAst`.
+    /// Parse an atom-DSL string (e.g. `"C#c-1#v4"`) into an `AtomForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrAtomForm::from_str(s).map(Self).map_err(parse_error)
@@ -410,7 +410,7 @@ impl AtomAst {
     }
 
     fn __repr__(&self) -> String {
-        format!("AtomAst.parse('{}')", self.0)
+        format!("AtomForm.parse('{}')", self.0)
     }
 
     #[getter]
@@ -511,11 +511,11 @@ impl AtomAst {
 }
 
 impl_py_lattice!(
-    AtomAst,
+    AtomForm,
     GraphIrAtomForm,
-    |value: &AtomAst, _py: Python<'_>| -> PyResult<GraphIrAtomForm> { Ok(value.inner().clone()) },
-    |_py: Python<'_>, value: GraphIrAtomForm| -> PyResult<AtomAst> {
-        Ok(AtomAst::from_inner(value))
+    |value: &AtomForm, _py: Python<'_>| -> PyResult<GraphIrAtomForm> { Ok(value.inner().clone()) },
+    |_py: Python<'_>, value: GraphIrAtomForm| -> PyResult<AtomForm> {
+        Ok(AtomForm::from_inner(value))
     }
 );
 
@@ -588,7 +588,7 @@ fn apply_fields(
     atom
 }
 
-impl AtomAst {
+impl AtomForm {
     /// The wrapped AST atom — read access for molecule construction.
     pub(crate) fn inner(&self) -> &GraphIrAtomForm {
         &self.0
@@ -603,7 +603,7 @@ impl AtomAst {
     /// Wrap an AST atom (the hold-the-value `from_inner` bridge, paired with
     /// `inner`).
     pub(crate) fn from_inner(atom: GraphIrAtomForm) -> Self {
-        AtomAst(atom)
+        AtomForm(atom)
     }
 }
 
@@ -762,7 +762,7 @@ impl AtomView {
     }
 
     /// The fields as a dict keyed by field name; values are Python objects —
-    /// symmetric with `AtomAst.asdict`, read through the view.
+    /// symmetric with `AtomForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let atom = self.atom(molecule.inner())?;
@@ -839,7 +839,7 @@ impl AtomViews {
     }
 
     /// Replace the whole atom at `index` in place.
-    fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomAst>) -> PyResult<()> {
+    fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_atom_index(molecule.inner(), index)?;
         *molecule.inner_mut().atom_mut(id).ast = atom.inner().clone();
@@ -921,7 +921,7 @@ mod tests {
         "y".to_string(),
         Some((GraphIrMemOp::In, BTreeSet::from([ChemElement::C, ChemElement::N]))),
     ))))]
-    fn test_element_ast_roundtrip(#[case] ast: GraphIrElementForm) {
+    fn test_element_form_roundtrip(#[case] ast: GraphIrElementForm) {
         assert_eq!(ElementForm::from_rust(&ast).to_rust(), ast);
     }
 
@@ -929,7 +929,7 @@ mod tests {
     #[case(GraphIrElementForm::Lit(ChemElement::C), Some(ChemElement::C))]
     #[case(GraphIrElementForm::Undetermined, None)]
     #[case(GraphIrElementForm::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))), None)]
-    fn test_element_ast_as_lit(
+    fn test_element_form_as_lit(
         #[case] ast: GraphIrElementForm,
         #[case] expected: Option<ChemElement>,
     ) {
@@ -949,7 +949,7 @@ mod tests {
         "y".to_string(),
         Some(BTreeSet::from([12, 13])),
     ))))]
-    fn test_isotope_mass_ast_roundtrip(#[case] ast: GraphIrIsotopeMassForm) {
+    fn test_isotope_mass_form_roundtrip(#[case] ast: GraphIrIsotopeMassForm) {
         assert_eq!(IsotopeMassForm::from_rust(&ast).to_rust(), ast);
     }
 
@@ -960,7 +960,7 @@ mod tests {
     )]
     #[case(GraphIrIsotopeMassForm::Natural, Some(GraphIrIsotopeMass::Natural))]
     #[case(GraphIrIsotopeMassForm::Undetermined, None)]
-    fn test_isotope_mass_ast_as_lit(
+    fn test_isotope_mass_form_as_lit(
         #[case] ast: GraphIrIsotopeMassForm,
         #[case] expected: Option<GraphIrIsotopeMass>,
     ) {
@@ -1116,7 +1116,7 @@ mod tests {
             };
             let nitrogen = Py::new(
                 py,
-                AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
+                AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
             )
             .unwrap();
             views
@@ -1137,7 +1137,7 @@ mod tests {
             };
             let nitrogen = Py::new(
                 py,
-                AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
+                AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
             )
             .unwrap();
             assert!(views
@@ -1147,8 +1147,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ast_constraints() {
-        let atom = AtomAst(
+    fn test_atom_form_constraints() {
+        let atom = AtomForm(
             GraphIrAtomForm::from_element(ChemElement::C)
                 .with_constraint(GraphIrAtomConstraintForm::valence(4)),
         );
@@ -1161,23 +1161,23 @@ mod tests {
     #[case::valence("C#v4")]
     #[case::lone_pairs("O#n2")]
     #[case::ring_size("C#R(6)")]
-    fn test_atom_ast_parse(#[case] dsl: &str) {
-        let atom = AtomAst::parse(dsl).unwrap();
+    fn test_atom_form_parse(#[case] dsl: &str) {
+        let atom = AtomForm::parse(dsl).unwrap();
         assert_eq!(atom.__str__(), dsl);
-        assert_eq!(atom.__repr__(), format!("AtomAst.parse('{dsl}')"));
+        assert_eq!(atom.__repr__(), format!("AtomForm.parse('{dsl}')"));
     }
 
     #[rstest]
-    fn test_atom_ast_parse_error() {
-        assert!(AtomAst::parse("Zz##").is_err());
+    fn test_atom_form_parse_error() {
+        assert!(AtomForm::parse("Zz##").is_err());
     }
 
     #[rstest]
-    fn test_atom_ast_set_constraints_from_view() {
+    fn test_atom_form_set_constraints_from_view() {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                AtomAst::from_inner(
+                AtomForm::from_inner(
                     GraphIrAtomForm::from_element(ChemElement::C)
                         .with_constraint(GraphIrAtomConstraintForm::valence(4)),
                 ),
@@ -1192,10 +1192,10 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
+                AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
             )
             .unwrap();
-            AtomAst::set_constraints(dst.clone_ref(py), py, AtomConstraintsLike::View(view))
+            AtomForm::set_constraints(dst.clone_ref(py), py, AtomConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
                 dst.bind(py)
@@ -1214,11 +1214,11 @@ mod tests {
     /// the write borrow, so it is a no-op, not a RefCell double-borrow panic
     /// (`atom.constraints = atom.constraints`).
     #[rstest]
-    fn test_atom_ast_set_constraints_self() {
+    fn test_atom_form_set_constraints_self() {
         Python::attach(|py| {
             let atom = Py::new(
                 py,
-                AtomAst::from_inner(
+                AtomForm::from_inner(
                     GraphIrAtomForm::from_element(ChemElement::C)
                         .with_constraint(GraphIrAtomConstraintForm::valence(4)),
                 ),
@@ -1231,7 +1231,7 @@ mod tests {
                 },
             )
             .unwrap();
-            AtomAst::set_constraints(atom.clone_ref(py), py, AtomConstraintsLike::View(own_view))
+            AtomForm::set_constraints(atom.clone_ref(py), py, AtomConstraintsLike::View(own_view))
                 .unwrap();
             assert_eq!(
                 atom.bind(py)
@@ -1650,7 +1650,7 @@ mod tests {
         Python::attach(|py| {
             let atom = Py::new(
                 py,
-                AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
             )
             .unwrap();
             let view = AtomConstraintsView {
@@ -1687,7 +1687,7 @@ mod tests {
         Python::attach(|py| {
             let atom = Py::new(
                 py,
-                AtomAst::from_inner(
+                AtomForm::from_inner(
                     GraphIrAtomForm::from_element(ChemElement::C)
                         .with_constraint(GraphIrAtomConstraintForm::valence(4)),
                 ),
@@ -1720,7 +1720,7 @@ mod tests {
         Python::attach(|py| {
             let atom = Py::new(
                 py,
-                AtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
             )
             .unwrap();
             let view = AtomConstraintsView {
@@ -1969,7 +1969,7 @@ mod tests {
         Python::attach(|py| {
             let atom = Py::new(
                 py,
-                AtomAst::from_inner(
+                AtomForm::from_inner(
                     GraphIrAtomForm::from_element(ChemElement::C)
                         .with_constraint(GraphIrAtomConstraintForm::valence(4)),
                 ),

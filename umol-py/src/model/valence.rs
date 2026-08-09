@@ -14,7 +14,7 @@ use umol_graph::ops::valence::{
 };
 use umol_graph_ir::ir::{ElementForm as GraphIrElementForm, NumForm as GraphIrNumForm};
 
-use crate::atom::AtomAst;
+use crate::atom::AtomForm;
 use crate::element::Element;
 
 /// An immutable collection of atom patterns used by atom-typing valence resolution.
@@ -32,7 +32,7 @@ impl AtomTypeRegistry {
 
     /// Construct a registry from atom patterns with literal elements and charges.
     #[staticmethod]
-    fn from_atoms(py: Python<'_>, atoms: Vec<Py<AtomAst>>) -> PyResult<Self> {
+    fn from_atoms(py: Python<'_>, atoms: Vec<Py<AtomForm>>) -> PyResult<Self> {
         let mut rust_atoms = Vec::with_capacity(atoms.len());
         for (index, atom) in atoms.iter().enumerate() {
             let atom = atom.bind(py).borrow();
@@ -78,22 +78,22 @@ impl AtomTypeRegistry {
     }
 
     /// All patterns registered for an element, detached from the registry.
-    fn patterns_for_element(&self, element: Element) -> Vec<AtomAst> {
+    fn patterns_for_element(&self, element: Element) -> Vec<AtomForm> {
         self.0
             .patterns_for_element(ChemElement::from(&element))
             .iter()
             .cloned()
-            .map(AtomAst::from_inner)
+            .map(AtomForm::from_inner)
             .collect()
     }
 
     /// Patterns registered for an element and charge, detached from the registry.
-    fn patterns_for_element_and_charge(&self, element: Element, charge: i8) -> Vec<AtomAst> {
+    fn patterns_for_element_and_charge(&self, element: Element, charge: i8) -> Vec<AtomForm> {
         self.0
             .patterns_for_element_and_charge(ChemElement::from(&element), charge)
             .iter()
             .cloned()
-            .map(AtomAst::from_inner)
+            .map(AtomForm::from_inner)
             .collect()
     }
 
@@ -105,7 +105,7 @@ impl AtomTypeRegistry {
         let atoms = (1..=MAX_ATOMIC_NUMBER)
             .filter_map(ChemElement::from_atomic_number)
             .flat_map(|element| self.0.patterns_for_element(element))
-            .map(|atom| format!("AtomAst.parse({:?})", atom.to_string()))
+            .map(|atom| format!("AtomForm.parse({:?})", atom.to_string()))
             .collect::<Vec<_>>()
             .join(", ");
         format!("AtomTypeRegistry.from_atoms([{atoms}])")
@@ -344,7 +344,7 @@ mod tests {
             let python_atoms = atoms
                 .iter()
                 .cloned()
-                .map(|atom| Py::new(py, AtomAst::from_inner(atom)).unwrap())
+                .map(|atom| Py::new(py, AtomForm::from_inner(atom)).unwrap())
                 .collect();
 
             assert_eq!(
@@ -372,7 +372,7 @@ mod tests {
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
-            let atom = Py::new(py, AtomAst::from_inner(atom)).unwrap();
+            let atom = Py::new(py, AtomForm::from_inner(atom)).unwrap();
             let error = AtomTypeRegistry::from_atoms(py, vec![atom]).unwrap_err();
 
             assert!(error.is_instance_of::<PyValueError>(py));
@@ -460,7 +460,7 @@ mod tests {
     )]
     #[case::custom(
         AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
-        "AtomTypeRegistry.from_atoms([AtomAst.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\"), AtomAst.parse(\"O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!#T!\")])"
+        "AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\"), AtomForm.parse(\"O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!#T!\")])"
     )]
     fn test_atom_type_registry_repr(#[case] registry: AtomTypeRegistry, #[case] expected: &str) {
         assert_eq!(registry.__repr__(), expected);
@@ -747,7 +747,7 @@ mod tests {
         ValenceModel::AtomTyping {
             registry: AtomTypeRegistry(registry!["C#c0#v4"]),
         },
-        "ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomAst.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\")]))"
+        "ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\")]))"
     )]
     #[case::counts(
         ValenceModel::Counts {

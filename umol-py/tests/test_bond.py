@@ -1,8 +1,8 @@
 import pytest
 
 from umol import (
-    AtomAst,
-    BondAst,
+    AtomForm,
+    BondForm,
     BondConstraintAst,
     BondConstraintKey,
     BondConstraintsAst,
@@ -89,13 +89,13 @@ def test_bond_update_parse_error():
 def ethene():
     # two carbons joined by one double bond (bond id 0, atoms 0-1)
     return MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("C"))],
-        bonds=[(0, 1, BondAst(2))],
+        [AtomForm(Element("C")), AtomForm(Element("C"))],
+        bonds=[(0, 1, BondForm(2))],
     )
 
 
 def test_bondast_new():
-    bond = BondAst(2)
+    bond = BondForm(2)
     assert bond.order == NumForm.Lit(2)
     assert bond.charge == NumForm.Undetermined()
 
@@ -103,13 +103,13 @@ def test_bondast_new():
 @pytest.mark.parametrize(
     ("actual", "expected"),
     [
-        pytest.param(BondAst.single(), BondAst(1), id="single"),
-        pytest.param(BondAst.double(), BondAst(2), id="double"),
-        pytest.param(BondAst.triple(), BondAst(3), id="triple"),
-        pytest.param(BondAst.quadruple(), BondAst(4), id="quadruple"),
+        pytest.param(BondForm.single(), BondForm(1), id="single"),
+        pytest.param(BondForm.double(), BondForm(2), id="double"),
+        pytest.param(BondForm.triple(), BondForm(3), id="triple"),
+        pytest.param(BondForm.quadruple(), BondForm(4), id="quadruple"),
         pytest.param(
-            BondAst.aromatic(),
-            BondAst(
+            BondForm.aromatic(),
+            BondForm(
                 1,
                 constraints=BondConstraintsAst(
                     [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
@@ -124,7 +124,7 @@ def test_bondast_keyword_constructors(actual, expected):
 
 
 def test_bondast_new_kwargs():
-    bond = BondAst(
+    bond = BondForm(
         1,
         charge=NumForm.Lit(-1),
         unpaired_electrons=UnpairedElectronsForm(0, 1),
@@ -135,7 +135,7 @@ def test_bondast_new_kwargs():
 
 
 def test_bondast_constraints_kwarg():
-    bond = BondAst(
+    bond = BondForm(
         1,
         constraints=BondConstraintsAst(
             [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
@@ -146,25 +146,25 @@ def test_bondast_constraints_kwarg():
 
 
 def test_bondast_order_setter():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.order = 2
     assert bond.order == NumForm.Lit(2)
 
 
 def test_bondast_charge_setter():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.charge = -1
     assert bond.charge == NumForm.Lit(-1)
 
 
 def test_bondast_unpaired_electrons_setter():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.unpaired_electrons = UnpairedElectronsForm(0, 1)
     assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 def test_bondast_asdict():
-    d = BondAst(2, charge=NumForm.Lit(-1)).asdict()
+    d = BondForm(2, charge=NumForm.Lit(-1)).asdict()
     assert set(d.keys()) == {
         "order",
         "charge",
@@ -176,7 +176,7 @@ def test_bondast_asdict():
 
 
 def test_bondast_asdict_constraints():
-    bond = BondAst(
+    bond = BondForm(
         1,
         constraints=BondConstraintsAst(
             [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
@@ -189,20 +189,20 @@ def test_bondast_asdict_constraints():
 
 
 def test_bondast_eq():
-    assert BondAst(1) == BondAst(1)
-    assert BondAst(1) != BondAst(2)
+    assert BondForm(1) == BondForm(1)
+    assert BondForm(1) != BondForm(2)
 
 
 @pytest.mark.parametrize("dsl", ["1", "2#c-", "1#a", "1#R(6)"])
 def test_bondast_parse(dsl):
-    bond = BondAst.parse(dsl)
+    bond = BondForm.parse(dsl)
     assert str(bond) == dsl
-    assert repr(bond) == f"BondAst.parse('{dsl}')"
+    assert repr(bond) == f"BondForm.parse('{dsl}')"
 
 
 def test_bondast_parse_error():
     with pytest.raises(ParseError):
-        BondAst.parse("x#")
+        BondForm.parse("x#")
 
 
 def test_bondconstraint_key_aromatic():
@@ -401,7 +401,7 @@ def test_bondconstraints_getitem_delitem():
 
 
 def test_bondconstraintsview_set():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.constraints.set(BondConstraintAst.Aromatic(BooleanForm.Lit(True)))
     # a fresh view proves the write mutated the standalone bond in place
     assert len(bond.constraints) == 1
@@ -411,7 +411,7 @@ def test_bondconstraintsview_set():
 
 
 def test_bondconstraintsview_pop():
-    bond = BondAst(
+    bond = BondForm(
         1,
         constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
     )
@@ -422,7 +422,7 @@ def test_bondconstraintsview_pop():
 
 
 def test_bondconstraintsview_update():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.constraints.update(
         BondConstraintsAst(
             [
@@ -438,14 +438,14 @@ def test_bondconstraintsview_update():
 
 
 def test_bondconstraintsview_aromatic_property():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.constraints.aromatic = True
     # a fresh view proves the write hit the bond
     assert bond.constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_bondconstraintsview_ring_size_count():
-    bond = BondAst(1)
+    bond = BondForm(1)
     bond.constraints.ring_size_count[6] = 3
     assert bond.constraints.ring_size_count[6].as_lit() == 3
     del bond.constraints.ring_size_count[6]
@@ -453,7 +453,7 @@ def test_bondconstraintsview_ring_size_count():
 
 
 def test_bondconstraintsview_reads():
-    bond = BondAst(
+    bond = BondForm(
         1,
         constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
     )
@@ -468,7 +468,7 @@ def test_bondconstraintsview_reads():
 
 
 def test_bondconstraintsview_getitem_delitem():
-    bond = BondAst(
+    bond = BondForm(
         1,
         constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
     )
@@ -484,17 +484,17 @@ def test_bondconstraintsview_getitem_delitem():
 
 
 def test_bondconstraintsview_update_from_view():
-    src = BondAst(
+    src = BondForm(
         1,
         constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
     )
-    dst = BondAst(2)
+    dst = BondForm(2)
     dst.constraints.update(src.constraints)
     assert BondConstraintKey.Aromatic() in dst.constraints
 
 
 def test_bondast_set_constraints_from_value():
-    dst = BondAst(2)
+    dst = BondForm(2)
     dst.constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
     assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
         BooleanForm.Lit(True)
@@ -502,11 +502,11 @@ def test_bondast_set_constraints_from_value():
 
 
 def test_bondast_set_constraints_from_view():
-    src = BondAst(
+    src = BondForm(
         1,
         constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
     )
-    dst = BondAst(2)
+    dst = BondForm(2)
     dst.constraints = src.constraints  # RHS is a live view, not a value container
     assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
         BooleanForm.Lit(True)
@@ -563,13 +563,13 @@ def test_bondconstraintsast_eq_repr():
 
 
 def test_bondconstraintsast_unhashable():
-    # mutable container: value-equal but unhashable, like BondAst
+    # mutable container: value-equal but unhashable, like BondForm
     with pytest.raises(TypeError):
         hash(BondConstraintsAst([]))
 
 
 def test_bondconstraintsview_repr():
-    bond = BondAst(1)
+    bond = BondForm(1)
     assert repr(bond.constraints) == "BondConstraintsView(0 entries)"
 
 
@@ -656,7 +656,7 @@ def test_bondviews_len_getitem():
 
 def test_bondviews_setitem():
     mol = ethene()
-    mol.bonds[0] = BondAst(1)
+    mol.bonds[0] = BondForm(1)
     view = mol.bonds[0]
     # value replaced, endpoints preserved
     assert view.order == NumForm.Lit(1)
@@ -665,7 +665,7 @@ def test_bondviews_setitem():
 
 def test_bondviews_setitem_out_of_range():
     with pytest.raises(IndexError):
-        ethene().bonds[5] = BondAst(1)
+        ethene().bonds[5] = BondForm(1)
 
 
 def test_bondviews_iter():
@@ -675,8 +675,8 @@ def test_bondviews_iter():
 
 def test_bondviews_of():
     mol = MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("C")), AtomAst(Element("C"))],
-        bonds=[(0, 1, BondAst(1))],
+        [AtomForm(Element("C")), AtomForm(Element("C")), AtomForm(Element("C"))],
+        bonds=[(0, 1, BondForm(1))],
     )
     assert mol.bonds.of(0, 1).id == 0
     assert mol.bonds.of(1, 0).id == 0

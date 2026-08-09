@@ -6,7 +6,7 @@ from umol import (
     AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityResolveConfig,
-    AtomAst,
+    AtomForm,
     AtomDelta,
     AtomFieldChange,
     ChemistryModel,
@@ -223,29 +223,29 @@ def test_return_only_value_constructor_error(value_type, message):
 def test_reactionast_constructor():
     empty = ReactionAst()
     populated = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
-        Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+        Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]),
     )
 
     assert empty.lhs == MoleculeAst()
     assert empty.deltas == Deltas()
-    assert populated.lhs == MoleculeAst.from_entries([AtomAst(Element("C"))])
+    assert populated.lhs == MoleculeAst.from_entries([AtomForm(Element("C"))])
     assert populated.deltas == Deltas(
-        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
+        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]
     )
 
 
 def test_reactionast_constructor_snapshot():
-    lhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
-    deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))])
+    lhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))])
     reaction = ReactionAst(lhs, deltas)
 
     lhs.atoms[0].charge = 1
-    deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("N")))))
+    deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomForm(Element("N")))))
 
     assert reaction.lhs.atoms[0].charge == NumForm.Undetermined()
     assert reaction.deltas == Deltas(
-        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
+        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]
     )
     assert reaction.lhs is not lhs
     assert reaction.deltas is not deltas
@@ -253,36 +253,36 @@ def test_reactionast_constructor_snapshot():
 
 def test_reactionast_components():
     reaction = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
         Deltas(),
     )
 
     lhs = reaction.lhs
     deltas = reaction.deltas
     lhs.atoms[0].charge = -1
-    deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O")))))
+    deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O")))))
 
     assert reaction.lhs is lhs
     assert reaction.deltas is deltas
     assert reaction.lhs.atoms[0].charge == NumForm.Lit(-1)
     assert reaction.deltas == Deltas(
-        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
+        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]
     )
 
 
 def test_reactionast_component_replacement():
     reaction = ReactionAst()
-    lhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
-    deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))])
+    lhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))])
 
     reaction.lhs = lhs
     reaction.deltas = deltas
     lhs.atoms[0].charge = 1
-    deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("N")))))
+    deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomForm(Element("N")))))
 
     assert reaction.lhs.atoms[0].charge == NumForm.Undetermined()
     assert reaction.deltas == Deltas(
-        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]
+        [Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]
     )
     assert reaction.lhs is not lhs
     assert reaction.deltas is not deltas
@@ -290,8 +290,8 @@ def test_reactionast_component_replacement():
 
 def test_reactionast_component_replacement_self():
     reaction = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
-        Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+        Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]),
     )
     expected = ReactionAst(reaction.lhs, reaction.deltas)
 
@@ -303,8 +303,8 @@ def test_reactionast_component_replacement_self():
 
 def test_reactionast_value():
     reaction = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C"))]),
-        Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))]),
+        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+        Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O"))))]),
     )
 
     assert reaction == ReactionAst(reaction.lhs, reaction.deltas)
@@ -312,7 +312,7 @@ def test_reactionast_value():
     assert repr(reaction) == (
         "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), "
         "deltas=Deltas([Delta.Atom(AtomDelta.Add("
-        "id=1, ast=AtomAst.parse('O')))]))"
+        "id=1, ast=AtomForm.parse('O')))]))"
     )
     with pytest.raises(TypeError):
         hash(reaction)
@@ -537,7 +537,7 @@ def test_reactionast_parse_with_metadata_defaults():
     assert reaction == ReactionAst(
         MoleculeAst.from_entries(
             [
-                AtomAst.parse(
+                AtomForm.parse(
                     "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
                 )
             ]
@@ -547,7 +547,7 @@ def test_reactionast_parse_with_metadata_defaults():
                 Delta.Atom(
                     AtomDelta.Add(
                         id=1,
-                        ast=AtomAst.parse(
+                        ast=AtomForm.parse(
                             "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"
                         ),
                     )
@@ -577,13 +577,13 @@ def test_reactionast_parse_with_metadata_keyword_error():
     [
         pytest.param(
             ReactionAst(
-                MoleculeAst.from_entries([AtomAst(Element("C"))]),
+                MoleculeAst.from_entries([AtomForm(Element("C"))]),
                 Deltas(
                     [
                         Delta.Atom(
                             AtomDelta.Add(
                                 id=1,
-                                ast=AtomAst(Element("O")),
+                                ast=AtomForm(Element("O")),
                             )
                         )
                     ]
@@ -598,7 +598,7 @@ def test_reactionast_parse_with_metadata_keyword_error():
             ReactionAst(
                 MoleculeAst.from_entries(
                     [
-                        AtomAst.parse(
+                        AtomForm.parse(
                             "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
                         )
                     ]
@@ -608,7 +608,7 @@ def test_reactionast_parse_with_metadata_keyword_error():
                         Delta.Atom(
                             AtomDelta.Add(
                                 id=1,
-                                ast=AtomAst.parse(
+                                ast=AtomForm.parse(
                                     "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"
                                 ),
                             )
@@ -662,7 +662,7 @@ def test_reactionast_render_with_metadata_error():
         ),
     ):
         ReactionAst(
-            MoleculeAst.from_entries([AtomAst(Element("C"))]),
+            MoleculeAst.from_entries([AtomForm(Element("C"))]),
         ).render_with_metadata(metadata)
 
 
@@ -681,13 +681,13 @@ def test_reactionast_render_with_metadata_keyword_error():
 
 
 def test_reactionast_from_sides():
-    lhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))])
-    rhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("N"))])
+    lhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
+    rhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
     lhs_snapshot = MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("O"))]
+        [AtomForm(Element("C")), AtomForm(Element("O"))]
     )
     rhs_snapshot = MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("N"))]
+        [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
 
     atom_correspondence = Correspondence([(0, 0)], 2, 2)
@@ -697,8 +697,8 @@ def test_reactionast_from_sides():
         lhs_snapshot,
         Deltas(
             [
-                Delta.Atom(AtomDelta.Remove(id=1, ast=AtomAst(Element("O")))),
-                Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("N")))),
+                Delta.Atom(AtomDelta.Remove(id=1, ast=AtomForm(Element("O")))),
+                Delta.Atom(AtomDelta.Add(id=2, ast=AtomForm(Element("N")))),
             ]
         ),
     )
@@ -709,8 +709,8 @@ def test_reactionast_from_sides():
 
 
 def test_reactionast_from_sides_snapshot():
-    lhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))])
-    rhs = MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("N"))])
+    lhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
+    rhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
     reaction = ReactionAst.from_sides(lhs, rhs, Correspondence([(0, 0)], 2, 2))
     expected = ReactionAst(reaction.lhs, reaction.deltas)
 
@@ -721,19 +721,19 @@ def test_reactionast_from_sides_snapshot():
     assert reaction.lhs is not lhs
 
     reaction.lhs.atoms[0].charge = 2
-    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("F")))))
+    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=3, ast=AtomForm(Element("F")))))
 
     assert reaction.lhs.atoms[0].charge == NumForm.Lit(2)
     assert reaction.deltas[-1] == Delta.Atom(
-        AtomDelta.Add(id=3, ast=AtomAst(Element("F")))
+        AtomDelta.Add(id=3, ast=AtomForm(Element("F")))
     )
     assert lhs.atoms[0].charge == NumForm.Lit(1)
     assert rhs.atoms[0].charge == NumForm.Lit(-1)
 
 
 def test_reactionast_from_sides_error():
-    lhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
-    rhs = MoleculeAst.from_entries([AtomAst(Element("C"))])
+    lhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    rhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
     atom_correspondence = Correspondence([(0, 0)], 2, 1)
 
     with pytest.raises(
@@ -1043,7 +1043,7 @@ def test_reactionast_str_components():
     reaction = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas []}')
 
     reaction.lhs.atoms[0].charge = 1
-    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O")))))
+    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O")))))
 
     assert str(reaction) == reaction.render()
     assert reaction.render() == (
@@ -1058,13 +1058,13 @@ def test_reactionast_parse_repr():
     assert repr(reaction) == (
         "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), "
         "deltas=Deltas([Delta.Atom(AtomDelta.Add("
-        "id=1, ast=AtomAst.parse('O')))]))"
+        "id=1, ast=AtomForm.parse('O')))]))"
     )
 
 
 def test_reactionast_canonicalize():
     source = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C"), charge=0)]),
+        MoleculeAst.from_entries([AtomForm(Element("C"), charge=0)]),
         Deltas(
             [
                 Delta.Atom(
@@ -1108,14 +1108,14 @@ def test_reactionast_canonicalize():
     assert canonical.deltas is not source.deltas
 
     canonical.lhs.atoms[0].charge = 3
-    canonical.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O")))))
+    canonical.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("O")))))
     assert canonical.lhs.atoms[0].charge == NumForm.Lit(3)
     assert len(canonical.deltas) == 2
 
 
 def test_reactionast_canonicalize_error():
     source = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C"), charge=0)]),
+        MoleculeAst.from_entries([AtomForm(Element("C"), charge=0)]),
         Deltas(
             [
                 Delta.Atom(
@@ -1147,7 +1147,7 @@ def test_reactionast_canonicalize_error():
 
 def test_reactionast_canonical_eq():
     source = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))]),
+        MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1170,7 +1170,7 @@ def test_reactionast_canonical_eq():
         ),
     )
     reordered = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("C")), AtomAst(Element("O"))]),
+        MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1193,7 +1193,7 @@ def test_reactionast_canonical_eq():
         ),
     )
     renumbered = ReactionAst(
-        MoleculeAst.from_entries([AtomAst(Element("O")), AtomAst(Element("C"))]),
+        MoleculeAst.from_entries([AtomForm(Element("O")), AtomForm(Element("C"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1231,7 +1231,7 @@ def test_reactionast_reverse():
     roundtrip = reversed_reaction.reverse()
 
     assert reversed_reaction.lhs == MoleculeAst.from_entries(
-        [AtomAst(Element("C")), AtomAst(Element("N"))]
+        [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
     assert roundtrip.canonicalize() == source.canonicalize()
     assert source == snapshot
@@ -1240,7 +1240,7 @@ def test_reactionast_reverse():
 
     reversed_reaction.lhs.atoms[0].charge = 1
     reversed_reaction.deltas.append(
-        Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("F"))))
+        Delta.Atom(AtomDelta.Add(id=2, ast=AtomForm(Element("F"))))
     )
     assert reversed_reaction.lhs.atoms[0].charge == NumForm.Lit(1)
     assert len(reversed_reaction.deltas) == 3
@@ -1392,12 +1392,12 @@ def test_reaction_ast_compose_snapshot():
     for composite in composites:
         composite.lhs.atoms[0].charge = 7
         composite.deltas.append(
-            Delta.Atom(AtomDelta.Add(id=8, ast=AtomAst(Element("Cl"))))
+            Delta.Atom(AtomDelta.Add(id=8, ast=AtomForm(Element("Cl"))))
         )
 
         assert composite.lhs.atoms[0].charge == NumForm.Lit(7)
         assert composite.deltas[-1] == Delta.Atom(
-            AtomDelta.Add(id=8, ast=AtomAst(Element("Cl")))
+            AtomDelta.Add(id=8, ast=AtomForm(Element("Cl")))
         )
 
     assert first == first_snapshot
@@ -1421,7 +1421,7 @@ def test_reactionast_apply():
     assert host == host_snapshot
 
     reaction.lhs.atoms[0].charge = 7
-    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("N")))))
+    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm(Element("N")))))
     host.atoms[0].charge = 8
 
     first = next(application)
@@ -1516,7 +1516,7 @@ def test_reactionast_apply():
     assert recovered.deltas is not independent.deltas
 
     recovered.lhs.atoms[1].charge = 9
-    recovered.deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("O")))))
+    recovered.deltas.append(Delta.Atom(AtomDelta.Add(id=2, ast=AtomForm(Element("O")))))
 
     assert independent == expected_reaction
     assert chained.lhs == host_snapshot
@@ -1670,7 +1670,7 @@ def test_reactionast_workflow():
     assert normalized.deltas is not reaction.deltas
 
     reaction.lhs.atoms[0].charge = 1
-    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Xe")))))
+    reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=5, ast=AtomForm(Element("Xe")))))
 
     assert normalized == expected_forward
     assert lhs == lhs_snapshot
@@ -1696,7 +1696,7 @@ def test_reactionast_workflow():
 
     normalized.lhs.atoms[0].charge = 2
     normalized.deltas.append(
-        Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Ne"))))
+        Delta.Atom(AtomDelta.Add(id=5, ast=AtomForm(Element("Ne"))))
     )
 
     assert parsed == expected_forward
@@ -1718,7 +1718,7 @@ def test_reactionast_workflow():
     assert reversed_reaction.deltas is not parsed.deltas
 
     parsed.lhs.atoms[0].charge = 3
-    parsed.deltas.append(Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Ar")))))
+    parsed.deltas.append(Delta.Atom(AtomDelta.Add(id=5, ast=AtomForm(Element("Ar")))))
 
     assert reversed_reaction == expected_reverse
 
@@ -1749,7 +1749,7 @@ def test_reactionast_workflow():
 
     reversed_reaction.lhs.atoms[0].charge = 4
     reversed_reaction.deltas.append(
-        Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Kr"))))
+        Delta.Atom(AtomDelta.Add(id=5, ast=AtomForm(Element("Kr"))))
     )
 
     assert composites == [expected_composite]
@@ -1758,12 +1758,12 @@ def test_reactionast_workflow():
     composite_lhs = composites[0].lhs
     composite_deltas = composites[0].deltas
     composite_lhs.atoms[5].charge = 2
-    composite_deltas.append(Delta.Atom(AtomDelta.Add(id=6, ast=AtomAst(Element("O")))))
+    composite_deltas.append(Delta.Atom(AtomDelta.Add(id=6, ast=AtomForm(Element("O")))))
 
     assert composites[0].lhs is composite_lhs
     assert composites[0].deltas is composite_deltas
     assert composites[0].lhs.atoms[5].charge == NumForm.Lit(2)
     assert composites[0].deltas[-1] == Delta.Atom(
-        AtomDelta.Add(id=6, ast=AtomAst(Element("O")))
+        AtomDelta.Add(id=6, ast=AtomForm(Element("O")))
     )
     assert second == second_snapshot

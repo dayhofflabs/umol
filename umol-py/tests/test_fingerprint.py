@@ -2,7 +2,7 @@ import pytest
 
 from umol import (
     AutomorphismAlgorithm,
-    AtomAst,
+    AtomForm,
     BitFp,
     CountedHashedFeatureSet,
     EcfpHashScheme,
@@ -38,7 +38,7 @@ def ethanol():
 
 @pytest.fixture
 def undetermined_molecule():
-    return MoleculeAst.from_entries([AtomAst.parse("C")])
+    return MoleculeAst.from_entries([AtomForm.parse("C")])
 
 
 @pytest.fixture

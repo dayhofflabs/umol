@@ -117,10 +117,10 @@ impl BondUpdate {
 /// A bond: order, charge, unpaired electrons, and bond-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct BondAst(GraphIrBondForm);
+pub struct BondForm(GraphIrBondForm);
 
 #[pymethods]
-impl BondAst {
+impl BondForm {
     /// Construct from an order — an `int` or a `NumForm` expression — optionally
     /// setting fields.
     #[new]
@@ -142,7 +142,7 @@ impl BondAst {
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
-        BondAst(bond)
+        BondForm(bond)
     }
 
     /// Construct the canonical `:single` bond shape.
@@ -179,7 +179,7 @@ impl BondAst {
         )
     }
 
-    /// Parse a bond-DSL string (e.g. `"2#c-1"`) into a `BondAst`.
+    /// Parse a bond-DSL string (e.g. `"2#c-1"`) into a `BondForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrBondForm::from_str(s).map(Self).map_err(parse_error)
@@ -190,7 +190,7 @@ impl BondAst {
     }
 
     fn __repr__(&self) -> String {
-        format!("BondAst.parse('{}')", self.0)
+        format!("BondForm.parse('{}')", self.0)
     }
 
     #[getter]
@@ -257,7 +257,7 @@ impl BondAst {
     }
 }
 
-impl BondAst {
+impl BondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrBondForm {
         &self.0
@@ -272,16 +272,16 @@ impl BondAst {
     /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
     /// `inner`).
     pub(crate) fn from_inner(bond: GraphIrBondForm) -> Self {
-        BondAst(bond)
+        BondForm(bond)
     }
 }
 
 impl_py_lattice!(
-    BondAst,
+    BondForm,
     GraphIrBondForm,
-    |value: &BondAst, _py: Python<'_>| -> PyResult<GraphIrBondForm> { Ok(value.inner().clone()) },
-    |_py: Python<'_>, value: GraphIrBondForm| -> PyResult<BondAst> {
-        Ok(BondAst::from_inner(value))
+    |value: &BondForm, _py: Python<'_>| -> PyResult<GraphIrBondForm> { Ok(value.inner().clone()) },
+    |_py: Python<'_>, value: GraphIrBondForm| -> PyResult<BondForm> {
+        Ok(BondForm::from_inner(value))
     }
 );
 
@@ -402,7 +402,7 @@ impl BondView {
     }
 
     /// The fields as a dict keyed by field name; values are Python objects —
-    /// symmetric with `BondAst.asdict`, read through the view.
+    /// symmetric with `BondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.bond(molecule.inner())?;
@@ -470,7 +470,7 @@ impl BondViews {
     }
 
     /// Replace the whole bond value at `index` in place (endpoints unchanged).
-    fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondAst>) -> PyResult<()> {
+    fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_bond_index(molecule.inner(), index)?;
         *molecule.inner_mut().bond_mut(id).ast = bond.inner().clone();
@@ -574,31 +574,31 @@ mod tests {
     #[case::charge("2#c-")]
     #[case::aromatic("1#a")]
     #[case::ring_size("1#R(6)")]
-    fn test_bond_ast_parse(#[case] dsl: &str) {
-        let bond = BondAst::parse(dsl).unwrap();
+    fn test_bond_form_parse(#[case] dsl: &str) {
+        let bond = BondForm::parse(dsl).unwrap();
         assert_eq!(bond.__str__(), dsl);
-        assert_eq!(bond.__repr__(), format!("BondAst.parse('{dsl}')"));
+        assert_eq!(bond.__repr__(), format!("BondForm.parse('{dsl}')"));
     }
 
     #[rstest]
-    fn test_bond_ast_parse_error() {
-        assert!(BondAst::parse("x#").is_err());
+    fn test_bond_form_parse_error() {
+        assert!(BondForm::parse("x#").is_err());
     }
 
     #[rstest]
-    fn test_bond_ast_constraints() {
-        let bond = BondAst(GraphIrBondForm::from_order(1).with_constraint(
+    fn test_bond_form_constraints() {
+        let bond = BondForm(GraphIrBondForm::from_order(1).with_constraint(
             GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
         ));
         assert_eq!(bond.inner().constraints.len(), 1);
     }
 
     #[rstest]
-    fn test_bond_ast_set_constraints_from_view() {
+    fn test_bond_form_set_constraints_from_view() {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                BondAst::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -610,8 +610,8 @@ mod tests {
                 },
             )
             .unwrap();
-            let dst = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(2))).unwrap();
-            BondAst::set_constraints(dst.clone_ref(py), py, BondConstraintsLike::View(view))
+            let dst = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(2))).unwrap();
+            BondForm::set_constraints(dst.clone_ref(py), py, BondConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.aromatic(),
@@ -976,11 +976,11 @@ mod tests {
     /// the write borrow, so it is a no-op, not a double-borrow panic
     /// (`bond.constraints = bond.constraints`).
     #[rstest]
-    fn test_bond_ast_set_constraints_self() {
+    fn test_bond_form_set_constraints_self() {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondAst::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -992,7 +992,7 @@ mod tests {
                 },
             )
             .unwrap();
-            BondAst::set_constraints(bond.clone_ref(py), py, BondConstraintsLike::View(own_view))
+            BondForm::set_constraints(bond.clone_ref(py), py, BondConstraintsLike::View(own_view))
                 .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.aromatic(),
@@ -1009,7 +1009,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondAst::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1118,7 +1118,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_set() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1157,7 +1157,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondAst::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1187,7 +1187,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_update() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1216,7 +1216,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_set_aromatic() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1253,7 +1253,7 @@ mod tests {
     #[rstest]
     fn test_bond_ring_size_counts_bond_backed() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1449,7 +1449,7 @@ mod tests {
             let views = BondViews {
                 owner: owner.clone_ref(py),
             };
-            let single = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let single = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, endpoints preserved
@@ -1462,7 +1462,7 @@ mod tests {
     fn test_bond_views_setitem_error() {
         Python::attach(|py| {
             let views = BondViews { owner: ethene(py) };
-            let single = Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let single = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
             assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
         });
     }

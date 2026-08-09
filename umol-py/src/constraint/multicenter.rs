@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::multicenter::MulticenterBondAst;
+use crate::multicenter::MulticenterBondForm;
 use crate::value::{NumForm, NumLike};
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
@@ -63,7 +63,7 @@ impl MulticenterBondConstraintKey {
 }
 
 /// A multicenter-bond-scope constraint: the asserted total electron count of the
-/// bond (cross-checked against `sum(MulticenterBondAst::electrons)`).
+/// bond (cross-checked against `sum(MulticenterBondForm::electrons)`).
 #[pyclass]
 pub enum MulticenterBondConstraintAst {
     ElectronCount(Py<NumForm>),
@@ -220,7 +220,7 @@ impl MulticenterBondConstraintsLike {
 }
 
 /// The multicenter-bond-scope constraints on a multicenter bond, in kind-sorted order.
-/// Mutable, hence value-equal but unhashable (matching `MulticenterBondAst`).
+/// Mutable, hence value-equal but unhashable (matching `MulticenterBondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
 pub struct MulticenterBondConstraintsAst(GraphIrMulticenterBondConstraintsForm);
@@ -483,17 +483,17 @@ pub(crate) fn multicenter_bond_constraints_asdict<'py>(
 }
 
 /// What a `MulticenterBondConstraintsView` writes through to: a multicenter bond
-/// within a molecule (by index) or a standalone `MulticenterBondAst`.
+/// within a molecule (by index) or a standalone `MulticenterBondForm`.
 pub(crate) enum MulticenterBondConstraintsBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrMulticenterBondId,
     },
-    MulticenterBond(Py<MulticenterBondAst>),
+    MulticenterBond(Py<MulticenterBondForm>),
 }
 
 /// A live handle onto one multicenter bond's constraints, backed by either a
-/// molecule-bond or a standalone `MulticenterBondAst`. Reads borrow the constraints
+/// molecule-bond or a standalone `MulticenterBondForm`. Reads borrow the constraints
 /// and read only the item they need (no whole-container clone); mutators write through
 /// to the bond in place, without a clone-and-writeback.
 #[pyclass]

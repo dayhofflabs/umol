@@ -340,7 +340,7 @@ mod tests {
         },
         None,
     )]
-    fn test_unpaired_electrons_ast_as_lit(
+    fn test_unpaired_electrons_form_as_lit(
         #[case] ast: GraphIrUnpairedElectronsForm,
         #[case] expected: Option<ChemUnpairedElectrons>,
     ) {
@@ -363,7 +363,7 @@ mod tests {
         count: GraphIrNumForm::Undetermined,
         multiplicity: GraphIrNumForm::Undetermined,
     })]
-    fn test_unpaired_electrons_ast_roundtrip(#[case] ast: GraphIrUnpairedElectronsForm) {
+    fn test_unpaired_electrons_form_roundtrip(#[case] ast: GraphIrUnpairedElectronsForm) {
         Python::attach(|py| {
             assert_eq!(
                 UnpairedElectronsForm::from_rust(py, &ast)

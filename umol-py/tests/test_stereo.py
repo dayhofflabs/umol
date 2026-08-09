@@ -1,7 +1,7 @@
 import pytest
 
 from umol import (
-    AtomAst,
+    AtomForm,
     CisTransConfiguration,
     CisTransStereo,
     CisTransStereoForm,
@@ -9,11 +9,11 @@ from umol import (
     MoleculeAst,
     ParseError,
     Permutation,
-    StereoAtomAst,
+    StereoAtomForm,
     StereoAtomConstraintAst,
     StereoAtomConstraintsAst,
     StereoAtomUpdate,
-    StereoBondAst,
+    StereoBondForm,
     StereoBondConstraintAst,
     StereoBondConstraintsAst,
     StereoBondUpdate,
@@ -346,19 +346,19 @@ def test_cistransconfiguration_enum():
 def stereo_atom_molecule():
     # a tetrahedral stereocenter on atom 0 with four atom ligands (atoms 1-4)
     return MoleculeAst.from_entries(
-        [AtomAst(Element("C")) for _ in range(5)],
+        [AtomForm(Element("C")) for _ in range(5)],
         stereo_atoms=[
             (
                 0,
                 [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)],
-                StereoAtomAst(TetrahedralConfiguration.Ccw),
+                StereoAtomForm(TetrahedralConfiguration.Ccw),
             )
         ],
     )
 
 
 def test_stereoatomast_new():
-    atom = StereoAtomAst(TetrahedralConfiguration.Ccw)
+    atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     assert str(atom) == "Th0"
     assert atom.configuration == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(0)
@@ -368,19 +368,19 @@ def test_stereoatomast_new():
 
 @pytest.mark.parametrize("dsl", ["Th0", "Th*", "Sp2"])
 def test_stereoatomast_parse_roundtrip(dsl):
-    atom = StereoAtomAst.parse(dsl)
+    atom = StereoAtomForm.parse(dsl)
     assert str(atom) == dsl
-    assert repr(atom) == f"StereoAtomAst.parse('{dsl}')"
+    assert repr(atom) == f"StereoAtomForm.parse('{dsl}')"
 
 
 def test_stereoatomast_configuration_setter():
-    atom = StereoAtomAst(TetrahedralConfiguration.Ccw)
+    atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     atom.configuration = TetrahedralConfiguration.Cw
     assert str(atom) == "Th1"
 
 
 def test_stereoatomast_constraints_kwarg():
-    atom = StereoAtomAst(
+    atom = StereoAtomForm(
         TetrahedralConfiguration.Ccw,
         constraints=StereoAtomConstraintsAst(
             [
@@ -396,7 +396,7 @@ def test_stereoatomast_constraints_kwarg():
 
 
 def test_stereoatomast_asdict():
-    atom = StereoAtomAst(TetrahedralConfiguration.Ccw)
+    atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     d = atom.asdict()
     assert set(d.keys()) == {"configuration", "constraints"}
     assert d["configuration"] == StereoConfigurationForm.Kinded(
@@ -406,7 +406,7 @@ def test_stereoatomast_asdict():
 
 
 def test_stereobondast_parse_roundtrip():
-    bond = StereoBondAst.parse("Ct0")
+    bond = StereoBondForm.parse("Ct0")
     assert str(bond) == "Ct0"
     assert bond.configuration == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(0)
@@ -463,7 +463,7 @@ def test_stereoatomviews_of():
 
 def test_stereoatomviews_setitem():
     mol = stereo_atom_molecule()
-    mol.stereo_atoms[0] = StereoAtomAst.parse("Th1")
+    mol.stereo_atoms[0] = StereoAtomForm.parse("Th1")
     view = mol.stereo_atoms[0]
     assert view.coset == StereoCoset.Lit(1)
     # site topology preserved

@@ -85,7 +85,7 @@ mod tests {
     #[case(GraphIrBooleanForm::Undetermined)]
     #[case(GraphIrBooleanForm::Lit(true))]
     #[case(GraphIrBooleanForm::Lit(false))]
-    fn test_boolean_ast_roundtrip(#[case] ast: GraphIrBooleanForm) {
+    fn test_boolean_form_roundtrip(#[case] ast: GraphIrBooleanForm) {
         assert_eq!(BooleanForm::from_rust(&ast).to_rust(), ast);
     }
 }

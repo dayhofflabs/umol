@@ -95,14 +95,14 @@ mod tests {
     #[case(GraphIrElectronCountsForm::Undetermined)]
     #[case(GraphIrElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1]))]
     #[case(GraphIrElectronCountsForm::Lit(vec![]))]
-    fn test_electron_counts_ast_roundtrip(#[case] ast: GraphIrElectronCountsForm) {
+    fn test_electron_counts_form_roundtrip(#[case] ast: GraphIrElectronCountsForm) {
         assert_eq!(ElectronCountsForm::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
     #[case(GraphIrElectronCountsForm::Undetermined, None)]
     #[case(GraphIrElectronCountsForm::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
-    fn test_electron_counts_ast_as_lit(
+    fn test_electron_counts_form_as_lit(
         #[case] ast: GraphIrElectronCountsForm,
         #[case] expected: Option<Vec<i64>>,
     ) {
