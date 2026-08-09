@@ -510,6 +510,32 @@ exists and is usable regardless; after the kernel ports the two core
 algorithms are written down, verified, and reusable; the full encoder is
 only the last rows of the table, and stopping earlier strands nothing.
 
+## Relation to doc 186
+
+Doc 186's scheduled canonicalization plan and this review intersect
+narrowly. The InChI approach contributes implementation guidance to stages
+S5–S9 of that plan, not structure: the chained constrained-certificate
+search is a proven shape for the internal coarse-to-fine strategy of S6–S8;
+retaining automorphism generators (which InChI discards, paying a second
+~7k-LOC backtracking search for stereo) is the design input for S8a/S9b;
+the absence of perception in umol's stereo canonicalization removes the
+restart pathology of InChI's stereo loop, simplifying S9a's termination
+argument; and the no-edge-color carrier is confirmed to be a consequence of
+InChI's identity semantics — bond orders are not part of InChI — rather
+than a transferable encoding trick. The full statement is recorded in doc
+186's InChI precedent section.
+
+Sequencing between the documents: doc 186 does not depend on this document.
+The only shared artifact is verification step 0 above, and only its
+build-and-expose subset — the vendored oracle build with `CanonGraph`
+callable via FFI; the stage dump hooks serve the rewrite path alone. That
+subset can serve doc 186 as an independent algorithm-layer implementation
+for offline orbit-fixture generation (S0b) and cross-checking (S5d, S6b),
+which is otherwise vacuous while nauty is the sole backend. It is optional
+for doc 186: the earliest stage that would consume it is S5d, so the
+build-or-not decision can be made at S5d and nothing in doc 186 waits on
+this document.
+
 ## Decoupling the two purposes
 
 The two stated purposes have different faithfulness requirements, and that
@@ -612,3 +638,6 @@ under every column and is independent of the identifier-generation choice.
   reading and key construction against code.
 - Decide where the algorithm write-up lives (whitepaper rationale doc vs a
   dedicated discussion doc) once either is scheduled.
+- At doc 186 S5d: decide whether the step-0 oracle build (build-and-expose
+  subset only) is wanted for algorithm-layer cross-checks and orbit-fixture
+  generation there.

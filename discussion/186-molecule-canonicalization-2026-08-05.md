@@ -5,7 +5,8 @@ Date: 2026-08-05
 Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
 [117](117-entity-model-extensibility-2026-06-20.md),
-[185](185-python-reaction-span-2026-08-04.md)
+[185](185-python-reaction-span-2026-08-04.md),
+[188](188-inchi-migration-2026-08-09.md)
 
 `MoleculeAst` does not provide a canonical representation with respect to entity renumbering.
 `Graph::canonical_key` and canonical labels are available in
@@ -562,6 +563,44 @@ This precedent reinforces the need to benchmark the canonicalization carrier bef
 full edge subdivision. It also suggests measuring whether progressive refinement over a compact
 base graph can avoid materializing bond nodes, without importing InChI's chemical normalization
 semantics.
+
+Doc 188 records a full review of the InChI 1.07 implementation. Four of its findings bear on this
+plan directly; none changes the plan's structure or ordering.
+
+- The internal search strategy of S6–S8 has a proven implementation shape in InChI's chained
+  canonicalization: up to eight `CanonGraph` passes, each constrained to reproduce the previous
+  layer's certificate (`zb_rho_fix`) while minimizing only the new layer, with per-layer
+  certificate memoization, a guard that skips a pass when the coarser orbits already separate the
+  new colors, and an auxiliary pre-ranking that steers branch order. When the S4b comparison
+  schema orders entity blocks coarse to fine, this chaining is a correct search strategy for the
+  typed-order minimum. It constrains rather than commits, so it is compatible with the rule that
+  intermediate numberings are never committed as canonical frames; all of it is internal
+  optimization under S9d's fixture-identity rule.
+- InChI discards the automorphism generators after `CanonGraph` and consequently re-derives the
+  group in a second backtracking search when minimizing stereo descriptors (`map_stereo_bonds4` in
+  `ichimap4.c`). The nauty adapter already returns generators and orbits; S8a's coset actions and
+  S9b's constraint placement should consume them directly, avoiding that second search by design.
+- InChI's stereo canonicalization loop is not monotonic: discovering a non-stereocenter mid-search
+  forces a total restart, because InChI perceives and removes stereo entities during
+  canonicalization. This plan preserves every stereo entity and performs no perception, so the
+  restart pathology cannot arise; S9a's monotonic-refinement and termination argument is easier
+  than this closest precedent.
+- The no-edge-color observation above has a sharper form: bond orders are not part of InChI
+  identity at all, which is the entire reason its carrier needs no bond information. The S5d
+  compact-carrier alternative for umol therefore remains typed incidences presented as adapter
+  colors, never omission of bond values.
+
+Doc 188 also describes a dev-only vendored build of the C source with internal symbols exposed
+(its verification step 0). Its `CanonGraph` entry is an independent implementation of
+vertex-colored-graph canonical labeling and orbit partitions, usable offline to generate
+checked-in orbit fixtures (S0b) and as an algorithm-layer cross-check while nauty is the sole
+automorphism backend (S5d, S6b), keeping external programs out of the test dependencies. It is an
+oracle for the graph layer only, never for umol's molecule numbering: InChI's graph carries no
+bond values, so agreement holds only where the colored encodings coincide. This build is not a
+prerequisite for any stage of this plan: S0b is satisfiable with hand-derived precedent cases and
+bounded internal cases, and its fixtures remain extensible later. The earliest point where the
+oracle adds strength is S5d/S6b, so whether to build it can be decided at S5d without affecting
+the critical path.
 
 ### Internal verification
 

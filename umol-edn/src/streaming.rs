@@ -10,7 +10,8 @@ use std::fmt;
 use std::str::{from_utf8, FromStr};
 
 use crate::error::{DeError, EdnError, ParseError};
-use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
+use crate::parser::{is_symbol_char, is_symbol_start, parse_value, validate_symbol};
+use crate::reader::default_config;
 
 pub struct EdnStreamDeserializer<'de> {
     input: &'de str,
@@ -258,114 +259,11 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     fn skip_value(&mut self) -> Result<(), ParseError> {
-        self.skip_ws()?;
-        let b = self
-            .peek()
-            .ok_or(ParseError::UnexpectedEof { offset: self.pos })?;
-        match b {
-            b'(' => {
-                self.pos += 1;
-                self.skip_delimited(b')')
-            }
-            b'[' => {
-                self.pos += 1;
-                self.skip_delimited(b']')
-            }
-            b'{' => {
-                self.pos += 1;
-                self.skip_delimited(b'}')
-            }
-            b'#' => {
-                self.pos += 1;
-                match self.peek() {
-                    Some(b'{') => {
-                        self.pos += 1;
-                        self.skip_delimited(b'}')
-                    }
-                    Some(b'_') => {
-                        self.pos += 1;
-                        self.skip_ws()?;
-                        self.skip_value()?;
-                        self.skip_value()
-                    }
-                    _ => {
-                        self.skip_atom()?;
-                        self.skip_ws()?;
-                        self.skip_value()
-                    }
-                }
-            }
-            b'"' => self.skip_string(),
-            b'\\' => {
-                self.pos += 1;
-                self.skip_atom()
-            }
-            b':' => {
-                self.pos += 1;
-                self.skip_atom()
-            }
-            _ => self.skip_atom(),
-        }
-    }
-
-    fn skip_delimited(&mut self, close: u8) -> Result<(), ParseError> {
-        loop {
-            self.skip_ws()?;
-            match self.peek() {
-                None => return Err(ParseError::UnexpectedEof { offset: self.pos }),
-                Some(b) if b == close => {
-                    self.pos += 1;
-                    return Ok(());
-                }
-                _ => self.skip_value()?,
-            }
-        }
-    }
-
-    fn skip_string(&mut self) -> Result<(), ParseError> {
-        debug_assert_eq!(self.input.as_bytes()[self.pos], b'"');
-        self.pos += 1;
-        let bytes = self.input.as_bytes();
-        loop {
-            match memchr::memchr2(b'"', b'\\', &bytes[self.pos..]) {
-                None => return Err(ParseError::UnexpectedEof { offset: self.pos }),
-                Some(i) => {
-                    self.pos += i;
-                    if bytes[self.pos] == b'"' {
-                        self.pos += 1;
-                        return Ok(());
-                    }
-                    // Skip escape: backslash + escaped content
-                    self.pos += 1; // skip backslash
-                    if self.pos >= bytes.len() {
-                        return Err(ParseError::UnexpectedEof { offset: self.pos });
-                    }
-                    if bytes[self.pos] == b'u' {
-                        // \uXXXX — skip u + 4 hex digits
-                        self.pos = (self.pos + 5).min(bytes.len());
-                    } else {
-                        self.pos += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    fn skip_atom(&mut self) -> Result<(), ParseError> {
-        let bytes = self.input.as_bytes();
-        if self.pos >= bytes.len() {
-            return Err(ParseError::UnexpectedEof { offset: self.pos });
-        }
         let start = self.pos;
-        while self.pos < bytes.len() && is_symbol_char(bytes[self.pos] as char) {
-            self.pos += 1;
-        }
-        if self.pos == start {
-            return Err(ParseError::UnexpectedToken {
-                offset: self.pos,
-                found: bytes[self.pos] as char,
-            });
-        }
+        let input = &self.input[start..];
+        let (_, remaining) =
+            parse_value(input, default_config()).map_err(|error| offset_error(error, start))?;
+        self.pos = self.input.len() - remaining.len();
         Ok(())
     }
 }
@@ -494,6 +392,60 @@ impl<'de> EdnStreamDeserializer<'de> {
 }
 
 #[inline]
+fn offset_error(error: ParseError, base: usize) -> ParseError {
+    match error {
+        ParseError::UnexpectedEof { offset } => ParseError::UnexpectedEof {
+            offset: base + offset,
+        },
+        ParseError::UnexpectedToken { offset, found } => ParseError::UnexpectedToken {
+            offset: base + offset,
+            found,
+        },
+        ParseError::InvalidNumber { offset } => ParseError::InvalidNumber {
+            offset: base + offset,
+        },
+        ParseError::InvalidEscape { offset } => ParseError::InvalidEscape {
+            offset: base + offset,
+        },
+        ParseError::InvalidCharLiteral { offset } => ParseError::InvalidCharLiteral {
+            offset: base + offset,
+        },
+        ParseError::InvalidSymbol { offset } => ParseError::InvalidSymbol {
+            offset: base + offset,
+        },
+        ParseError::DuplicateKey { offset } => ParseError::DuplicateKey {
+            offset: base + offset,
+        },
+        ParseError::InvalidTag { offset, tag } => ParseError::InvalidTag {
+            offset: base + offset,
+            tag,
+        },
+        ParseError::TrailingContent { offset } => ParseError::TrailingContent {
+            offset: base + offset,
+        },
+        ParseError::UnsupportedFeature { offset, feature } => ParseError::UnsupportedFeature {
+            offset: base + offset,
+            feature,
+        },
+        ParseError::RecursionLimit { offset } => ParseError::RecursionLimit {
+            offset: base + offset,
+        },
+        ParseError::InvalidUtf8 { offset } => ParseError::InvalidUtf8 {
+            offset: base + offset,
+        },
+        ParseError::TagReaderFailed {
+            offset,
+            tag,
+            message,
+        } => ParseError::TagReaderFailed {
+            offset: base + offset,
+            tag,
+            message,
+        },
+        error @ (ParseError::InvalidInst { .. } | ParseError::InvalidUuid { .. }) => error,
+    }
+}
+
 fn unexpected_or_eof(offset: usize, b: Option<u8>) -> ParseError {
     match b {
         Some(b) => ParseError::UnexpectedToken {
@@ -528,6 +480,25 @@ mod tests {
     fn test_edn_stream_deserializer_expect_eof(#[case] input: &str, #[case] ok: bool) {
         let mut d = EdnStreamDeserializer::new(input);
         assert_eq!(d.expect_eof().is_ok(), ok);
+    }
+
+    #[rstest]
+    #[case::odd_map(
+        "{}#_{O}",
+        ParseError::UnexpectedToken {
+            offset: 6,
+            found: '}'
+        }
+    )]
+    #[case::unterminated_vector("{}#_[1", ParseError::UnexpectedEof { offset: 6 })]
+    #[case::invalid_escape("{}#_\"\\q\"", ParseError::InvalidEscape { offset: 5 })]
+    fn test_edn_stream_deserializer_expect_eof_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        d.read_skip_value().unwrap();
+        assert_eq!(d.expect_eof(), Err(expected));
     }
 
     #[rstest]
@@ -654,7 +625,6 @@ mod tests {
     #[case::list("(1 2)")]
     #[case::map("{:a 1}")]
     #[case::set("#{1 2}")]
-    #[case::tagged("#tag value")]
     #[case::discard("#_ foo bar")]
     #[case::char(r#"\c"#)]
     #[case::keyword(":keyword")]
@@ -671,13 +641,29 @@ mod tests {
     }
 
     #[rstest]
-    #[case::eof("")]
-    #[case::unterminated_vector("[1 2")]
-    #[case::unterminated_string(r#""abc"#)]
-    #[case::unexpected_close(")")]
-    fn test_edn_stream_deserializer_read_skip_value_error(#[case] input: &str) {
+    #[case::eof("", ParseError::UnexpectedEof { offset: 0 })]
+    #[case::unterminated_vector("[1 2", ParseError::UnexpectedEof { offset: 4 })]
+    #[case::unterminated_string(r#""abc"#, ParseError::UnexpectedEof { offset: 4 })]
+    #[case::unexpected_close(
+        ")",
+        ParseError::UnexpectedToken {
+            offset: 0,
+            found: ')'
+        }
+    )]
+    #[case::unknown_tag(
+        "#tag value",
+        ParseError::InvalidTag {
+            offset: 1,
+            tag: "tag".to_string()
+        }
+    )]
+    fn test_edn_stream_deserializer_read_skip_value_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
         let mut d = EdnStreamDeserializer::new(input);
-        assert!(d.read_skip_value().is_err());
+        assert_eq!(d.read_skip_value(), Err(expected));
     }
 
     #[rstest]
