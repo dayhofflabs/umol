@@ -1572,9 +1572,9 @@ mod tests {
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
     use super::super::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
-        Constraints, DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
+        AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
+        Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+        NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
     };
     use super::super::edit::{AtomFieldChange, BondFieldChange};
@@ -2022,18 +2022,18 @@ mod tests {
         let constraint = Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
             Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(0),
-                AromaticSystemConstraintAst::electron_count(6_i64),
+                AromaticSystemConstraintForm::electron_count(6_i64),
             ),
             Constraint::MulticenterBond(
                 MulticenterBondId(0),
-                MulticenterBondConstraintAst::electron_count(2_i64),
+                MulticenterBondConstraintForm::electron_count(2_i64),
             ),
             Constraint::NoncovalentBond(
                 NoncovalentBondId(0),
-                NoncovalentBondConstraintAst::intramolecular(true),
+                NoncovalentBondConstraintForm::intramolecular(true),
             ),
             Constraint::StereoAtom(
                 StereoAtomId(0),

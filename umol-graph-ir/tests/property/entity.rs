@@ -367,17 +367,17 @@ proptest! {
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, DativeBondConstraintsAst::new());
+        prop_assert_eq!(constraints, DativeBondConstraintsForm::new());
     }
 
     #[test]
-    fn test_aromatic_system_constraints_ast_take_exact_size(
+    fn test_aromatic_system_constraints_form_take_exact_size(
         mut constraints in aromatic_system_form_strategy().prop_map(|ast| ast.constraints),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, AromaticSystemConstraintsAst::new());
+        prop_assert_eq!(constraints, AromaticSystemConstraintsForm::new());
     }
 
     #[test]
@@ -387,7 +387,7 @@ proptest! {
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, MulticenterBondConstraintsAst::new());
+        prop_assert_eq!(constraints, MulticenterBondConstraintsForm::new());
     }
 
     #[test]
@@ -397,7 +397,7 @@ proptest! {
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, NoncovalentBondConstraintsAst::new());
+        prop_assert_eq!(constraints, NoncovalentBondConstraintsForm::new());
     }
 
     #[test]

@@ -449,10 +449,10 @@ proptest! {
     }
 
     #[test]
-    fn test_aromatic_system_constraint_ast_lattice_laws(
-        a in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintAst::ElectronCount(value).canonicalize().unwrap()),
-        b in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintAst::ElectronCount(value).canonicalize().unwrap()),
-        c in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+    fn test_aromatic_system_constraint_form_lattice_laws(
+        a in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).canonicalize().unwrap()),
+        b in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).canonicalize().unwrap()),
+        c in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).canonicalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -490,9 +490,9 @@ proptest! {
 
     #[test]
     fn test_multicenter_bond_constraint_form_lattice_laws(
-        a in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
-        b in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
-        c in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+        a in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).canonicalize().unwrap()),
+        b in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).canonicalize().unwrap()),
+        c in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).canonicalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

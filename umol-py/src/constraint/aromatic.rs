@@ -6,9 +6,9 @@ use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
-    AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
+    AromaticSystemConstraintForm as GraphIrAromaticSystemConstraintForm,
     AromaticSystemConstraintKey as GraphIrAromaticSystemConstraintKey,
-    AromaticSystemConstraintsAst as GraphIrAromaticSystemConstraintsAst,
+    AromaticSystemConstraintsForm as GraphIrAromaticSystemConstraintsForm,
     AromaticSystemId as GraphIrAromaticSystemId,
 };
 
@@ -100,12 +100,12 @@ impl AromaticSystemConstraintAst {
 
 impl_py_lattice!(
     AromaticSystemConstraintAst,
-    GraphIrAromaticSystemConstraintAst,
+    GraphIrAromaticSystemConstraintForm,
     |value: &AromaticSystemConstraintAst,
      py: Python<'_>|
-     -> PyResult<GraphIrAromaticSystemConstraintAst> { Ok(value.to_rust(py)) },
+     -> PyResult<GraphIrAromaticSystemConstraintForm> { Ok(value.to_rust(py)) },
     |py: Python<'_>,
-     value: GraphIrAromaticSystemConstraintAst|
+     value: GraphIrAromaticSystemConstraintForm|
      -> PyResult<AromaticSystemConstraintAst> {
         AromaticSystemConstraintAst::from_rust(py, &value)
     }
@@ -114,19 +114,19 @@ impl_py_lattice!(
 impl AromaticSystemConstraintAst {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrAromaticSystemConstraintAst,
+        ast: &GraphIrAromaticSystemConstraintForm,
     ) -> PyResult<Self> {
         Ok(match ast {
-            GraphIrAromaticSystemConstraintAst::ElectronCount(v) => {
+            GraphIrAromaticSystemConstraintForm::ElectronCount(v) => {
                 Self::ElectronCount(into_py_variant(py, ValueAst::from_rust(py, v)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrAromaticSystemConstraintForm {
         match self {
             Self::ElectronCount(v) => {
-                GraphIrAromaticSystemConstraintAst::ElectronCount(v.bind(py).borrow().to_rust(py))
+                GraphIrAromaticSystemConstraintForm::ElectronCount(v.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -178,14 +178,14 @@ impl AromaticSystemConstraintsUpdate {
 pub(crate) enum ResolvedAromaticSystemConstraintsUpdate {
     /// A whole container (from another container or a live view): overlaid via `update`
     /// (last-wins per key; undetermined entries remove).
-    Overlay(GraphIrAromaticSystemConstraintsAst),
+    Overlay(GraphIrAromaticSystemConstraintsForm),
     /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
-    Entries(Vec<GraphIrAromaticSystemConstraintAst>),
+    Entries(Vec<GraphIrAromaticSystemConstraintForm>),
 }
 
 impl ResolvedAromaticSystemConstraintsUpdate {
     /// Overlay onto `target` in place. No Python reads.
-    pub(crate) fn apply(self, target: &mut GraphIrAromaticSystemConstraintsAst) {
+    pub(crate) fn apply(self, target: &mut GraphIrAromaticSystemConstraintsForm) {
         match self {
             ResolvedAromaticSystemConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
             ResolvedAromaticSystemConstraintsUpdate::Entries(entries) => {
@@ -206,7 +206,7 @@ pub(crate) enum AromaticSystemConstraintsLike {
 }
 
 impl AromaticSystemConstraintsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrAromaticSystemConstraintsAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrAromaticSystemConstraintsForm> {
         match self {
             AromaticSystemConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             AromaticSystemConstraintsLike::View(v) => {
@@ -220,7 +220,7 @@ impl AromaticSystemConstraintsLike {
 /// Mutable, hence value-equal but unhashable (matching `AromaticSystemAst`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct AromaticSystemConstraintsAst(GraphIrAromaticSystemConstraintsAst);
+pub struct AromaticSystemConstraintsAst(GraphIrAromaticSystemConstraintsForm);
 
 #[pymethods]
 impl AromaticSystemConstraintsAst {
@@ -228,7 +228,7 @@ impl AromaticSystemConstraintsAst {
     /// an earlier one, last-wins).
     #[new]
     pub(crate) fn new(py: Python<'_>, entries: Vec<Py<AromaticSystemConstraintAst>>) -> Self {
-        let mut constraints = GraphIrAromaticSystemConstraintsAst::new();
+        let mut constraints = GraphIrAromaticSystemConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
@@ -369,7 +369,7 @@ impl AromaticSystemConstraintsAst {
     #[setter]
     pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: NumLike) {
         self.0
-            .set(GraphIrAromaticSystemConstraintAst::electron_count(
+            .set(GraphIrAromaticSystemConstraintForm::electron_count(
                 value.to_rust(py),
             ));
     }
@@ -383,31 +383,31 @@ impl AromaticSystemConstraintsAst {
 
 impl AromaticSystemConstraintsAst {
     /// The wrapped AST constraints — read access for aromatic system construction.
-    pub(crate) fn inner(&self) -> &GraphIrAromaticSystemConstraintsAst {
+    pub(crate) fn inner(&self) -> &GraphIrAromaticSystemConstraintsForm {
         &self.0
     }
 
     /// Wrap owned AST constraints.
-    pub(crate) fn from_inner(constraints: GraphIrAromaticSystemConstraintsAst) -> Self {
+    pub(crate) fn from_inner(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
         AromaticSystemConstraintsAst(constraints)
     }
 }
 
 impl_py_lattice!(
     AromaticSystemConstraintsAst,
-    GraphIrAromaticSystemConstraintsAst,
+    GraphIrAromaticSystemConstraintsForm,
     |value: &AromaticSystemConstraintsAst,
      _py: Python<'_>|
-     -> PyResult<GraphIrAromaticSystemConstraintsAst> { Ok(value.inner().clone()) },
+     -> PyResult<GraphIrAromaticSystemConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
-     value: GraphIrAromaticSystemConstraintsAst|
+     value: GraphIrAromaticSystemConstraintsForm|
      -> PyResult<AromaticSystemConstraintsAst> { Ok(AromaticSystemConstraintsAst(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn aromatic_system_constraints_iter(
     py: Python<'_>,
-    constraints: &GraphIrAromaticSystemConstraintsAst,
+    constraints: &GraphIrAromaticSystemConstraintsForm,
 ) -> PyResult<AromaticSystemConstraintIter> {
     let entries = constraints
         .iter()
@@ -423,7 +423,7 @@ pub(crate) fn aromatic_system_constraints_iter(
 /// Build the key iterator handle from a borrowed container (mapping-style keys).
 pub(crate) fn aromatic_system_constraint_keys(
     py: Python<'_>,
-    constraints: &GraphIrAromaticSystemConstraintsAst,
+    constraints: &GraphIrAromaticSystemConstraintsForm,
 ) -> PyResult<AromaticSystemConstraintKeyIter> {
     let keys = constraints
         .iter()
@@ -442,7 +442,7 @@ pub(crate) fn aromatic_system_constraint_keys(
 /// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
 pub(crate) fn aromatic_system_constraint_items(
     py: Python<'_>,
-    constraints: &GraphIrAromaticSystemConstraintsAst,
+    constraints: &GraphIrAromaticSystemConstraintsForm,
 ) -> PyResult<AromaticSystemConstraintItemsIter> {
     let items = constraints
         .iter()
@@ -465,12 +465,12 @@ pub(crate) fn aromatic_system_constraint_items(
 /// Python values.
 pub(crate) fn aromatic_system_constraints_asdict<'py>(
     py: Python<'py>,
-    constraints: &GraphIrAromaticSystemConstraintsAst,
+    constraints: &GraphIrAromaticSystemConstraintsForm,
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for entry in constraints.iter() {
         match entry {
-            GraphIrAromaticSystemConstraintAst::ElectronCount(v) => {
+            GraphIrAromaticSystemConstraintForm::ElectronCount(v) => {
                 dict.set_item("electron_count", ValueAst::from_rust(py, v)?)?
             }
         }
@@ -502,7 +502,7 @@ impl AromaticSystemConstraintsView {
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&GraphIrAromaticSystemConstraintsAst) -> PyResult<R>,
+        f: impl FnOnce(&GraphIrAromaticSystemConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
             AromaticSystemConstraintsBacking::Molecule { owner, id } => {
@@ -525,7 +525,7 @@ impl AromaticSystemConstraintsView {
     pub(crate) fn with_mut<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrAromaticSystemConstraintsAst) -> R,
+        f: impl FnOnce(&mut GraphIrAromaticSystemConstraintsForm) -> R,
     ) -> R {
         match &self.backing {
             AromaticSystemConstraintsBacking::Molecule { owner, id } => f(&mut owner
@@ -541,7 +541,7 @@ impl AromaticSystemConstraintsView {
     }
 
     /// Set one constraint on the backing system in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrAromaticSystemConstraintAst) {
+    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrAromaticSystemConstraintForm) {
         self.with_mut(py, |cs| cs.set(constraint));
     }
 
@@ -550,7 +550,7 @@ impl AromaticSystemConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrAromaticSystemConstraintKey,
-    ) -> Option<GraphIrAromaticSystemConstraintAst> {
+    ) -> Option<GraphIrAromaticSystemConstraintForm> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -696,7 +696,7 @@ impl AromaticSystemConstraintsView {
     pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) {
         self.set_ast(
             py,
-            GraphIrAromaticSystemConstraintAst::electron_count(value.to_rust(py)),
+            GraphIrAromaticSystemConstraintForm::electron_count(value.to_rust(py)),
         );
     }
 

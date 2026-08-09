@@ -3,7 +3,7 @@
 use umol_graph_core::{BiRelationData, ParticipantPosition};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
-use super::constraint::{DativeBondConstraintAst, DativeBondConstraintsAst};
+use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::traits::Canonicalize;
 use super::value::NumForm;
 
@@ -14,7 +14,7 @@ use super::value::NumForm;
 pub struct DativeBondForm {
     /// Bond order — number of electron pairs donated.
     pub order: NumForm,
-    pub constraints: DativeBondConstraintsAst,
+    pub constraints: DativeBondConstraintsForm,
 }
 
 /// Attribute update for a dative bond. The order is optional, and
@@ -22,14 +22,14 @@ pub struct DativeBondForm {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DativeBondUpdate {
     pub order: Option<NumForm>,
-    pub constraints: DativeBondConstraintsAst,
+    pub constraints: DativeBondConstraintsForm,
 }
 
 impl DativeBondForm {
     pub fn new(order: NumForm) -> Self {
         Self {
             order,
-            constraints: DativeBondConstraintsAst::new(),
+            constraints: DativeBondConstraintsForm::new(),
         }
     }
 
@@ -43,20 +43,20 @@ impl DativeBondForm {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// key (last-wins per `DativeBondConstraintsAst::set`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<DativeBondConstraintAst>) -> Self {
+    /// key (last-wins per `DativeBondConstraintsForm::set`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<DativeBondConstraintForm>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same key (last-wins per `DativeBondConstraintsAst::set`). Does
+    /// of the same key (last-wins per `DativeBondConstraintsForm::set`). Does
     /// not clear existing constraints; use `bond.constraints.clear()` or
     /// direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<DativeBondConstraintAst>,
+        I::Item: Into<DativeBondConstraintForm>,
     {
         self.constraints
             .extend(constraints.into_iter().map(Into::into));
@@ -81,7 +81,7 @@ impl DativeBondForm {
 
     /// Derive the minimal canonical attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> DativeBondUpdate {
-        let mut constraints = DativeBondConstraintsAst::new();
+        let mut constraints = DativeBondConstraintsForm::new();
         for new in other.constraints.iter() {
             if self
                 .constraints
@@ -137,9 +137,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::new(DativeBondForm::new(NumForm::Lit(2)),
-        DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintsAst::new() })]
+        DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintsForm::new() })]
     #[case::from_order(DativeBondForm::from_order(3),
-        DativeBondForm { order: NumForm::Lit(3), constraints: DativeBondConstraintsAst::new() })]
+        DativeBondForm { order: NumForm::Lit(3), constraints: DativeBondConstraintsForm::new() })]
     fn test_dative_bond_form_new(#[case] actual: DativeBondForm, #[case] expected: DativeBondForm) {
         assert_eq!(actual, expected);
     }
@@ -147,28 +147,28 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::with_order(DativeBondForm::default().with_order(2),
-        DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintsAst::new() })]
-    #[case::with_constraint(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintsForm::new() })]
+    #[case::with_constraint(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         DativeBondForm { order: NumForm::Lit(1),
-            constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) })]
+            constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))) })]
     #[case::with_constraints_extends(
         DativeBondForm::from_order(1)
-            .with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)))
-            .with_constraints([DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)]),
+            .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)))
+            .with_constraints([DativeBondConstraintForm::ring_membership(RingScope::All, 1), DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)]),
         DativeBondForm { order: NumForm::Lit(1),
-            constraints: DativeBondConstraintsAst::from_iter([
-                DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)),
-                DativeBondConstraintAst::ring_membership(RingScope::All, 1),
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
+            constraints: DativeBondConstraintsForm::from_iter([
+                DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)),
+                DativeBondConstraintForm::ring_membership(RingScope::All, 1),
+                DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
             ]) })]
     #[case::with_constraint_appends_different_scopes(
         DativeBondForm::from_order(1)
-            .with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1))
-            .with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),
+            .with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1))
+            .with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)),
         DativeBondForm { order: NumForm::Lit(1),
-            constraints: DativeBondConstraintsAst::from_iter([
-                DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
+            constraints: DativeBondConstraintsForm::from_iter([
+                DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
+                DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
             ]) })]
     fn test_dative_bond_form_with_methods(#[case] actual: DativeBondForm, #[case] expected: DativeBondForm) {
         assert_eq!(actual, expected);
@@ -176,7 +176,7 @@ mod tests {
 
     #[rstest]
     #[case::from_order(DativeBondForm::from_order(1))]
-    #[case::with_constraint(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
+    #[case::with_constraint(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
     fn test_dative_bond_form_into_ground(#[case] bond: DativeBondForm) {
         assert_eq!(bond.clone().into_ground(), bond);
     }
@@ -185,9 +185,9 @@ mod tests {
     #[rstest]
     #[case::order(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }, DativeBondForm::from_order(2))]
     #[case::order_undetermined(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }, DativeBondForm::default())]
-    #[case::constraint_set(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))), ..Default::default() }, DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
-    #[case::constraint_replace(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
-    #[case::constraint_remove(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }, DativeBondForm::from_order(1))]
+    #[case::constraint_set(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))), ..Default::default() }, DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
+    #[case::constraint_replace(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64)), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 2_i64)))]
+    #[case::constraint_remove(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64)), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }, DativeBondForm::from_order(1))]
     fn test_dative_bond_form_update(
         #[case] bond: DativeBondForm,
         #[case] update: DativeBondUpdate,
@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
+    #[case::empty(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
     fn test_dative_bond_form_update_identity(#[case] bond: DativeBondForm) {
         assert_eq!(bond.update(&DativeBondUpdate::default()), bond);
     }
@@ -206,19 +206,19 @@ mod tests {
     #[rstest]
     #[case::fields_and_constraints(
         DativeBondForm::from_order(1).with_constraints([
-            DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)),
-            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64),
+            DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)),
+            DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64),
         ]),
         DativeBondForm::from_order(2).with_constraints([
-            DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false)),
-            DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64),
+            DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)),
+            DativeBondConstraintForm::ring_membership(RingScope::All, 2_i64),
         ]),
         DativeBondUpdate {
             order: Some(NumForm::Lit(2)),
-            constraints: DativeBondConstraintsAst::from_iter([
-                DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false)),
-                DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64),
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
+            constraints: DativeBondConstraintsForm::from_iter([
+                DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)),
+                DativeBondConstraintForm::ring_membership(RingScope::All, 2_i64),
+                DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined),
             ]),
         },
     )]
@@ -248,7 +248,7 @@ mod tests {
     #[case::order_lit(DativeBondForm::from_order(1), true)]
     #[case::order_undetermined(DativeBondForm::new(NumForm::Undetermined), false)]
     #[case::ground_with_constraint(DativeBondForm { order: NumForm::Lit(1),
-        constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)) }, true)]
+        constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)) }, true)]
     fn test_dative_bond_form_is_ground(#[case] ast: DativeBondForm, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -284,12 +284,12 @@ mod tests {
         false
     )]
     #[case::constraint_required_present(
-        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
-        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         true
     )]
     #[case::constraint_required_absent(
-        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         DativeBondForm::from_order(1),
         false
     )]
@@ -309,9 +309,9 @@ mod tests {
     )]
     #[case::order_mismatch(DativeBondForm::from_order(1), DativeBondForm::from_order(2), None)]
     #[case::narrows_order(
-        DativeBondForm { order: NumForm::Undetermined, constraints: DativeBondConstraintsAst::new() },
-        DativeBondForm { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::new() },
-        Some(DativeBondForm { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::new() }),
+        DativeBondForm { order: NumForm::Undetermined, constraints: DativeBondConstraintsForm::new() },
+        DativeBondForm { order: NumForm::Lit(1), constraints: DativeBondConstraintsForm::new() },
+        Some(DativeBondForm { order: NumForm::Lit(1), constraints: DativeBondConstraintsForm::new() }),
     )]
     fn test_dative_bond_form_meet(
         #[case] a: DativeBondForm,
@@ -325,7 +325,7 @@ mod tests {
     #[case::order_widens_to_lit_set(
         DativeBondForm::from_order(1),
         DativeBondForm::from_order(2),
-        DativeBondForm { order: NumForm::lit_set([1, 2]), constraints: DativeBondConstraintsAst::new() },
+        DativeBondForm { order: NumForm::lit_set([1, 2]), constraints: DativeBondConstraintsForm::new() },
     )]
     fn test_dative_bond_form_join(
         #[case] a: DativeBondForm,

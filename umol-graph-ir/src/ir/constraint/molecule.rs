@@ -18,12 +18,12 @@ use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
-use super::aromatic::AromaticSystemConstraintAst;
+use super::aromatic::AromaticSystemConstraintForm;
 use super::atom::AtomConstraintForm;
 use super::bond::BondConstraintForm;
-use super::dative::DativeBondConstraintAst;
-use super::multicenter::MulticenterBondConstraintAst;
-use super::noncovalent::NoncovalentBondConstraintAst;
+use super::dative::DativeBondConstraintForm;
+use super::multicenter::MulticenterBondConstraintForm;
+use super::noncovalent::NoncovalentBondConstraintForm;
 use super::relational::RelationalConstraint;
 use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 
@@ -39,10 +39,10 @@ use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 pub enum Constraint {
     Atom(AtomId, AtomConstraintForm),
     Bond(BondId, BondConstraintForm),
-    DativeBond(DativeBondId, DativeBondConstraintAst),
-    AromaticSystem(AromaticSystemId, AromaticSystemConstraintAst),
-    MulticenterBond(MulticenterBondId, MulticenterBondConstraintAst),
-    NoncovalentBond(NoncovalentBondId, NoncovalentBondConstraintAst),
+    DativeBond(DativeBondId, DativeBondConstraintForm),
+    AromaticSystem(AromaticSystemId, AromaticSystemConstraintForm),
+    MulticenterBond(MulticenterBondId, MulticenterBondConstraintForm),
+    NoncovalentBond(NoncovalentBondId, NoncovalentBondConstraintForm),
     StereoAtom(StereoAtomId, StereoKind, StereoAtomConstraintAst),
     StereoBond(StereoBondId, StereoKind, StereoBondConstraintAst),
     Relational(RelationalConstraint),
@@ -836,11 +836,11 @@ mod tests {
     #[case::bond_lit(Constraint::Bond(BondId(0), BondConstraintForm::ring_membership(RingScope::Size(6), 1)), false)]
     #[case::bond_undetermined(Constraint::Bond(BondId(0), BondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), true)]
     #[case::bond_aromatic_flag(Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))), false)]
-    #[case::dative_undetermined(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)), true)]
+    #[case::dative_undetermined(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), true)]
     #[case::aromatic_system_undetermined(Constraint::AromaticSystem(AromaticSystemId(0),
-        AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), true)]
+        AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)), true)]
     #[case::multicenter_undetermined(Constraint::MulticenterBond(MulticenterBondId(0),
-        MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)), true)]
+        MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)), true)]
     #[case::relational(Constraint::Relational(RelationalConstraint::DativeBondDonor {
         bond: DativeBondId(0), atom: AtomId(0) }), false)]
     #[case::molecule_undetermined(Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -939,32 +939,32 @@ mod tests {
         None,
     )]
     #[case::dative_shifts(
-        Constraint::DativeBond(DativeBondId(2), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        Constraint::DativeBond(DativeBondId(2), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         relation_compaction(vec![0], vec![], vec![], vec![], vec![], vec![]),
-        Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)))),
+        Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)))),
     )]
     #[case::dative_dropped(
-        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         relation_compaction(vec![1], vec![], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::aromatic_system_shifts(
-        Constraint::AromaticSystem(AromaticSystemId(2), AromaticSystemConstraintAst::electron_count(6)),
+        Constraint::AromaticSystem(AromaticSystemId(2), AromaticSystemConstraintForm::electron_count(6)),
         relation_compaction(vec![], vec![0], vec![], vec![], vec![], vec![]),
-        Some(Constraint::AromaticSystem(AromaticSystemId(1), AromaticSystemConstraintAst::electron_count(6))),
+        Some(Constraint::AromaticSystem(AromaticSystemId(1), AromaticSystemConstraintForm::electron_count(6))),
     )]
     #[case::aromatic_system_dropped(
-        Constraint::AromaticSystem(AromaticSystemId(1), AromaticSystemConstraintAst::electron_count(6)),
+        Constraint::AromaticSystem(AromaticSystemId(1), AromaticSystemConstraintForm::electron_count(6)),
         relation_compaction(vec![], vec![1], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::multicenter_shifts(
-        Constraint::MulticenterBond(MulticenterBondId(2), MulticenterBondConstraintAst::electron_count(2)),
+        Constraint::MulticenterBond(MulticenterBondId(2), MulticenterBondConstraintForm::electron_count(2)),
         relation_compaction(vec![], vec![], vec![0], vec![], vec![], vec![]),
-        Some(Constraint::MulticenterBond(MulticenterBondId(1), MulticenterBondConstraintAst::electron_count(2))),
+        Some(Constraint::MulticenterBond(MulticenterBondId(1), MulticenterBondConstraintForm::electron_count(2))),
     )]
     #[case::multicenter_dropped(
-        Constraint::MulticenterBond(MulticenterBondId(1), MulticenterBondConstraintAst::electron_count(2)),
+        Constraint::MulticenterBond(MulticenterBondId(1), MulticenterBondConstraintForm::electron_count(2)),
         relation_compaction(vec![], vec![], vec![1], vec![], vec![], vec![]),
         None,
     )]
@@ -1087,9 +1087,9 @@ mod tests {
         Constraint::Bond(BondId(3), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     )]
     #[case::dative_leaf(
-        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         id_remapping(&[], &[], &[(1, 0)]),
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     )]
     #[case::molecule_charge_sum(
         Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: NumForm::Lit(1) }),

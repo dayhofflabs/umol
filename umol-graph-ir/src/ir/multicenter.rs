@@ -3,7 +3,7 @@
 use umol_graph_core::{ParticipantPosition, RelationData};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
-use super::constraint::{MulticenterBondConstraintAst, MulticenterBondConstraintsAst};
+use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraintsForm};
 use super::electrons::ElectronCountsForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{Canonicalize, Lattice};
@@ -14,7 +14,7 @@ pub struct MulticenterBondForm {
     pub electrons: ElectronCountsForm,
     pub charge: NumForm,
     pub unpaired_electrons: UnpairedElectronsForm,
-    pub constraints: MulticenterBondConstraintsAst,
+    pub constraints: MulticenterBondConstraintsForm,
 }
 
 /// Attribute update for a multicenter bond. Ordinary fields are optional,
@@ -25,7 +25,7 @@ pub struct MulticenterBondUpdate {
     pub electrons: Option<ElectronCountsForm>,
     pub charge: Option<NumForm>,
     pub unpaired_electrons: UnpairedElectronsUpdate,
-    pub constraints: MulticenterBondConstraintsAst,
+    pub constraints: MulticenterBondConstraintsForm,
 }
 
 impl From<&str> for MulticenterBondForm {
@@ -71,20 +71,20 @@ impl MulticenterBondForm {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `MulticenterBondConstraintsAst::set`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<MulticenterBondConstraintAst>) -> Self {
+    /// kind (last-wins per `MulticenterBondConstraintsForm::set`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<MulticenterBondConstraintForm>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `MulticenterBondConstraintsAst::set`).
+    /// of the same kind (last-wins per `MulticenterBondConstraintsForm::set`).
     /// Does not clear existing constraints; use `bond.constraints.clear()`
     /// or direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<MulticenterBondConstraintAst>,
+        I::Item: Into<MulticenterBondConstraintForm>,
     {
         for c in constraints {
             self.constraints.set(c.into());
@@ -123,7 +123,7 @@ impl MulticenterBondForm {
 
     /// Derive the minimal canonical attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> MulticenterBondUpdate {
-        let mut constraints = MulticenterBondConstraintsAst::new();
+        let mut constraints = MulticenterBondConstraintsForm::new();
         for new in other.constraints.iter() {
             if self
                 .constraints
@@ -170,7 +170,7 @@ mod tests {
     #[case::literal(MulticenterBondForm::new(ElectronCountsForm::Lit(vec![1; 3])),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
-            constraints: MulticenterBondConstraintsAst::new() })]
+            constraints: MulticenterBondConstraintsForm::new() })]
     fn test_multicenter_bond_form_new(
         #[case] actual: MulticenterBondForm,
         #[case] expected: MulticenterBondForm,
@@ -183,7 +183,7 @@ mod tests {
     #[case::literal(MulticenterBondForm::from_electrons(vec![1, 1, 1]),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
-            constraints: MulticenterBondConstraintsAst::new() })]
+            constraints: MulticenterBondConstraintsForm::new() })]
     fn test_multicenter_bond_form_from_electrons(
         #[case] actual: MulticenterBondForm,
         #[case] expected: MulticenterBondForm,
@@ -196,29 +196,29 @@ mod tests {
     #[case::with_charge(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(-1),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm::default(),
-            constraints: MulticenterBondConstraintsAst::new() })]
+            constraints: MulticenterBondConstraintsForm::new() })]
     #[case::with_unpaired_electrons(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 1_u8)),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-            constraints: MulticenterBondConstraintsAst::new() })]
+            constraints: MulticenterBondConstraintsForm::new() })]
     #[case::with_constraint(
-        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(2)),
+        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintForm::electron_count(2)),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)) })]
+            constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)) })]
     #[case::with_constraints_extends(
         MulticenterBondForm::from_electrons(vec![1, 1, 1])
-            .with_constraints([MulticenterBondConstraintAst::electron_count(2)]),
+            .with_constraints([MulticenterBondConstraintForm::electron_count(2)]),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)) })]
+            constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)) })]
     #[case::with_constraint_replaces_same_kind(
         MulticenterBondForm::from_electrons(vec![1, 1, 1])
-            .with_constraint(MulticenterBondConstraintAst::electron_count(2))
-            .with_constraint(MulticenterBondConstraintAst::electron_count(4)),
+            .with_constraint(MulticenterBondConstraintForm::electron_count(2))
+            .with_constraint(MulticenterBondConstraintForm::electron_count(4)),
         MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]),
             charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(4)) })]
+            constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(4)) })]
     fn test_multicenter_bond_form_with_methods(
         #[case] actual: MulticenterBondForm,
         #[case] expected: MulticenterBondForm,
@@ -234,7 +234,7 @@ mod tests {
             electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: MulticenterBondConstraintsAst::new(),
+            constraints: MulticenterBondConstraintsForm::new(),
         },
     )]
     #[case::preserves_set_charge(
@@ -243,19 +243,19 @@ mod tests {
             electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Lit(1),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: MulticenterBondConstraintsAst::new(),
+            constraints: MulticenterBondConstraintsForm::new(),
         },
     )]
     #[case::preserves_constraints(
         MulticenterBondForm::from_electrons(vec![1; 3])
-            .with_constraint(MulticenterBondConstraintAst::electron_count(3))
+            .with_constraint(MulticenterBondConstraintForm::electron_count(3))
             .into_ground(),
         MulticenterBondForm {
             electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
-            constraints: MulticenterBondConstraintsAst::from(
-                MulticenterBondConstraintAst::electron_count(3),
+            constraints: MulticenterBondConstraintsForm::from(
+                MulticenterBondConstraintForm::electron_count(3),
             ),
         },
     )]
@@ -274,9 +274,9 @@ mod tests {
     #[case::charge_undetermined(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(-1_i64), MulticenterBondUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]))]
     #[case::unpaired_electrons_count(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((0_u8, 3_u8)))]
     #[case::unpaired_electrons_multiplicity(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8)), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 1_u8)))]
-    #[case::constraint_set(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6_i64)), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)))]
-    #[case::constraint_replace(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(4_i64)), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(4_i64)))]
-    #[case::constraint_remove(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]))]
+    #[case::constraint_set(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6_i64)), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)))]
+    #[case::constraint_replace(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(4_i64)), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintForm::electron_count(4_i64)))]
+    #[case::constraint_remove(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() }, MulticenterBondForm::from_electrons(vec![1, 1, 1]))]
     fn test_multicenter_bond_form_update(
         #[case] bond: MulticenterBondForm,
         #[case] update: MulticenterBondUpdate,
@@ -286,7 +286,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)))]
+    #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)))]
     fn test_multicenter_bond_form_update_identity(#[case] bond: MulticenterBondForm) {
         assert_eq!(bond.update(&MulticenterBondUpdate::default()), bond);
     }
@@ -294,13 +294,13 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
-        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)),
         MulticenterBondForm::from_electrons(vec![2, 2, 2]).with_unpaired_electrons((2_u8, 1_u8)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)),
+            constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)),
         },
     )]
     fn test_multicenter_bond_form_difference_to(
@@ -354,7 +354,7 @@ mod tests {
     #[case::ground_with_constraint(
         MulticenterBondForm::new(ElectronCountsForm::Lit(vec![1; 3]))
             .with_charge(0).with_unpaired_electrons((0, 1))
-            .with_constraint(MulticenterBondConstraintAst::electron_count(3)),
+            .with_constraint(MulticenterBondConstraintForm::electron_count(3)),
         true,
     )]
     fn test_multicenter_bond_form_is_ground(
@@ -416,14 +416,14 @@ mod tests {
     )]
     #[case::constraint_required_present(
         MulticenterBondForm::new(ElectronCountsForm::Undetermined)
-            .with_constraint(MulticenterBondConstraintAst::electron_count(3)),
+            .with_constraint(MulticenterBondConstraintForm::electron_count(3)),
         MulticenterBondForm::new(ElectronCountsForm::Undetermined)
-            .with_constraint(MulticenterBondConstraintAst::electron_count(3)),
+            .with_constraint(MulticenterBondConstraintForm::electron_count(3)),
         true,
     )]
     #[case::constraint_required_absent(
         MulticenterBondForm::new(ElectronCountsForm::Undetermined)
-            .with_constraint(MulticenterBondConstraintAst::electron_count(3)),
+            .with_constraint(MulticenterBondConstraintForm::electron_count(3)),
         MulticenterBondForm::new(ElectronCountsForm::Undetermined),
         false,
     )]

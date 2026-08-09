@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 
-use super::super::constraint::NoncovalentBondConstraintsAst;
+use super::super::constraint::NoncovalentBondConstraintsForm;
 use super::super::id::{AtomId, NoncovalentBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
@@ -176,7 +176,7 @@ impl<'a> NoncovalentBondView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a NoncovalentBondConstraintsAst {
+    pub fn constraints(&self) -> &'a NoncovalentBondConstraintsForm {
         &self.ast.constraints
     }
 

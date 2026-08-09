@@ -2203,14 +2203,14 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
+        AromaticSystemConstraintForm as GraphIrAromaticSystemConstraintForm,
         AtomConstraintForm as GraphIrAtomConstraintForm,
         BondConstraintForm as GraphIrBondConstraintForm, BooleanForm as GraphIrBooleanForm,
-        DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
+        DativeBondConstraintForm as GraphIrDativeBondConstraintForm,
         ElectronCountsForm as GraphIrElectronCountsForm, ElementForm as GraphIrElementForm,
         IsotopeMassForm as GraphIrIsotopeMassForm,
-        MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+        MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
+        NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
         NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm, NumForm as GraphIrNumForm,
         StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
@@ -3405,17 +3405,17 @@ mod tests {
     #[case::constraint_added(GraphIrDativeBondDelta::ModifyConstraint {
         id: GraphIrDativeBondId(1),
         old: None,
-        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     #[case::constraint_removed(GraphIrDativeBondDelta::ModifyConstraint {
         id: GraphIrDativeBondId(1),
-        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrDativeBondDelta::ModifyConstraint {
         id: GraphIrDativeBondId(1),
-        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(false))),
-        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(false))),
+        new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     fn test_dative_bond_delta_roundtrip(#[case] delta: GraphIrDativeBondDelta) {
         Python::attach(|py| {
@@ -3502,7 +3502,7 @@ mod tests {
         GraphIrDativeBondDelta::ModifyConstraint {
             id: GraphIrDativeBondId(1),
             old: None,
-            new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+            new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         },
         "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
     )]
@@ -3546,17 +3546,17 @@ mod tests {
     #[case::constraint_added(GraphIrDativeBondDelta::ModifyConstraint {
         id: GraphIrDativeBondId(1),
         old: None,
-        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     #[case::constraint_removed(GraphIrDativeBondDelta::ModifyConstraint {
         id: GraphIrDativeBondId(1),
-        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrDativeBondDelta::ModifyConstraint {
         id: GraphIrDativeBondId(1),
-        old: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(false))),
-        new: Some(GraphIrDativeBondConstraintAst::Aromatic(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(false))),
+        new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
     fn test_dative_bond_delta_inverse(#[case] delta: GraphIrDativeBondDelta) {
         Python::attach(|py| {
@@ -3592,17 +3592,17 @@ mod tests {
     #[case::constraint_added(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
         old: None,
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_aromatic_system_delta_roundtrip(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
@@ -3685,7 +3685,7 @@ mod tests {
         GraphIrAromaticSystemDelta::ModifyConstraint {
             id: GraphIrAromaticSystemId(2),
             old: None,
-            new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+            new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         },
         "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
     )]
@@ -3730,17 +3730,17 @@ mod tests {
     #[case::constraint_added(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
         old: None,
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrAromaticSystemDelta::ModifyConstraint {
         id: GraphIrAromaticSystemId(2),
-        old: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
-        new: Some(GraphIrAromaticSystemConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_aromatic_system_delta_inverse(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
@@ -3776,17 +3776,17 @@ mod tests {
     #[case::constraint_added(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
         old: None,
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_multicenter_bond_delta_roundtrip(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
@@ -3869,7 +3869,7 @@ mod tests {
         GraphIrMulticenterBondDelta::ModifyConstraint {
             id: GraphIrMulticenterBondId(3),
             old: None,
-            new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+            new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         },
         "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
     )]
@@ -3914,17 +3914,17 @@ mod tests {
     #[case::constraint_added(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
         old: None,
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     #[case::constraint_removed(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrMulticenterBondDelta::ModifyConstraint {
         id: GraphIrMulticenterBondId(3),
-        old: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(5))),
-        new: Some(GraphIrMulticenterBondConstraintAst::ElectronCount(GraphIrNumForm::Lit(6))),
+        old: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(5))),
+        new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
     fn test_multicenter_bond_delta_inverse(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
@@ -3960,17 +3960,17 @@ mod tests {
     #[case::constraint_added(GraphIrNoncovalentBondDelta::ModifyConstraint {
         id: GraphIrNoncovalentBondId(4),
         old: None,
-        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+        new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
     })]
     #[case::constraint_removed(GraphIrNoncovalentBondDelta::ModifyConstraint {
         id: GraphIrNoncovalentBondId(4),
-        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrNoncovalentBondDelta::ModifyConstraint {
         id: GraphIrNoncovalentBondId(4),
-        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(false))),
-        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(false))),
+        new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
     })]
     fn test_noncovalent_bond_delta_roundtrip(#[case] delta: GraphIrNoncovalentBondDelta) {
         Python::attach(|py| {
@@ -4053,7 +4053,7 @@ mod tests {
         GraphIrNoncovalentBondDelta::ModifyConstraint {
             id: GraphIrNoncovalentBondId(4),
             old: None,
-            new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+            new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
         },
         "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)))",
     )]
@@ -4098,17 +4098,17 @@ mod tests {
     #[case::constraint_added(GraphIrNoncovalentBondDelta::ModifyConstraint {
         id: GraphIrNoncovalentBondId(4),
         old: None,
-        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+        new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
     })]
     #[case::constraint_removed(GraphIrNoncovalentBondDelta::ModifyConstraint {
         id: GraphIrNoncovalentBondId(4),
-        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
         new: None,
     })]
     #[case::constraint_modified(GraphIrNoncovalentBondDelta::ModifyConstraint {
         id: GraphIrNoncovalentBondId(4),
-        old: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(false))),
-        new: Some(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Lit(true))),
+        old: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(false))),
+        new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
     })]
     fn test_noncovalent_bond_delta_inverse(#[case] delta: GraphIrNoncovalentBondDelta) {
         Python::attach(|py| {

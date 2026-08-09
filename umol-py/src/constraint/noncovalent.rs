@@ -6,9 +6,9 @@ use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_graph_ir::ir::{
-    NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+    NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
     NoncovalentBondConstraintKey as GraphIrNoncovalentBondConstraintKey,
-    NoncovalentBondConstraintsAst as GraphIrNoncovalentBondConstraintsAst,
+    NoncovalentBondConstraintsForm as GraphIrNoncovalentBondConstraintsForm,
     NoncovalentBondId as GraphIrNoncovalentBondId,
 };
 
@@ -100,12 +100,12 @@ impl NoncovalentBondConstraintAst {
 
 impl_py_lattice!(
     NoncovalentBondConstraintAst,
-    GraphIrNoncovalentBondConstraintAst,
+    GraphIrNoncovalentBondConstraintForm,
     |value: &NoncovalentBondConstraintAst,
      py: Python<'_>|
-     -> PyResult<GraphIrNoncovalentBondConstraintAst> { Ok(value.to_rust(py)) },
+     -> PyResult<GraphIrNoncovalentBondConstraintForm> { Ok(value.to_rust(py)) },
     |py: Python<'_>,
-     value: GraphIrNoncovalentBondConstraintAst|
+     value: GraphIrNoncovalentBondConstraintForm|
      -> PyResult<NoncovalentBondConstraintAst> {
         NoncovalentBondConstraintAst::from_rust(py, &value)
     }
@@ -114,19 +114,19 @@ impl_py_lattice!(
 impl NoncovalentBondConstraintAst {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrNoncovalentBondConstraintAst,
+        ast: &GraphIrNoncovalentBondConstraintForm,
     ) -> PyResult<Self> {
         Ok(match ast {
-            GraphIrNoncovalentBondConstraintAst::Intramolecular(b) => {
+            GraphIrNoncovalentBondConstraintForm::Intramolecular(b) => {
                 Self::Intramolecular(into_py_variant(py, BooleanAst::from_rust(b))?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondConstraintForm {
         match self {
             Self::Intramolecular(b) => {
-                GraphIrNoncovalentBondConstraintAst::Intramolecular(b.bind(py).borrow().to_rust())
+                GraphIrNoncovalentBondConstraintForm::Intramolecular(b.bind(py).borrow().to_rust())
             }
         }
     }
@@ -179,14 +179,14 @@ impl NoncovalentBondConstraintsUpdate {
 pub(crate) enum ResolvedNoncovalentBondConstraintsUpdate {
     /// A whole container (from another container or a live view): overlaid via
     /// `update` (last-wins per key; undetermined entries remove).
-    Overlay(GraphIrNoncovalentBondConstraintsAst),
+    Overlay(GraphIrNoncovalentBondConstraintsForm),
     /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
-    Entries(Vec<GraphIrNoncovalentBondConstraintAst>),
+    Entries(Vec<GraphIrNoncovalentBondConstraintForm>),
 }
 
 impl ResolvedNoncovalentBondConstraintsUpdate {
     /// Overlay onto `target` in place. No Python reads.
-    pub(crate) fn apply(self, target: &mut GraphIrNoncovalentBondConstraintsAst) {
+    pub(crate) fn apply(self, target: &mut GraphIrNoncovalentBondConstraintsForm) {
         match self {
             ResolvedNoncovalentBondConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
             ResolvedNoncovalentBondConstraintsUpdate::Entries(entries) => {
@@ -202,7 +202,7 @@ impl ResolvedNoncovalentBondConstraintsUpdate {
 /// Mutable, hence value-equal but unhashable (matching `NoncovalentBondAst`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct NoncovalentBondConstraintsAst(GraphIrNoncovalentBondConstraintsAst);
+pub struct NoncovalentBondConstraintsAst(GraphIrNoncovalentBondConstraintsForm);
 
 #[pymethods]
 impl NoncovalentBondConstraintsAst {
@@ -210,7 +210,7 @@ impl NoncovalentBondConstraintsAst {
     /// an earlier one, last-wins).
     #[new]
     pub(crate) fn new(py: Python<'_>, entries: Vec<Py<NoncovalentBondConstraintAst>>) -> Self {
-        let mut constraints = GraphIrNoncovalentBondConstraintsAst::new();
+        let mut constraints = GraphIrNoncovalentBondConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
@@ -352,7 +352,7 @@ impl NoncovalentBondConstraintsAst {
     #[setter]
     pub(crate) fn set_intramolecular(&mut self, py: Python<'_>, value: BooleanLike) {
         self.0
-            .set(GraphIrNoncovalentBondConstraintAst::intramolecular(
+            .set(GraphIrNoncovalentBondConstraintForm::intramolecular(
                 value.to_rust(py),
             ));
     }
@@ -366,32 +366,32 @@ impl NoncovalentBondConstraintsAst {
 
 impl NoncovalentBondConstraintsAst {
     /// The wrapped AST constraints — read access for noncovalent bond construction.
-    pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondConstraintsAst {
+    pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondConstraintsForm {
         &self.0
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
     /// in-crate construction wraps `NoncovalentBondConstraintsAst(..)` directly.
-    pub(crate) fn from_inner(constraints: GraphIrNoncovalentBondConstraintsAst) -> Self {
+    pub(crate) fn from_inner(constraints: GraphIrNoncovalentBondConstraintsForm) -> Self {
         NoncovalentBondConstraintsAst(constraints)
     }
 }
 
 impl_py_lattice!(
     NoncovalentBondConstraintsAst,
-    GraphIrNoncovalentBondConstraintsAst,
+    GraphIrNoncovalentBondConstraintsForm,
     |value: &NoncovalentBondConstraintsAst,
      _py: Python<'_>|
-     -> PyResult<GraphIrNoncovalentBondConstraintsAst> { Ok(value.inner().clone()) },
+     -> PyResult<GraphIrNoncovalentBondConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
-     value: GraphIrNoncovalentBondConstraintsAst|
+     value: GraphIrNoncovalentBondConstraintsForm|
      -> PyResult<NoncovalentBondConstraintsAst> { Ok(NoncovalentBondConstraintsAst(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn noncovalent_bond_constraints_iter(
     py: Python<'_>,
-    constraints: &GraphIrNoncovalentBondConstraintsAst,
+    constraints: &GraphIrNoncovalentBondConstraintsForm,
 ) -> PyResult<NoncovalentBondConstraintIter> {
     let entries = constraints
         .iter()
@@ -407,7 +407,7 @@ pub(crate) fn noncovalent_bond_constraints_iter(
 /// Build the key iterator handle from a borrowed container (mapping-style keys).
 pub(crate) fn noncovalent_bond_constraint_keys(
     py: Python<'_>,
-    constraints: &GraphIrNoncovalentBondConstraintsAst,
+    constraints: &GraphIrNoncovalentBondConstraintsForm,
 ) -> PyResult<NoncovalentBondConstraintKeyIter> {
     let keys = constraints
         .iter()
@@ -426,7 +426,7 @@ pub(crate) fn noncovalent_bond_constraint_keys(
 /// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
 pub(crate) fn noncovalent_bond_constraint_items(
     py: Python<'_>,
-    constraints: &GraphIrNoncovalentBondConstraintsAst,
+    constraints: &GraphIrNoncovalentBondConstraintsForm,
 ) -> PyResult<NoncovalentBondConstraintItemsIter> {
     let items = constraints
         .iter()
@@ -449,12 +449,12 @@ pub(crate) fn noncovalent_bond_constraint_items(
 /// Python values.
 pub(crate) fn noncovalent_bond_constraints_asdict<'py>(
     py: Python<'py>,
-    constraints: &GraphIrNoncovalentBondConstraintsAst,
+    constraints: &GraphIrNoncovalentBondConstraintsForm,
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for entry in constraints.iter() {
         match entry {
-            GraphIrNoncovalentBondConstraintAst::Intramolecular(b) => {
+            GraphIrNoncovalentBondConstraintForm::Intramolecular(b) => {
                 dict.set_item("intramolecular", BooleanAst::from_rust(b))?
             }
         }
@@ -527,7 +527,10 @@ pub(crate) enum NoncovalentBondConstraintsLike {
 }
 
 impl NoncovalentBondConstraintsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrNoncovalentBondConstraintsAst> {
+    pub(crate) fn to_rust(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<GraphIrNoncovalentBondConstraintsForm> {
         match self {
             NoncovalentBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             NoncovalentBondConstraintsLike::View(v) => {
@@ -561,7 +564,7 @@ impl NoncovalentBondConstraintsView {
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&GraphIrNoncovalentBondConstraintsAst) -> PyResult<R>,
+        f: impl FnOnce(&GraphIrNoncovalentBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
             NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
@@ -584,7 +587,7 @@ impl NoncovalentBondConstraintsView {
     pub(crate) fn with_mut<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrNoncovalentBondConstraintsAst) -> R,
+        f: impl FnOnce(&mut GraphIrNoncovalentBondConstraintsForm) -> R,
     ) -> R {
         match &self.backing {
             NoncovalentBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
@@ -600,7 +603,7 @@ impl NoncovalentBondConstraintsView {
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrNoncovalentBondConstraintAst) {
+    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrNoncovalentBondConstraintForm) {
         self.with_mut(py, |cs| cs.set(constraint));
     }
 
@@ -609,7 +612,7 @@ impl NoncovalentBondConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrNoncovalentBondConstraintKey,
-    ) -> Option<GraphIrNoncovalentBondConstraintAst> {
+    ) -> Option<GraphIrNoncovalentBondConstraintForm> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -757,7 +760,7 @@ impl NoncovalentBondConstraintsView {
     pub(crate) fn set_intramolecular(&self, py: Python<'_>, value: BooleanLike) {
         self.set_ast(
             py,
-            GraphIrNoncovalentBondConstraintAst::intramolecular(value.to_rust(py)),
+            GraphIrNoncovalentBondConstraintForm::intramolecular(value.to_rust(py)),
         );
     }
 

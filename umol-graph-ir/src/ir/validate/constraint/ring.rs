@@ -5,7 +5,7 @@ use umol_graph_core::RelevantCycleEnumerationAlgorithm;
 use umol_utils::solution::Solution;
 
 use super::super::super::constraint::{
-    AtomConstraintForm, BondConstraintForm, DativeBondConstraintAst,
+    AtomConstraintForm, BondConstraintForm, DativeBondConstraintForm,
 };
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId, DativeBondId};
@@ -65,7 +65,7 @@ impl RingConstraintValidator {
             if bond.constraints().iter().any(|constraint| {
                 matches!(
                     constraint,
-                    DativeBondConstraintAst::RingMembership(membership)
+                    DativeBondConstraintForm::RingMembership(membership)
                         if !membership.is_undetermined()
                 )
             }) {
@@ -151,7 +151,7 @@ impl RingConstraintValidator {
         if bond.constraints().iter().any(|constraint| {
             matches!(
                 constraint,
-                DativeBondConstraintAst::RingMembership(membership)
+                DativeBondConstraintForm::RingMembership(membership)
                     if !membership.is_undetermined()
             )
         }) {
@@ -283,7 +283,7 @@ fn uses_ring_constraints(ast: &MoleculeAst) -> bool {
             bond.constraints().iter().any(|constraint| {
                 matches!(
                     constraint,
-                    DativeBondConstraintAst::RingMembership(membership)
+                    DativeBondConstraintForm::RingMembership(membership)
                         if !membership.is_undetermined()
                 )
             })

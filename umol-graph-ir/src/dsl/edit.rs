@@ -36,9 +36,9 @@ use crate::ir::aromatic::AromaticSystemUpdate;
 use crate::ir::atom::AtomUpdate;
 use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
-    AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
-    DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-    NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
+    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
+    DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintAst,
     StereoBondConstraintAst, SubPatternAnchor,
 };
 use crate::ir::dative::DativeBondUpdate;
@@ -1898,8 +1898,8 @@ fn validate_dative_bond_update_pair(
     let constraints_match = expect
         .constraints
         .iter()
-        .map(DativeBondConstraintAst::key)
-        .eq(update.constraints.iter().map(DativeBondConstraintAst::key));
+        .map(DativeBondConstraintForm::key)
+        .eq(update.constraints.iter().map(DativeBondConstraintForm::key));
     if !fields_match || !constraints_match {
         return Err(DeError::Custom(
             "dative-bond :modify :expect and :update must address the same fields and constraints"
@@ -1921,11 +1921,11 @@ fn validate_aromatic_system_update_pair(
     let constraints_match = expect
         .constraints
         .iter()
-        .map(AromaticSystemConstraintAst::key)
+        .map(AromaticSystemConstraintForm::key)
         .eq(update
             .constraints
             .iter()
-            .map(AromaticSystemConstraintAst::key));
+            .map(AromaticSystemConstraintForm::key));
     if !fields_match || !constraints_match {
         return Err(DeError::Custom(
             "aromatic-system :modify :expect and :update must address the same fields and constraints"
@@ -1950,11 +1950,11 @@ fn validate_multicenter_bond_update_pair(
     let constraints_match = expect
         .constraints
         .iter()
-        .map(MulticenterBondConstraintAst::key)
+        .map(MulticenterBondConstraintForm::key)
         .eq(update
             .constraints
             .iter()
-            .map(MulticenterBondConstraintAst::key));
+            .map(MulticenterBondConstraintForm::key));
     if !fields_match || !constraints_match {
         return Err(DeError::Custom(
             "multicenter-bond :modify :expect and :update must address the same fields and constraints"
@@ -1975,11 +1975,11 @@ fn validate_noncovalent_bond_update_pair(
     let constraints_match = expect
         .constraints
         .iter()
-        .map(NoncovalentBondConstraintAst::key)
+        .map(NoncovalentBondConstraintForm::key)
         .eq(update
             .constraints
             .iter()
-            .map(NoncovalentBondConstraintAst::key));
+            .map(NoncovalentBondConstraintForm::key));
     if !fields_match || !constraints_match {
         return Err(DeError::Custom(
             "noncovalent-bond :modify :expect and :update must address the same fields and constraints"
@@ -2760,8 +2760,8 @@ fn bond_constraint_updates(
 }
 
 fn dative_bond_constraint_updates(
-    old: &Option<DativeBondConstraintAst>,
-    new: &Option<DativeBondConstraintAst>,
+    old: &Option<DativeBondConstraintForm>,
+    new: &Option<DativeBondConstraintForm>,
 ) -> Result<(DativeBondUpdate, DativeBondUpdate), DeError> {
     let key_matches = match (old, new) {
         (Some(old), Some(new)) => old.key() == new.key(),
@@ -2794,8 +2794,8 @@ fn dative_bond_constraint_updates(
 }
 
 fn aromatic_system_constraint_updates(
-    old: &Option<AromaticSystemConstraintAst>,
-    new: &Option<AromaticSystemConstraintAst>,
+    old: &Option<AromaticSystemConstraintForm>,
+    new: &Option<AromaticSystemConstraintForm>,
 ) -> Result<(AromaticSystemUpdate, AromaticSystemUpdate), DeError> {
     let key_matches = match (old, new) {
         (Some(old), Some(new)) => old.key() == new.key(),
@@ -2828,8 +2828,8 @@ fn aromatic_system_constraint_updates(
 }
 
 fn multicenter_bond_constraint_updates(
-    old: &Option<MulticenterBondConstraintAst>,
-    new: &Option<MulticenterBondConstraintAst>,
+    old: &Option<MulticenterBondConstraintForm>,
+    new: &Option<MulticenterBondConstraintForm>,
 ) -> Result<(MulticenterBondUpdate, MulticenterBondUpdate), DeError> {
     let key_matches = match (old, new) {
         (Some(old), Some(new)) => old.key() == new.key(),
@@ -2862,8 +2862,8 @@ fn multicenter_bond_constraint_updates(
 }
 
 fn noncovalent_bond_constraint_updates(
-    old: &Option<NoncovalentBondConstraintAst>,
-    new: &Option<NoncovalentBondConstraintAst>,
+    old: &Option<NoncovalentBondConstraintForm>,
+    new: &Option<NoncovalentBondConstraintForm>,
 ) -> Result<(NoncovalentBondUpdate, NoncovalentBondUpdate), DeError> {
     let key_matches = match (old, new) {
         (Some(old), Some(new)) => old.key() == new.key(),
@@ -4380,9 +4380,9 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintsForm, BondConstraintsForm, Constraint,
-        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst, RingMembershipAst, RingScope, StereoAtomConstraintAst,
+        AromaticSystemConstraintForm, AtomConstraintsForm, BondConstraintsForm, Constraint,
+        DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+        NoncovalentBondConstraintForm, RingMembershipAst, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst,
     };
     use crate::ir::dative::DativeBondForm;
@@ -4929,14 +4929,14 @@ mod tests {
         Edit::ModifyDativeBondConstraint {
             id: DativeBondHandle::Id(DativeBondId(0)),
             old: None,
-            new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+            new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         },
     )]
     #[case::dative_constraint_remove(
         r##"{:dative-bond {:modify [{:new 1} {:expect "#a" :update "#a*"}]}}"##,
         Edit::ModifyDativeBondConstraint {
             id: DativeBondHandle::New(1),
-            old: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+            old: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
             new: None,
         },
     )]
@@ -4983,14 +4983,14 @@ mod tests {
         Edit::ModifyAromaticSystemConstraint {
             id: AromaticSystemHandle::Id(AromaticSystemId(0)),
             old: None,
-            new: Some(AromaticSystemConstraintAst::electron_count(NumForm::Lit(6))),
+            new: Some(AromaticSystemConstraintForm::electron_count(NumForm::Lit(6))),
         },
     )]
     #[case::aromatic_constraint_remove(
         r##"{:aromatic-system {:modify [{:new 2} {:expect "#e6" :update "#e*"}]}}"##,
         Edit::ModifyAromaticSystemConstraint {
             id: AromaticSystemHandle::New(2),
-            old: Some(AromaticSystemConstraintAst::electron_count(NumForm::Lit(6))),
+            old: Some(AromaticSystemConstraintForm::electron_count(NumForm::Lit(6))),
             new: None,
         },
     )]
@@ -5037,14 +5037,14 @@ mod tests {
         Edit::ModifyMulticenterBondConstraint {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             old: None,
-            new: Some(MulticenterBondConstraintAst::electron_count(NumForm::Lit(2))),
+            new: Some(MulticenterBondConstraintForm::electron_count(NumForm::Lit(2))),
         },
     )]
     #[case::multicenter_constraint_remove(
         r##"{:multicenter-bond {:modify [{:new 2} {:expect "#e2" :update "#e*"}]}}"##,
         Edit::ModifyMulticenterBondConstraint {
             id: MulticenterBondHandle::New(2),
-            old: Some(MulticenterBondConstraintAst::electron_count(NumForm::Lit(2))),
+            old: Some(MulticenterBondConstraintForm::electron_count(NumForm::Lit(2))),
             new: None,
         },
     )]
@@ -5077,14 +5077,14 @@ mod tests {
         Edit::ModifyNoncovalentBondConstraint {
             id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
             old: None,
-            new: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+            new: Some(NoncovalentBondConstraintForm::intramolecular(true)),
         },
     )]
     #[case::noncovalent_constraint_remove(
         r##"{:noncovalent-bond {:modify [{:new 1} {:expect "#I" :update "#I*"}]}}"##,
         Edit::ModifyNoncovalentBondConstraint {
             id: NoncovalentBondHandle::New(1),
-            old: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+            old: Some(NoncovalentBondConstraintForm::intramolecular(true)),
             new: None,
         },
     )]

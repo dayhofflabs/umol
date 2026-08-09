@@ -18,10 +18,10 @@ use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::super::bond::BondForm;
 use super::super::boolean::BooleanForm;
 use super::super::constraint::{
-    AromaticSystemConstraintAst, AtomConstraintForm, AtomConstraintsForm, BondConstraintForm,
-    BondConstraintsForm, Constraint, Constraints, DativeBondConstraintAst,
-    DativeBondConstraintsAst, MoleculeConstraint, MulticenterBondConstraintAst,
-    NoncovalentBondConstraintAst, RelationalConstraint, RingScope, StereoAtomConstraintAst,
+    AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintsForm, BondConstraintForm,
+    BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
+    DativeBondConstraintsForm, MoleculeConstraint, MulticenterBondConstraintForm,
+    NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintAst,
     StereoBondConstraintAst, StereogenicityAst, SubPatternAnchor,
 };
 use super::super::correspondence::MoleculeCorrespondence;
@@ -384,18 +384,18 @@ fn test_molecule_ast_try_from_entries_constraint_error(
         Entity::Atom(id) => Constraint::Atom(id, AtomConstraintForm::valence(NumForm::Lit(4))),
         Entity::Bond(id) => Constraint::Bond(id, BondConstraintForm::aromatic(false)),
         Entity::DativeBond(id) => {
-            Constraint::DativeBond(id, DativeBondConstraintAst::aromatic(false))
+            Constraint::DativeBond(id, DativeBondConstraintForm::aromatic(false))
         }
         Entity::AromaticSystem(id) => Constraint::AromaticSystem(
             id,
-            AromaticSystemConstraintAst::electron_count(NumForm::Lit(6)),
+            AromaticSystemConstraintForm::electron_count(NumForm::Lit(6)),
         ),
         Entity::MulticenterBond(id) => Constraint::MulticenterBond(
             id,
-            MulticenterBondConstraintAst::electron_count(NumForm::Lit(2)),
+            MulticenterBondConstraintForm::electron_count(NumForm::Lit(2)),
         ),
         Entity::NoncovalentBond(id) => {
-            Constraint::NoncovalentBond(id, NoncovalentBondConstraintAst::intramolecular(true))
+            Constraint::NoncovalentBond(id, NoncovalentBondConstraintForm::intramolecular(true))
         }
         Entity::StereoAtom(id) => Constraint::StereoAtom(
             id,
@@ -2246,7 +2246,7 @@ fn test_molecule_editor_push_constraint_and_constraints_mut(
 fn test_molecule_editor_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
-        DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
+        DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
     );
     let result = b.build();
     assert!(!result
@@ -2756,11 +2756,11 @@ fn test_molecule_ast_modify_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
 #[rstest]
 fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     ast.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
-        DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
+        DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
     );
     assert_eq!(
         ast.dative_bond(DativeBondId(0)).ast.constraints,
-        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
+        DativeBondConstraintsForm::from_iter([DativeBondConstraintForm::ring_membership(
             RingScope::Size(6),
             1
         )])
@@ -2861,7 +2861,7 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
         .constraints
         .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
-        DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)),
+        DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Lit(1)),
     );
 
     ast.lift_constraints();
@@ -2886,7 +2886,7 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     ));
     expected.push(Constraint::DativeBond(
         DativeBondId(0),
-        DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)),
+        DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Lit(1)),
     ));
     assert_same_constraints(ast.constraints(), &expected);
 }
@@ -2930,7 +2930,7 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
     ));
     ast.constraints_mut().push(Constraint::DativeBond(
         DativeBondId(0),
-        DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
+        DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
     ));
 
     ast.inline_constraints();
@@ -2946,7 +2946,7 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
     );
     assert_eq!(
         ast.dative_bond(DativeBondId(0)).ast.constraints,
-        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
+        DativeBondConstraintsForm::from_iter([DativeBondConstraintForm::ring_membership(
             RingScope::Size(5),
             1
         )])
@@ -3052,7 +3052,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
         .constraints
         .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
-        DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)),
+        DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Lit(1)),
     );
 
     let original = ast.clone();

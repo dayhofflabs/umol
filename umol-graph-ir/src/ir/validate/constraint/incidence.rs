@@ -5,9 +5,9 @@ use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_utils::solution::Solution;
 
 use super::super::super::constraint::{
-    AromaticSystemConstraintAst, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey,
-    BondConstraintForm, BondConstraintKey, DativeBondConstraintAst, MulticenterBondConstraintAst,
-    MulticenterValenceForm, NoncovalentBondConstraintAst,
+    AromaticSystemConstraintForm, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey,
+    BondConstraintForm, BondConstraintKey, DativeBondConstraintForm, MulticenterBondConstraintForm,
+    MulticenterValenceForm, NoncovalentBondConstraintForm,
 };
 use super::super::super::entity::Entity;
 use super::super::super::id::{
@@ -388,22 +388,22 @@ pub enum IncidenceConstraintContradiction {
     #[error("dative bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
     DativeBond {
         bond: DativeBondId,
-        constraint: DativeBondConstraintAst,
+        constraint: DativeBondConstraintForm,
     },
     #[error("aromatic system {system:?} does not satisfy incidence constraint {constraint:?}")]
     AromaticSystem {
         system: AromaticSystemId,
-        constraint: AromaticSystemConstraintAst,
+        constraint: AromaticSystemConstraintForm,
     },
     #[error("multicenter bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
     MulticenterBond {
         bond: MulticenterBondId,
-        constraint: MulticenterBondConstraintAst,
+        constraint: MulticenterBondConstraintForm,
     },
     #[error("noncovalent bond {bond:?} does not satisfy incidence constraint {constraint:?}")]
     NoncovalentBond {
         bond: NoncovalentBondId,
-        constraint: NoncovalentBondConstraintAst,
+        constraint: NoncovalentBondConstraintForm,
     },
 }
 
@@ -446,11 +446,11 @@ pub fn validate_bond_constraint(
 pub fn validate_dative_bond_constraint(
     ast: &MoleculeAst,
     bond_id: DativeBondId,
-    constraint: &DativeBondConstraintAst,
+    constraint: &DativeBondConstraintForm,
 ) -> Option<Solution<(), IncidenceConstraintContradiction>> {
     let bond = ast.dative_bond(bond_id);
     Some(match constraint {
-        DativeBondConstraintAst::Aromatic(_) if bond.donor_count() != 1 => {
+        DativeBondConstraintForm::Aromatic(_) if bond.donor_count() != 1 => {
             // Aromatic incidence is defined only for a binary dative bond pending the
             // coordination/haptic entity split in discussion doc 117.
             if constraint.is_undetermined() {
@@ -459,7 +459,7 @@ pub fn validate_dative_bond_constraint(
                 Solution::Underdetermined(())
             }
         }
-        DativeBondConstraintAst::Aromatic(_) => {
+        DativeBondConstraintForm::Aromatic(_) => {
             let donor_system = bond
                 .donors()
                 .next()
@@ -468,23 +468,23 @@ pub fn validate_dative_bond_constraint(
                 donor_system.is_some() && donor_system == bond.acceptor().aromatic_system_id();
             evaluate(
                 constraint,
-                &DativeBondConstraintAst::aromatic(derived),
+                &DativeBondConstraintForm::aromatic(derived),
                 IncidenceConstraintContradiction::DativeBond {
                     bond: bond.id,
                     constraint: constraint.clone(),
                 },
             )
         }
-        DativeBondConstraintAst::RingMembership(_) => return None,
+        DativeBondConstraintForm::RingMembership(_) => return None,
     })
 }
 
 pub fn validate_aromatic_system_constraint(
     ast: &MoleculeAst,
     system_id: AromaticSystemId,
-    constraint: &AromaticSystemConstraintAst,
+    constraint: &AromaticSystemConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let derived = AromaticSystemConstraintAst::electron_count(
+    let derived = AromaticSystemConstraintForm::electron_count(
         ast.aromatic_system(system_id).electron_count(),
     );
     evaluate(
@@ -500,9 +500,9 @@ pub fn validate_aromatic_system_constraint(
 pub fn validate_multicenter_bond_constraint(
     ast: &MoleculeAst,
     bond_id: MulticenterBondId,
-    constraint: &MulticenterBondConstraintAst,
+    constraint: &MulticenterBondConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let derived = MulticenterBondConstraintAst::electron_count(
+    let derived = MulticenterBondConstraintForm::electron_count(
         ast.multicenter_bond(bond_id).electron_count(),
     );
     evaluate(
@@ -517,10 +517,10 @@ pub fn validate_multicenter_bond_constraint(
 
 pub fn validate_noncovalent_bond_constraint(
     bond_id: NoncovalentBondId,
-    constraint: &NoncovalentBondConstraintAst,
+    constraint: &NoncovalentBondConstraintForm,
     intramolecular: bool,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let derived = NoncovalentBondConstraintAst::intramolecular(intramolecular);
+    let derived = NoncovalentBondConstraintForm::intramolecular(intramolecular);
     evaluate(
         constraint,
         &derived,
@@ -788,28 +788,28 @@ mod tests {
         r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]}"#,
         IncidenceConstraintContradiction::DativeBond {
             bond: DativeBondId(0),
-            constraint: DativeBondConstraintAst::aromatic(true),
+            constraint: DativeBondConstraintForm::aromatic(true),
         }
     )]
     #[case::aromatic_system(
         r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :aromatic-systems [{:atoms [0 1] :type "[1,1]#e3"}]}"#,
         IncidenceConstraintContradiction::AromaticSystem {
             system: AromaticSystemId(0),
-            constraint: AromaticSystemConstraintAst::electron_count(3),
+            constraint: AromaticSystemConstraintForm::electron_count(3),
         }
     )]
     #[case::multicenter_bond(
         r#"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "[1,1,0]#e3"}]}"#,
         IncidenceConstraintContradiction::MulticenterBond {
             bond: MulticenterBondId(0),
-            constraint: MulticenterBondConstraintAst::electron_count(3),
+            constraint: MulticenterBondConstraintForm::electron_count(3),
         }
     )]
     #[case::noncovalent_bond(
         r#"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd#I"}]}"#,
         IncidenceConstraintContradiction::NoncovalentBond {
             bond: NoncovalentBondId(0),
-            constraint: NoncovalentBondConstraintAst::intramolecular(true),
+            constraint: NoncovalentBondConstraintForm::intramolecular(true),
         }
     )]
     fn test_incidence_constraint_validator_validate_contradictory(

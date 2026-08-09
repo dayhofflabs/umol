@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemForm;
-use super::super::constraint::AromaticSystemConstraintsAst;
+use super::super::constraint::AromaticSystemConstraintsForm;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
@@ -193,7 +193,7 @@ impl<'a> AromaticSystemView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a AromaticSystemConstraintsAst {
+    pub fn constraints(&self) -> &'a AromaticSystemConstraintsForm {
         &self.ast.constraints
     }
 

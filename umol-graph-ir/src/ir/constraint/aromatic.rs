@@ -11,20 +11,20 @@ use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
-/// `AromaticSystemConstraintsAst`.
+/// `AromaticSystemConstraintsForm`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum AromaticSystemConstraintAst {
+pub enum AromaticSystemConstraintForm {
     /// Asserted total π-electron count for the system. Cross-checked by the
     /// `ConsistencyValidator` against `sum(AromaticSystemForm::electrons)`.
     ElectronCount(NumForm),
 }
 
-impl AromaticSystemConstraintAst {
+impl AromaticSystemConstraintForm {
     pub fn electron_count(v: impl Into<NumForm>) -> Self {
         Self::ElectronCount(v.into())
     }
 
-    /// Aromatic-system constraint key, unique within an `AromaticSystemConstraintsAst` container.
+    /// Aromatic-system constraint key, unique within an `AromaticSystemConstraintsForm` container.
     pub fn key(&self) -> AromaticSystemConstraintKey {
         match self {
             Self::ElectronCount(_) => AromaticSystemConstraintKey::ElectronCount,
@@ -49,7 +49,7 @@ impl AromaticSystemConstraintAst {
     }
 }
 
-impl Canonicalize for AromaticSystemConstraintAst {
+impl Canonicalize for AromaticSystemConstraintForm {
     /// Canonicalize the inner value; the kind is preserved.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -58,7 +58,7 @@ impl Canonicalize for AromaticSystemConstraintAst {
     }
 }
 
-impl Lattice for AromaticSystemConstraintAst {
+impl Lattice for AromaticSystemConstraintForm {
     fn is_undetermined(&self) -> bool {
         match self {
             Self::ElectronCount(v) => v.is_undetermined(),
@@ -104,9 +104,9 @@ pub enum AromaticSystemConstraintKey {
 
 /// Aromatic system constraints container, ordered, unique by key, sorted flat vector storage.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AromaticSystemConstraintsAst(Vec<AromaticSystemConstraintAst>);
+pub struct AromaticSystemConstraintsForm(Vec<AromaticSystemConstraintForm>);
 
-impl AromaticSystemConstraintsAst {
+impl AromaticSystemConstraintsForm {
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -114,7 +114,7 @@ impl AromaticSystemConstraintsAst {
     /// The system's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
     pub fn electron_count(&self) -> NumForm {
         match self.get(AromaticSystemConstraintKey::ElectronCount) {
-            Some(AromaticSystemConstraintAst::ElectronCount(v)) => v.clone(),
+            Some(AromaticSystemConstraintForm::ElectronCount(v)) => v.clone(),
             _ => NumForm::Undetermined,
         }
     }
@@ -135,12 +135,12 @@ impl AromaticSystemConstraintsAst {
         self.find(key).is_ok()
     }
 
-    pub fn get(&self, key: AromaticSystemConstraintKey) -> Option<&AromaticSystemConstraintAst> {
+    pub fn get(&self, key: AromaticSystemConstraintKey) -> Option<&AromaticSystemConstraintForm> {
         self.find(key).ok().map(|i| &self.0[i])
     }
 
     /// Insert in sorted order by key, overwrite same key (last-wins).
-    pub fn set(&mut self, c: AromaticSystemConstraintAst) {
+    pub fn set(&mut self, c: AromaticSystemConstraintForm) {
         match self.find(c.key()) {
             Ok(i) => self.0[i] = c,
             Err(i) => self.0.insert(i, c),
@@ -153,8 +153,8 @@ impl AromaticSystemConstraintsAst {
     /// apply/undo primitive.
     pub fn compare_and_set(
         &mut self,
-        old: Option<AromaticSystemConstraintAst>,
-        new: Option<AromaticSystemConstraintAst>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     ) -> Result<(), Contradiction> {
         let key = match (&old, &new) {
             (Some(o), Some(n)) => {
@@ -187,12 +187,12 @@ impl AromaticSystemConstraintsAst {
     pub fn remove(
         &mut self,
         key: AromaticSystemConstraintKey,
-    ) -> Option<AromaticSystemConstraintAst> {
+    ) -> Option<AromaticSystemConstraintForm> {
         self.find(key).ok().map(|i| self.0.remove(i))
     }
 
     /// `set` each constraint in turn (last-wins), for bulk construction.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = AromaticSystemConstraintAst>) {
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = AromaticSystemConstraintForm>) {
         for constraint in constraints {
             self.set(constraint);
         }
@@ -200,7 +200,7 @@ impl AromaticSystemConstraintsAst {
 
     /// Overlay `other` onto self by `set`-ing each of its entries (last-wins).
     /// Undetermined entries in `other` remove.
-    pub fn update(&mut self, other: &AromaticSystemConstraintsAst) {
+    pub fn update(&mut self, other: &AromaticSystemConstraintsForm) {
         for c in other.iter() {
             if c.is_undetermined() {
                 self.remove(c.key());
@@ -211,7 +211,7 @@ impl AromaticSystemConstraintsAst {
     }
 
     /// Bulk-remove entries that don't satisfy the predicate.
-    pub fn retain(&mut self, mut f: impl FnMut(&AromaticSystemConstraintAst) -> bool) {
+    pub fn retain(&mut self, mut f: impl FnMut(&AromaticSystemConstraintForm) -> bool) {
         self.0.retain(|c| f(c));
     }
 
@@ -221,11 +221,11 @@ impl AromaticSystemConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl ExactSizeIterator<Item = AromaticSystemConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = AromaticSystemConstraintForm> {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn iter(&self) -> Iter<'_, AromaticSystemConstraintAst> {
+    pub fn iter(&self) -> Iter<'_, AromaticSystemConstraintForm> {
         self.0.iter()
     }
 
@@ -234,7 +234,7 @@ impl AromaticSystemConstraintsAst {
     }
 }
 
-impl Canonicalize for AromaticSystemConstraintsAst {
+impl Canonicalize for AromaticSystemConstraintsForm {
     /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
@@ -243,13 +243,13 @@ impl Canonicalize for AromaticSystemConstraintsAst {
             .0
             .into_iter()
             .map(Canonicalize::canonicalize)
-            .collect::<Result<Vec<AromaticSystemConstraintAst>, _>>()?;
+            .collect::<Result<Vec<AromaticSystemConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
     }
 }
 
-impl Lattice for AromaticSystemConstraintsAst {
+impl Lattice for AromaticSystemConstraintsForm {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| c.is_undetermined())
     }
@@ -259,10 +259,10 @@ impl Lattice for AromaticSystemConstraintsAst {
     }
 
     /// Greatest lower bound as a two-pointer merge over the key-sorted entries: a shared key
-    /// meets its two values (`AromaticSystemConstraintAst::meet`; a `None` aborts the whole meet), an
+    /// meets its two values (`AromaticSystemConstraintForm::meet`; a `None` aborts the whole meet), an
     /// A-only / B-only key is kept (meet with the absent ⊤ is the value). Vacuous results dropped.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let mut entries: Vec<AromaticSystemConstraintAst> = Vec::new();
+        let mut entries: Vec<AromaticSystemConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
         let mut ca = a.next();
@@ -292,10 +292,10 @@ impl Lattice for AromaticSystemConstraintsAst {
     }
 
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
-    /// (`AromaticSystemConstraintAst::join`); a single-side key widens to the absent ⊤ and is dropped.
+    /// (`AromaticSystemConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let mut entries: Vec<AromaticSystemConstraintAst> = Vec::new();
+        let mut entries: Vec<AromaticSystemConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
         let mut ca = a.next();
@@ -348,8 +348,8 @@ impl Lattice for AromaticSystemConstraintsAst {
     }
 }
 
-impl FromIterator<AromaticSystemConstraintAst> for AromaticSystemConstraintsAst {
-    fn from_iter<I: IntoIterator<Item = AromaticSystemConstraintAst>>(iter: I) -> Self {
+impl FromIterator<AromaticSystemConstraintForm> for AromaticSystemConstraintsForm {
+    fn from_iter<I: IntoIterator<Item = AromaticSystemConstraintForm>>(iter: I) -> Self {
         let mut out = Self::new();
         for c in iter {
             out.set(c);
@@ -358,23 +358,23 @@ impl FromIterator<AromaticSystemConstraintAst> for AromaticSystemConstraintsAst 
     }
 }
 
-impl IntoIterator for AromaticSystemConstraintsAst {
-    type Item = AromaticSystemConstraintAst;
-    type IntoIter = IntoIter<AromaticSystemConstraintAst>;
+impl IntoIterator for AromaticSystemConstraintsForm {
+    type Item = AromaticSystemConstraintForm;
+    type IntoIter = IntoIter<AromaticSystemConstraintForm>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl From<AromaticSystemConstraintAst> for AromaticSystemConstraintsAst {
-    fn from(c: AromaticSystemConstraintAst) -> Self {
+impl From<AromaticSystemConstraintForm> for AromaticSystemConstraintsForm {
+    fn from(c: AromaticSystemConstraintForm) -> Self {
         Self::from_iter([c])
     }
 }
 
-impl From<Vec<AromaticSystemConstraintAst>> for AromaticSystemConstraintsAst {
-    fn from(cs: Vec<AromaticSystemConstraintAst>) -> Self {
+impl From<Vec<AromaticSystemConstraintForm>> for AromaticSystemConstraintsForm {
+    fn from(cs: Vec<AromaticSystemConstraintForm>) -> Self {
         Self::from_iter(cs)
     }
 }
@@ -389,23 +389,23 @@ mod tests {
 
     #[rstest]
     #[case::electron_count(
-        AromaticSystemConstraintAst::electron_count(6),
-        AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6))
+        AromaticSystemConstraintForm::electron_count(6),
+        AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6))
     )]
-    fn test_aromatic_system_constraint_ast_constructors(
-        #[case] actual: AromaticSystemConstraintAst,
-        #[case] expected: AromaticSystemConstraintAst,
+    fn test_aromatic_system_constraint_form_constructors(
+        #[case] actual: AromaticSystemConstraintForm,
+        #[case] expected: AromaticSystemConstraintForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
     #[case::electron_count(
-        AromaticSystemConstraintAst::electron_count(6),
+        AromaticSystemConstraintForm::electron_count(6),
         AromaticSystemConstraintKey::ElectronCount
     )]
-    fn test_aromatic_system_constraint_ast_key(
-        #[case] c: AromaticSystemConstraintAst,
+    fn test_aromatic_system_constraint_form_key(
+        #[case] c: AromaticSystemConstraintForm,
         #[case] expected: AromaticSystemConstraintKey,
     ) {
         assert_eq!(c.key(), expected);
@@ -413,35 +413,35 @@ mod tests {
 
     #[rstest]
     #[case::electron_count(
-        AromaticSystemConstraintAst::electron_count(6),
-        AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)
+        AromaticSystemConstraintForm::electron_count(6),
+        AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)
     )]
-    fn test_aromatic_system_constraint_ast_as_undetermined(
-        #[case] c: AromaticSystemConstraintAst,
-        #[case] expected: AromaticSystemConstraintAst,
+    fn test_aromatic_system_constraint_form_as_undetermined(
+        #[case] c: AromaticSystemConstraintForm,
+        #[case] expected: AromaticSystemConstraintForm,
     ) {
         assert_eq!(c.as_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count_litset_singleton(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([6])), Ok(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::empty_litset_contradiction(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
-    fn test_aromatic_system_constraint_ast_canonicalize(
-        #[case] constraint: AromaticSystemConstraintAst,
-        #[case] expected: Result<AromaticSystemConstraintAst, Contradiction>,
+    #[case::electron_count_litset_singleton(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([6])), Ok(AromaticSystemConstraintForm::electron_count(6)))]
+    #[case::empty_litset_contradiction(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+    fn test_aromatic_system_constraint_form_canonicalize(
+        #[case] constraint: AromaticSystemConstraintForm,
+        #[case] expected: Result<AromaticSystemConstraintForm, Contradiction>,
     ) {
         assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rstest]
-    #[case::lit(AromaticSystemConstraintAst::electron_count(6), false)]
+    #[case::lit(AromaticSystemConstraintForm::electron_count(6), false)]
     #[case::undetermined(
-        AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined),
+        AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined),
         true
     )]
-    fn test_aromatic_system_constraint_ast_is_undetermined(
-        #[case] c: AromaticSystemConstraintAst,
+    fn test_aromatic_system_constraint_form_is_undetermined(
+        #[case] c: AromaticSystemConstraintForm,
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
@@ -449,105 +449,106 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_value(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(6), Some(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::narrows_undetermined(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined), Some(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::incompatible(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(2), None)]
-    fn test_aromatic_system_constraint_ast_meet(#[case] a: AromaticSystemConstraintAst, #[case] b: AromaticSystemConstraintAst, #[case] expected: Option<AromaticSystemConstraintAst>) {
+    #[case::same_value(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(6), Some(AromaticSystemConstraintForm::electron_count(6)))]
+    #[case::narrows_undetermined(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined), Some(AromaticSystemConstraintForm::electron_count(6)))]
+    #[case::incompatible(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(2), None)]
+    fn test_aromatic_system_constraint_form_meet(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: Option<AromaticSystemConstraintForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_value(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(6), Ok(AromaticSystemConstraintAst::electron_count(6)))]
-    #[case::widens(AromaticSystemConstraintAst::electron_count(1), AromaticSystemConstraintAst::electron_count(2), Ok(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([1, 2]))))]
-    fn test_aromatic_system_constraint_ast_join(#[case] a: AromaticSystemConstraintAst, #[case] b: AromaticSystemConstraintAst, #[case] expected: Result<AromaticSystemConstraintAst, NoJoin>) {
+    #[case::same_value(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(6), Ok(AromaticSystemConstraintForm::electron_count(6)))]
+    #[case::widens(AromaticSystemConstraintForm::electron_count(1), AromaticSystemConstraintForm::electron_count(2), Ok(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([1, 2]))))]
+    fn test_aromatic_system_constraint_form_join(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: Result<AromaticSystemConstraintForm, NoJoin>) {
         assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_value(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(6), true)]
-    #[case::incompatible(AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(2), false)]
-    fn test_aromatic_system_constraint_ast_is_compatible(#[case] a: AromaticSystemConstraintAst, #[case] b: AromaticSystemConstraintAst, #[case] expected: bool) {
+    #[case::same_value(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(6), true)]
+    #[case::incompatible(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(2), false)]
+    fn test_aromatic_system_constraint_form_is_compatible(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_new() {
-        let cs = AromaticSystemConstraintsAst::new();
+    fn test_aromatic_system_constraints_form_new() {
+        let cs = AromaticSystemConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_iter() {
-        let cs = AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
+    fn test_aromatic_system_constraints_form_iter() {
+        let cs =
+            AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
-            vec![AromaticSystemConstraintAst::electron_count(6)]
+            vec![AromaticSystemConstraintForm::electron_count(6)]
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(vec![AromaticSystemConstraintAst::electron_count(6)], vec![AromaticSystemConstraintAst::electron_count(6)])]
-    #[case::overwrite_same_key(vec![AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::electron_count(10)], vec![AromaticSystemConstraintAst::electron_count(10)])]
-    #[case::vacuous_stores(vec![AromaticSystemConstraintAst::electron_count(6), AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)], vec![AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)])]
-    fn test_aromatic_system_constraints_ast_set(#[case] sequence: Vec<AromaticSystemConstraintAst>, #[case] expected: Vec<AromaticSystemConstraintAst>) {
-        let mut cs = AromaticSystemConstraintsAst::new();
+    #[case::fresh(vec![AromaticSystemConstraintForm::electron_count(6)], vec![AromaticSystemConstraintForm::electron_count(6)])]
+    #[case::overwrite_same_key(vec![AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(10)], vec![AromaticSystemConstraintForm::electron_count(10)])]
+    #[case::vacuous_stores(vec![AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)], vec![AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)])]
+    fn test_aromatic_system_constraints_form_set(#[case] sequence: Vec<AromaticSystemConstraintForm>, #[case] expected: Vec<AromaticSystemConstraintForm>) {
+        let mut cs = AromaticSystemConstraintsForm::new();
         for c in sequence {
             cs.set(c);
         }
-        assert_eq!(cs, AromaticSystemConstraintsAst::from_iter(expected));
+        assert_eq!(cs, AromaticSystemConstraintsForm::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::overwrite(
-        vec![AromaticSystemConstraintAst::electron_count(6)],
-        vec![AromaticSystemConstraintAst::electron_count(10)],
-        vec![AromaticSystemConstraintAst::electron_count(10)])]
+        vec![AromaticSystemConstraintForm::electron_count(6)],
+        vec![AromaticSystemConstraintForm::electron_count(10)],
+        vec![AromaticSystemConstraintForm::electron_count(10)])]
     #[case::adds_from_empty(
         vec![],
-        vec![AromaticSystemConstraintAst::electron_count(6)],
-        vec![AromaticSystemConstraintAst::electron_count(6)])]
+        vec![AromaticSystemConstraintForm::electron_count(6)],
+        vec![AromaticSystemConstraintForm::electron_count(6)])]
     #[case::vacuous_removes(
-        vec![AromaticSystemConstraintAst::electron_count(6)],
-        vec![AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)],
+        vec![AromaticSystemConstraintForm::electron_count(6)],
+        vec![AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)],
         vec![])]
-    fn test_aromatic_system_constraints_ast_update(#[case] initial: Vec<AromaticSystemConstraintAst>, #[case] other: Vec<AromaticSystemConstraintAst>, #[case] expected: Vec<AromaticSystemConstraintAst>) {
-        let mut cs = AromaticSystemConstraintsAst::from_iter(initial);
-        cs.update(&AromaticSystemConstraintsAst::from_iter(other));
-        assert_eq!(cs, AromaticSystemConstraintsAst::from_iter(expected));
+    fn test_aromatic_system_constraints_form_update(#[case] initial: Vec<AromaticSystemConstraintForm>, #[case] other: Vec<AromaticSystemConstraintForm>, #[case] expected: Vec<AromaticSystemConstraintForm>) {
+        let mut cs = AromaticSystemConstraintsForm::from_iter(initial);
+        cs.update(&AromaticSystemConstraintsForm::from_iter(other));
+        assert_eq!(cs, AromaticSystemConstraintsForm::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::modify(vec![AromaticSystemConstraintAst::electron_count(6)], Some(AromaticSystemConstraintAst::electron_count(6)), Some(AromaticSystemConstraintAst::electron_count(10)), Ok(()), vec![AromaticSystemConstraintAst::electron_count(10)])]
-    #[case::remove(vec![AromaticSystemConstraintAst::electron_count(6)], Some(AromaticSystemConstraintAst::electron_count(6)), None, Ok(()), vec![])]
-    #[case::add_from_absent(vec![], None, Some(AromaticSystemConstraintAst::electron_count(6)), Ok(()), vec![AromaticSystemConstraintAst::electron_count(6)])]
-    #[case::old_mismatch(vec![AromaticSystemConstraintAst::electron_count(6)], Some(AromaticSystemConstraintAst::electron_count(2)), None, Err(Contradiction), vec![AromaticSystemConstraintAst::electron_count(6)])]
-    fn test_aromatic_system_constraints_ast_compare_and_set(
-        #[case] initial: Vec<AromaticSystemConstraintAst>,
-        #[case] old: Option<AromaticSystemConstraintAst>,
-        #[case] new: Option<AromaticSystemConstraintAst>,
+    #[case::modify(vec![AromaticSystemConstraintForm::electron_count(6)], Some(AromaticSystemConstraintForm::electron_count(6)), Some(AromaticSystemConstraintForm::electron_count(10)), Ok(()), vec![AromaticSystemConstraintForm::electron_count(10)])]
+    #[case::remove(vec![AromaticSystemConstraintForm::electron_count(6)], Some(AromaticSystemConstraintForm::electron_count(6)), None, Ok(()), vec![])]
+    #[case::add_from_absent(vec![], None, Some(AromaticSystemConstraintForm::electron_count(6)), Ok(()), vec![AromaticSystemConstraintForm::electron_count(6)])]
+    #[case::old_mismatch(vec![AromaticSystemConstraintForm::electron_count(6)], Some(AromaticSystemConstraintForm::electron_count(2)), None, Err(Contradiction), vec![AromaticSystemConstraintForm::electron_count(6)])]
+    fn test_aromatic_system_constraints_form_compare_and_set(
+        #[case] initial: Vec<AromaticSystemConstraintForm>,
+        #[case] old: Option<AromaticSystemConstraintForm>,
+        #[case] new: Option<AromaticSystemConstraintForm>,
         #[case] expected_result: Result<(), Contradiction>,
-        #[case] expected_state: Vec<AromaticSystemConstraintAst>,
+        #[case] expected_state: Vec<AromaticSystemConstraintForm>,
     ) {
-        let mut cs = AromaticSystemConstraintsAst::from_iter(initial);
+        let mut cs = AromaticSystemConstraintsForm::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        assert_eq!(cs, AromaticSystemConstraintsAst::from_iter(expected_state));
+        assert_eq!(cs, AromaticSystemConstraintsForm::from_iter(expected_state));
     }
 
     #[rstest]
     #[case::present(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)),
         true
     )]
-    #[case::absent(AromaticSystemConstraintsAst::new(), false)]
-    fn test_aromatic_system_constraints_ast_contains(
-        #[case] cs: AromaticSystemConstraintsAst,
+    #[case::absent(AromaticSystemConstraintsForm::new(), false)]
+    fn test_aromatic_system_constraints_form_contains(
+        #[case] cs: AromaticSystemConstraintsForm,
         #[case] expected: bool,
     ) {
         assert_eq!(
@@ -558,13 +559,13 @@ mod tests {
 
     #[rstest]
     #[case::present(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
-        Some(AromaticSystemConstraintAst::electron_count(6))
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)),
+        Some(AromaticSystemConstraintForm::electron_count(6))
     )]
-    #[case::absent(AromaticSystemConstraintsAst::new(), None)]
-    fn test_aromatic_system_constraints_ast_get(
-        #[case] cs: AromaticSystemConstraintsAst,
-        #[case] expected: Option<AromaticSystemConstraintAst>,
+    #[case::absent(AromaticSystemConstraintsForm::new(), None)]
+    fn test_aromatic_system_constraints_form_get(
+        #[case] cs: AromaticSystemConstraintsForm,
+        #[case] expected: Option<AromaticSystemConstraintForm>,
     ) {
         assert_eq!(
             cs.get(AromaticSystemConstraintKey::ElectronCount),
@@ -574,19 +575,19 @@ mod tests {
 
     #[rstest]
     #[case::present(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
-        Some(AromaticSystemConstraintAst::electron_count(6)),
-        AromaticSystemConstraintsAst::new()
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)),
+        Some(AromaticSystemConstraintForm::electron_count(6)),
+        AromaticSystemConstraintsForm::new()
     )]
     #[case::absent(
-        AromaticSystemConstraintsAst::new(),
+        AromaticSystemConstraintsForm::new(),
         None,
-        AromaticSystemConstraintsAst::new()
+        AromaticSystemConstraintsForm::new()
     )]
-    fn test_aromatic_system_constraints_ast_remove(
-        #[case] mut cs: AromaticSystemConstraintsAst,
-        #[case] expected_removed: Option<AromaticSystemConstraintAst>,
-        #[case] expected_state: AromaticSystemConstraintsAst,
+    fn test_aromatic_system_constraints_form_remove(
+        #[case] mut cs: AromaticSystemConstraintsForm,
+        #[case] expected_removed: Option<AromaticSystemConstraintForm>,
+        #[case] expected_state: AromaticSystemConstraintsForm,
     ) {
         assert_eq!(
             cs.remove(AromaticSystemConstraintKey::ElectronCount),
@@ -597,52 +598,53 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(|c: &AromaticSystemConstraintAst| matches!(c, AromaticSystemConstraintAst::ElectronCount(_)), vec![AromaticSystemConstraintAst::electron_count(6)])]
-    #[case::all_dropped(|_: &AromaticSystemConstraintAst| false, vec![])]
-    fn test_aromatic_system_constraints_ast_retain(
-        #[case] predicate: impl FnMut(&AromaticSystemConstraintAst) -> bool,
-        #[case] expected: Vec<AromaticSystemConstraintAst>,
+    #[case::partial(|c: &AromaticSystemConstraintForm| matches!(c, AromaticSystemConstraintForm::ElectronCount(_)), vec![AromaticSystemConstraintForm::electron_count(6)])]
+    #[case::all_dropped(|_: &AromaticSystemConstraintForm| false, vec![])]
+    fn test_aromatic_system_constraints_form_retain(
+        #[case] predicate: impl FnMut(&AromaticSystemConstraintForm) -> bool,
+        #[case] expected: Vec<AromaticSystemConstraintForm>,
     ) {
-        let mut cs = AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
+        let mut cs = AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         cs.retain(predicate);
-        assert_eq!(cs, AromaticSystemConstraintsAst::from_iter(expected));
+        assert_eq!(cs, AromaticSystemConstraintsForm::from_iter(expected));
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_clear() {
+    fn test_aromatic_system_constraints_form_clear() {
         let mut cs =
-            AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
+            AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         cs.clear();
-        assert_eq!(cs, AromaticSystemConstraintsAst::new());
+        assert_eq!(cs, AromaticSystemConstraintsForm::new());
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_take() {
-        let mut empty = AromaticSystemConstraintsAst::new();
+    fn test_aromatic_system_constraints_form_take() {
+        let mut empty = AromaticSystemConstraintsForm::new();
         let mut empty_taken = empty.take();
         assert_eq!(empty_taken.len(), 0);
         assert_eq!(empty_taken.size_hint(), (0, Some(0)));
         assert_eq!(empty_taken.next(), None);
 
         let mut cs =
-            AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
+            AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let mut taken = cs.take();
         assert_eq!(taken.len(), 1);
         assert_eq!(taken.size_hint(), (1, Some(1)));
         assert_eq!(
             taken.next(),
-            Some(AromaticSystemConstraintAst::electron_count(6)),
+            Some(AromaticSystemConstraintForm::electron_count(6)),
         );
         assert_eq!(taken.len(), 0);
         assert_eq!(taken.size_hint(), (0, Some(0)));
         assert_eq!(taken.next(), None);
         drop(taken);
-        assert_eq!(cs, AromaticSystemConstraintsAst::new());
+        assert_eq!(cs, AromaticSystemConstraintsForm::new());
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_compact() {
-        let cs = AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
+    fn test_aromatic_system_constraints_form_compact() {
+        let cs =
+            AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let compaction = IdCompaction::new(
             Compaction::new(vec![0, 1], vec![0]),
             Vec::new(),
@@ -658,57 +660,57 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::canonicalizes_value(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([6]))),
-        Ok(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([6]))),
+        Ok(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6))))]
     #[case::drop_vacuous(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)),
-        Ok(AromaticSystemConstraintsAst::new()))]
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)),
+        Ok(AromaticSystemConstraintsForm::new()))]
     #[case::contradiction(
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set(Vec::<i64>::new()))),
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
-    fn test_aromatic_system_constraints_ast_canonicalize(
-        #[case] constraints: AromaticSystemConstraintsAst,
-        #[case] expected: Result<AromaticSystemConstraintsAst, Contradiction>,
+    fn test_aromatic_system_constraints_form_canonicalize(
+        #[case] constraints: AromaticSystemConstraintsForm,
+        #[case] expected: Result<AromaticSystemConstraintsForm, Contradiction>,
     ) {
         assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::a_only_kept(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::new(),
-        Some(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
-    #[case::b_only_kept(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
-        Some(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
-    #[case::shared_key_meets(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)),
-        Some(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6))))]
-    #[case::shared_key_contradicts(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)), None)]
-    #[case::prunes_vacuous(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), Some(AromaticSystemConstraintsAst::new()))]
-    fn test_aromatic_system_constraints_ast_meet(#[case] a: AromaticSystemConstraintsAst, #[case] b: AromaticSystemConstraintsAst, #[case] expected: Option<AromaticSystemConstraintsAst>) {
+    #[case::a_only_kept(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::new(),
+        Some(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6))))]
+    #[case::b_only_kept(AromaticSystemConstraintsForm::new(), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)),
+        Some(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6))))]
+    #[case::shared_key_meets(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)),
+        Some(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6))))]
+    #[case::shared_key_contradicts(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(2)), None)]
+    #[case::prunes_vacuous(AromaticSystemConstraintsForm::new(), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)), Some(AromaticSystemConstraintsForm::new()))]
+    fn test_aromatic_system_constraints_form_meet(#[case] a: AromaticSystemConstraintsForm, #[case] b: AromaticSystemConstraintsForm, #[case] expected: Option<AromaticSystemConstraintsForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::widens_value(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(1)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)),
-        AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::lit_set([1, 2]))))]
-    #[case::single_side_dropped(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::new(),
-        AromaticSystemConstraintsAst::new())]
-    #[case::undetermined_drops(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)),
-        AromaticSystemConstraintsAst::new())]
-    fn test_aromatic_system_constraints_ast_join(#[case] a: AromaticSystemConstraintsAst, #[case] b: AromaticSystemConstraintsAst, #[case] expected: AromaticSystemConstraintsAst) {
+    #[case::widens_value(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(1)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(2)),
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([1, 2]))))]
+    #[case::single_side_dropped(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::new(),
+        AromaticSystemConstraintsForm::new())]
+    #[case::undetermined_drops(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)),
+        AromaticSystemConstraintsForm::new())]
+    fn test_aromatic_system_constraints_form_join(#[case] a: AromaticSystemConstraintsForm, #[case] b: AromaticSystemConstraintsForm, #[case] expected: AromaticSystemConstraintsForm) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty_pattern_matches_anything(AromaticSystemConstraintsAst::new(), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
-    #[case::required_present(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
-    #[case::required_absent(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::new(), false)]
-    #[case::wildcard_matches_lit(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
-    #[case::lit_mismatch(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)), false)]
-    fn test_aromatic_system_constraints_ast_matches(
-        #[case] pattern: AromaticSystemConstraintsAst,
-        #[case] target: AromaticSystemConstraintsAst,
+    #[case::empty_pattern_matches_anything(AromaticSystemConstraintsForm::new(), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), true)]
+    #[case::required_present(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), true)]
+    #[case::required_absent(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::new(), false)]
+    #[case::wildcard_matches_lit(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), true)]
+    #[case::lit_mismatch(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(2)), false)]
+    fn test_aromatic_system_constraints_form_matches(
+        #[case] pattern: AromaticSystemConstraintsForm,
+        #[case] target: AromaticSystemConstraintsForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -716,57 +718,58 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::disjoint_one_empty(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::new(), true)]
-    #[case::shared_key_compatible(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), true)]
-    #[case::shared_key_incompatible(AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6)), AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(2)), false)]
-    fn test_aromatic_system_constraints_ast_is_compatible(#[case] a: AromaticSystemConstraintsAst, #[case] b: AromaticSystemConstraintsAst, #[case] expected: bool) {
+    #[case::disjoint_one_empty(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::new(), true)]
+    #[case::shared_key_compatible(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), true)]
+    #[case::shared_key_incompatible(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)), AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(2)), false)]
+    fn test_aromatic_system_constraints_form_is_compatible(#[case] a: AromaticSystemConstraintsForm, #[case] b: AromaticSystemConstraintsForm, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(vec![AromaticSystemConstraintAst::electron_count(6)], vec![AromaticSystemConstraintAst::electron_count(6)])]
-    #[case::same_key_last_wins(vec![AromaticSystemConstraintAst::electron_count(2), AromaticSystemConstraintAst::electron_count(6)], vec![AromaticSystemConstraintAst::electron_count(6)])]
+    #[case::single(vec![AromaticSystemConstraintForm::electron_count(6)], vec![AromaticSystemConstraintForm::electron_count(6)])]
+    #[case::same_key_last_wins(vec![AromaticSystemConstraintForm::electron_count(2), AromaticSystemConstraintForm::electron_count(6)], vec![AromaticSystemConstraintForm::electron_count(6)])]
     #[case::empty(vec![], vec![])]
-    fn test_aromatic_system_constraints_ast_from_iter(
-        #[case] input: Vec<AromaticSystemConstraintAst>,
-        #[case] expected: Vec<AromaticSystemConstraintAst>,
+    fn test_aromatic_system_constraints_form_from_iter(
+        #[case] input: Vec<AromaticSystemConstraintForm>,
+        #[case] expected: Vec<AromaticSystemConstraintForm>,
     ) {
-        let cs = AromaticSystemConstraintsAst::from_iter(input);
-        assert_eq!(cs, AromaticSystemConstraintsAst::from_iter(expected));
+        let cs = AromaticSystemConstraintsForm::from_iter(input);
+        assert_eq!(cs, AromaticSystemConstraintsForm::from_iter(expected));
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_into_iter() {
-        let cs = AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6));
+    fn test_aromatic_system_constraints_form_into_iter() {
+        let cs =
+            AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
-            vec![AromaticSystemConstraintAst::electron_count(6)]
+            vec![AromaticSystemConstraintForm::electron_count(6)]
         );
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_from_aromatic_system_constraint() {
-        let cs: AromaticSystemConstraintsAst =
-            AromaticSystemConstraintAst::electron_count(6).into();
+    fn test_aromatic_system_constraints_form_from_aromatic_system_constraint() {
+        let cs: AromaticSystemConstraintsForm =
+            AromaticSystemConstraintForm::electron_count(6).into();
         assert_eq!(
             cs,
-            AromaticSystemConstraintsAst::from_iter([AromaticSystemConstraintAst::electron_count(
-                6
-            )]),
+            AromaticSystemConstraintsForm::from_iter([
+                AromaticSystemConstraintForm::electron_count(6)
+            ]),
         );
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_from_vec() {
-        let cs: AromaticSystemConstraintsAst =
-            vec![AromaticSystemConstraintAst::electron_count(6)].into();
+    fn test_aromatic_system_constraints_form_from_vec() {
+        let cs: AromaticSystemConstraintsForm =
+            vec![AromaticSystemConstraintForm::electron_count(6)].into();
         assert_eq!(
             cs,
-            AromaticSystemConstraintsAst::from_iter([AromaticSystemConstraintAst::electron_count(
-                6
-            )]),
+            AromaticSystemConstraintsForm::from_iter([
+                AromaticSystemConstraintForm::electron_count(6)
+            ]),
         );
     }
 }

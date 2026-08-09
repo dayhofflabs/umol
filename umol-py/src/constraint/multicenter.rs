@@ -6,9 +6,9 @@ use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
-    MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
+    MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
     MulticenterBondConstraintKey as GraphIrMulticenterBondConstraintKey,
-    MulticenterBondConstraintsAst as GraphIrMulticenterBondConstraintsAst,
+    MulticenterBondConstraintsForm as GraphIrMulticenterBondConstraintsForm,
     MulticenterBondId as GraphIrMulticenterBondId,
 };
 
@@ -100,12 +100,12 @@ impl MulticenterBondConstraintAst {
 
 impl_py_lattice!(
     MulticenterBondConstraintAst,
-    GraphIrMulticenterBondConstraintAst,
+    GraphIrMulticenterBondConstraintForm,
     |value: &MulticenterBondConstraintAst,
      py: Python<'_>|
-     -> PyResult<GraphIrMulticenterBondConstraintAst> { Ok(value.to_rust(py)) },
+     -> PyResult<GraphIrMulticenterBondConstraintForm> { Ok(value.to_rust(py)) },
     |py: Python<'_>,
-     value: GraphIrMulticenterBondConstraintAst|
+     value: GraphIrMulticenterBondConstraintForm|
      -> PyResult<MulticenterBondConstraintAst> {
         MulticenterBondConstraintAst::from_rust(py, &value)
     }
@@ -114,19 +114,19 @@ impl_py_lattice!(
 impl MulticenterBondConstraintAst {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrMulticenterBondConstraintAst,
+        ast: &GraphIrMulticenterBondConstraintForm,
     ) -> PyResult<Self> {
         Ok(match ast {
-            GraphIrMulticenterBondConstraintAst::ElectronCount(v) => {
+            GraphIrMulticenterBondConstraintForm::ElectronCount(v) => {
                 Self::ElectronCount(into_py_variant(py, ValueAst::from_rust(py, v)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrMulticenterBondConstraintForm {
         match self {
             Self::ElectronCount(v) => {
-                GraphIrMulticenterBondConstraintAst::ElectronCount(v.bind(py).borrow().to_rust(py))
+                GraphIrMulticenterBondConstraintForm::ElectronCount(v.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -178,14 +178,14 @@ impl MulticenterBondConstraintsUpdate {
 pub(crate) enum ResolvedMulticenterBondConstraintsUpdate {
     /// A whole container (from another container or a live view): overlaid via `update`
     /// (last-wins per key; undetermined entries remove).
-    Overlay(GraphIrMulticenterBondConstraintsAst),
+    Overlay(GraphIrMulticenterBondConstraintsForm),
     /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
-    Entries(Vec<GraphIrMulticenterBondConstraintAst>),
+    Entries(Vec<GraphIrMulticenterBondConstraintForm>),
 }
 
 impl ResolvedMulticenterBondConstraintsUpdate {
     /// Overlay onto `target` in place. No Python reads.
-    pub(crate) fn apply(self, target: &mut GraphIrMulticenterBondConstraintsAst) {
+    pub(crate) fn apply(self, target: &mut GraphIrMulticenterBondConstraintsForm) {
         match self {
             ResolvedMulticenterBondConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
             ResolvedMulticenterBondConstraintsUpdate::Entries(entries) => {
@@ -206,7 +206,10 @@ pub(crate) enum MulticenterBondConstraintsLike {
 }
 
 impl MulticenterBondConstraintsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrMulticenterBondConstraintsAst> {
+    pub(crate) fn to_rust(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<GraphIrMulticenterBondConstraintsForm> {
         match self {
             MulticenterBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             MulticenterBondConstraintsLike::View(v) => {
@@ -220,7 +223,7 @@ impl MulticenterBondConstraintsLike {
 /// Mutable, hence value-equal but unhashable (matching `MulticenterBondAst`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct MulticenterBondConstraintsAst(GraphIrMulticenterBondConstraintsAst);
+pub struct MulticenterBondConstraintsAst(GraphIrMulticenterBondConstraintsForm);
 
 #[pymethods]
 impl MulticenterBondConstraintsAst {
@@ -228,7 +231,7 @@ impl MulticenterBondConstraintsAst {
     /// an earlier one, last-wins).
     #[new]
     pub(crate) fn new(py: Python<'_>, entries: Vec<Py<MulticenterBondConstraintAst>>) -> Self {
-        let mut constraints = GraphIrMulticenterBondConstraintsAst::new();
+        let mut constraints = GraphIrMulticenterBondConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
@@ -369,7 +372,7 @@ impl MulticenterBondConstraintsAst {
     #[setter]
     pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: NumLike) {
         self.0
-            .set(GraphIrMulticenterBondConstraintAst::electron_count(
+            .set(GraphIrMulticenterBondConstraintForm::electron_count(
                 value.to_rust(py),
             ));
     }
@@ -383,32 +386,32 @@ impl MulticenterBondConstraintsAst {
 
 impl MulticenterBondConstraintsAst {
     /// The wrapped AST constraints — read access for multicenter bond construction.
-    pub(crate) fn inner(&self) -> &GraphIrMulticenterBondConstraintsAst {
+    pub(crate) fn inner(&self) -> &GraphIrMulticenterBondConstraintsForm {
         &self.0
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
     /// in-crate construction wraps `MulticenterBondConstraintsAst(..)` directly.
-    pub(crate) fn from_inner(constraints: GraphIrMulticenterBondConstraintsAst) -> Self {
+    pub(crate) fn from_inner(constraints: GraphIrMulticenterBondConstraintsForm) -> Self {
         MulticenterBondConstraintsAst(constraints)
     }
 }
 
 impl_py_lattice!(
     MulticenterBondConstraintsAst,
-    GraphIrMulticenterBondConstraintsAst,
+    GraphIrMulticenterBondConstraintsForm,
     |value: &MulticenterBondConstraintsAst,
      _py: Python<'_>|
-     -> PyResult<GraphIrMulticenterBondConstraintsAst> { Ok(value.inner().clone()) },
+     -> PyResult<GraphIrMulticenterBondConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
-     value: GraphIrMulticenterBondConstraintsAst|
+     value: GraphIrMulticenterBondConstraintsForm|
      -> PyResult<MulticenterBondConstraintsAst> { Ok(MulticenterBondConstraintsAst(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
 pub(crate) fn multicenter_bond_constraints_iter(
     py: Python<'_>,
-    constraints: &GraphIrMulticenterBondConstraintsAst,
+    constraints: &GraphIrMulticenterBondConstraintsForm,
 ) -> PyResult<MulticenterBondConstraintIter> {
     let entries = constraints
         .iter()
@@ -424,7 +427,7 @@ pub(crate) fn multicenter_bond_constraints_iter(
 /// Build the key iterator handle from a borrowed container (mapping-style keys).
 pub(crate) fn multicenter_bond_constraint_keys(
     py: Python<'_>,
-    constraints: &GraphIrMulticenterBondConstraintsAst,
+    constraints: &GraphIrMulticenterBondConstraintsForm,
 ) -> PyResult<MulticenterBondConstraintKeyIter> {
     let keys = constraints
         .iter()
@@ -443,7 +446,7 @@ pub(crate) fn multicenter_bond_constraint_keys(
 /// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
 pub(crate) fn multicenter_bond_constraint_items(
     py: Python<'_>,
-    constraints: &GraphIrMulticenterBondConstraintsAst,
+    constraints: &GraphIrMulticenterBondConstraintsForm,
 ) -> PyResult<MulticenterBondConstraintItemsIter> {
     let items = constraints
         .iter()
@@ -466,12 +469,12 @@ pub(crate) fn multicenter_bond_constraint_items(
 /// Python values.
 pub(crate) fn multicenter_bond_constraints_asdict<'py>(
     py: Python<'py>,
-    constraints: &GraphIrMulticenterBondConstraintsAst,
+    constraints: &GraphIrMulticenterBondConstraintsForm,
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for entry in constraints.iter() {
         match entry {
-            GraphIrMulticenterBondConstraintAst::ElectronCount(v) => {
+            GraphIrMulticenterBondConstraintForm::ElectronCount(v) => {
                 dict.set_item("electron_count", ValueAst::from_rust(py, v)?)?
             }
         }
@@ -503,7 +506,7 @@ impl MulticenterBondConstraintsView {
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&GraphIrMulticenterBondConstraintsAst) -> PyResult<R>,
+        f: impl FnOnce(&GraphIrMulticenterBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
             MulticenterBondConstraintsBacking::Molecule { owner, id } => {
@@ -526,7 +529,7 @@ impl MulticenterBondConstraintsView {
     pub(crate) fn with_mut<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrMulticenterBondConstraintsAst) -> R,
+        f: impl FnOnce(&mut GraphIrMulticenterBondConstraintsForm) -> R,
     ) -> R {
         match &self.backing {
             MulticenterBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
@@ -542,7 +545,7 @@ impl MulticenterBondConstraintsView {
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrMulticenterBondConstraintAst) {
+    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrMulticenterBondConstraintForm) {
         self.with_mut(py, |cs| cs.set(constraint));
     }
 
@@ -551,7 +554,7 @@ impl MulticenterBondConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrMulticenterBondConstraintKey,
-    ) -> Option<GraphIrMulticenterBondConstraintAst> {
+    ) -> Option<GraphIrMulticenterBondConstraintForm> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -697,7 +700,7 @@ impl MulticenterBondConstraintsView {
     pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) {
         self.set_ast(
             py,
-            GraphIrMulticenterBondConstraintAst::electron_count(value.to_rust(py)),
+            GraphIrMulticenterBondConstraintForm::electron_count(value.to_rust(py)),
         );
     }
 

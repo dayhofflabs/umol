@@ -42,18 +42,19 @@ pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{
-    aromatic_covalence, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
-    AromaticSystemConstraintsAst, AromaticValence, AromaticValenceForm, AtomConstraintForm,
+    aromatic_covalence, AromaticSystemConstraintForm, AromaticSystemConstraintKey,
+    AromaticSystemConstraintsForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
     AtomConstraintKey, AtomConstraintsForm, BondConstraintForm, BondConstraintKey,
-    BondConstraintsForm, Constraint, Constraints, DativeBondConstraintAst, DativeBondConstraintKey,
-    DativeBondConstraintsAst, FluxionalityAst, LigandPermutation, LigandSymmetryAst,
-    MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-    MulticenterBondConstraintsAst, MulticenterValence, MulticenterValenceForm,
-    NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, NoncovalentBondConstraintsAst,
-    OrientedLigandPermutation, RelationalConstraint, RingMembershipAst, RingScope,
-    StereoAtomConstraintAst, StereoAtomConstraintKey, StereoAtomConstraintsAst,
-    StereoBondConstraintAst, StereoBondConstraintKey, StereoBondConstraintsAst, StereoLigandPair,
-    StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
+    BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
+    DativeBondConstraintKey, DativeBondConstraintsForm, FluxionalityAst, LigandPermutation,
+    LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraintForm,
+    MulticenterBondConstraintKey, MulticenterBondConstraintsForm, MulticenterValence,
+    MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
+    NoncovalentBondConstraintsForm, OrientedLigandPermutation, RelationalConstraint,
+    RingMembershipAst, RingScope, StereoAtomConstraintAst, StereoAtomConstraintKey,
+    StereoAtomConstraintsAst, StereoBondConstraintAst, StereoBondConstraintKey,
+    StereoBondConstraintsAst, StereoLigandPair, StereogenicityAst, SubPatternAnchor, TopicityAst,
+    TopicityRelationAst,
 };
 pub use correspondence::MoleculeCorrespondence;
 pub use dative::{DativeBondForm, DativeBondUpdate};

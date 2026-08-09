@@ -1218,13 +1218,13 @@ mod tests {
     use pyo3::types::PyDict;
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
+        AromaticSystemConstraintForm as GraphIrAromaticSystemConstraintForm,
         AtomConstraintForm as GraphIrAtomConstraintForm,
         BondConstraintForm as GraphIrBondConstraintForm,
-        DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
+        DativeBondConstraintForm as GraphIrDativeBondConstraintForm,
         MoleculeAst as GraphIrMoleculeAst,
-        MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+        MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
+        NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
         NumForm as GraphIrNumForm, StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
         StereoBondConstraintAst as GraphIrStereoBondConstraintAst, StereoKind as GraphIrStereoKind,
         Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
@@ -1449,19 +1449,19 @@ mod tests {
     ))]
     #[case::dative_bond(GraphIrConstraint::DativeBond(
         GraphIrDativeBondId(4),
-        GraphIrDativeBondConstraintAst::aromatic(false),
+        GraphIrDativeBondConstraintForm::aromatic(false),
     ))]
     #[case::aromatic_system(GraphIrConstraint::AromaticSystem(
         GraphIrAromaticSystemId(5),
-        GraphIrAromaticSystemConstraintAst::electron_count(6),
+        GraphIrAromaticSystemConstraintForm::electron_count(6),
     ))]
     #[case::multicenter_bond(GraphIrConstraint::MulticenterBond(
         GraphIrMulticenterBondId(7),
-        GraphIrMulticenterBondConstraintAst::electron_count(8),
+        GraphIrMulticenterBondConstraintForm::electron_count(8),
     ))]
     #[case::noncovalent_bond(GraphIrConstraint::NoncovalentBond(
         GraphIrNoncovalentBondId(9),
-        GraphIrNoncovalentBondConstraintAst::intramolecular(true),
+        GraphIrNoncovalentBondConstraintForm::intramolecular(true),
     ))]
     #[case::stereo_atom(GraphIrConstraint::StereoAtom(
         GraphIrStereoAtomId(10),

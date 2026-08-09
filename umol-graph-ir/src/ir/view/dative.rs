@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
-use super::super::constraint::DativeBondConstraintsAst;
+use super::super::constraint::DativeBondConstraintsForm;
 use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::MoleculeAst;
@@ -193,7 +193,7 @@ impl<'a> DativeBondView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a DativeBondConstraintsAst {
+    pub fn constraints(&self) -> &'a DativeBondConstraintsForm {
         &self.ast.constraints
     }
 

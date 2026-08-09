@@ -233,9 +233,9 @@ mod tests {
     use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
     use crate::ir::constraint::RingScope;
     use crate::ir::{
-        AromaticSystemConstraintAst, AromaticSystemForm, AtomConstraintForm, AtomConstraintsForm,
+        AromaticSystemConstraintForm, AromaticSystemForm, AtomConstraintForm, AtomConstraintsForm,
         AtomForm, AtomId, AtomUpdate, BondConstraintForm, BondConstraintsForm, BondForm,
-        BondUpdate, BooleanForm, DativeBondConstraintAst, DativeBondForm, ElementForm, Entity,
+        BondUpdate, BooleanForm, DativeBondConstraintForm, DativeBondForm, ElementForm, Entity,
         MoleculeAst, MoleculeEntries, MulticenterBondForm, NoncovalentBondForm,
         NoncovalentBondKind, NumForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
     };
@@ -297,7 +297,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1)), (AtomId(1), AtomId(2), BondForm::from_order(1)), (AtomId(2), AtomId(0), BondForm::from_order(1))],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemForm::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintAst::electron_count(3)))],
+            AromaticSystemForm::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintForm::electron_count(3)))],
             ..Default::default()
         }))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
@@ -386,7 +386,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single("1", DativeBondForm::from_order(1))]
-    #[case::with_ring_size( "2 #R(6)", DativeBondForm::from_order(2).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),)]
+    #[case::with_ring_size( "2 #R(6)", DativeBondForm::from_order(2).with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)),)]
     fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondForm) {
         assert_eq!(dative_dsl!(input), expected);
     }
@@ -407,7 +407,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::charge("[1,1,1]#c+", AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64))]
-    #[case::electron_count("*#e6", AromaticSystemForm::default().with_constraint(AromaticSystemConstraintAst::electron_count(6)))]
+    #[case::electron_count("*#e6", AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(6)))]
     fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemForm) {
         assert_eq!(aromatic_dsl!(input), expected);
     }
@@ -420,7 +420,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground())]
+    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintForm::electron_count(6)).into_ground())]
     fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemForm) {
         assert_eq!(aromatic_dsl_ground!(input), expected);
     }

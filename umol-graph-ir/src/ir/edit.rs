@@ -18,9 +18,9 @@ use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
-    AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
-    DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-    NoncovalentBondConstraintAst, RelationalConstraint, StereoAtomConstraintAst,
+    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
+    DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintAst,
     StereoBondConstraintAst,
 };
 use super::dative::{DativeBondForm, DativeBondUpdate};
@@ -397,23 +397,23 @@ pub enum Edit {
     },
     ModifyDativeBondConstraint {
         id: DativeBondHandle,
-        old: Option<DativeBondConstraintAst>,
-        new: Option<DativeBondConstraintAst>,
+        old: Option<DativeBondConstraintForm>,
+        new: Option<DativeBondConstraintForm>,
     },
     ModifyAromaticSystemConstraint {
         id: AromaticSystemHandle,
-        old: Option<AromaticSystemConstraintAst>,
-        new: Option<AromaticSystemConstraintAst>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     },
     ModifyMulticenterBondConstraint {
         id: MulticenterBondHandle,
-        old: Option<MulticenterBondConstraintAst>,
-        new: Option<MulticenterBondConstraintAst>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     },
     ModifyNoncovalentBondConstraint {
         id: NoncovalentBondHandle,
-        old: Option<NoncovalentBondConstraintAst>,
-        new: Option<NoncovalentBondConstraintAst>,
+        old: Option<NoncovalentBondConstraintForm>,
+        new: Option<NoncovalentBondConstraintForm>,
     },
     ModifyStereoAtomConstraint {
         id: StereoAtomHandle,
@@ -1920,9 +1920,9 @@ mod tests {
 
     use super::super::boolean::BooleanForm;
     use super::super::constraint::{
-        AromaticSystemConstraintsAst, AromaticValenceForm, AtomConstraintsForm,
-        BondConstraintsForm, DativeBondConstraintsAst, MoleculeConstraint,
-        MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, RelationalConstraint,
+        AromaticSystemConstraintsForm, AromaticValenceForm, AtomConstraintsForm,
+        BondConstraintsForm, DativeBondConstraintsForm, MoleculeConstraint,
+        MulticenterBondConstraintsForm, NoncovalentBondConstraintsForm, RelationalConstraint,
         RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereogenicityAst,
         SubPatternAnchor,
     };
@@ -2797,12 +2797,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
-        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64)),
         DativeBondUpdate {
             order: Some(NumForm::Lit(2)),
-            constraints: DativeBondConstraintsAst::from_iter([
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
-                DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+            constraints: DativeBondConstraintsForm::from_iter([
+                DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined),
+                DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             ]),
         },
         vec![
@@ -2813,11 +2813,11 @@ mod tests {
             Edit::ModifyDativeBondConstraint {
                 id: DativeBondHandle::Id(DativeBondId(7)),
                 old: None,
-                new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
             },
             Edit::ModifyDativeBondConstraint {
                 id: DativeBondHandle::Id(DativeBondId(7)),
-                old: Some(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+                old: Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64)),
                 new: None,
             },
         ],
@@ -2860,7 +2860,7 @@ mod tests {
     #[rstest]
     #[case::empty(DativeBondForm::from_order(1), DativeBondUpdate::default())]
     #[case::canonical_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_dative_bond_identity(
         #[case] current: DativeBondForm,
         #[case] update: DativeBondUpdate,
@@ -2878,12 +2878,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintForm::electron_count(6_i64)),
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
-            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)),
+            constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)),
         },
         vec![
             Edit::ModifyAromaticSystemField {
@@ -2900,7 +2900,7 @@ mod tests {
             },
             Edit::ModifyAromaticSystemConstraint {
                 id: AromaticSystemHandle::Id(AromaticSystemId(7)),
-                old: Some(AromaticSystemConstraintAst::electron_count(6_i64)),
+                old: Some(AromaticSystemConstraintForm::electron_count(6_i64)),
                 new: None,
             },
         ],
@@ -2950,7 +2950,7 @@ mod tests {
     #[rstest]
     #[case::empty(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
     #[case::canonical_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_aromatic_system_identity(
         #[case] current: AromaticSystemForm,
         #[case] update: AromaticSystemUpdate,
@@ -2968,12 +2968,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)),
+            constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)),
         },
         vec![
             Edit::ModifyMulticenterBondField {
@@ -2990,7 +2990,7 @@ mod tests {
             },
             Edit::ModifyMulticenterBondConstraint {
                 id: MulticenterBondHandle::Id(MulticenterBondId(7)),
-                old: Some(MulticenterBondConstraintAst::electron_count(6_i64)),
+                old: Some(MulticenterBondConstraintForm::electron_count(6_i64)),
                 new: None,
             },
         ],
@@ -3040,7 +3040,7 @@ mod tests {
     #[rstest]
     #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
     #[case::canonical_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_multicenter_bond_identity(
         #[case] current: MulticenterBondForm,
         #[case] update: MulticenterBondUpdate,
@@ -3058,10 +3058,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_and_constraint(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
         NoncovalentBondUpdate {
             kind: Some(NoncovalentBondKindForm::Undetermined),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)),
+            constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(BooleanForm::Undetermined)),
         },
         vec![
             Edit::ModifyNoncovalentBondField {
@@ -3070,7 +3070,7 @@ mod tests {
             },
             Edit::ModifyNoncovalentBondConstraint {
                 id: NoncovalentBondHandle::Id(NoncovalentBondId(7)),
-                old: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+                old: Some(NoncovalentBondConstraintForm::intramolecular(true)),
                 new: None,
             },
         ],
@@ -3116,7 +3116,7 @@ mod tests {
     #[rstest]
     #[case::empty(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
     #[case::same_kind(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
-    #[case::absent_constraint_removal(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_noncovalent_bond_identity(
         #[case] current: NoncovalentBondForm,
         #[case] update: NoncovalentBondUpdate,
@@ -3413,10 +3413,10 @@ mod tests {
         Constraint::And(vec![
             Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
             Constraint::Bond(BondId(8), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(9), DativeBondConstraintAst::aromatic(true)),
-            Constraint::AromaticSystem(AromaticSystemId(10), AromaticSystemConstraintAst::electron_count(6_i64)),
-            Constraint::MulticenterBond(MulticenterBondId(11), MulticenterBondConstraintAst::electron_count(2_i64)),
-            Constraint::NoncovalentBond(NoncovalentBondId(12), NoncovalentBondConstraintAst::intramolecular(true)),
+            Constraint::DativeBond(DativeBondId(9), DativeBondConstraintForm::aromatic(true)),
+            Constraint::AromaticSystem(AromaticSystemId(10), AromaticSystemConstraintForm::electron_count(6_i64)),
+            Constraint::MulticenterBond(MulticenterBondId(11), MulticenterBondConstraintForm::electron_count(2_i64)),
+            Constraint::NoncovalentBond(NoncovalentBondId(12), NoncovalentBondConstraintForm::intramolecular(true)),
             Constraint::StereoAtom(StereoAtomId(13), StereoKind::Tetrahedral, StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
             Constraint::StereoBond(StereoBondId(14), StereoKind::CisTrans, StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
         ]),
@@ -3434,10 +3434,10 @@ mod tests {
             constraint: Constraint::And(vec![
                 Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
                 Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
-                Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
-                Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintAst::electron_count(6_i64)),
-                Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintAst::electron_count(2_i64)),
-                Constraint::NoncovalentBond(NoncovalentBondId(0), NoncovalentBondConstraintAst::intramolecular(true)),
+                Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
+                Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintForm::electron_count(6_i64)),
+                Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintForm::electron_count(2_i64)),
+                Constraint::NoncovalentBond(NoncovalentBondId(0), NoncovalentBondConstraintForm::intramolecular(true)),
                 Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
                 Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
             ]),

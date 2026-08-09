@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use umol_graph_core::{ParticipantPosition, RelationData};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
-use super::constraint::{NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst};
+use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
@@ -15,7 +15,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct NoncovalentBondForm {
     pub kind: NoncovalentBondKindForm,
-    pub constraints: NoncovalentBondConstraintsAst,
+    pub constraints: NoncovalentBondConstraintsForm,
 }
 
 /// Attribute update for a noncovalent bond. The kind is optional, and an
@@ -23,7 +23,7 @@ pub struct NoncovalentBondForm {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NoncovalentBondUpdate {
     pub kind: Option<NoncovalentBondKindForm>,
-    pub constraints: NoncovalentBondConstraintsAst,
+    pub constraints: NoncovalentBondConstraintsForm,
 }
 
 impl From<&str> for NoncovalentBondForm {
@@ -45,7 +45,7 @@ impl NoncovalentBondForm {
     pub fn new(kind: NoncovalentBondKindForm) -> Self {
         Self {
             kind,
-            constraints: NoncovalentBondConstraintsAst::new(),
+            constraints: NoncovalentBondConstraintsForm::new(),
         }
     }
 
@@ -59,20 +59,20 @@ impl NoncovalentBondForm {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `NoncovalentBondConstraintsAst::set`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<NoncovalentBondConstraintAst>) -> Self {
+    /// kind (last-wins per `NoncovalentBondConstraintsForm::set`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<NoncovalentBondConstraintForm>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `NoncovalentBondConstraintsAst::set`).
+    /// of the same kind (last-wins per `NoncovalentBondConstraintsForm::set`).
     /// Does not clear existing constraints; use `bond.constraints.clear()`
     /// or direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<NoncovalentBondConstraintAst>,
+        I::Item: Into<NoncovalentBondConstraintForm>,
     {
         for c in constraints {
             self.constraints.set(c.into());
@@ -99,7 +99,7 @@ impl NoncovalentBondForm {
 
     /// Derive the minimal canonical attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> NoncovalentBondUpdate {
-        let mut constraints = NoncovalentBondConstraintsAst::new();
+        let mut constraints = NoncovalentBondConstraintsForm::new();
         for new in other.constraints.iter() {
             if self
                 .constraints
@@ -219,10 +219,10 @@ mod tests {
     #[rstest]
     #[case::new(NoncovalentBondForm::new(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraintsAst::new() })]
+            constraints: NoncovalentBondConstraintsForm::new() })]
     #[case::from_kind(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraintsAst::new() })]
+            constraints: NoncovalentBondConstraintsForm::new() })]
     fn test_noncovalent_bond_form_new(
         #[case] actual: NoncovalentBondForm,
         #[case] expected: NoncovalentBondForm,
@@ -235,25 +235,25 @@ mod tests {
     #[case::with_kind_primitive(
         NoncovalentBondForm::default().with_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraintsAst::new() })]
+            constraints: NoncovalentBondConstraintsForm::new() })]
     #[case::with_kind_ast(
         NoncovalentBondForm::default().with_kind(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraintsAst::new() })]
+            constraints: NoncovalentBondConstraintsForm::new() })]
     #[case::with_constraints_empty(
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
-            .with_constraints(empty::<NoncovalentBondConstraintAst>()),
+            .with_constraints(empty::<NoncovalentBondConstraintForm>()),
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
     #[case::with_constraint(
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
-            .with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+            .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)) })]
+            constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(true)) })]
     #[case::with_constraints_populated(
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
-            .with_constraints([NoncovalentBondConstraintAst::intramolecular(false)]),
+            .with_constraints([NoncovalentBondConstraintForm::intramolecular(false)]),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) })]
+            constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(false)) })]
     fn test_noncovalent_bond_form_with_methods(
         #[case] actual: NoncovalentBondForm,
         #[case] expected: NoncovalentBondForm,
@@ -280,15 +280,15 @@ mod tests {
         NoncovalentBondForm::default())]
     #[case::constraint_set(
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)), ..Default::default() },
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)))]
+        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(true)), ..Default::default() },
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)))]
     #[case::constraint_replace(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
-        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)), ..Default::default() },
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(false)))]
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
+        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(false)), ..Default::default() },
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(false)))]
     #[case::constraint_remove(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
-        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() },
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
+        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), ..Default::default() },
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_form_update(
         #[case] bond: NoncovalentBondForm,
@@ -299,7 +299,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)))]
+    #[case::empty(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)))]
     fn test_noncovalent_bond_form_update_identity(#[case] bond: NoncovalentBondForm) {
         assert_eq!(bond.update(&NoncovalentBondUpdate::default()), bond);
     }
@@ -307,11 +307,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_and_constraint(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
         NoncovalentBondForm::default(),
         NoncovalentBondUpdate {
             kind: Some(NoncovalentBondKindForm::Undetermined),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)),
+            constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)),
         },
     )]
     fn test_noncovalent_bond_form_difference_to(

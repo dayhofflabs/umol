@@ -2825,10 +2825,10 @@ mod tests {
     use crate::ir::atom::ElementForm;
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::{
-        AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintForm,
-        BondConstraintForm, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
-        MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst,
-        NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, RingScope,
+        AromaticSystemConstraintForm, AromaticSystemConstraintsForm, AtomConstraintForm,
+        BondConstraintForm, Constraint, DativeBondConstraintForm, DativeBondConstraintsForm,
+        MoleculeConstraint, MulticenterBondConstraintForm, MulticenterBondConstraintsForm,
+        NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm, RingScope,
         StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
         StereoBondConstraintsAst, StereogenicityAst,
     };
@@ -3167,7 +3167,7 @@ mod tests {
     #[rstest]
     #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }))]
     #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_dative_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3182,7 +3182,7 @@ mod tests {
     #[rstest]
     #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }))]
     #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Keyword("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_dative_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3196,7 +3196,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unpaired_electrons_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_aromatic_system(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3210,7 +3210,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unpaired_electrons_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Keyword("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_aromatic_system(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3224,7 +3224,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unpaired_electrons_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_multicenter_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3238,7 +3238,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unpaired_electrons_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Keyword("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsForm::Undetermined), charge: Some(NumForm::Undetermined), constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_multicenter_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3252,7 +3252,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(BooleanForm::Undetermined)), ..Default::default() }))]
     fn test_parse_delta_input_noncovalent_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3266,7 +3266,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Undetermined), ..Default::default() }))]
-    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Keyword("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(BooleanForm::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_noncovalent_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
@@ -3813,11 +3813,11 @@ mod tests {
     #[rstest]
     #[case::ring_size(
         r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R(6)"}]} :deltas [{:dative-bond {:modify [:d1 "#R(6)*"]}}]}"##,
-        DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Lit(1)),
+        DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Lit(1)),
     )]
     fn test_reaction_input_into_ast_dative_bond_modify_constraint(
         #[case] input: &str,
-        #[case] old: DativeBondConstraintAst,
+        #[case] old: DativeBondConstraintForm,
     ) {
         let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
@@ -3849,7 +3849,7 @@ mod tests {
     )]
     #[case::constraint_removal(
         r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#e*"]}}]}"##,
-        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintAst::electron_count(6_i64)), new: None })],
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintForm::electron_count(6_i64)), new: None })],
     )]
     fn test_reaction_input_into_ast_aromatic_system_modify(
         #[case] input: &str,
@@ -3878,7 +3878,7 @@ mod tests {
     )]
     #[case::constraint_removal(
         r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#e*"]}}]}"##,
-        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintAst::electron_count(6_i64)), new: None })],
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintForm::electron_count(6_i64)), new: None })],
     )]
     fn test_reaction_input_into_ast_multicenter_bond_modify(
         #[case] input: &str,
@@ -3899,7 +3899,7 @@ mod tests {
     )]
     #[case::constraint_removal(
         r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:id :n1 :atoms [0 1] :type "Hbd#I"}]} :deltas [{:noncovalent-bond {:modify [:n1 "#I*"]}}]}"##,
-        vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintAst::intramolecular(true)), new: None })],
+        vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintForm::intramolecular(true)), new: None })],
     )]
     fn test_reaction_input_into_ast_noncovalent_bond_modify(
         #[case] input: &str,
@@ -4199,8 +4199,8 @@ mod tests {
     #[case::add(vec![Delta::DativeBond(DativeBondDelta::Add { id: DativeBondId(1), donors: vec![AtomId(0)], acceptor: AtomId(2), ast: DativeBondForm::from_order(1) })], r##"{:dative-bond {:add {:id :d2 :donors [:br] :acceptor :n :type :single}}}"##)]
     #[case::order(vec![Delta::DativeBond(DativeBondDelta::ModifyField { id: DativeBondId(0), change: DativeBondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) } })], r##"{:dative-bond {:modify [:d1 "2"]}}"##)]
     #[case::order_undetermined(vec![Delta::DativeBond(DativeBondDelta::ModifyField { id: DativeBondId(0), change: DativeBondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Undetermined } })], r##"{:dative-bond {:modify [:d1 "*"]}}"##)]
-    #[case::constraint(vec![Delta::DativeBond(DativeBondDelta::ModifyConstraint { id: DativeBondId(0), old: None, new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) })], r##"{:dative-bond {:modify [:d1 "#a"]}}"##)]
-    #[case::constraint_removal(vec![Delta::DativeBond(DativeBondDelta::ModifyConstraint { id: DativeBondId(0), old: Some(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Lit(1))), new: None })], r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##)]
+    #[case::constraint(vec![Delta::DativeBond(DativeBondDelta::ModifyConstraint { id: DativeBondId(0), old: None, new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))) })], r##"{:dative-bond {:modify [:d1 "#a"]}}"##)]
+    #[case::constraint_removal(vec![Delta::DativeBond(DativeBondDelta::ModifyConstraint { id: DativeBondId(0), old: Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Lit(1))), new: None })], r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##)]
     fn test_render_deltas_dative_bond(
         meta: ReactionMetadata,
         #[case] deltas: Vec<Delta>,
@@ -4218,7 +4218,7 @@ mod tests {
     #[case::electrons_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 1, 1]), new: ElectronCountsForm::Undetermined } })], r##"{:aromatic-system {:modify [:a1 "*"]}}"##)]
     #[case::charge_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined } })], r##"{:aromatic-system {:modify [:a1 "#c*"]}}"##)]
     #[case::unpaired_electrons(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) } })], r##"{:aromatic-system {:modify [:a1 "#u2#s"]}}"##)]
-    #[case::constraint_removal(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintAst::electron_count(6_i64)), new: None })], r##"{:aromatic-system {:modify [:a1 "#e*"]}}"##)]
+    #[case::constraint_removal(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintForm::electron_count(6_i64)), new: None })], r##"{:aromatic-system {:modify [:a1 "#e*"]}}"##)]
     fn test_render_deltas_aromatic_system(
         meta: ReactionMetadata,
         #[case] deltas: Vec<Delta>,
@@ -4236,7 +4236,7 @@ mod tests {
     #[case::electrons_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 1, 1]), new: ElectronCountsForm::Undetermined } })], r##"{:multicenter-bond {:modify [:m1 "*"]}}"##)]
     #[case::charge_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined } })], r##"{:multicenter-bond {:modify [:m1 "#c*"]}}"##)]
     #[case::unpaired_electrons(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) } })], r##"{:multicenter-bond {:modify [:m1 "#u2#s"]}}"##)]
-    #[case::constraint_removal(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintAst::electron_count(6_i64)), new: None })], r##"{:multicenter-bond {:modify [:m1 "#e*"]}}"##)]
+    #[case::constraint_removal(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintForm::electron_count(6_i64)), new: None })], r##"{:multicenter-bond {:modify [:m1 "#e*"]}}"##)]
     fn test_render_deltas_multicenter_bond(
         meta: ReactionMetadata,
         #[case] deltas: Vec<Delta>,
@@ -4253,7 +4253,7 @@ mod tests {
     #[case::add(vec![Delta::NoncovalentBond(NoncovalentBondDelta::Add { id: NoncovalentBondId(1), atoms: [AtomId(0), AtomId(2)], ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond) })], r##"{:noncovalent-bond {:add {:id :n2 :atoms [:br :n] :type "Hbd"}}}"##)]
     #[case::kind_undetermined(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { id: NoncovalentBondId(0), change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindForm::Undetermined } })], r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##)]
     #[case::kind(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { id: NoncovalentBondId(0), change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic) } })], r##"{:noncovalent-bond {:modify [:n1 "Ion"]}}"##)]
-    #[case::constraint_removal(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintAst::intramolecular(true)), new: None })], r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##)]
+    #[case::constraint_removal(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintForm::intramolecular(true)), new: None })], r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##)]
     fn test_render_deltas_noncovalent_bond(
         meta: ReactionMetadata,
         #[case] deltas: Vec<Delta>,

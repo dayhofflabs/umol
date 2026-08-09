@@ -1722,8 +1722,8 @@ impl MoleculeEditor {
     fn apply_modify_dative_bond_constraint(
         &mut self,
         id: DativeBondId,
-        old: Option<super::super::constraint::DativeBondConstraintAst>,
-        new: Option<super::super::constraint::DativeBondConstraintAst>,
+        old: Option<super::super::constraint::DativeBondConstraintForm>,
+        new: Option<super::super::constraint::DativeBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1737,8 +1737,8 @@ impl MoleculeEditor {
     fn apply_modify_aromatic_system_constraint(
         &mut self,
         id: AromaticSystemId,
-        old: Option<super::super::constraint::AromaticSystemConstraintAst>,
-        new: Option<super::super::constraint::AromaticSystemConstraintAst>,
+        old: Option<super::super::constraint::AromaticSystemConstraintForm>,
+        new: Option<super::super::constraint::AromaticSystemConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1752,8 +1752,8 @@ impl MoleculeEditor {
     fn apply_modify_multicenter_bond_constraint(
         &mut self,
         id: MulticenterBondId,
-        old: Option<super::super::constraint::MulticenterBondConstraintAst>,
-        new: Option<super::super::constraint::MulticenterBondConstraintAst>,
+        old: Option<super::super::constraint::MulticenterBondConstraintForm>,
+        new: Option<super::super::constraint::MulticenterBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1767,8 +1767,8 @@ impl MoleculeEditor {
     fn apply_modify_noncovalent_bond_constraint(
         &mut self,
         id: NoncovalentBondId,
-        old: Option<super::super::constraint::NoncovalentBondConstraintAst>,
-        new: Option<super::super::constraint::NoncovalentBondConstraintAst>,
+        old: Option<super::super::constraint::NoncovalentBondConstraintForm>,
+        new: Option<super::super::constraint::NoncovalentBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -2321,9 +2321,9 @@ mod tests {
     use super::super::super::atom::{AtomForm, ElementForm};
     use super::super::super::bond::BondForm;
     use super::super::super::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
-        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst, RelationalConstraint, RingScope, StereoAtomConstraintAst,
+        AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
+        DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+        NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintAst,
         StereoBondConstraintAst, StereogenicityAst, SubPatternAnchor,
     };
     use super::super::super::dative::DativeBondForm;
@@ -3052,18 +3052,18 @@ mod tests {
         let constraint = Constraint::And(vec![
             Constraint::Atom(AtomId(1), AtomConstraintForm::valence(3_i64)),
             Constraint::Bond(BondId(1), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(1),
-                AromaticSystemConstraintAst::electron_count(6_i64),
+                AromaticSystemConstraintForm::electron_count(6_i64),
             ),
             Constraint::MulticenterBond(
                 MulticenterBondId(1),
-                MulticenterBondConstraintAst::electron_count(2_i64),
+                MulticenterBondConstraintForm::electron_count(2_i64),
             ),
             Constraint::NoncovalentBond(
                 NoncovalentBondId(1),
-                NoncovalentBondConstraintAst::intramolecular(true),
+                NoncovalentBondConstraintForm::intramolecular(true),
             ),
             Constraint::StereoAtom(
                 StereoAtomId(1),
@@ -3122,18 +3122,18 @@ mod tests {
         let source = Constraint::And(vec![
             Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
             Constraint::Bond(BondId(7), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(7), DativeBondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(7), DativeBondConstraintForm::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(7),
-                AromaticSystemConstraintAst::electron_count(6_i64),
+                AromaticSystemConstraintForm::electron_count(6_i64),
             ),
             Constraint::MulticenterBond(
                 MulticenterBondId(7),
-                MulticenterBondConstraintAst::electron_count(2_i64),
+                MulticenterBondConstraintForm::electron_count(2_i64),
             ),
             Constraint::NoncovalentBond(
                 NoncovalentBondId(7),
-                NoncovalentBondConstraintAst::intramolecular(true),
+                NoncovalentBondConstraintForm::intramolecular(true),
             ),
             Constraint::StereoAtom(
                 StereoAtomId(7),
@@ -3187,18 +3187,18 @@ mod tests {
         let expected = Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
             Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(true)),
+            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
             Constraint::AromaticSystem(
                 AromaticSystemId(0),
-                AromaticSystemConstraintAst::electron_count(6_i64),
+                AromaticSystemConstraintForm::electron_count(6_i64),
             ),
             Constraint::MulticenterBond(
                 MulticenterBondId(0),
-                MulticenterBondConstraintAst::electron_count(2_i64),
+                MulticenterBondConstraintForm::electron_count(2_i64),
             ),
             Constraint::NoncovalentBond(
                 NoncovalentBondId(0),
-                NoncovalentBondConstraintAst::intramolecular(true),
+                NoncovalentBondConstraintForm::intramolecular(true),
             ),
             Constraint::StereoAtom(
                 StereoAtomId(0),
@@ -3229,11 +3229,11 @@ mod tests {
     ) {
         let removed = Constraint::AromaticSystem(
             AromaticSystemId(1),
-            AromaticSystemConstraintAst::electron_count(6_i64),
+            AromaticSystemConstraintForm::electron_count(6_i64),
         );
         let added = Constraint::AromaticSystem(
             AromaticSystemId(1),
-            AromaticSystemConstraintAst::electron_count(4_i64),
+            AromaticSystemConstraintForm::electron_count(4_i64),
         );
         batched_overlays.push_constraint(removed.clone());
         let before = batched_overlays.clone().build();
@@ -3252,7 +3252,7 @@ mod tests {
             batched_overlays.constraints().as_slice(),
             &[Constraint::AromaticSystem(
                 AromaticSystemId(0),
-                AromaticSystemConstraintAst::electron_count(4_i64),
+                AromaticSystemConstraintForm::electron_count(4_i64),
             )],
         );
 
@@ -4421,7 +4421,7 @@ mod tests {
         b.transact(Edits::from_iter([Edit::AddMoleculeConstraint {
             constraint: Constraint::AromaticSystem(
                 constrained,
-                AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6)),
+                AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
             )
             .into(),
         }]))
@@ -4568,7 +4568,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyDativeBondConstraint {
                 id: DativeBondHandle::Id(DativeBondId(0)),
                 old: None,
-                new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
             }]))
             .unwrap();
         assert!(diatomic_with_overlays
@@ -4576,7 +4576,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))));
+            .any(|c| *c == DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))));
     }
 
     #[rstest]
@@ -4587,7 +4587,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyAromaticSystemConstraint {
                 id: AromaticSystemHandle::Id(AromaticSystemId(0)),
                 old: None,
-                new: Some(AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6))),
+                new: Some(AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6))),
             }]))
             .unwrap();
         assert_eq!(
@@ -4598,7 +4598,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6))],
+            vec![AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6))],
         );
     }
 
@@ -4610,7 +4610,9 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyMulticenterBondConstraint {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 old: None,
-                new: Some(MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(2))),
+                new: Some(MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(
+                    2,
+                ))),
             }]))
             .unwrap();
         assert_eq!(
@@ -4621,7 +4623,9 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(2))],
+            vec![MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(
+                2
+            ))],
         );
     }
 

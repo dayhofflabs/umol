@@ -23,7 +23,7 @@ pub use relational::{RelationalConstraintContradiction, RelationalConstraintVali
 pub use ring::{RingConstraintContradiction, RingConstraintValidator};
 
 use super::super::constraint::{
-    AtomConstraintForm, BondConstraintForm, Constraint, DativeBondConstraintAst,
+    AtomConstraintForm, BondConstraintForm, Constraint, DativeBondConstraintForm,
     MoleculeConstraint, StereoAtomConstraintAst, StereoBondConstraintAst,
 };
 use super::super::entity::Entity;
@@ -344,10 +344,10 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_dative_bond(
         &mut self,
         id: DativeBondId,
-        constraint: &DativeBondConstraintAst,
+        constraint: &DativeBondConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::DativeBond(id))?;
-        if let DativeBondConstraintAst::RingMembership(membership) = constraint {
+        if let DativeBondConstraintForm::RingMembership(membership) = constraint {
             if membership.is_undetermined() {
                 Ok(Solution::Determined(()))
             } else {
@@ -363,7 +363,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_aromatic_system(
         &self,
         id: AromaticSystemId,
-        constraint: &super::super::constraint::AromaticSystemConstraintAst,
+        constraint: &super::super::constraint::AromaticSystemConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::AromaticSystem(id))?;
         Ok(
@@ -375,7 +375,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_multicenter_bond(
         &self,
         id: MulticenterBondId,
-        constraint: &super::super::constraint::MulticenterBondConstraintAst,
+        constraint: &super::super::constraint::MulticenterBondConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::MulticenterBond(id))?;
         Ok(
@@ -387,7 +387,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_noncovalent_bond(
         &mut self,
         id: NoncovalentBondId,
-        constraint: &super::super::constraint::NoncovalentBondConstraintAst,
+        constraint: &super::super::constraint::NoncovalentBondConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::NoncovalentBond(id))?;
         let intramolecular = if constraint.is_undetermined() {

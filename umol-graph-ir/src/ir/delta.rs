@@ -20,10 +20,10 @@ use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate};
 use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
-    AromaticSystemConstraintAst, AromaticSystemConstraintKey, AtomConstraintForm,
-    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintAst,
-    DativeBondConstraintKey, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-    NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, StereoAtomConstraintAst,
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
+    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
+    DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, StereoAtomConstraintAst,
     StereoAtomConstraintKey, StereoBondConstraintAst, StereoBondConstraintKey,
 };
 use super::dative::{DativeBondForm, DativeBondUpdate};
@@ -285,8 +285,8 @@ pub enum DativeBondDelta {
     },
     ModifyConstraint {
         id: DativeBondId,
-        old: Option<DativeBondConstraintAst>,
-        new: Option<DativeBondConstraintAst>,
+        old: Option<DativeBondConstraintForm>,
+        new: Option<DativeBondConstraintForm>,
     },
 }
 
@@ -376,8 +376,8 @@ pub enum AromaticSystemDelta {
     },
     ModifyConstraint {
         id: AromaticSystemId,
-        old: Option<AromaticSystemConstraintAst>,
-        new: Option<AromaticSystemConstraintAst>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     },
 }
 
@@ -473,8 +473,8 @@ pub enum MulticenterBondDelta {
     },
     ModifyConstraint {
         id: MulticenterBondId,
-        old: Option<MulticenterBondConstraintAst>,
-        new: Option<MulticenterBondConstraintAst>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     },
 }
 
@@ -570,8 +570,8 @@ pub enum NoncovalentBondDelta {
     },
     ModifyConstraint {
         id: NoncovalentBondId,
-        old: Option<NoncovalentBondConstraintAst>,
-        new: Option<NoncovalentBondConstraintAst>,
+        old: Option<NoncovalentBondConstraintForm>,
+        new: Option<NoncovalentBondConstraintForm>,
     },
 }
 
@@ -1555,7 +1555,7 @@ impl EntityPatch for DativeBondDelta {
     type Id = DativeBondId;
     type Ast = DativeBondForm;
     type FieldChange = DativeBondFieldChange;
-    type Constraint = DativeBondConstraintAst;
+    type Constraint = DativeBondConstraintForm;
 
     fn modify_field(id: DativeBondId, change: DativeBondFieldChange) -> Self {
         DativeBondDelta::ModifyField { id, change }
@@ -1563,8 +1563,8 @@ impl EntityPatch for DativeBondDelta {
 
     fn modify_constraint(
         id: DativeBondId,
-        old: Option<DativeBondConstraintAst>,
-        new: Option<DativeBondConstraintAst>,
+        old: Option<DativeBondConstraintForm>,
+        new: Option<DativeBondConstraintForm>,
     ) -> Self {
         DativeBondDelta::ModifyConstraint { id, old, new }
     }
@@ -1573,14 +1573,14 @@ impl EntityPatch for DativeBondDelta {
         Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
-    diff_field_ops!(DativeBondFieldChange, DativeBondForm, DativeBondConstraintAst, {
+    diff_field_ops!(DativeBondFieldChange, DativeBondForm, DativeBondConstraintForm, {
         Order => order,
     });
 
     fn apply_constraint(
         ast: &mut DativeBondForm,
-        old: Option<DativeBondConstraintAst>,
-        new: Option<DativeBondConstraintAst>,
+        old: Option<DativeBondConstraintForm>,
+        new: Option<DativeBondConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1659,7 +1659,7 @@ impl EntityFold for DativeBondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &DativeBondConstraintAst) -> DativeBondConstraintKey {
+    fn constraint_key(constraint: &DativeBondConstraintForm) -> DativeBondConstraintKey {
         constraint.key()
     }
 
@@ -1670,7 +1670,7 @@ impl EntityPatch for AromaticSystemDelta {
     type Id = AromaticSystemId;
     type Ast = AromaticSystemForm;
     type FieldChange = AromaticSystemFieldChange;
-    type Constraint = AromaticSystemConstraintAst;
+    type Constraint = AromaticSystemConstraintForm;
 
     fn modify_field(id: AromaticSystemId, change: AromaticSystemFieldChange) -> Self {
         AromaticSystemDelta::ModifyField { id, change }
@@ -1678,8 +1678,8 @@ impl EntityPatch for AromaticSystemDelta {
 
     fn modify_constraint(
         id: AromaticSystemId,
-        old: Option<AromaticSystemConstraintAst>,
-        new: Option<AromaticSystemConstraintAst>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     ) -> Self {
         AromaticSystemDelta::ModifyConstraint { id, old, new }
     }
@@ -1691,7 +1691,7 @@ impl EntityPatch for AromaticSystemDelta {
     diff_field_ops!(
         AromaticSystemFieldChange,
         AromaticSystemForm,
-        AromaticSystemConstraintAst,
+        AromaticSystemConstraintForm,
         {
             Electrons => electrons,
             Charge => charge,
@@ -1701,8 +1701,8 @@ impl EntityPatch for AromaticSystemDelta {
 
     fn apply_constraint(
         ast: &mut AromaticSystemForm,
-        old: Option<AromaticSystemConstraintAst>,
-        new: Option<AromaticSystemConstraintAst>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1749,7 +1749,7 @@ impl EntityFold for AromaticSystemDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &AromaticSystemConstraintAst) -> AromaticSystemConstraintKey {
+    fn constraint_key(constraint: &AromaticSystemConstraintForm) -> AromaticSystemConstraintKey {
         constraint.key()
     }
 
@@ -1764,7 +1764,7 @@ impl EntityPatch for MulticenterBondDelta {
     type Id = MulticenterBondId;
     type Ast = MulticenterBondForm;
     type FieldChange = MulticenterBondFieldChange;
-    type Constraint = MulticenterBondConstraintAst;
+    type Constraint = MulticenterBondConstraintForm;
 
     fn modify_field(id: MulticenterBondId, change: MulticenterBondFieldChange) -> Self {
         MulticenterBondDelta::ModifyField { id, change }
@@ -1772,8 +1772,8 @@ impl EntityPatch for MulticenterBondDelta {
 
     fn modify_constraint(
         id: MulticenterBondId,
-        old: Option<MulticenterBondConstraintAst>,
-        new: Option<MulticenterBondConstraintAst>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     ) -> Self {
         MulticenterBondDelta::ModifyConstraint { id, old, new }
     }
@@ -1789,7 +1789,7 @@ impl EntityPatch for MulticenterBondDelta {
     diff_field_ops!(
         MulticenterBondFieldChange,
         MulticenterBondForm,
-        MulticenterBondConstraintAst,
+        MulticenterBondConstraintForm,
         {
             Electrons => electrons,
             Charge => charge,
@@ -1799,8 +1799,8 @@ impl EntityPatch for MulticenterBondDelta {
 
     fn apply_constraint(
         ast: &mut MulticenterBondForm,
-        old: Option<MulticenterBondConstraintAst>,
-        new: Option<MulticenterBondConstraintAst>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1847,7 +1847,7 @@ impl EntityFold for MulticenterBondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &MulticenterBondConstraintAst) -> MulticenterBondConstraintKey {
+    fn constraint_key(constraint: &MulticenterBondConstraintForm) -> MulticenterBondConstraintKey {
         constraint.key()
     }
 
@@ -1862,7 +1862,7 @@ impl EntityPatch for NoncovalentBondDelta {
     type Id = NoncovalentBondId;
     type Ast = NoncovalentBondForm;
     type FieldChange = NoncovalentBondFieldChange;
-    type Constraint = NoncovalentBondConstraintAst;
+    type Constraint = NoncovalentBondConstraintForm;
 
     fn modify_field(id: NoncovalentBondId, change: NoncovalentBondFieldChange) -> Self {
         NoncovalentBondDelta::ModifyField { id, change }
@@ -1870,8 +1870,8 @@ impl EntityPatch for NoncovalentBondDelta {
 
     fn modify_constraint(
         id: NoncovalentBondId,
-        old: Option<NoncovalentBondConstraintAst>,
-        new: Option<NoncovalentBondConstraintAst>,
+        old: Option<NoncovalentBondConstraintForm>,
+        new: Option<NoncovalentBondConstraintForm>,
     ) -> Self {
         NoncovalentBondDelta::ModifyConstraint { id, old, new }
     }
@@ -1887,7 +1887,7 @@ impl EntityPatch for NoncovalentBondDelta {
     diff_field_ops!(
         NoncovalentBondFieldChange,
         NoncovalentBondForm,
-        NoncovalentBondConstraintAst,
+        NoncovalentBondConstraintForm,
         {
             Kind => kind,
         }
@@ -1895,8 +1895,8 @@ impl EntityPatch for NoncovalentBondDelta {
 
     fn apply_constraint(
         ast: &mut NoncovalentBondForm,
-        old: Option<NoncovalentBondConstraintAst>,
-        new: Option<NoncovalentBondConstraintAst>,
+        old: Option<NoncovalentBondConstraintForm>,
+        new: Option<NoncovalentBondConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1943,7 +1943,7 @@ impl EntityFold for NoncovalentBondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &NoncovalentBondConstraintAst) -> NoncovalentBondConstraintKey {
+    fn constraint_key(constraint: &NoncovalentBondConstraintForm) -> NoncovalentBondConstraintKey {
         constraint.key()
     }
 
@@ -3135,9 +3135,9 @@ mod tests {
     use super::super::value::NumForm;
     use super::*;
     use crate::ir::{
-        AromaticSystemConstraintsAst, AtomConstraintsForm, BondConstraintsForm, BooleanForm,
-        DativeBondConstraintsAst, ElectronCountsForm, ElementForm, IsotopeMassForm,
-        MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindForm,
+        AromaticSystemConstraintsForm, AtomConstraintsForm, BondConstraintsForm, BooleanForm,
+        DativeBondConstraintsForm, ElectronCountsForm, ElementForm, IsotopeMassForm,
+        MulticenterBondConstraintsForm, NoncovalentBondConstraintsForm, NoncovalentBondKindForm,
         RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationForm,
         StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
         StereogenicityAst, UnpairedElectronsForm, UnpairedElectronsUpdate,
@@ -3390,12 +3390,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
-        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64)),
         DativeBondUpdate {
             order: Some(NumForm::Lit(2)),
-            constraints: DativeBondConstraintsAst::from_iter([
-                DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
-                DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)),
+            constraints: DativeBondConstraintsForm::from_iter([
+                DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined),
+                DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             ]),
         },
         vec![
@@ -3406,11 +3406,11 @@ mod tests {
             DativeBondDelta::ModifyConstraint {
                 id: DativeBondId(7),
                 old: None,
-                new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+                new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
             },
             DativeBondDelta::ModifyConstraint {
                 id: DativeBondId(7),
-                old: Some(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+                old: Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64)),
                 new: None,
             },
         ],
@@ -3427,7 +3427,7 @@ mod tests {
     #[rstest]
     #[case::empty(DativeBondForm::from_order(1), DativeBondUpdate::default())]
     #[case::canonical_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_dative_bond_delta_for_update_identity(
         #[case] current: DativeBondForm,
         #[case] update: DativeBondUpdate,
@@ -3441,12 +3441,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintForm::electron_count(6_i64)),
         AromaticSystemUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
-            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)),
+            constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)),
         },
         vec![
             AromaticSystemDelta::ModifyField {
@@ -3463,7 +3463,7 @@ mod tests {
             },
             AromaticSystemDelta::ModifyConstraint {
                 id: AromaticSystemId(7),
-                old: Some(AromaticSystemConstraintAst::electron_count(6_i64)),
+                old: Some(AromaticSystemConstraintForm::electron_count(6_i64)),
                 new: None,
             },
         ],
@@ -3480,7 +3480,7 @@ mod tests {
     #[rstest]
     #[case::empty(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
     #[case::canonical_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_aromatic_system_delta_for_update_identity(
         #[case] current: AromaticSystemForm,
         #[case] update: AromaticSystemUpdate,
@@ -3494,12 +3494,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraint(
-        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintForm::electron_count(6_i64)),
         MulticenterBondUpdate {
             electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
-            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)),
+            constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)),
         },
         vec![
             MulticenterBondDelta::ModifyField {
@@ -3516,7 +3516,7 @@ mod tests {
             },
             MulticenterBondDelta::ModifyConstraint {
                 id: MulticenterBondId(7),
-                old: Some(MulticenterBondConstraintAst::electron_count(6_i64)),
+                old: Some(MulticenterBondConstraintForm::electron_count(6_i64)),
                 new: None,
             },
         ],
@@ -3536,7 +3536,7 @@ mod tests {
     #[rstest]
     #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
     #[case::canonical_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_multicenter_bond_delta_for_update_identity(
         #[case] current: MulticenterBondForm,
         #[case] update: MulticenterBondUpdate,
@@ -3550,10 +3550,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_and_constraint(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
         NoncovalentBondUpdate {
             kind: Some(NoncovalentBondKindForm::Undetermined),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)),
+            constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(BooleanForm::Undetermined)),
         },
         vec![
             NoncovalentBondDelta::ModifyField {
@@ -3562,7 +3562,7 @@ mod tests {
             },
             NoncovalentBondDelta::ModifyConstraint {
                 id: NoncovalentBondId(7),
-                old: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+                old: Some(NoncovalentBondConstraintForm::intramolecular(true)),
                 new: None,
             },
         ],
@@ -3582,7 +3582,7 @@ mod tests {
     #[rstest]
     #[case::empty(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
     #[case::same_kind(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
-    #[case::absent_constraint_removal(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
     fn test_noncovalent_bond_delta_for_update_identity(
         #[case] current: NoncovalentBondForm,
         #[case] update: NoncovalentBondUpdate,

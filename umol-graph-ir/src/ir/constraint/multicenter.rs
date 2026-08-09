@@ -11,20 +11,20 @@ use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondForm` via
-/// `MulticenterBondConstraintsAst`.
+/// `MulticenterBondConstraintsForm`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum MulticenterBondConstraintAst {
+pub enum MulticenterBondConstraintForm {
     /// Asserted total electron count for the multicenter bond. Cross-checked
     /// by the `ConsistencyValidator` against `sum(MulticenterBondForm::electrons)`.
     ElectronCount(NumForm),
 }
 
-impl MulticenterBondConstraintAst {
+impl MulticenterBondConstraintForm {
     pub fn electron_count(v: impl Into<NumForm>) -> Self {
         Self::ElectronCount(v.into())
     }
 
-    /// Multicenter-bond constraint key, unique within a `MulticenterBondConstraintsAst` container.
+    /// Multicenter-bond constraint key, unique within a `MulticenterBondConstraintsForm` container.
     pub fn key(&self) -> MulticenterBondConstraintKey {
         match self {
             Self::ElectronCount(_) => MulticenterBondConstraintKey::ElectronCount,
@@ -49,7 +49,7 @@ impl MulticenterBondConstraintAst {
     }
 }
 
-impl Canonicalize for MulticenterBondConstraintAst {
+impl Canonicalize for MulticenterBondConstraintForm {
     /// Canonicalize the inner value; the kind is preserved.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -58,7 +58,7 @@ impl Canonicalize for MulticenterBondConstraintAst {
     }
 }
 
-impl Lattice for MulticenterBondConstraintAst {
+impl Lattice for MulticenterBondConstraintForm {
     fn is_undetermined(&self) -> bool {
         match self {
             Self::ElectronCount(v) => v.is_undetermined(),
@@ -104,9 +104,9 @@ pub enum MulticenterBondConstraintKey {
 
 /// Multicenter bond constraints container, ordered, unique by key, sorted flat vector storage.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MulticenterBondConstraintsAst(Vec<MulticenterBondConstraintAst>);
+pub struct MulticenterBondConstraintsForm(Vec<MulticenterBondConstraintForm>);
 
-impl MulticenterBondConstraintsAst {
+impl MulticenterBondConstraintsForm {
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -114,7 +114,7 @@ impl MulticenterBondConstraintsAst {
     /// The bond's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
     pub fn electron_count(&self) -> NumForm {
         match self.get(MulticenterBondConstraintKey::ElectronCount) {
-            Some(MulticenterBondConstraintAst::ElectronCount(v)) => v.clone(),
+            Some(MulticenterBondConstraintForm::ElectronCount(v)) => v.clone(),
             _ => NumForm::Undetermined,
         }
     }
@@ -135,12 +135,12 @@ impl MulticenterBondConstraintsAst {
         self.find(key).is_ok()
     }
 
-    pub fn get(&self, key: MulticenterBondConstraintKey) -> Option<&MulticenterBondConstraintAst> {
+    pub fn get(&self, key: MulticenterBondConstraintKey) -> Option<&MulticenterBondConstraintForm> {
         self.find(key).ok().map(|i| &self.0[i])
     }
 
     /// Insert in sorted order by key, overwrite same key (last-wins).
-    pub fn set(&mut self, c: MulticenterBondConstraintAst) {
+    pub fn set(&mut self, c: MulticenterBondConstraintForm) {
         match self.find(c.key()) {
             Ok(i) => self.0[i] = c,
             Err(i) => self.0.insert(i, c),
@@ -153,8 +153,8 @@ impl MulticenterBondConstraintsAst {
     /// apply/undo primitive.
     pub fn compare_and_set(
         &mut self,
-        old: Option<MulticenterBondConstraintAst>,
-        new: Option<MulticenterBondConstraintAst>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     ) -> Result<(), Contradiction> {
         let key = match (&old, &new) {
             (Some(o), Some(n)) => {
@@ -187,12 +187,12 @@ impl MulticenterBondConstraintsAst {
     pub fn remove(
         &mut self,
         key: MulticenterBondConstraintKey,
-    ) -> Option<MulticenterBondConstraintAst> {
+    ) -> Option<MulticenterBondConstraintForm> {
         self.find(key).ok().map(|i| self.0.remove(i))
     }
 
     /// `set` each constraint in turn (last-wins), for bulk construction.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = MulticenterBondConstraintAst>) {
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = MulticenterBondConstraintForm>) {
         for constraint in constraints {
             self.set(constraint);
         }
@@ -200,7 +200,7 @@ impl MulticenterBondConstraintsAst {
 
     /// Overlay `other` onto self by `set`-ing each of its entries (last-wins).
     /// Undetermined entries in `other` remove.
-    pub fn update(&mut self, other: &MulticenterBondConstraintsAst) {
+    pub fn update(&mut self, other: &MulticenterBondConstraintsForm) {
         for c in other.iter() {
             if c.is_undetermined() {
                 self.remove(c.key());
@@ -211,7 +211,7 @@ impl MulticenterBondConstraintsAst {
     }
 
     /// Bulk-remove entries that don't satisfy the predicate.
-    pub fn retain(&mut self, mut f: impl FnMut(&MulticenterBondConstraintAst) -> bool) {
+    pub fn retain(&mut self, mut f: impl FnMut(&MulticenterBondConstraintForm) -> bool) {
         self.0.retain(|c| f(c));
     }
 
@@ -221,11 +221,11 @@ impl MulticenterBondConstraintsAst {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl ExactSizeIterator<Item = MulticenterBondConstraintAst> {
+    pub fn take(&mut self) -> impl ExactSizeIterator<Item = MulticenterBondConstraintForm> {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn iter(&self) -> Iter<'_, MulticenterBondConstraintAst> {
+    pub fn iter(&self) -> Iter<'_, MulticenterBondConstraintForm> {
         self.0.iter()
     }
 
@@ -234,7 +234,7 @@ impl MulticenterBondConstraintsAst {
     }
 }
 
-impl Canonicalize for MulticenterBondConstraintsAst {
+impl Canonicalize for MulticenterBondConstraintsForm {
     /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
@@ -243,13 +243,13 @@ impl Canonicalize for MulticenterBondConstraintsAst {
             .0
             .into_iter()
             .map(Canonicalize::canonicalize)
-            .collect::<Result<Vec<MulticenterBondConstraintAst>, _>>()?;
+            .collect::<Result<Vec<MulticenterBondConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
     }
 }
 
-impl Lattice for MulticenterBondConstraintsAst {
+impl Lattice for MulticenterBondConstraintsForm {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| c.is_undetermined())
     }
@@ -259,10 +259,10 @@ impl Lattice for MulticenterBondConstraintsAst {
     }
 
     /// Greatest lower bound as a two-pointer merge over the key-sorted entries: a shared key
-    /// meets its two values (`MulticenterBondConstraintAst::meet`; a `None` aborts the whole meet), an
+    /// meets its two values (`MulticenterBondConstraintForm::meet`; a `None` aborts the whole meet), an
     /// A-only / B-only key is kept (meet with the absent ⊤ is the value). Vacuous results dropped.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let mut entries: Vec<MulticenterBondConstraintAst> = Vec::new();
+        let mut entries: Vec<MulticenterBondConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
         let mut ca = a.next();
@@ -292,10 +292,10 @@ impl Lattice for MulticenterBondConstraintsAst {
     }
 
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
-    /// (`MulticenterBondConstraintAst::join`); a single-side key widens to the absent ⊤ and is dropped.
+    /// (`MulticenterBondConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let mut entries: Vec<MulticenterBondConstraintAst> = Vec::new();
+        let mut entries: Vec<MulticenterBondConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
         let mut ca = a.next();
@@ -348,8 +348,8 @@ impl Lattice for MulticenterBondConstraintsAst {
     }
 }
 
-impl FromIterator<MulticenterBondConstraintAst> for MulticenterBondConstraintsAst {
-    fn from_iter<I: IntoIterator<Item = MulticenterBondConstraintAst>>(iter: I) -> Self {
+impl FromIterator<MulticenterBondConstraintForm> for MulticenterBondConstraintsForm {
+    fn from_iter<I: IntoIterator<Item = MulticenterBondConstraintForm>>(iter: I) -> Self {
         let mut out = Self::new();
         for c in iter {
             out.set(c);
@@ -358,23 +358,23 @@ impl FromIterator<MulticenterBondConstraintAst> for MulticenterBondConstraintsAs
     }
 }
 
-impl IntoIterator for MulticenterBondConstraintsAst {
-    type Item = MulticenterBondConstraintAst;
-    type IntoIter = IntoIter<MulticenterBondConstraintAst>;
+impl IntoIterator for MulticenterBondConstraintsForm {
+    type Item = MulticenterBondConstraintForm;
+    type IntoIter = IntoIter<MulticenterBondConstraintForm>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl From<MulticenterBondConstraintAst> for MulticenterBondConstraintsAst {
-    fn from(c: MulticenterBondConstraintAst) -> Self {
+impl From<MulticenterBondConstraintForm> for MulticenterBondConstraintsForm {
+    fn from(c: MulticenterBondConstraintForm) -> Self {
         Self::from_iter([c])
     }
 }
 
-impl From<Vec<MulticenterBondConstraintAst>> for MulticenterBondConstraintsAst {
-    fn from(cs: Vec<MulticenterBondConstraintAst>) -> Self {
+impl From<Vec<MulticenterBondConstraintForm>> for MulticenterBondConstraintsForm {
+    fn from(cs: Vec<MulticenterBondConstraintForm>) -> Self {
         Self::from_iter(cs)
     }
 }
@@ -389,23 +389,23 @@ mod tests {
 
     #[rstest]
     #[case::electron_count(
-        MulticenterBondConstraintAst::electron_count(6),
-        MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(6))
+        MulticenterBondConstraintForm::electron_count(6),
+        MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(6))
     )]
     fn test_multicenter_bond_constraint_form_constructors(
-        #[case] actual: MulticenterBondConstraintAst,
-        #[case] expected: MulticenterBondConstraintAst,
+        #[case] actual: MulticenterBondConstraintForm,
+        #[case] expected: MulticenterBondConstraintForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
     #[case::electron_count(
-        MulticenterBondConstraintAst::electron_count(6),
+        MulticenterBondConstraintForm::electron_count(6),
         MulticenterBondConstraintKey::ElectronCount
     )]
     fn test_multicenter_bond_constraint_form_key(
-        #[case] c: MulticenterBondConstraintAst,
+        #[case] c: MulticenterBondConstraintForm,
         #[case] expected: MulticenterBondConstraintKey,
     ) {
         assert_eq!(c.key(), expected);
@@ -413,35 +413,35 @@ mod tests {
 
     #[rstest]
     #[case::electron_count(
-        MulticenterBondConstraintAst::electron_count(6),
-        MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)
+        MulticenterBondConstraintForm::electron_count(6),
+        MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)
     )]
     fn test_multicenter_bond_constraint_form_as_undetermined(
-        #[case] c: MulticenterBondConstraintAst,
-        #[case] expected: MulticenterBondConstraintAst,
+        #[case] c: MulticenterBondConstraintForm,
+        #[case] expected: MulticenterBondConstraintForm,
     ) {
         assert_eq!(c.as_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count_litset_singleton(MulticenterBondConstraintAst::ElectronCount(NumForm::lit_set([6])), Ok(MulticenterBondConstraintAst::electron_count(6)))]
-    #[case::empty_litset_contradiction(MulticenterBondConstraintAst::ElectronCount(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+    #[case::electron_count_litset_singleton(MulticenterBondConstraintForm::ElectronCount(NumForm::lit_set([6])), Ok(MulticenterBondConstraintForm::electron_count(6)))]
+    #[case::empty_litset_contradiction(MulticenterBondConstraintForm::ElectronCount(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
     fn test_multicenter_bond_constraint_form_canonicalize(
-        #[case] constraint: MulticenterBondConstraintAst,
-        #[case] expected: Result<MulticenterBondConstraintAst, Contradiction>,
+        #[case] constraint: MulticenterBondConstraintForm,
+        #[case] expected: Result<MulticenterBondConstraintForm, Contradiction>,
     ) {
         assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rstest]
-    #[case::lit(MulticenterBondConstraintAst::electron_count(6), false)]
+    #[case::lit(MulticenterBondConstraintForm::electron_count(6), false)]
     #[case::undetermined(
-        MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined),
+        MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined),
         true
     )]
     fn test_multicenter_bond_constraint_form_is_undetermined(
-        #[case] c: MulticenterBondConstraintAst,
+        #[case] c: MulticenterBondConstraintForm,
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
@@ -449,32 +449,32 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_value(MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::electron_count(6), Some(MulticenterBondConstraintAst::electron_count(6)))]
-    #[case::narrows_undetermined(MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined), Some(MulticenterBondConstraintAst::electron_count(6)))]
-    #[case::incompatible(MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::electron_count(2), None)]
-    fn test_multicenter_bond_constraint_form_meet(#[case] a: MulticenterBondConstraintAst, #[case] b: MulticenterBondConstraintAst, #[case] expected: Option<MulticenterBondConstraintAst>) {
+    #[case::same_value(MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::electron_count(6), Some(MulticenterBondConstraintForm::electron_count(6)))]
+    #[case::narrows_undetermined(MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined), Some(MulticenterBondConstraintForm::electron_count(6)))]
+    #[case::incompatible(MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::electron_count(2), None)]
+    fn test_multicenter_bond_constraint_form_meet(#[case] a: MulticenterBondConstraintForm, #[case] b: MulticenterBondConstraintForm, #[case] expected: Option<MulticenterBondConstraintForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_value(MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::electron_count(6), Ok(MulticenterBondConstraintAst::electron_count(6)))]
-    #[case::widens(MulticenterBondConstraintAst::electron_count(1), MulticenterBondConstraintAst::electron_count(2), Ok(MulticenterBondConstraintAst::ElectronCount(NumForm::lit_set([1, 2]))))]
-    fn test_multicenter_bond_constraint_form_join(#[case] a: MulticenterBondConstraintAst, #[case] b: MulticenterBondConstraintAst, #[case] expected: Result<MulticenterBondConstraintAst, NoJoin>) {
+    #[case::same_value(MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::electron_count(6), Ok(MulticenterBondConstraintForm::electron_count(6)))]
+    #[case::widens(MulticenterBondConstraintForm::electron_count(1), MulticenterBondConstraintForm::electron_count(2), Ok(MulticenterBondConstraintForm::ElectronCount(NumForm::lit_set([1, 2]))))]
+    fn test_multicenter_bond_constraint_form_join(#[case] a: MulticenterBondConstraintForm, #[case] b: MulticenterBondConstraintForm, #[case] expected: Result<MulticenterBondConstraintForm, NoJoin>) {
         assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_value(MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::electron_count(6), true)]
-    #[case::incompatible(MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::electron_count(2), false)]
-    fn test_multicenter_bond_constraint_form_is_compatible(#[case] a: MulticenterBondConstraintAst, #[case] b: MulticenterBondConstraintAst, #[case] expected: bool) {
+    #[case::same_value(MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::electron_count(6), true)]
+    #[case::incompatible(MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::electron_count(2), false)]
+    fn test_multicenter_bond_constraint_form_is_compatible(#[case] a: MulticenterBondConstraintForm, #[case] b: MulticenterBondConstraintForm, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_new() {
-        let cs = MulticenterBondConstraintsAst::new();
+        let cs = MulticenterBondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
     }
@@ -482,73 +482,73 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraints_form_iter() {
         let cs =
-            MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
+            MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
-            vec![MulticenterBondConstraintAst::electron_count(6)]
+            vec![MulticenterBondConstraintForm::electron_count(6)]
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(vec![MulticenterBondConstraintAst::electron_count(6)], vec![MulticenterBondConstraintAst::electron_count(6)])]
-    #[case::overwrite_same_key(vec![MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::electron_count(10)], vec![MulticenterBondConstraintAst::electron_count(10)])]
-    #[case::vacuous_stores(vec![MulticenterBondConstraintAst::electron_count(6), MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)], vec![MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)])]
-    fn test_multicenter_bond_constraints_form_set(#[case] sequence: Vec<MulticenterBondConstraintAst>, #[case] expected: Vec<MulticenterBondConstraintAst>) {
-        let mut cs = MulticenterBondConstraintsAst::new();
+    #[case::fresh(vec![MulticenterBondConstraintForm::electron_count(6)], vec![MulticenterBondConstraintForm::electron_count(6)])]
+    #[case::overwrite_same_key(vec![MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::electron_count(10)], vec![MulticenterBondConstraintForm::electron_count(10)])]
+    #[case::vacuous_stores(vec![MulticenterBondConstraintForm::electron_count(6), MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)], vec![MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)])]
+    fn test_multicenter_bond_constraints_form_set(#[case] sequence: Vec<MulticenterBondConstraintForm>, #[case] expected: Vec<MulticenterBondConstraintForm>) {
+        let mut cs = MulticenterBondConstraintsForm::new();
         for c in sequence {
             cs.set(c);
         }
-        assert_eq!(cs, MulticenterBondConstraintsAst::from_iter(expected));
+        assert_eq!(cs, MulticenterBondConstraintsForm::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::overwrite(
-        vec![MulticenterBondConstraintAst::electron_count(6)],
-        vec![MulticenterBondConstraintAst::electron_count(10)],
-        vec![MulticenterBondConstraintAst::electron_count(10)])]
+        vec![MulticenterBondConstraintForm::electron_count(6)],
+        vec![MulticenterBondConstraintForm::electron_count(10)],
+        vec![MulticenterBondConstraintForm::electron_count(10)])]
     #[case::adds_from_empty(
         vec![],
-        vec![MulticenterBondConstraintAst::electron_count(6)],
-        vec![MulticenterBondConstraintAst::electron_count(6)])]
+        vec![MulticenterBondConstraintForm::electron_count(6)],
+        vec![MulticenterBondConstraintForm::electron_count(6)])]
     #[case::vacuous_removes(
-        vec![MulticenterBondConstraintAst::electron_count(6)],
-        vec![MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)],
+        vec![MulticenterBondConstraintForm::electron_count(6)],
+        vec![MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)],
         vec![])]
-    fn test_multicenter_bond_constraints_form_update(#[case] initial: Vec<MulticenterBondConstraintAst>, #[case] other: Vec<MulticenterBondConstraintAst>, #[case] expected: Vec<MulticenterBondConstraintAst>) {
-        let mut cs = MulticenterBondConstraintsAst::from_iter(initial);
-        cs.update(&MulticenterBondConstraintsAst::from_iter(other));
-        assert_eq!(cs, MulticenterBondConstraintsAst::from_iter(expected));
+    fn test_multicenter_bond_constraints_form_update(#[case] initial: Vec<MulticenterBondConstraintForm>, #[case] other: Vec<MulticenterBondConstraintForm>, #[case] expected: Vec<MulticenterBondConstraintForm>) {
+        let mut cs = MulticenterBondConstraintsForm::from_iter(initial);
+        cs.update(&MulticenterBondConstraintsForm::from_iter(other));
+        assert_eq!(cs, MulticenterBondConstraintsForm::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::modify(vec![MulticenterBondConstraintAst::electron_count(6)], Some(MulticenterBondConstraintAst::electron_count(6)), Some(MulticenterBondConstraintAst::electron_count(10)), Ok(()), vec![MulticenterBondConstraintAst::electron_count(10)])]
-    #[case::remove(vec![MulticenterBondConstraintAst::electron_count(6)], Some(MulticenterBondConstraintAst::electron_count(6)), None, Ok(()), vec![])]
-    #[case::add_from_absent(vec![], None, Some(MulticenterBondConstraintAst::electron_count(6)), Ok(()), vec![MulticenterBondConstraintAst::electron_count(6)])]
-    #[case::old_mismatch(vec![MulticenterBondConstraintAst::electron_count(6)], Some(MulticenterBondConstraintAst::electron_count(2)), None, Err(Contradiction), vec![MulticenterBondConstraintAst::electron_count(6)])]
+    #[case::modify(vec![MulticenterBondConstraintForm::electron_count(6)], Some(MulticenterBondConstraintForm::electron_count(6)), Some(MulticenterBondConstraintForm::electron_count(10)), Ok(()), vec![MulticenterBondConstraintForm::electron_count(10)])]
+    #[case::remove(vec![MulticenterBondConstraintForm::electron_count(6)], Some(MulticenterBondConstraintForm::electron_count(6)), None, Ok(()), vec![])]
+    #[case::add_from_absent(vec![], None, Some(MulticenterBondConstraintForm::electron_count(6)), Ok(()), vec![MulticenterBondConstraintForm::electron_count(6)])]
+    #[case::old_mismatch(vec![MulticenterBondConstraintForm::electron_count(6)], Some(MulticenterBondConstraintForm::electron_count(2)), None, Err(Contradiction), vec![MulticenterBondConstraintForm::electron_count(6)])]
     fn test_multicenter_bond_constraints_form_compare_and_set(
-        #[case] initial: Vec<MulticenterBondConstraintAst>,
-        #[case] old: Option<MulticenterBondConstraintAst>,
-        #[case] new: Option<MulticenterBondConstraintAst>,
+        #[case] initial: Vec<MulticenterBondConstraintForm>,
+        #[case] old: Option<MulticenterBondConstraintForm>,
+        #[case] new: Option<MulticenterBondConstraintForm>,
         #[case] expected_result: Result<(), Contradiction>,
-        #[case] expected_state: Vec<MulticenterBondConstraintAst>,
+        #[case] expected_state: Vec<MulticenterBondConstraintForm>,
     ) {
-        let mut cs = MulticenterBondConstraintsAst::from_iter(initial);
+        let mut cs = MulticenterBondConstraintsForm::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        assert_eq!(cs, MulticenterBondConstraintsAst::from_iter(expected_state));
+        assert_eq!(cs, MulticenterBondConstraintsForm::from_iter(expected_state));
     }
 
     #[rstest]
     #[case::present(
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)),
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)),
         true
     )]
-    #[case::absent(MulticenterBondConstraintsAst::new(), false)]
+    #[case::absent(MulticenterBondConstraintsForm::new(), false)]
     fn test_multicenter_bond_constraints_form_contains(
-        #[case] cs: MulticenterBondConstraintsAst,
+        #[case] cs: MulticenterBondConstraintsForm,
         #[case] expected: bool,
     ) {
         assert_eq!(
@@ -559,13 +559,13 @@ mod tests {
 
     #[rstest]
     #[case::present(
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)),
-        Some(MulticenterBondConstraintAst::electron_count(6))
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)),
+        Some(MulticenterBondConstraintForm::electron_count(6))
     )]
-    #[case::absent(MulticenterBondConstraintsAst::new(), None)]
+    #[case::absent(MulticenterBondConstraintsForm::new(), None)]
     fn test_multicenter_bond_constraints_form_get(
-        #[case] cs: MulticenterBondConstraintsAst,
-        #[case] expected: Option<MulticenterBondConstraintAst>,
+        #[case] cs: MulticenterBondConstraintsForm,
+        #[case] expected: Option<MulticenterBondConstraintForm>,
     ) {
         assert_eq!(
             cs.get(MulticenterBondConstraintKey::ElectronCount),
@@ -575,19 +575,19 @@ mod tests {
 
     #[rstest]
     #[case::present(
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)),
-        Some(MulticenterBondConstraintAst::electron_count(6)),
-        MulticenterBondConstraintsAst::new()
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)),
+        Some(MulticenterBondConstraintForm::electron_count(6)),
+        MulticenterBondConstraintsForm::new()
     )]
     #[case::absent(
-        MulticenterBondConstraintsAst::new(),
+        MulticenterBondConstraintsForm::new(),
         None,
-        MulticenterBondConstraintsAst::new()
+        MulticenterBondConstraintsForm::new()
     )]
     fn test_multicenter_bond_constraints_form_remove(
-        #[case] mut cs: MulticenterBondConstraintsAst,
-        #[case] expected_removed: Option<MulticenterBondConstraintAst>,
-        #[case] expected_state: MulticenterBondConstraintsAst,
+        #[case] mut cs: MulticenterBondConstraintsForm,
+        #[case] expected_removed: Option<MulticenterBondConstraintForm>,
+        #[case] expected_state: MulticenterBondConstraintsForm,
     ) {
         assert_eq!(
             cs.remove(MulticenterBondConstraintKey::ElectronCount),
@@ -598,53 +598,53 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(|c: &MulticenterBondConstraintAst| matches!(c, MulticenterBondConstraintAst::ElectronCount(_)), vec![MulticenterBondConstraintAst::electron_count(6)])]
-    #[case::all_dropped(|_: &MulticenterBondConstraintAst| false, vec![])]
+    #[case::partial(|c: &MulticenterBondConstraintForm| matches!(c, MulticenterBondConstraintForm::ElectronCount(_)), vec![MulticenterBondConstraintForm::electron_count(6)])]
+    #[case::all_dropped(|_: &MulticenterBondConstraintForm| false, vec![])]
     fn test_multicenter_bond_constraints_form_retain(
-        #[case] predicate: impl FnMut(&MulticenterBondConstraintAst) -> bool,
-        #[case] expected: Vec<MulticenterBondConstraintAst>,
+        #[case] predicate: impl FnMut(&MulticenterBondConstraintForm) -> bool,
+        #[case] expected: Vec<MulticenterBondConstraintForm>,
     ) {
-        let mut cs = MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
+        let mut cs = MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
         cs.retain(predicate);
-        assert_eq!(cs, MulticenterBondConstraintsAst::from_iter(expected));
+        assert_eq!(cs, MulticenterBondConstraintsForm::from_iter(expected));
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_clear() {
         let mut cs =
-            MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
+            MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
         cs.clear();
-        assert_eq!(cs, MulticenterBondConstraintsAst::new());
+        assert_eq!(cs, MulticenterBondConstraintsForm::new());
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_take() {
-        let mut empty = MulticenterBondConstraintsAst::new();
+        let mut empty = MulticenterBondConstraintsForm::new();
         let mut empty_taken = empty.take();
         assert_eq!(empty_taken.len(), 0);
         assert_eq!(empty_taken.size_hint(), (0, Some(0)));
         assert_eq!(empty_taken.next(), None);
 
         let mut cs =
-            MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
+            MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
         let mut taken = cs.take();
         assert_eq!(taken.len(), 1);
         assert_eq!(taken.size_hint(), (1, Some(1)));
         assert_eq!(
             taken.next(),
-            Some(MulticenterBondConstraintAst::electron_count(6)),
+            Some(MulticenterBondConstraintForm::electron_count(6)),
         );
         assert_eq!(taken.len(), 0);
         assert_eq!(taken.size_hint(), (0, Some(0)));
         assert_eq!(taken.next(), None);
         drop(taken);
-        assert_eq!(cs, MulticenterBondConstraintsAst::new());
+        assert_eq!(cs, MulticenterBondConstraintsForm::new());
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_compact() {
         let cs =
-            MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
+            MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
         let compaction = IdCompaction::new(
             Compaction::new(vec![0, 1], vec![0]),
             Vec::new(),
@@ -660,57 +660,57 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::canonicalizes_value(
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::lit_set([6]))),
-        Ok(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6))))]
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::lit_set([6]))),
+        Ok(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6))))]
     #[case::drop_vacuous(
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)),
-        Ok(MulticenterBondConstraintsAst::new()))]
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)),
+        Ok(MulticenterBondConstraintsForm::new()))]
     #[case::contradiction(
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::lit_set(Vec::<i64>::new()))),
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
     fn test_multicenter_bond_constraints_form_canonicalize(
-        #[case] constraints: MulticenterBondConstraintsAst,
-        #[case] expected: Result<MulticenterBondConstraintsAst, Contradiction>,
+        #[case] constraints: MulticenterBondConstraintsForm,
+        #[case] expected: Result<MulticenterBondConstraintsForm, Contradiction>,
     ) {
         assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::a_only_kept(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::new(),
-        Some(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6))))]
-    #[case::b_only_kept(MulticenterBondConstraintsAst::new(), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)),
-        Some(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6))))]
-    #[case::shared_key_meets(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)),
-        Some(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6))))]
-    #[case::shared_key_contradicts(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)), None)]
-    #[case::prunes_vacuous(MulticenterBondConstraintsAst::new(), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)), Some(MulticenterBondConstraintsAst::new()))]
-    fn test_multicenter_bond_constraints_form_meet(#[case] a: MulticenterBondConstraintsAst, #[case] b: MulticenterBondConstraintsAst, #[case] expected: Option<MulticenterBondConstraintsAst>) {
+    #[case::a_only_kept(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::new(),
+        Some(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6))))]
+    #[case::b_only_kept(MulticenterBondConstraintsForm::new(), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)),
+        Some(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6))))]
+    #[case::shared_key_meets(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)),
+        Some(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6))))]
+    #[case::shared_key_contradicts(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)), None)]
+    #[case::prunes_vacuous(MulticenterBondConstraintsForm::new(), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)), Some(MulticenterBondConstraintsForm::new()))]
+    fn test_multicenter_bond_constraints_form_meet(#[case] a: MulticenterBondConstraintsForm, #[case] b: MulticenterBondConstraintsForm, #[case] expected: Option<MulticenterBondConstraintsForm>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::widens_value(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(1)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)),
-        MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::lit_set([1, 2]))))]
-    #[case::single_side_dropped(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::new(),
-        MulticenterBondConstraintsAst::new())]
-    #[case::undetermined_drops(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)),
-        MulticenterBondConstraintsAst::new())]
-    fn test_multicenter_bond_constraints_form_join(#[case] a: MulticenterBondConstraintsAst, #[case] b: MulticenterBondConstraintsAst, #[case] expected: MulticenterBondConstraintsAst) {
+    #[case::widens_value(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(1)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)),
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::lit_set([1, 2]))))]
+    #[case::single_side_dropped(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::new(),
+        MulticenterBondConstraintsForm::new())]
+    #[case::undetermined_drops(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)),
+        MulticenterBondConstraintsForm::new())]
+    fn test_multicenter_bond_constraints_form_join(#[case] a: MulticenterBondConstraintsForm, #[case] b: MulticenterBondConstraintsForm, #[case] expected: MulticenterBondConstraintsForm) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty_pattern_matches_anything(MulticenterBondConstraintsAst::new(), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), true)]
-    #[case::required_present(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), true)]
-    #[case::required_absent(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::new(), false)]
-    #[case::wildcard_matches_lit(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::ElectronCount(NumForm::Undetermined)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), true)]
-    #[case::lit_mismatch(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)), false)]
+    #[case::empty_pattern_matches_anything(MulticenterBondConstraintsForm::new(), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), true)]
+    #[case::required_present(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), true)]
+    #[case::required_absent(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::new(), false)]
+    #[case::wildcard_matches_lit(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), true)]
+    #[case::lit_mismatch(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)), false)]
     fn test_multicenter_bond_constraints_form_matches(
-        #[case] pattern: MulticenterBondConstraintsAst,
-        #[case] target: MulticenterBondConstraintsAst,
+        #[case] pattern: MulticenterBondConstraintsForm,
+        #[case] target: MulticenterBondConstraintsForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -718,57 +718,57 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::disjoint_one_empty(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::new(), true)]
-    #[case::shared_key_compatible(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), true)]
-    #[case::shared_key_incompatible(MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6)), MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(2)), false)]
-    fn test_multicenter_bond_constraints_form_is_compatible(#[case] a: MulticenterBondConstraintsAst, #[case] b: MulticenterBondConstraintsAst, #[case] expected: bool) {
+    #[case::disjoint_one_empty(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::new(), true)]
+    #[case::shared_key_compatible(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), true)]
+    #[case::shared_key_incompatible(MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6)), MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)), false)]
+    fn test_multicenter_bond_constraints_form_is_compatible(#[case] a: MulticenterBondConstraintsForm, #[case] b: MulticenterBondConstraintsForm, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(vec![MulticenterBondConstraintAst::electron_count(6)], vec![MulticenterBondConstraintAst::electron_count(6)])]
-    #[case::same_key_last_wins(vec![MulticenterBondConstraintAst::electron_count(2), MulticenterBondConstraintAst::electron_count(6)], vec![MulticenterBondConstraintAst::electron_count(6)])]
+    #[case::single(vec![MulticenterBondConstraintForm::electron_count(6)], vec![MulticenterBondConstraintForm::electron_count(6)])]
+    #[case::same_key_last_wins(vec![MulticenterBondConstraintForm::electron_count(2), MulticenterBondConstraintForm::electron_count(6)], vec![MulticenterBondConstraintForm::electron_count(6)])]
     #[case::empty(vec![], vec![])]
     fn test_multicenter_bond_constraints_form_from_iter(
-        #[case] input: Vec<MulticenterBondConstraintAst>,
-        #[case] expected: Vec<MulticenterBondConstraintAst>,
+        #[case] input: Vec<MulticenterBondConstraintForm>,
+        #[case] expected: Vec<MulticenterBondConstraintForm>,
     ) {
-        let cs = MulticenterBondConstraintsAst::from_iter(input);
-        assert_eq!(cs, MulticenterBondConstraintsAst::from_iter(expected));
+        let cs = MulticenterBondConstraintsForm::from_iter(input);
+        assert_eq!(cs, MulticenterBondConstraintsForm::from_iter(expected));
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_into_iter() {
         let cs =
-            MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(6));
+            MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
-            vec![MulticenterBondConstraintAst::electron_count(6)]
+            vec![MulticenterBondConstraintForm::electron_count(6)]
         );
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_from_multicenter_bond_constraint() {
-        let cs: MulticenterBondConstraintsAst =
-            MulticenterBondConstraintAst::electron_count(6).into();
+        let cs: MulticenterBondConstraintsForm =
+            MulticenterBondConstraintForm::electron_count(6).into();
         assert_eq!(
             cs,
-            MulticenterBondConstraintsAst::from_iter([
-                MulticenterBondConstraintAst::electron_count(6)
+            MulticenterBondConstraintsForm::from_iter([
+                MulticenterBondConstraintForm::electron_count(6)
             ]),
         );
     }
 
     #[rstest]
     fn test_multicenter_bond_constraints_form_from_vec() {
-        let cs: MulticenterBondConstraintsAst =
-            vec![MulticenterBondConstraintAst::electron_count(6)].into();
+        let cs: MulticenterBondConstraintsForm =
+            vec![MulticenterBondConstraintForm::electron_count(6)].into();
         assert_eq!(
             cs,
-            MulticenterBondConstraintsAst::from_iter([
-                MulticenterBondConstraintAst::electron_count(6)
+            MulticenterBondConstraintsForm::from_iter([
+                MulticenterBondConstraintForm::electron_count(6)
             ]),
         );
     }

@@ -2201,7 +2201,7 @@ mod tests {
     use super::super::namespace::MoleculeContext;
     use super::*;
     use crate::ir::constraint::{
-        AromaticValenceForm, AtomConstraintForm, BondConstraintForm, DativeBondConstraintAst,
+        AromaticValenceForm, AtomConstraintForm, BondConstraintForm, DativeBondConstraintForm,
         FluxionalityAst, LigandPermutation, LigandSymmetryAst, MulticenterValenceForm,
         OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintAst, StereoLigandPair,
         StereogenicityAst, TopicityAst, TopicityRelationAst,
@@ -2494,7 +2494,7 @@ mod tests {
     #[rstest]
     #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(4))), "{:atom [0 {:valence 4}]}")]
     #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraintForm::Aromatic(BooleanForm::Lit(true))), "{:bond [1 {:aromatic true}]}")]
-    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))),
+    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Lit(1))),
         "{:dative-bond [0 {:ring-membership {:count 1}}]}")]
     #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }),
         "{:dative-bond-donor [0 2]}")]

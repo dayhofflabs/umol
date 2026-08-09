@@ -25,23 +25,23 @@ pub(crate) use umol_graph_ir::dsl::{
     StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_graph_ir::ir::{
-    aromatic_covalence, AddBond, ArithExpr, AromaticSystemConstraintAst,
-    AromaticSystemConstraintKey, AromaticSystemConstraintsAst, AromaticSystemDelta,
+    aromatic_covalence, AddBond, ArithExpr, AromaticSystemConstraintForm,
+    AromaticSystemConstraintKey, AromaticSystemConstraintsForm, AromaticSystemDelta,
     AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemHandle, AromaticSystemId,
     AromaticSystemUpdate, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
     AtomConstraintKey, AtomConstraintsForm, AtomDelta, AtomFieldChange, AtomForm, AtomHandle,
     AtomId, AtomUpdate, BondConstraintForm, BondConstraintKey, BondConstraintsForm, BondDelta,
     BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize,
-    CisTransStereoForm, Constraint, ConstraintEdit, Constraints, DativeBondConstraintAst,
-    DativeBondConstraintKey, DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange,
+    CisTransStereoForm, Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm,
+    DativeBondConstraintKey, DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange,
     DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator,
     Edit, Edits, ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind,
     FluxionalityAst, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
     LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MoleculeCorrespondence,
-    MoleculeEntries, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-    MulticenterBondConstraintsAst, MulticenterBondDelta, MulticenterBondFieldChange,
+    MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+    MulticenterBondConstraintsForm, MulticenterBondDelta, MulticenterBondFieldChange,
     MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
-    MulticenterValenceForm, NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst,
+    MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm,
     NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
     NumForm, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst, RelOp,
@@ -508,22 +508,22 @@ pub(crate) fn bond_update_constraints_strategy() -> impl Strategy<Value = BondCo
     .prop_map(BondConstraintsForm::from_iter)
 }
 
-pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintAst> {
+pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintForm> {
     prop_oneof![
-        any::<bool>().prop_map(|b| DativeBondConstraintAst::Aromatic(BooleanForm::Lit(b))),
+        any::<bool>().prop_map(|b| DativeBondConstraintForm::Aromatic(BooleanForm::Lit(b))),
         constraint_inner_value_strategy(0..=6)
-            .prop_map(|v| DativeBondConstraintAst::ring_membership(RingScope::All, v)),
+            .prop_map(|v| DativeBondConstraintForm::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| {
-            DativeBondConstraintAst::ring_membership(RingScope::Size(s), count)
+            DativeBondConstraintForm::ring_membership(RingScope::Size(s), count)
         }),
     ]
     .boxed()
 }
 
-pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = DativeBondConstraintsAst>
+pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = DativeBondConstraintsForm>
 {
     prop::collection::vec(dative_bond_constraint_strategy(), 0..=2).prop_map(|list| {
-        let mut cs = DativeBondConstraintsAst::new();
+        let mut cs = DativeBondConstraintsForm::new();
         for c in list {
             cs.set(c);
         }
@@ -532,7 +532,7 @@ pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = Dative
 }
 
 pub(crate) fn dative_bond_update_constraints_strategy(
-) -> impl Strategy<Value = DativeBondConstraintsAst> {
+) -> impl Strategy<Value = DativeBondConstraintsForm> {
     prop::collection::vec(
         prop_oneof![
             dative_bond_constraint_strategy(),
@@ -540,7 +540,7 @@ pub(crate) fn dative_bond_update_constraints_strategy(
         ],
         0..=2,
     )
-    .prop_map(DativeBondConstraintsAst::from_iter)
+    .prop_map(DativeBondConstraintsForm::from_iter)
 }
 
 prop_compose! {
@@ -695,18 +695,18 @@ prop_compose! {
 /// parse but the renderer omits the predicate entirely, breaking
 /// roundtrip.
 pub(crate) fn optional_aromatic_electron_count(
-) -> impl Strategy<Value = AromaticSystemConstraintsAst> {
+) -> impl Strategy<Value = AromaticSystemConstraintsForm> {
     prop::option::weighted(0.5, electron_count_value_strategy(0..=12)).prop_map(|opt| {
-        let mut cs = AromaticSystemConstraintsAst::new();
+        let mut cs = AromaticSystemConstraintsForm::new();
         if let Some(v) = opt {
-            cs.set(AromaticSystemConstraintAst::ElectronCount(v));
+            cs.set(AromaticSystemConstraintForm::ElectronCount(v));
         }
         cs.canonicalize().unwrap_or_default()
     })
 }
 
 pub(crate) fn aromatic_system_update_constraints_strategy(
-) -> impl Strategy<Value = AromaticSystemConstraintsAst> {
+) -> impl Strategy<Value = AromaticSystemConstraintsForm> {
     prop::option::weighted(
         0.5,
         prop_oneof![
@@ -716,25 +716,25 @@ pub(crate) fn aromatic_system_update_constraints_strategy(
     )
     .prop_map(|value| {
         value
-            .map(AromaticSystemConstraintAst::ElectronCount)
-            .map(AromaticSystemConstraintsAst::from)
+            .map(AromaticSystemConstraintForm::ElectronCount)
+            .map(AromaticSystemConstraintsForm::from)
             .unwrap_or_default()
     })
 }
 
 pub(crate) fn optional_multicenter_electron_count(
-) -> impl Strategy<Value = MulticenterBondConstraintsAst> {
+) -> impl Strategy<Value = MulticenterBondConstraintsForm> {
     prop::option::weighted(0.5, electron_count_value_strategy(0..=8)).prop_map(|opt| {
-        let mut cs = MulticenterBondConstraintsAst::new();
+        let mut cs = MulticenterBondConstraintsForm::new();
         if let Some(v) = opt {
-            cs.set(MulticenterBondConstraintAst::ElectronCount(v));
+            cs.set(MulticenterBondConstraintForm::ElectronCount(v));
         }
         cs.canonicalize().unwrap_or_default()
     })
 }
 
 pub(crate) fn multicenter_bond_update_constraints_strategy(
-) -> impl Strategy<Value = MulticenterBondConstraintsAst> {
+) -> impl Strategy<Value = MulticenterBondConstraintsForm> {
     prop::option::weighted(
         0.5,
         prop_oneof![
@@ -744,8 +744,8 @@ pub(crate) fn multicenter_bond_update_constraints_strategy(
     )
     .prop_map(|value| {
         value
-            .map(MulticenterBondConstraintAst::ElectronCount)
-            .map(MulticenterBondConstraintsAst::from)
+            .map(MulticenterBondConstraintForm::ElectronCount)
+            .map(MulticenterBondConstraintsForm::from)
             .unwrap_or_default()
     })
 }
@@ -898,17 +898,17 @@ pub(crate) fn noncovalent_bond_kind_form_strategy() -> impl Strategy<Value = Non
     ]
 }
 
-pub(crate) fn noncovalent_bond_constraint_strategy() -> BoxedStrategy<NoncovalentBondConstraintAst>
+pub(crate) fn noncovalent_bond_constraint_strategy() -> BoxedStrategy<NoncovalentBondConstraintForm>
 {
     any::<bool>()
-        .prop_map(|b| NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Lit(b)))
+        .prop_map(|b| NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(b)))
         .boxed()
 }
 
 pub(crate) fn noncovalent_bond_constraints_strategy(
-) -> impl Strategy<Value = NoncovalentBondConstraintsAst> {
+) -> impl Strategy<Value = NoncovalentBondConstraintsForm> {
     prop::collection::vec(noncovalent_bond_constraint_strategy(), 0..=1).prop_map(|list| {
-        let mut cs = NoncovalentBondConstraintsAst::new();
+        let mut cs = NoncovalentBondConstraintsForm::new();
         for c in list {
             cs.set(c);
         }
@@ -917,21 +917,21 @@ pub(crate) fn noncovalent_bond_constraints_strategy(
 }
 
 pub(crate) fn noncovalent_bond_update_constraints_strategy(
-) -> impl Strategy<Value = NoncovalentBondConstraintsAst> {
+) -> impl Strategy<Value = NoncovalentBondConstraintsForm> {
     prop::option::weighted(
         0.5,
         prop_oneof![
             any::<bool>().prop_map(|value| {
-                NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Lit(value))
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(value))
             }),
-            Just(NoncovalentBondConstraintAst::Intramolecular(
+            Just(NoncovalentBondConstraintForm::Intramolecular(
                 BooleanForm::Undetermined,
             )),
         ],
     )
     .prop_map(|constraint| {
         constraint
-            .map(NoncovalentBondConstraintsAst::from)
+            .map(NoncovalentBondConstraintsForm::from)
             .unwrap_or_default()
     })
 }
@@ -1843,7 +1843,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
 
         let aromatic_leaf = (system_id.clone(), electron_count_value_strategy(0..=12))
             .prop_map(|(system, v)| {
-                Constraint::AromaticSystem(system, AromaticSystemConstraintAst::ElectronCount(v))
+                Constraint::AromaticSystem(system, AromaticSystemConstraintForm::ElectronCount(v))
             })
             .boxed();
         choices.push(aromatic_leaf);
@@ -1906,7 +1906,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
 
         let multicenter_leaf = (bond_id.clone(), electron_count_value_strategy(0..=8))
             .prop_map(|(bond, v)| {
-                Constraint::MulticenterBond(bond, MulticenterBondConstraintAst::ElectronCount(v))
+                Constraint::MulticenterBond(bond, MulticenterBondConstraintForm::ElectronCount(v))
             })
             .boxed();
         choices.push(multicenter_leaf);
@@ -3480,22 +3480,22 @@ fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
         Edit::ModifyDativeBondConstraint {
             id: DativeBondHandle::Id(DativeBondId(0)),
             old: None,
-            new: Some(DativeBondConstraintAst::aromatic(true)),
+            new: Some(DativeBondConstraintForm::aromatic(true)),
         },
         Edit::ModifyAromaticSystemConstraint {
             id: AromaticSystemHandle::Id(AromaticSystemId(0)),
             old: None,
-            new: Some(AromaticSystemConstraintAst::electron_count(6)),
+            new: Some(AromaticSystemConstraintForm::electron_count(6)),
         },
         Edit::ModifyMulticenterBondConstraint {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             old: None,
-            new: Some(MulticenterBondConstraintAst::electron_count(2)),
+            new: Some(MulticenterBondConstraintForm::electron_count(2)),
         },
         Edit::ModifyNoncovalentBondConstraint {
             id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
             old: None,
-            new: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+            new: Some(NoncovalentBondConstraintForm::intramolecular(true)),
         },
         Edit::ModifyStereoAtomConstraint {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
@@ -3636,18 +3636,18 @@ fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, 
     let source = Constraint::And(vec![
         Constraint::Atom(AtomId(7), AtomConstraintForm::degree(3)),
         Constraint::Bond(BondId(7), BondConstraintForm::aromatic(true)),
-        Constraint::DativeBond(DativeBondId(7), DativeBondConstraintAst::aromatic(true)),
+        Constraint::DativeBond(DativeBondId(7), DativeBondConstraintForm::aromatic(true)),
         Constraint::AromaticSystem(
             AromaticSystemId(7),
-            AromaticSystemConstraintAst::electron_count(6),
+            AromaticSystemConstraintForm::electron_count(6),
         ),
         Constraint::MulticenterBond(
             MulticenterBondId(7),
-            MulticenterBondConstraintAst::electron_count(2),
+            MulticenterBondConstraintForm::electron_count(2),
         ),
         Constraint::NoncovalentBond(
             NoncovalentBondId(7),
-            NoncovalentBondConstraintAst::intramolecular(true),
+            NoncovalentBondConstraintForm::intramolecular(true),
         ),
         Constraint::StereoAtom(
             StereoAtomId(7),
@@ -3804,19 +3804,19 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
         ),
         EntityKind::DativeBond => Constraint::DativeBond(
             DativeBondId(id),
-            DativeBondConstraintAst::aromatic(value % 2 == 0),
+            DativeBondConstraintForm::aromatic(value % 2 == 0),
         ),
         EntityKind::AromaticSystem => Constraint::AromaticSystem(
             AromaticSystemId(id),
-            AromaticSystemConstraintAst::electron_count(value),
+            AromaticSystemConstraintForm::electron_count(value),
         ),
         EntityKind::MulticenterBond => Constraint::MulticenterBond(
             MulticenterBondId(id),
-            MulticenterBondConstraintAst::electron_count(value),
+            MulticenterBondConstraintForm::electron_count(value),
         ),
         EntityKind::NoncovalentBond => Constraint::NoncovalentBond(
             NoncovalentBondId(id),
-            NoncovalentBondConstraintAst::intramolecular(value % 2 == 0),
+            NoncovalentBondConstraintForm::intramolecular(value % 2 == 0),
         ),
         EntityKind::StereoAtom => Constraint::StereoAtom(
             StereoAtomId(id),
@@ -4093,7 +4093,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::AddMoleculeConstraint {
                         constraint: Constraint::AromaticSystem(
                             AromaticSystemId(i as u32),
-                            AromaticSystemConstraintAst::ElectronCount(NumForm::Lit(6)),
+                            AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
                         )
                         .into(),
                     });
@@ -4102,7 +4102,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::AddMoleculeConstraint {
                         constraint: Constraint::MulticenterBond(
                             MulticenterBondId(i as u32),
-                            MulticenterBondConstraintAst::ElectronCount(NumForm::Lit(4)),
+                            MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(4)),
                         )
                         .into(),
                     });
@@ -4924,14 +4924,14 @@ fn build_reaction(
             .ast
             .constraints
             .iter()
-            .any(|c| matches!(c, DativeBondConstraintAst::Aromatic(_)));
+            .any(|c| matches!(c, DativeBondConstraintForm::Aromatic(_)));
         if has_aromatic {
             continue;
         }
         deltas.push(Delta::DativeBond(DativeBondDelta::ModifyConstraint {
             id,
             old: None,
-            new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+            new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         }));
     }
     // Part B — stereo edits on survivors. Relative ops resolve `old` from the host at apply;

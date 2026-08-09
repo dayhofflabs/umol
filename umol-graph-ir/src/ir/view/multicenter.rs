@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
-use super::super::constraint::MulticenterBondConstraintsAst;
+use super::super::constraint::MulticenterBondConstraintsForm;
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
@@ -195,7 +195,7 @@ impl<'a> MulticenterBondView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a MulticenterBondConstraintsAst {
+    pub fn constraints(&self) -> &'a MulticenterBondConstraintsForm {
         &self.ast.constraints
     }
 

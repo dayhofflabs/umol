@@ -2082,9 +2082,9 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::constraint::{
-        AromaticSystemConstraintAst, AtomConstraintForm, BondConstraintForm, Constraint,
-        Constraints, DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
-        NoncovalentBondConstraintAst, StereoAtomConstraintAst, StereoBondConstraintAst,
+        AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
+        Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+        NoncovalentBondConstraintForm, StereoAtomConstraintAst, StereoBondConstraintAst,
         StereogenicityAst,
     };
     use super::super::delta::Deltas;
@@ -2749,27 +2749,27 @@ mod tests {
         Entity::Bond(BondId(0))
     )]
     #[case::dative_bond(
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::aromatic(false)),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(false)),
         Entity::DativeBond(DativeBondId(0))
     )]
     #[case::aromatic_system(
         Constraint::AromaticSystem(
             AromaticSystemId(0),
-            AromaticSystemConstraintAst::electron_count(NumForm::Lit(2)),
+            AromaticSystemConstraintForm::electron_count(NumForm::Lit(2)),
         ),
         Entity::AromaticSystem(AromaticSystemId(0))
     )]
     #[case::multicenter_bond(
         Constraint::MulticenterBond(
             MulticenterBondId(0),
-            MulticenterBondConstraintAst::electron_count(NumForm::Lit(2)),
+            MulticenterBondConstraintForm::electron_count(NumForm::Lit(2)),
         ),
         Entity::MulticenterBond(MulticenterBondId(0))
     )]
     #[case::noncovalent_bond(
         Constraint::NoncovalentBond(
             NoncovalentBondId(0),
-            NoncovalentBondConstraintAst::intramolecular(true),
+            NoncovalentBondConstraintForm::intramolecular(true),
         ),
         Entity::NoncovalentBond(NoncovalentBondId(0))
     )]

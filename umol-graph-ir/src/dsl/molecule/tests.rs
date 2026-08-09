@@ -725,7 +725,7 @@ fn test_molecule_dsl_required_field_missing_streaming(#[case] source: &str) {
 #[case::bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:aromatic true}]}]}"##)]
 #[case::bond_ring_count(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:count 1}}]}]}"##)]
 #[case::bond_ring_size(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:size 6 :count 1}}]}]}"##)]
-// DativeBondConstraintAst variants
+// DativeBondConstraintForm variants
 #[case::dative_ring_count(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type :single}] :constraints [{:dative-bond [0 {:ring-membership {:count 1}}]}]}"##)]
 #[case::dative_ring_size(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type :single}] :constraints [{:dative-bond [0 {:ring-membership {:size 5 :count 1}}]}]}"##)]
 #[case::dative_donors(r##"{:atoms ["C" "C" "N"] :bonds [] :dative-bonds [{:donors [0 1] :acceptor 2 :type :single}] :constraints [{:dative-bond-donors [0 [0 1]]}]}"##)]

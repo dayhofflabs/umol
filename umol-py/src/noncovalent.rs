@@ -589,9 +589,9 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
         AtomForm as GraphIrAtomForm, BooleanForm as GraphIrBooleanForm, MoleculeEntries,
-        NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
+        NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
         NoncovalentBondConstraintKey as GraphIrNoncovalentBondConstraintKey,
-        NoncovalentBondConstraintsAst as GraphIrNoncovalentBondConstraintsAst,
+        NoncovalentBondConstraintsForm as GraphIrNoncovalentBondConstraintsForm,
     };
 
     use super::*;
@@ -649,7 +649,7 @@ mod tests {
             py,
             NoncovalentBondConstraintAst::from_rust(
                 py,
-                &GraphIrNoncovalentBondConstraintAst::intramolecular(b),
+                &GraphIrNoncovalentBondConstraintForm::intramolecular(b),
             )
             .unwrap(),
         )
@@ -674,7 +674,7 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_constraint_ast_key() {
         Python::attach(|py| {
-            let constraint = GraphIrNoncovalentBondConstraintAst::intramolecular(true);
+            let constraint = GraphIrNoncovalentBondConstraintForm::intramolecular(true);
             let key = NoncovalentBondConstraintAst::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
@@ -686,11 +686,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrNoncovalentBondConstraintAst::intramolecular(true))]
-    #[case(GraphIrNoncovalentBondConstraintAst::intramolecular(false))]
-    #[case(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Undetermined))]
+    #[case(GraphIrNoncovalentBondConstraintForm::intramolecular(true))]
+    #[case(GraphIrNoncovalentBondConstraintForm::intramolecular(false))]
+    #[case(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Undetermined))]
     fn test_noncovalent_bond_constraint_ast_roundtrip(
-        #[case] ast: GraphIrNoncovalentBondConstraintAst,
+        #[case] ast: GraphIrNoncovalentBondConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
@@ -760,8 +760,8 @@ mod tests {
     fn test_noncovalent_bond_constraints_ast_update_container() {
         Python::attach(|py| {
             let constraints = Py::new(py, NoncovalentBondConstraintsAst::new(py, vec![])).unwrap();
-            let mut other = GraphIrNoncovalentBondConstraintsAst::new();
-            other.set(GraphIrNoncovalentBondConstraintAst::intramolecular(true));
+            let mut other = GraphIrNoncovalentBondConstraintsForm::new();
+            other.set(GraphIrNoncovalentBondConstraintForm::intramolecular(true));
             NoncovalentBondConstraintsAst::update(
                 constraints.clone_ref(py),
                 py,
@@ -843,7 +843,7 @@ mod tests {
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
                 values.__next__().unwrap().bind(py).borrow().to_rust(py),
-                GraphIrNoncovalentBondConstraintAst::intramolecular(true)
+                GraphIrNoncovalentBondConstraintForm::intramolecular(true)
             );
             let mut items = constraints.items(py).unwrap();
             let (k, v) = items.__next__().unwrap();
@@ -853,7 +853,7 @@ mod tests {
             );
             assert_eq!(
                 v.bind(py).borrow().to_rust(py),
-                GraphIrNoncovalentBondConstraintAst::intramolecular(true)
+                GraphIrNoncovalentBondConstraintForm::intramolecular(true)
             );
         });
     }
@@ -1047,7 +1047,9 @@ mod tests {
                 py,
                 NoncovalentBondAst::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
+                        .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
+                            true,
+                        )),
                 ),
             )
             .unwrap();
@@ -1076,7 +1078,9 @@ mod tests {
                 py,
                 NoncovalentBondAst::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
+                        .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
+                            true,
+                        )),
                 ),
             )
             .unwrap();
@@ -1113,7 +1117,7 @@ mod tests {
         Python::attach(|py| {
             let bond = NoncovalentBondAst::from_inner(
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
-                    .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
+                    .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(true)),
             );
             let dict = bond.asdict(py).unwrap();
             let kind = dict.get_item("kind").unwrap().unwrap();
@@ -1155,7 +1159,9 @@ mod tests {
                 py,
                 NoncovalentBondAst::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
+                        .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
+                            true,
+                        )),
                 ),
             )
             .unwrap();
@@ -1205,7 +1211,9 @@ mod tests {
                 py,
                 NoncovalentBondAst::from_inner(
                     GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond)
-                        .with_constraint(GraphIrNoncovalentBondConstraintAst::intramolecular(true)),
+                        .with_constraint(GraphIrNoncovalentBondConstraintForm::intramolecular(
+                            true,
+                        )),
                 ),
             )
             .unwrap();
@@ -1368,7 +1376,7 @@ mod tests {
                 .noncovalent_bond_mut(GraphIrNoncovalentBondId(0))
                 .ast
                 .constraints
-                .set(GraphIrNoncovalentBondConstraintAst::intramolecular(true));
+                .set(GraphIrNoncovalentBondConstraintForm::intramolecular(true));
             let view = NoncovalentBondConstraintsView {
                 backing: NoncovalentBondConstraintsBacking::Molecule {
                     owner: owner.clone_ref(py),
