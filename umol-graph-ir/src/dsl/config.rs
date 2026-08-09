@@ -3,7 +3,7 @@
 use umol_edn::{FromEdn, ToEdn};
 
 /// Aggregated lowering/raising defaults for molecule DSL <-> AST interconversion. per-entity-kind
-/// defaults bundle; consumed by the molecule-level `FromAst` / `IntoAst` implementations.
+/// defaults bundle; consumed by the molecule-level `FromIr` / `IntoIr` implementations.
 #[derive(Debug, Clone, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MoleculeDefaults {
     pub atom: AtomDefaults,
@@ -47,8 +47,8 @@ impl MoleculeDefaults {
 
     /// Composes `*Defaults::zeroed()` for each entity. Atom topology-derived
     /// fields (`valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`,
-    /// `multicenter_valence`) are skipped during `into_ast` when the molecule
-    /// has incident topology — see `MoleculeDsl::into_ast`.
+    /// `multicenter_valence`) are skipped during `into_ir` when the molecule
+    /// has incident topology — see `MoleculeDsl::into_ir`.
     pub fn zeroed() -> Self {
         Self {
             atom: AtomDefaults::zeroed(),

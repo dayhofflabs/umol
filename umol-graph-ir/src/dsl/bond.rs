@@ -28,7 +28,7 @@ use crate::ir::boolean::BooleanAst;
 use crate::ir::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst, RingScope};
 use crate::ir::spin::UnpairedElectronsAst;
 use crate::ir::stereo::CisTransStereoAst;
-use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `BondAst`.
@@ -148,20 +148,20 @@ fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
     }
 }
 
-impl FromAst<BondAst> for BondDsl {
+impl FromIr<BondAst> for BondDsl {
     type Ctx = BondDefaults;
 
-    fn from_ast(ast: &BondAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &BondAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_bond(&mut out, cfg);
         BondDsl(out)
     }
 }
 
-impl IntoAst<BondAst> for BondDsl {
+impl IntoIr<BondAst> for BondDsl {
     type Ctx = BondDefaults;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> BondAst {
+    fn into_ir(mut self, cfg: &Self::Ctx) -> BondAst {
         raise_bond(&mut self.0, cfg);
         self.0
     }
@@ -171,7 +171,7 @@ impl FromStr for BondAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(BondDsl::from_str(s)?.into_ast(&BondDefaults::default()))
+        Ok(BondDsl::from_str(s)?.into_ir(&BondDefaults::default()))
     }
 }
 
@@ -183,11 +183,11 @@ impl Display for BondAst {
 
 impl<'de> FromEdn<'de> for BondAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(BondDsl::from_edn(edn)?.into_ast(&BondDefaults::default()))
+        Ok(BondDsl::from_edn(edn)?.into_ir(&BondDefaults::default()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        Ok(BondDsl::from_edn_str(input)?.into_ast(&BondDefaults::default()))
+        Ok(BondDsl::from_edn_str(input)?.into_ir(&BondDefaults::default()))
     }
 }
 
@@ -225,18 +225,18 @@ impl BondUpdateDsl {
     }
 }
 
-impl FromAst<BondUpdate> for BondUpdateDsl {
+impl FromIr<BondUpdate> for BondUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &BondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &BondUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<BondUpdate> for BondUpdateDsl {
+impl IntoIr<BondUpdate> for BondUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> BondUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> BondUpdate {
         self.0
     }
 }
@@ -253,7 +253,7 @@ impl FromStr for BondUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(BondUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(BondUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -566,18 +566,18 @@ fn lower_bond_constraints(constraints: &mut BondConstraintsAst, cfg: &BondDefaul
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BondConstraintDsl(pub BondConstraintAst);
 
-impl FromAst<BondConstraintAst> for BondConstraintDsl {
+impl FromIr<BondConstraintAst> for BondConstraintDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &BondConstraintAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &BondConstraintAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<BondConstraintAst> for BondConstraintDsl {
+impl IntoIr<BondConstraintAst> for BondConstraintDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> BondConstraintAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> BondConstraintAst {
         self.0
     }
 }
@@ -600,7 +600,7 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                         BondConstraintAst::RingMembership(RingMembershipDsl::from_edn(v)?.0)
                     }
                     "cis-trans-stereo" => BondConstraintAst::CisTransStereo(
-                        CisTransStereoDsl::from_edn(v)?.into_ast(&()),
+                        CisTransStereoDsl::from_edn(v)?.into_ir(&()),
                     ),
                     other => {
                         return Err(DeError::UnknownField {
@@ -629,7 +629,7 @@ impl ToEdn for BondConstraintDsl {
             }
             BondConstraintAst::CisTransStereo(c) => single_key_map(
                 "cis-trans-stereo",
-                CisTransStereoDsl::from_ast(c, &()).to_edn(),
+                CisTransStereoDsl::from_ir(c, &()).to_edn(),
             ),
         }
     }
@@ -835,7 +835,7 @@ mod tests {
         ast.charge = ValueAst::Lit(0);
         ast.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
         let cfg = BondDefaults::zeroed();
-        let dsl = BondDsl::from_ast(&ast, &cfg);
+        let dsl = BondDsl::from_ir(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.unpaired_electrons, UnpairedElectronsAst::default());
     }
@@ -844,7 +844,7 @@ mod tests {
     fn test_bond_dsl_into_ast() {
         let dsl = BondDsl(BondAst::new(ValueAst::Lit(1)));
         let cfg = BondDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg);
+        let ast = dsl.into_ir(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(
             ast.unpaired_electrons,
@@ -856,8 +856,8 @@ mod tests {
     fn test_bond_dsl_roundtrip_zeroed() {
         let input = BondDsl(BondAst::new(ValueAst::Lit(2)));
         let cfg = BondDefaults::zeroed();
-        let raised = input.clone().into_ast(&cfg);
-        let lowered = BondDsl::from_ast(&raised, &cfg);
+        let raised = input.clone().into_ir(&cfg);
+        let lowered = BondDsl::from_ir(&raised, &cfg);
         assert_eq!(input, lowered);
     }
 
@@ -910,12 +910,12 @@ mod tests {
         #[case] input: BondConstraintAst,
         #[case] edn_source: &str,
     ) {
-        let dsl = BondConstraintDsl::from_ast(&input, &());
+        let dsl = BondConstraintDsl::from_ir(&input, &());
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
-        assert_eq!(parsed.into_ast(&()), input, "parse-back mismatch");
+        assert_eq!(parsed.into_ir(&()), input, "parse-back mismatch");
     }
 
     #[rstest]

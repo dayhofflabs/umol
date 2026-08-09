@@ -54,7 +54,7 @@ use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
 use crate::ir::multicenter::MulticenterBondAst;
 use crate::ir::noncovalent::NoncovalentBondAst;
 use crate::ir::stereo::{StereoAtomAst, StereoBondAst};
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 
 /// Surface DSL for a whole molecule. Pairs `MoleculeAst` with `MoleculeMetadata`;
 /// fields are private so metadata cannot drift onto a different AST.
@@ -128,7 +128,7 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let input = parse_molecule_input(edn)?;
         let (ast, context) = input
-            .into_ast()
+            .into_ir()
             .map_err(|e| DeError::Custom(e.to_string()))?;
         Ok(MoleculeDsl::from_parts(ast, context.into_metadata()))
     }
@@ -137,7 +137,7 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
         let mut de = EdnStreamDeserializer::new(input);
         let mi = read_molecule_input(&mut de)?;
         de.expect_eof()?;
-        let (ast, context) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
+        let (ast, context) = mi.into_ir().map_err(|e| DeError::Custom(e.to_string()))?;
         Ok(MoleculeDsl::from_parts(ast, context.into_metadata()))
     }
 }
@@ -574,28 +574,28 @@ impl ToEdn for MoleculeDsl {
     }
 }
 
-impl FromAst<MoleculeAst> for MoleculeDsl {
+impl FromIr<MoleculeAst> for MoleculeDsl {
     type Ctx = MoleculeDefaults;
 
-    fn from_ast(ast: &MoleculeAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &MoleculeAst, cfg: &Self::Ctx) -> Self {
         let mut ast_out = ast.clone();
-        ast_out.modify_atoms(|atom| AtomDsl::from_ast(&atom, &cfg.atom).0);
-        ast_out.modify_bonds(|bond| BondDsl::from_ast(&bond, &cfg.bond).0);
+        ast_out.modify_atoms(|atom| AtomDsl::from_ir(&atom, &cfg.atom).0);
+        ast_out.modify_bonds(|bond| BondDsl::from_ir(&bond, &cfg.bond).0);
         ast_out.modify_aromatic_systems(|system| {
-            AromaticSystemDsl::from_ast(&system, &cfg.aromatic_system).0
+            AromaticSystemDsl::from_ir(&system, &cfg.aromatic_system).0
         });
         ast_out.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl::from_ast(&bond, &cfg.multicenter_bond).0
+            MulticenterBondDsl::from_ir(&bond, &cfg.multicenter_bond).0
         });
-        ast_out.modify_dative_bonds(|bond| DativeBondDsl::from_ast(&bond, &cfg.dative_bond).0);
+        ast_out.modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &cfg.dative_bond).0);
         ast_out.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl::from_ast(&bond, &cfg.noncovalent_bond).0
+            NoncovalentBondDsl::from_ir(&bond, &cfg.noncovalent_bond).0
         });
         ast_out.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl::from_ast(&stereo_atom, &cfg.stereo_atom).0
+            StereoAtomDsl::from_ir(&stereo_atom, &cfg.stereo_atom).0
         });
         ast_out.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl::from_ast(&stereo_bond, &cfg.stereo_bond).0
+            StereoBondDsl::from_ir(&stereo_bond, &cfg.stereo_bond).0
         });
         MoleculeDsl {
             ast: ast_out,
@@ -604,29 +604,25 @@ impl FromAst<MoleculeAst> for MoleculeDsl {
     }
 }
 
-impl IntoAst<MoleculeAst> for MoleculeDsl {
+impl IntoIr<MoleculeAst> for MoleculeDsl {
     type Ctx = MoleculeDefaults;
 
-    fn into_ast(self, cfg: &Self::Ctx) -> MoleculeAst {
+    fn into_ir(self, cfg: &Self::Ctx) -> MoleculeAst {
         let mut ast = self.ast;
-        ast.modify_atoms(|atom| AtomDsl(atom).into_ast(&cfg.atom));
-        ast.modify_bonds(|bond| BondDsl(bond).into_ast(&cfg.bond));
-        ast.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ast(&cfg.dative_bond));
+        ast.modify_atoms(|atom| AtomDsl(atom).into_ir(&cfg.atom));
+        ast.modify_bonds(|bond| BondDsl(bond).into_ir(&cfg.bond));
+        ast.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&cfg.dative_bond));
         ast.modify_aromatic_systems(|system| {
-            AromaticSystemDsl(system).into_ast(&cfg.aromatic_system)
+            AromaticSystemDsl(system).into_ir(&cfg.aromatic_system)
         });
         ast.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl(bond).into_ast(&cfg.multicenter_bond)
+            MulticenterBondDsl(bond).into_ir(&cfg.multicenter_bond)
         });
         ast.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl(bond).into_ast(&cfg.noncovalent_bond)
+            NoncovalentBondDsl(bond).into_ir(&cfg.noncovalent_bond)
         });
-        ast.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl(stereo_atom).into_ast(&cfg.stereo_atom)
-        });
-        ast.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl(stereo_bond).into_ast(&cfg.stereo_bond)
-        });
+        ast.modify_stereo_atoms(|stereo_atom| StereoAtomDsl(stereo_atom).into_ir(&cfg.stereo_atom));
+        ast.modify_stereo_bonds(|stereo_bond| StereoBondDsl(stereo_bond).into_ir(&cfg.stereo_bond));
         ast
     }
 }
@@ -662,8 +658,8 @@ pub(super) fn render_molecule_edn(ast: &MoleculeAst, meta: &MoleculeMetadata) ->
     if meta.iter_atom_aliases().len() != 0 {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
     }
-    let constraints_dsl = ConstraintsDsl::from_ast(ast.constraints(), meta)
-        .expect("ConstraintsDsl::from_ast is infallible for a well-formed AST");
+    let constraints_dsl = ConstraintsDsl::from_ir(ast.constraints(), meta)
+        .expect("ConstraintsDsl::from_ir is infallible for a well-formed AST");
     if !constraints_dsl.0.is_empty() {
         map.insert(Edn::keyword("constraints"), constraints_dsl.to_edn());
     }
@@ -1033,7 +1029,7 @@ fn render_atom_aliases(meta: &MoleculeMetadata) -> Edn<'static> {
 // Unresolved, owned-by-value tree that mirrors the EDN shape. Atom entries and
 // per-bond endpoints carry `AtomRef` (index or keyword); constraint leaves carry
 // typed per-entity `Constraint*` variants already parsed from their EDN form.
-// Lowered destructively via `into_ast(self, cfg)` so that allocations move
+// Lowered destructively via `into_ir(self, cfg)` so that allocations move
 // into the final `MoleculeAst`.
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1066,7 +1062,7 @@ pub(crate) enum AtomSpecInput {
 }
 
 /// Resolve an atom spec to its `AtomAst`: a bare value is its own atom; an alias is looked up in the
-/// table (unknown → error). Shared by the molecule, reaction, and span `into_ast` paths.
+/// table (unknown → error). Shared by the molecule, reaction, and span `into_ir` paths.
 pub(super) fn resolve_atom_spec(
     spec: AtomSpecInput,
     namespace: &impl Namespace,
@@ -1140,7 +1136,7 @@ impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
     /// parse-time context. Called from `FromEdn::from_edn` and the streaming path.
-    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, MoleculeContext), ParseError> {
+    pub(crate) fn into_ir(self) -> Result<(MoleculeAst, MoleculeContext), ParseError> {
         let MoleculeInput {
             atoms: atom_entries,
             bonds: bond_entries,
@@ -1264,7 +1260,7 @@ impl MoleculeInput {
         }
 
         // The context is complete; constraints resolve against it directly.
-        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&context)?;
+        let constraints = ConstraintsDsl(constraint_dsls).into_ir(&context)?;
 
         let ast = MoleculeAst::from_entries(MoleculeEntries {
             atoms,

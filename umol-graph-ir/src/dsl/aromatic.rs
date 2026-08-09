@@ -21,7 +21,7 @@ use super::predicate::{
 use super::value::{fmt_value, ValueDsl};
 use crate::ir::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 use crate::ir::constraint::AromaticSystemConstraintAst;
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `AromaticSystemAst`.
@@ -80,20 +80,20 @@ impl ToEdn for AromaticSystemDsl {
     }
 }
 
-impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
+impl FromIr<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx = AromaticSystemDefaults;
 
-    fn from_ast(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_aromatic_system(&mut out, cfg);
         AromaticSystemDsl(out)
     }
 }
 
-impl IntoAst<AromaticSystemAst> for AromaticSystemDsl {
+impl IntoIr<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx = AromaticSystemDefaults;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> AromaticSystemAst {
+    fn into_ir(mut self, cfg: &Self::Ctx) -> AromaticSystemAst {
         raise_aromatic_system(&mut self.0, cfg);
         self.0
     }
@@ -103,7 +103,7 @@ impl FromStr for AromaticSystemAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(AromaticSystemDsl::from_str(s)?.into_ast(&AromaticSystemDefaults::default()))
+        Ok(AromaticSystemDsl::from_str(s)?.into_ir(&AromaticSystemDefaults::default()))
     }
 }
 
@@ -115,11 +115,11 @@ impl Display for AromaticSystemAst {
 
 impl<'de> FromEdn<'de> for AromaticSystemAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(AromaticSystemDsl::from_edn(edn)?.into_ast(&AromaticSystemDefaults::default()))
+        Ok(AromaticSystemDsl::from_edn(edn)?.into_ir(&AromaticSystemDefaults::default()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        Ok(AromaticSystemDsl::from_edn_str(input)?.into_ast(&AromaticSystemDefaults::default()))
+        Ok(AromaticSystemDsl::from_edn_str(input)?.into_ir(&AromaticSystemDefaults::default()))
     }
 }
 
@@ -263,18 +263,18 @@ impl AromaticSystemUpdateDsl {
     }
 }
 
-impl FromAst<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
+impl FromIr<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &AromaticSystemUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &AromaticSystemUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
+impl IntoIr<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> AromaticSystemUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> AromaticSystemUpdate {
         self.0
     }
 }
@@ -291,7 +291,7 @@ impl FromStr for AromaticSystemUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(AromaticSystemUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(AromaticSystemUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -472,13 +472,13 @@ pub enum AromaticSystemConstraintDsl {
 }
 
 impl AromaticSystemConstraintDsl {
-    pub(crate) fn from_ast(c: &AromaticSystemConstraintAst) -> Self {
+    pub(crate) fn from_ir(c: &AromaticSystemConstraintAst) -> Self {
         match c {
             AromaticSystemConstraintAst::ElectronCount(v) => Self::ElectronCount(v.clone()),
         }
     }
 
-    pub(crate) fn into_ast(self) -> AromaticSystemConstraintAst {
+    pub(crate) fn into_ir(self) -> AromaticSystemConstraintAst {
         match self {
             Self::ElectronCount(v) => AromaticSystemConstraintAst::ElectronCount(v),
         }
@@ -685,7 +685,7 @@ mod tests {
         #[case] expected: AromaticSystemDsl,
     ) {
         assert_eq!(
-            AromaticSystemDsl::from_ast(&input, &AromaticSystemDefaults::zeroed()),
+            AromaticSystemDsl::from_ir(&input, &AromaticSystemDefaults::zeroed()),
             expected,
         );
     }
@@ -700,7 +700,7 @@ mod tests {
         #[case] input: AromaticSystemDsl,
         #[case] expected: AromaticSystemAst,
     ) {
-        assert_eq!(input.into_ast(&AromaticSystemDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&AromaticSystemDefaults::zeroed()), expected);
     }
 
     #[rustfmt::skip]
@@ -820,7 +820,7 @@ mod tests {
         #[case] input: AromaticSystemConstraintAst,
         #[case] expected: AromaticSystemConstraintDsl,
     ) {
-        assert_eq!(AromaticSystemConstraintDsl::from_ast(&input), expected);
+        assert_eq!(AromaticSystemConstraintDsl::from_ir(&input), expected);
     }
 
     #[rustfmt::skip]
@@ -830,7 +830,7 @@ mod tests {
         #[case] input: AromaticSystemConstraintDsl,
         #[case] expected: AromaticSystemConstraintAst,
     ) {
-        assert_eq!(input.into_ast(), expected);
+        assert_eq!(input.into_ir(), expected);
     }
 
     #[rustfmt::skip]

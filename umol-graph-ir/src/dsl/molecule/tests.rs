@@ -124,7 +124,7 @@ fn test_molecule_dsl_new_parsed(populated_molecule_dsl: MoleculeDsl) {
 #[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }))]
 fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
     let dsl = input.parse::<MoleculeDsl>().unwrap();
-    assert_eq!(dsl.into_ast(&MoleculeDefaults::default()), expected);
+    assert_eq!(dsl.into_ir(&MoleculeDefaults::default()), expected);
 }
 
 #[rstest]
@@ -372,7 +372,7 @@ fn test_molecule_dsl_from_str_error() {
 // Round-trip direction: DSL → AST (raise) → DSL (lower) is the
 // identity. AST → DSL → AST isn't, since raising `Undetermined`
 // fields to `Lit(0)` is one-way under `zeroed()`. One case per overlay
-// kind so the `into_ast` / `from_ast` per-relation loops are exercised.
+// kind so the `into_ir` / `from_ir` per-relation loops are exercised.
 #[rustfmt::skip]
 #[rstest]
 #[case::atoms_bonds(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##)]
@@ -386,8 +386,8 @@ fn test_molecule_dsl_dsl_to_ast_to_dsl_roundtrip_zeroed(#[case] source: &str) {
     let ast = mol_dsl!(source);
     let dsl = MoleculeDsl::new(ast, MoleculeMetadata::default()).unwrap();
     let cfg = MoleculeDefaults::zeroed();
-    let raised = dsl.clone().into_ast(&cfg);
-    let lowered = MoleculeDsl::from_ast(&raised, &cfg);
+    let raised = dsl.clone().into_ir(&cfg);
+    let lowered = MoleculeDsl::from_ir(&raised, &cfg);
     assert_eq!(lowered.ast(), dsl.ast());
 }
 
@@ -395,7 +395,7 @@ fn test_molecule_dsl_dsl_to_ast_to_dsl_roundtrip_zeroed(#[case] source: &str) {
 fn test_molecule_dsl_from_ast_has_empty_metadata() {
     let ast = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
     let cfg = MoleculeDefaults::zeroed();
-    let dsl = MoleculeDsl::from_ast(&ast, &cfg);
+    let dsl = MoleculeDsl::from_ir(&ast, &cfg);
     assert_eq!(dsl.metadata(), &MoleculeMetadata::default());
 }
 

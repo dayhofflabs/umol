@@ -21,7 +21,7 @@ use super::value::{fmt_value, value};
 use crate::ir::boolean::BooleanAst;
 use crate::ir::constraint::{DativeBondConstraintAst, RingMembershipAst, RingScope};
 use crate::ir::dative::{DativeBondAst, DativeBondUpdate};
-use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `DativeBondAst`. The string form is the order
@@ -135,18 +135,18 @@ fn dative_keyword_for(ast: &DativeBondAst) -> Option<&'static str> {
     }
 }
 
-impl FromAst<DativeBondAst> for DativeBondDsl {
+impl FromIr<DativeBondAst> for DativeBondDsl {
     type Ctx = DativeBondDefaults;
 
-    fn from_ast(ast: &DativeBondAst, _cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &DativeBondAst, _cfg: &Self::Ctx) -> Self {
         DativeBondDsl(ast.clone())
     }
 }
 
-impl IntoAst<DativeBondAst> for DativeBondDsl {
+impl IntoIr<DativeBondAst> for DativeBondDsl {
     type Ctx = DativeBondDefaults;
 
-    fn into_ast(self, _cfg: &Self::Ctx) -> DativeBondAst {
+    fn into_ir(self, _cfg: &Self::Ctx) -> DativeBondAst {
         self.0
     }
 }
@@ -164,18 +164,18 @@ impl DativeBondUpdateDsl {
     }
 }
 
-impl FromAst<DativeBondUpdate> for DativeBondUpdateDsl {
+impl FromIr<DativeBondUpdate> for DativeBondUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &DativeBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &DativeBondUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<DativeBondUpdate> for DativeBondUpdateDsl {
+impl IntoIr<DativeBondUpdate> for DativeBondUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> DativeBondUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> DativeBondUpdate {
         self.0
     }
 }
@@ -192,7 +192,7 @@ impl FromStr for DativeBondUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(DativeBondUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(DativeBondUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -243,7 +243,7 @@ impl FromStr for DativeBondAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(DativeBondDsl::from_str(s)?.into_ast(&DativeBondDefaults::default()))
+        Ok(DativeBondDsl::from_str(s)?.into_ir(&DativeBondDefaults::default()))
     }
 }
 
@@ -255,11 +255,11 @@ impl Display for DativeBondAst {
 
 impl<'de> FromEdn<'de> for DativeBondAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(DativeBondDsl::from_edn(edn)?.into_ast(&DativeBondDefaults::default()))
+        Ok(DativeBondDsl::from_edn(edn)?.into_ir(&DativeBondDefaults::default()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        Ok(DativeBondDsl::from_edn_str(input)?.into_ast(&DativeBondDefaults::default()))
+        Ok(DativeBondDsl::from_edn_str(input)?.into_ir(&DativeBondDefaults::default()))
     }
 }
 
@@ -453,7 +453,7 @@ impl ToEdn for DativeBondConstraintDsl {
 
 impl DativeBondConstraintDsl {
     /// Build from the narrow inline AST form.
-    pub(crate) fn from_ast(c: &DativeBondConstraintAst) -> Self {
+    pub(crate) fn from_ir(c: &DativeBondConstraintAst) -> Self {
         match c {
             DativeBondConstraintAst::Aromatic(b) => Self::Aromatic(*b),
             DativeBondConstraintAst::RingMembership(m) => Self::RingMembership(m.clone()),
@@ -461,7 +461,7 @@ impl DativeBondConstraintDsl {
     }
 
     /// Convert into the narrow inline AST form.
-    pub(crate) fn into_ast(self) -> DativeBondConstraintAst {
+    pub(crate) fn into_ir(self) -> DativeBondConstraintAst {
         match self {
             Self::Aromatic(b) => DativeBondConstraintAst::Aromatic(b),
             Self::RingMembership(m) => DativeBondConstraintAst::RingMembership(m),
@@ -604,7 +604,7 @@ mod tests {
         #[case] input: DativeBondDsl,
         #[case] expected: DativeBondAst,
     ) {
-        assert_eq!(input.into_ast(&DativeBondDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&DativeBondDefaults::zeroed()), expected);
     }
 
     #[rustfmt::skip]
@@ -768,7 +768,7 @@ mod tests {
         #[case] input: DativeBondConstraintAst,
         #[case] expected: DativeBondConstraintDsl,
     ) {
-        assert_eq!(DativeBondConstraintDsl::from_ast(&input), expected);
+        assert_eq!(DativeBondConstraintDsl::from_ir(&input), expected);
     }
 
     #[rustfmt::skip]
@@ -781,6 +781,6 @@ mod tests {
         #[case] input: DativeBondConstraintDsl,
         #[case] expected: DativeBondConstraintAst,
     ) {
-        assert_eq!(input.into_ast(), expected);
+        assert_eq!(input.into_ir(), expected);
     }
 }

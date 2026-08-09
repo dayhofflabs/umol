@@ -1,6 +1,6 @@
 //! Reaction span DSL: the surface form of `ReactionSpanAst`, where each entity carries its
 //! complete before/after value (`EntitySpan`) rather than a delta. Entity ids, bond endpoints,
-//! and constraint topology refs are resolved in `into_ast`.
+//! and constraint topology refs are resolved in `into_ir`.
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
@@ -44,7 +44,7 @@ use crate::ir::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ir::ligand::StereoLigand;
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::{
     AromaticSystemAst, Constraint, ConstraintSpan, DativeBondAst, EntitySpan, MulticenterBondAst,
     NoncovalentBondAst, ReactionSpanAst, ReactionSpanEntries, StereoAtomAst, StereoBondAst,
@@ -113,15 +113,15 @@ fn map_span<T, U>(span: &EntitySpan<T>, f: impl Fn(&T) -> U) -> EntitySpan<U> {
     }
 }
 
-impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
+impl FromIr<ReactionSpanAst> for ReactionSpanDsl {
     type Ctx = MoleculeDefaults;
 
-    fn from_ast(ast: &ReactionSpanAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &ReactionSpanAst, cfg: &Self::Ctx) -> Self {
         let lowered = ReactionSpanAst::from_entries(ReactionSpanEntries {
             atoms: ast
                 .atoms()
                 .iter()
-                .map(|span| map_span(span, |atom| AtomDsl::from_ast(atom, &cfg.atom).0))
+                .map(|span| map_span(span, |atom| AtomDsl::from_ir(atom, &cfg.atom).0))
                 .collect(),
             bonds: ast
                 .bonds()
@@ -132,7 +132,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                     (
                         AtomId::from(first),
                         AtomId::from(second),
-                        map_span(span, |bond| BondDsl::from_ast(bond, &cfg.bond).0),
+                        map_span(span, |bond| BondDsl::from_ir(bond, &cfg.bond).0),
                     )
                 })
                 .collect(),
@@ -149,7 +149,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                             .collect(),
                         AtomId::from(ast.dative_bonds().participants_1(id)[0]),
                         map_span(ast.dative_bonds().data(id), |bond| {
-                            DativeBondDsl::from_ast(bond, &cfg.dative_bond).0
+                            DativeBondDsl::from_ir(bond, &cfg.dative_bond).0
                         }),
                     )
                 })
@@ -166,7 +166,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(ast.aromatic_systems().data(id), |system| {
-                            AromaticSystemDsl::from_ast(system, &cfg.aromatic_system).0
+                            AromaticSystemDsl::from_ir(system, &cfg.aromatic_system).0
                         }),
                     )
                 })
@@ -183,7 +183,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(ast.multicenter_bonds().data(id), |bond| {
-                            MulticenterBondDsl::from_ast(bond, &cfg.multicenter_bond).0
+                            MulticenterBondDsl::from_ir(bond, &cfg.multicenter_bond).0
                         }),
                     )
                 })
@@ -197,7 +197,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                         AtomId::from(first),
                         AtomId::from(second),
                         map_span(ast.noncovalent_bonds().data(id), |bond| {
-                            NoncovalentBondDsl::from_ast(bond, &cfg.noncovalent_bond).0
+                            NoncovalentBondDsl::from_ir(bond, &cfg.noncovalent_bond).0
                         }),
                     )
                 })
@@ -210,7 +210,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                         AtomId::from(ast.stereo_atoms().participants_1(id)[0]),
                         ast.stereo_atoms().participants_2(id).to_vec(),
                         map_span(ast.stereo_atoms().data(id), |stereo| {
-                            StereoAtomDsl::from_ast(stereo, &cfg.stereo_atom).0
+                            StereoAtomDsl::from_ir(stereo, &cfg.stereo_atom).0
                         }),
                     )
                 })
@@ -223,7 +223,7 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                         BondId::from(ast.stereo_bonds().participants_1(id)[0]),
                         ast.stereo_bonds().participants_2(id).to_vec(),
                         map_span(ast.stereo_bonds().data(id), |stereo| {
-                            StereoBondDsl::from_ast(stereo, &cfg.stereo_bond).0
+                            StereoBondDsl::from_ir(stereo, &cfg.stereo_bond).0
                         }),
                     )
                 })
@@ -234,16 +234,16 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
     }
 }
 
-impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
+impl IntoIr<ReactionSpanAst> for ReactionSpanDsl {
     type Ctx = MoleculeDefaults;
 
-    fn into_ast(self, cfg: &Self::Ctx) -> ReactionSpanAst {
+    fn into_ir(self, cfg: &Self::Ctx) -> ReactionSpanAst {
         let ast = self.ast;
         ReactionSpanAst::from_entries(ReactionSpanEntries {
             atoms: ast
                 .atoms()
                 .iter()
-                .map(|span| map_span(span, |atom| AtomDsl(atom.clone()).into_ast(&cfg.atom)))
+                .map(|span| map_span(span, |atom| AtomDsl(atom.clone()).into_ir(&cfg.atom)))
                 .collect(),
             bonds: ast
                 .bonds()
@@ -254,7 +254,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                     (
                         AtomId::from(first),
                         AtomId::from(second),
-                        map_span(span, |bond| BondDsl(bond.clone()).into_ast(&cfg.bond)),
+                        map_span(span, |bond| BondDsl(bond.clone()).into_ir(&cfg.bond)),
                     )
                 })
                 .collect(),
@@ -271,7 +271,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                             .collect(),
                         AtomId::from(ast.dative_bonds().participants_1(id)[0]),
                         map_span(ast.dative_bonds().data(id), |bond| {
-                            DativeBondDsl(bond.clone()).into_ast(&cfg.dative_bond)
+                            DativeBondDsl(bond.clone()).into_ir(&cfg.dative_bond)
                         }),
                     )
                 })
@@ -288,7 +288,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(ast.aromatic_systems().data(id), |system| {
-                            AromaticSystemDsl(system.clone()).into_ast(&cfg.aromatic_system)
+                            AromaticSystemDsl(system.clone()).into_ir(&cfg.aromatic_system)
                         }),
                     )
                 })
@@ -305,7 +305,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(ast.multicenter_bonds().data(id), |bond| {
-                            MulticenterBondDsl(bond.clone()).into_ast(&cfg.multicenter_bond)
+                            MulticenterBondDsl(bond.clone()).into_ir(&cfg.multicenter_bond)
                         }),
                     )
                 })
@@ -319,7 +319,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                         AtomId::from(first),
                         AtomId::from(second),
                         map_span(ast.noncovalent_bonds().data(id), |bond| {
-                            NoncovalentBondDsl(bond.clone()).into_ast(&cfg.noncovalent_bond)
+                            NoncovalentBondDsl(bond.clone()).into_ir(&cfg.noncovalent_bond)
                         }),
                     )
                 })
@@ -332,7 +332,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                         AtomId::from(ast.stereo_atoms().participants_1(id)[0]),
                         ast.stereo_atoms().participants_2(id).to_vec(),
                         map_span(ast.stereo_atoms().data(id), |stereo| {
-                            StereoAtomDsl(stereo.clone()).into_ast(&cfg.stereo_atom)
+                            StereoAtomDsl(stereo.clone()).into_ir(&cfg.stereo_atom)
                         }),
                     )
                 })
@@ -345,7 +345,7 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                         BondId::from(ast.stereo_bonds().participants_1(id)[0]),
                         ast.stereo_bonds().participants_2(id).to_vec(),
                         map_span(ast.stereo_bonds().data(id), |stereo| {
-                            StereoBondDsl(stereo.clone()).into_ast(&cfg.stereo_bond)
+                            StereoBondDsl(stereo.clone()).into_ir(&cfg.stereo_bond)
                         }),
                     )
                 })
@@ -365,7 +365,7 @@ pub(crate) enum ConstraintSpanInput {
 
 /// A parsed reaction span before ref resolution: each atom carries an unresolved `AtomSpecInput`
 /// (`Bare | Alias`) per `EntitySpan` side, each bond its endpoints + value, plus the `:atom-aliases`
-/// table. Aliases, bond endpoints, and constraint refs are resolved in `into_ast`.
+/// table. Aliases, bond endpoints, and constraint refs are resolved in `into_ir`.
 #[derive(Debug, PartialEq)]
 #[allow(clippy::type_complexity)]
 pub(crate) struct SpanInput {
@@ -1024,9 +1024,9 @@ fn resolve_constraint_span(
     context: &MoleculeContext,
 ) -> Result<ConstraintSpan, ParseError> {
     Ok(match input {
-        ConstraintSpanInput::Unchanged(dsl) => ConstraintSpan::Unchanged(dsl.into_ast(context)?),
-        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ast(context)?),
-        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ast(context)?),
+        ConstraintSpanInput::Unchanged(dsl) => ConstraintSpan::Unchanged(dsl.into_ir(context)?),
+        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ir(context)?),
+        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ir(context)?),
     })
 }
 
@@ -1036,7 +1036,7 @@ impl SpanInput {
     /// `AtomAst`, and participant, site, ligand, and constraint refs resolve against the context.
     /// Checked span construction requires every selected side reference to remain available after
     /// projection; chemistry and other semantic properties are not validated here.
-    pub(crate) fn into_ast(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
+    pub(crate) fn into_ir(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
         let atom_count = self.atoms.len();
         let bond_count = self.bonds.len();
 
@@ -1152,7 +1152,7 @@ impl SpanInput {
 impl<'de> FromEdn<'de> for ReactionSpanDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let (ast, metadata) = parse_span_input(edn)?
-            .into_ast()
+            .into_ir()
             .map_err(|e| DeError::Custom(e.to_string()))?;
         Ok(ReactionSpanDsl::from_parts(ast, metadata))
     }
@@ -1162,7 +1162,7 @@ impl<'de> FromEdn<'de> for ReactionSpanDsl {
         let span_input = read_span_input(&mut de)?;
         de.expect_eof()?;
         let (ast, metadata) = span_input
-            .into_ast()
+            .into_ir()
             .map_err(|e| DeError::Custom(e.to_string()))?;
         Ok(ReactionSpanDsl::from_parts(ast, metadata))
     }
@@ -1393,8 +1393,8 @@ fn render_stereo_bond_span_entry(
 
 fn render_constraint_span_entry(span: &ConstraintSpan, meta: &MoleculeMetadata) -> Edn<'static> {
     let render = |c: &Constraint| {
-        ConstraintDsl::from_ast(c, meta)
-            .expect("ConstraintDsl::from_ast is infallible for a well-formed AST")
+        ConstraintDsl::from_ir(c, meta)
+            .expect("ConstraintDsl::from_ir is infallible for a well-formed AST")
             .to_edn()
     };
     match span {
@@ -1775,7 +1775,7 @@ mod tests {
     fn test_reaction_span_dsl_from_ast(#[case] reaction: ReactionAst) {
         let span = reaction.to_reaction_span().unwrap();
         let cfg = MoleculeDefaults::default();
-        assert_eq!(ReactionSpanDsl::from_ast(&span, &cfg).into_ast(&cfg), span);
+        assert_eq!(ReactionSpanDsl::from_ir(&span, &cfg).into_ir(&cfg), span);
     }
 
     #[rstest]
@@ -1802,7 +1802,7 @@ mod tests {
         let defaults = MoleculeDefaults::default();
 
         assert_eq!(
-            ReactionSpanDsl::from_ast(&expected, &defaults).into_ast(&defaults),
+            ReactionSpanDsl::from_ir(&expected, &defaults).into_ir(&defaults),
             expected,
         );
     }
@@ -2178,7 +2178,7 @@ mod tests {
         assert_eq!(
             parse_span_input(&read_string(input).unwrap())
                 .unwrap()
-                .into_ast()
+                .into_ir()
                 .unwrap(),
             (expected_ast, expected_metadata),
         );
@@ -2189,7 +2189,7 @@ mod tests {
         let (ast, metadata) =
             parse_span_input(&read_string(r#"{:atoms [{:modify ["C#c1" "C#c{1}"]}]}"#).unwrap())
                 .unwrap()
-                .into_ast()
+                .into_ir()
                 .unwrap();
 
         assert_eq!(
@@ -2245,7 +2245,7 @@ mod tests {
     ) {
         let (_, metadata) = parse_span_input(&read_string(input).unwrap())
             .unwrap()
-            .into_ast()
+            .into_ir()
             .unwrap();
 
         assert_eq!(
@@ -2261,7 +2261,7 @@ mod tests {
         let input = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#;
         let (ast, _) = parse_span_input(&read_string(input).unwrap())
             .unwrap()
-            .into_ast()
+            .into_ir()
             .unwrap();
         assert_eq!(
             ast.constraints().to_vec(),
@@ -2307,7 +2307,7 @@ mod tests {
         assert_eq!(
             parse_span_input(&read_string(input).unwrap())
                 .unwrap()
-                .into_ast()
+                .into_ir()
                 .unwrap_err(),
             expected,
         );

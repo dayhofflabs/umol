@@ -1,6 +1,6 @@
 //! AST-related traits.
 //!
-//! `FromAst` / `IntoAst` are infallible conversions parameterized by context.
+//! `FromIr` / `IntoIr` are infallible conversions parameterized by context.
 //! `TryFromAst` / `TryIntoAst` are fallible, reject invalid boundary inputs.
 //! `AsLit` extracts a literal value from an AST type.
 //! `Lattice` is a refinement lattice on AST value types.
@@ -14,20 +14,20 @@ use umol_graph_core::{BiRelationData, ParticipantPosition, RelationData};
 
 use super::error::{Contradiction, NoJoin};
 
-/// Build `Self` from a borrowed AST of type `A` plus a configuration context.
-/// AST → DSL direction. Infallible.
-pub trait FromAst<A>: Sized {
+/// Build `Self` from a borrowed IR value of type `A` plus a configuration context.
+/// IR → DSL direction. Infallible.
+pub trait FromIr<A>: Sized {
     /// Configuration consumed during conversion (e.g. entity defaults).
     type Ctx;
-    fn from_ast(ast: &A, ctx: &Self::Ctx) -> Self;
+    fn from_ir(ir: &A, ctx: &Self::Ctx) -> Self;
 }
 
-/// Consume `self` to produce an AST of type `A` plus a configuration context.
-/// DSL → AST direction. Infallible.
-pub trait IntoAst<A>: Sized {
+/// Consume `self` to produce an IR value of type `A` plus a configuration context.
+/// DSL → IR direction. Infallible.
+pub trait IntoIr<A>: Sized {
     /// Configuration consumed during conversion (e.g. entity defaults).
     type Ctx;
-    fn into_ast(self, ctx: &Self::Ctx) -> A;
+    fn into_ir(self, ctx: &Self::Ctx) -> A;
 }
 
 /// Build `Self` from a borrowed AST of type `A` plus a configuration context.

@@ -18,7 +18,7 @@ use umol_chem::element::Element;
 use umol_edn::FromEdn;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    AtomAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp, MoleculeAst,
+    AtomAst, AtomId, BondAst, ElementAst, IntoIr, IsotopeMassAst, MemOp, MoleculeAst,
     MoleculeEntries, RelOp, UnpairedElectronsAst, ValueAst, ValuePredicate, ValueTerm,
 };
 
@@ -30,7 +30,7 @@ use fixtures::MOL_INDOLE;
 fn indole_ground() -> MoleculeAst {
     let dsl = MoleculeDsl::from_edn_str(MOL_INDOLE).unwrap();
     let cfg = MoleculeDefaults::zeroed();
-    dsl.into_ast(&cfg)
+    dsl.into_ir(&cfg)
 }
 
 fn indole_with_bool_expr_fields() -> MoleculeAst {

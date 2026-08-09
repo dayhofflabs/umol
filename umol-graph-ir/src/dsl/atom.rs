@@ -36,7 +36,7 @@ use crate::ir::constraint::{
 };
 use crate::ir::operators::MemOp;
 use crate::ir::stereo::TetrahedralStereoAst;
-use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
@@ -101,20 +101,20 @@ impl ToEdn for AtomDsl {
     }
 }
 
-impl FromAst<AtomAst> for AtomDsl {
+impl FromIr<AtomAst> for AtomDsl {
     type Ctx = AtomDefaults;
 
-    fn from_ast(ast: &AtomAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &AtomAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_atom(&mut out, cfg);
         AtomDsl(out)
     }
 }
 
-impl IntoAst<AtomAst> for AtomDsl {
+impl IntoIr<AtomAst> for AtomDsl {
     type Ctx = AtomDefaults;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> AtomAst {
+    fn into_ir(mut self, cfg: &Self::Ctx) -> AtomAst {
         raise_atom(&mut self.0, cfg);
         self.0
     }
@@ -124,7 +124,7 @@ impl FromStr for AtomAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(AtomDsl::from_str(s)?.into_ast(&AtomDefaults::default()))
+        Ok(AtomDsl::from_str(s)?.into_ir(&AtomDefaults::default()))
     }
 }
 
@@ -136,11 +136,11 @@ impl Display for AtomAst {
 
 impl<'de> FromEdn<'de> for AtomAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(AtomDsl::from_edn(edn)?.into_ast(&AtomDefaults::default()))
+        Ok(AtomDsl::from_edn(edn)?.into_ir(&AtomDefaults::default()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        Ok(AtomDsl::from_edn_str(input)?.into_ast(&AtomDefaults::default()))
+        Ok(AtomDsl::from_edn_str(input)?.into_ir(&AtomDefaults::default()))
     }
 }
 
@@ -197,18 +197,18 @@ impl AtomUpdateDsl {
     }
 }
 
-impl FromAst<AtomUpdate> for AtomUpdateDsl {
+impl FromIr<AtomUpdate> for AtomUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &AtomUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &AtomUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<AtomUpdate> for AtomUpdateDsl {
+impl IntoIr<AtomUpdate> for AtomUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> AtomUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> AtomUpdate {
         self.0
     }
 }
@@ -225,7 +225,7 @@ impl FromStr for AtomUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(AtomUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(AtomUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -1038,7 +1038,7 @@ impl<'de> FromEdn<'de> for AromaticValenceDsl {
                 };
                 match key.name() {
                     "aromatic" => Ok(Self(AromaticValenceAst::Aromatic(
-                        ValueDsl::from_edn(v)?.into_ast(&()),
+                        ValueDsl::from_edn(v)?.into_ir(&()),
                     ))),
                     other => Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -1065,24 +1065,24 @@ impl ToEdn for AromaticValenceDsl {
                 Edn::Keyword(EdnKeyword::owned("not-aromatic".into()))
             }
             AromaticValenceAst::Aromatic(v) => {
-                single_key_map("aromatic", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("aromatic", ValueDsl::from_ir(v, &()).to_edn())
             }
         }
     }
 }
 
-impl FromAst<AromaticValenceAst> for AromaticValenceDsl {
+impl FromIr<AromaticValenceAst> for AromaticValenceDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &AromaticValenceAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &AromaticValenceAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<AromaticValenceAst> for AromaticValenceDsl {
+impl IntoIr<AromaticValenceAst> for AromaticValenceDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> AromaticValenceAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> AromaticValenceAst {
         self.0
     }
 }
@@ -1112,7 +1112,7 @@ impl<'de> FromEdn<'de> for MulticenterValenceDsl {
                 };
                 match key.name() {
                     "multicenter" => Ok(Self(MulticenterValenceAst::Multicenter(
-                        ValueDsl::from_edn(v)?.into_ast(&()),
+                        ValueDsl::from_edn(v)?.into_ir(&()),
                     ))),
                     other => Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -1139,24 +1139,24 @@ impl ToEdn for MulticenterValenceDsl {
                 Edn::Keyword(EdnKeyword::owned("not-multicenter".into()))
             }
             MulticenterValenceAst::Multicenter(v) => {
-                single_key_map("multicenter", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("multicenter", ValueDsl::from_ir(v, &()).to_edn())
             }
         }
     }
 }
 
-impl FromAst<MulticenterValenceAst> for MulticenterValenceDsl {
+impl FromIr<MulticenterValenceAst> for MulticenterValenceDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &MulticenterValenceAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &MulticenterValenceAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<MulticenterValenceAst> for MulticenterValenceDsl {
+impl IntoIr<MulticenterValenceAst> for MulticenterValenceDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> MulticenterValenceAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> MulticenterValenceAst {
         self.0
     }
 }
@@ -1191,34 +1191,30 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             });
         };
         let c = match key.name() {
-            "valence" => AtomConstraintAst::Valence(ValueDsl::from_edn(v)?.into_ast(&())),
-            "total-valence" => {
-                AtomConstraintAst::TotalValence(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
+            "valence" => AtomConstraintAst::Valence(ValueDsl::from_edn(v)?.into_ir(&())),
+            "total-valence" => AtomConstraintAst::TotalValence(ValueDsl::from_edn(v)?.into_ir(&())),
             "aromatic-valence" => {
-                AtomConstraintAst::AromaticValence(AromaticValenceDsl::from_edn(v)?.into_ast(&()))
+                AtomConstraintAst::AromaticValence(AromaticValenceDsl::from_edn(v)?.into_ir(&()))
             }
             "multicenter-valence" => AtomConstraintAst::MulticenterValence(
-                MulticenterValenceDsl::from_edn(v)?.into_ast(&()),
+                MulticenterValenceDsl::from_edn(v)?.into_ir(&()),
             ),
-            "donated-pairs" => {
-                AtomConstraintAst::DonatedPairs(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
+            "donated-pairs" => AtomConstraintAst::DonatedPairs(ValueDsl::from_edn(v)?.into_ir(&())),
             "accepted-pairs" => {
-                AtomConstraintAst::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast(&()))
+                AtomConstraintAst::AcceptedPairs(ValueDsl::from_edn(v)?.into_ir(&()))
             }
-            "degree" => AtomConstraintAst::Degree(ValueDsl::from_edn(v)?.into_ast(&())),
-            "total-degree" => AtomConstraintAst::TotalDegree(ValueDsl::from_edn(v)?.into_ast(&())),
-            "ring-degree" => AtomConstraintAst::RingDegree(ValueDsl::from_edn(v)?.into_ast(&())),
-            "ring-valence" => AtomConstraintAst::RingValence(ValueDsl::from_edn(v)?.into_ast(&())),
+            "degree" => AtomConstraintAst::Degree(ValueDsl::from_edn(v)?.into_ir(&())),
+            "total-degree" => AtomConstraintAst::TotalDegree(ValueDsl::from_edn(v)?.into_ir(&())),
+            "ring-degree" => AtomConstraintAst::RingDegree(ValueDsl::from_edn(v)?.into_ir(&())),
+            "ring-valence" => AtomConstraintAst::RingValence(ValueDsl::from_edn(v)?.into_ir(&())),
             "total-hydrogens" => {
-                AtomConstraintAst::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()))
+                AtomConstraintAst::TotalHydrogens(ValueDsl::from_edn(v)?.into_ir(&()))
             }
             "ring-membership" => {
                 AtomConstraintAst::RingMembership(RingMembershipDsl::from_edn(v)?.0)
             }
             "tetrahedral-stereo" => AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoDsl::from_edn(v)?.into_ast(&()),
+                TetrahedralStereoDsl::from_edn(v)?.into_ir(&()),
             ),
             other => {
                 return Err(DeError::UnknownField {
@@ -1235,63 +1231,63 @@ impl ToEdn for AtomConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
             AtomConstraintAst::Valence(v) => {
-                single_key_map("valence", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("valence", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::TotalValence(v) => {
-                single_key_map("total-valence", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("total-valence", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::AromaticValence(c) => single_key_map(
                 "aromatic-valence",
-                AromaticValenceDsl::from_ast(c, &()).to_edn(),
+                AromaticValenceDsl::from_ir(c, &()).to_edn(),
             ),
             AtomConstraintAst::MulticenterValence(c) => single_key_map(
                 "multicenter-valence",
-                MulticenterValenceDsl::from_ast(c, &()).to_edn(),
+                MulticenterValenceDsl::from_ir(c, &()).to_edn(),
             ),
             AtomConstraintAst::DonatedPairs(v) => {
-                single_key_map("donated-pairs", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("donated-pairs", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::AcceptedPairs(v) => {
-                single_key_map("accepted-pairs", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("accepted-pairs", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::Degree(v) => {
-                single_key_map("degree", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("degree", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::TotalDegree(v) => {
-                single_key_map("total-degree", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("total-degree", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::RingDegree(v) => {
-                single_key_map("ring-degree", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("ring-degree", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::RingValence(v) => {
-                single_key_map("ring-valence", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("ring-valence", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::TotalHydrogens(v) => {
-                single_key_map("total-hydrogens", ValueDsl::from_ast(v, &()).to_edn())
+                single_key_map("total-hydrogens", ValueDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintAst::RingMembership(m) => {
                 single_key_map("ring-membership", RingMembershipDsl(m.clone()).to_edn())
             }
             AtomConstraintAst::TetrahedralStereo(c) => single_key_map(
                 "tetrahedral-stereo",
-                TetrahedralStereoDsl::from_ast(c, &()).to_edn(),
+                TetrahedralStereoDsl::from_ir(c, &()).to_edn(),
             ),
         }
     }
 }
 
-impl FromAst<AtomConstraintAst> for AtomConstraintDsl {
+impl FromIr<AtomConstraintAst> for AtomConstraintDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &AtomConstraintAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &AtomConstraintAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<AtomConstraintAst> for AtomConstraintDsl {
+impl IntoIr<AtomConstraintAst> for AtomConstraintDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> AtomConstraintAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> AtomConstraintAst {
         self.0
     }
 }
@@ -1712,7 +1708,7 @@ mod tests {
             AromaticValenceAst::NotAromatic,
         ));
         let cfg = AtomDefaults::zeroed();
-        let dsl = AtomDsl::from_ast(&ast, &cfg);
+        let dsl = AtomDsl::from_ir(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.lone_pairs, ValueAst::Undetermined);
         assert_eq!(dsl.0.implicit_hydrogens, ValueAst::Undetermined);
@@ -1725,7 +1721,7 @@ mod tests {
     fn test_atom_dsl_into_ast() {
         let dsl = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg);
+        let ast = dsl.into_ir(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.lone_pairs, ValueAst::Lit(0));
         assert_eq!(ast.implicit_hydrogens, ValueAst::Lit(0));
@@ -1789,8 +1785,8 @@ mod tests {
     fn test_atom_dsl_roundtrip_zeroed() {
         let input = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
-        let raised = input.clone().into_ast(&cfg);
-        let lowered = AtomDsl::from_ast(&raised, &cfg);
+        let raised = input.clone().into_ir(&cfg);
+        let lowered = AtomDsl::from_ir(&raised, &cfg);
         assert_eq!(input, lowered);
     }
 
@@ -1817,12 +1813,12 @@ mod tests {
         #[case] input: AromaticValenceAst,
         #[case] edn_source: &str,
     ) {
-        let dsl = AromaticValenceDsl::from_ast(&input, &());
+        let dsl = AromaticValenceDsl::from_ir(&input, &());
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected);
         let parsed = AromaticValenceDsl::from_edn(&edn).unwrap();
-        assert_eq!(parsed.into_ast(&()), input);
+        assert_eq!(parsed.into_ir(&()), input);
     }
 
     #[rustfmt::skip]
@@ -1835,12 +1831,12 @@ mod tests {
         #[case] input: MulticenterValenceAst,
         #[case] edn_source: &str,
     ) {
-        let dsl = MulticenterValenceDsl::from_ast(&input, &());
+        let dsl = MulticenterValenceDsl::from_ir(&input, &());
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected);
         let parsed = MulticenterValenceDsl::from_edn(&edn).unwrap();
-        assert_eq!(parsed.into_ast(&()), input);
+        assert_eq!(parsed.into_ir(&()), input);
     }
 
     #[rstest]
@@ -1885,12 +1881,12 @@ mod tests {
     #[case::tetrahedral_stereo_term(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))), "{:tetrahedral-stereo {:stereo \"~1\"}}")]
     fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraintAst, #[case] edn_source: &str) {
 
-        let dsl = AtomConstraintDsl::from_ast(&input, &());
+        let dsl = AtomConstraintDsl::from_ir(&input, &());
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
-        assert_eq!(parsed.into_ast(&()), input, "parse-back mismatch");
+        assert_eq!(parsed.into_ir(&()), input, "parse-back mismatch");
     }
 
     #[rstest]

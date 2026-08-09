@@ -11,11 +11,11 @@ proptest! {
     #[test]
     fn test_edits_dsl_roundtrip(edits in edits_dsl_strategy()) {
         let defaults = MoleculeDefaults::new();
-        let dsl = EditsDsl::from_ast(&edits, &defaults);
+        let dsl = EditsDsl::from_ir(&edits, &defaults);
         let rendered = dsl.to_edn();
         let parsed = EditsDsl::from_edn(&rendered)
             .map_err(|error| TestCaseError::fail(format!("edit parse failed: {error}")))?;
-        let rebuilt = parsed.into_ast(&defaults);
+        let rebuilt = parsed.into_ir(&defaults);
 
         prop_assert_eq!(rebuilt, edits);
     }

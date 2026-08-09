@@ -14,7 +14,7 @@ use umol_graph::ops::model::{AromaticityModel, ChemistryModel, StereoModel, Vale
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ValenceTable;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
-use umol_graph_ir::ir::{FromAst, IntoAst, MoleculeAst};
+use umol_graph_ir::ir::{FromIr, IntoIr, MoleculeAst};
 use umol_utils::solution::Solution;
 
 #[derive(FromEdn)]
@@ -38,12 +38,12 @@ struct ResolveResult {
 }
 
 fn raise(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> MoleculeAst {
-    input.clone().into_ast(defaults)
+    input.clone().into_ir(defaults)
 }
 
 fn lower(ast: &MoleculeAst) -> MoleculeDsl {
     let cfg = MoleculeDefaults::zeroed();
-    MoleculeDsl::from_ast(ast, &cfg)
+    MoleculeDsl::from_ir(ast, &cfg)
 }
 
 fn resolve_test(

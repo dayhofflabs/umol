@@ -21,7 +21,7 @@ use umol_graph_ir::dsl::ReactionDsl as GraphIrReactionDsl;
 #[cfg(test)]
 use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
 use umol_graph_ir::ir::{
-    ApplyError as GraphIrApplyError, AtomId, FromAst, IntoAst, MoleculeAst as GraphIrMoleculeAst,
+    ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, MoleculeAst as GraphIrMoleculeAst,
     MoleculeCorrespondence as GraphIrMoleculeCorrespondence, ReactionAst as GraphIrReactionAst,
     ReactionDerivation as GraphIrReactionDerivation,
     SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
@@ -244,7 +244,7 @@ impl ReactionAst {
         let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
         let reaction = GraphIrReactionDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ast(&defaults);
+            .into_ir(&defaults);
         Self::from_rust(py, reaction)
     }
 
@@ -261,7 +261,7 @@ impl ReactionAst {
         let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
         let dsl = GraphIrReactionDsl::from_str(text).map_err(parse_error)?;
         let metadata = ReactionMetadata::from_rust(dsl.metadata().clone());
-        Ok((Self::from_rust(py, dsl.into_ast(&defaults))?, metadata))
+        Ok((Self::from_rust(py, dsl.into_ir(&defaults))?, metadata))
     }
 
     /// Render a canonical positional DSL representation without entity
@@ -269,7 +269,7 @@ impl ReactionAst {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, py: Python<'_>, defaults: Option<ReactionDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
-        GraphIrReactionDsl::from_ast(&self.to_rust(py), &defaults).to_string()
+        GraphIrReactionDsl::from_ir(&self.to_rust(py), &defaults).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -284,7 +284,7 @@ impl ReactionAst {
         defaults: Option<ReactionDefaults>,
     ) -> PyResult<String> {
         let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
-        let lowered = GraphIrReactionDsl::from_ast(&self.to_rust(py), &defaults)
+        let lowered = GraphIrReactionDsl::from_ir(&self.to_rust(py), &defaults)
             .into_parts()
             .0;
         GraphIrReactionDsl::new(lowered, metadata.to_rust())

@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondHandle as GraphIrBondHandle, BondId as GraphIrBondId,
     ConstraintEdit as GraphIrConstraintEdit, DativeBondHandle as GraphIrDativeBondHandle,
     DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
-    Entity as GraphIrEntity, EntityHandle as GraphIrEntityHandle, FromAst, IntoAst,
+    Entity as GraphIrEntity, EntityHandle as GraphIrEntityHandle, FromIr, IntoIr,
     MulticenterBondHandle as GraphIrMulticenterBondHandle,
     MulticenterBondId as GraphIrMulticenterBondId,
     NoncovalentBondHandle as GraphIrNoncovalentBondHandle,
@@ -1303,14 +1303,14 @@ impl Edits {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         let edits = GraphIrEditsDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ast(&defaults);
+            .into_ir(&defaults);
         Ok(Self::from_rust(edits))
     }
 
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        GraphIrEditsDsl::from_ast(&self.0, &defaults).to_string()
+        GraphIrEditsDsl::from_ir(&self.0, &defaults).to_string()
     }
 
     /// Append one detached raw edit and account for every entity it creates.

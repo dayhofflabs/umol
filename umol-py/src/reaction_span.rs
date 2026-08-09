@@ -8,7 +8,7 @@ use umol_graph_ir::dsl::ReactionSpanDsl as GraphIrReactionSpanDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, Canonicalize,
     Constraint as GraphIrConstraint, ConstraintSpan as GraphIrConstraintSpan,
-    EntitySpan as GraphIrEntitySpan, FromAst, IntoAst, ReactionSpanAst as GraphIrReactionSpanAst,
+    EntitySpan as GraphIrEntitySpan, FromIr, IntoIr, ReactionSpanAst as GraphIrReactionSpanAst,
     ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
 
@@ -68,7 +68,7 @@ impl ReactionSpanAst {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         let span = GraphIrReactionSpanDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ast(&defaults);
+            .into_ir(&defaults);
         Ok(Self::from_rust(span))
     }
 
@@ -83,7 +83,7 @@ impl ReactionSpanAst {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         let dsl = GraphIrReactionSpanDsl::from_str(text).map_err(parse_error)?;
         let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
-        Ok((Self::from_rust(dsl.into_ast(&defaults)), metadata))
+        Ok((Self::from_rust(dsl.into_ir(&defaults)), metadata))
     }
 
     /// Render a canonical positional DSL representation without entity
@@ -91,7 +91,7 @@ impl ReactionSpanAst {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        GraphIrReactionSpanDsl::from_ast(&self.0, &defaults).to_string()
+        GraphIrReactionSpanDsl::from_ir(&self.0, &defaults).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -105,7 +105,7 @@ impl ReactionSpanAst {
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let lowered = GraphIrReactionSpanDsl::from_ast(&self.0, &defaults)
+        let lowered = GraphIrReactionSpanDsl::from_ir(&self.0, &defaults)
             .into_parts()
             .0;
         GraphIrReactionSpanDsl::new(lowered, metadata.to_rust())

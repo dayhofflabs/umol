@@ -21,7 +21,7 @@ use super::predicate::{
 use super::value::{fmt_value, ValueDsl};
 use crate::ir::constraint::MulticenterBondConstraintAst;
 use crate::ir::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::value::ValueAst;
 
 /// Surface DSL wrapper around `MulticenterBondAst`. The `electrons` field
@@ -82,20 +82,20 @@ impl ToEdn for MulticenterBondDsl {
     }
 }
 
-impl FromAst<MulticenterBondAst> for MulticenterBondDsl {
+impl FromIr<MulticenterBondAst> for MulticenterBondDsl {
     type Ctx = MulticenterBondDefaults;
 
-    fn from_ast(ast: &MulticenterBondAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &MulticenterBondAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_multicenter_bond(&mut out, cfg);
         MulticenterBondDsl(out)
     }
 }
 
-impl IntoAst<MulticenterBondAst> for MulticenterBondDsl {
+impl IntoIr<MulticenterBondAst> for MulticenterBondDsl {
     type Ctx = MulticenterBondDefaults;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> MulticenterBondAst {
+    fn into_ir(mut self, cfg: &Self::Ctx) -> MulticenterBondAst {
         raise_multicenter_bond(&mut self.0, cfg);
         self.0
     }
@@ -105,7 +105,7 @@ impl FromStr for MulticenterBondAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(MulticenterBondDsl::from_str(s)?.into_ast(&MulticenterBondDefaults::default()))
+        Ok(MulticenterBondDsl::from_str(s)?.into_ir(&MulticenterBondDefaults::default()))
     }
 }
 
@@ -117,11 +117,11 @@ impl Display for MulticenterBondAst {
 
 impl<'de> FromEdn<'de> for MulticenterBondAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(MulticenterBondDsl::from_edn(edn)?.into_ast(&MulticenterBondDefaults::default()))
+        Ok(MulticenterBondDsl::from_edn(edn)?.into_ir(&MulticenterBondDefaults::default()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        Ok(MulticenterBondDsl::from_edn_str(input)?.into_ast(&MulticenterBondDefaults::default()))
+        Ok(MulticenterBondDsl::from_edn_str(input)?.into_ir(&MulticenterBondDefaults::default()))
     }
 }
 
@@ -265,18 +265,18 @@ impl MulticenterBondUpdateDsl {
     }
 }
 
-impl FromAst<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
+impl FromIr<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &MulticenterBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &MulticenterBondUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
+impl IntoIr<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> MulticenterBondUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> MulticenterBondUpdate {
         self.0
     }
 }
@@ -293,7 +293,7 @@ impl FromStr for MulticenterBondUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(MulticenterBondUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(MulticenterBondUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -474,13 +474,13 @@ pub enum MulticenterBondConstraintDsl {
 }
 
 impl MulticenterBondConstraintDsl {
-    pub(crate) fn from_ast(c: &MulticenterBondConstraintAst) -> Self {
+    pub(crate) fn from_ir(c: &MulticenterBondConstraintAst) -> Self {
         match c {
             MulticenterBondConstraintAst::ElectronCount(v) => Self::ElectronCount(v.clone()),
         }
     }
 
-    pub(crate) fn into_ast(self) -> MulticenterBondConstraintAst {
+    pub(crate) fn into_ir(self) -> MulticenterBondConstraintAst {
         match self {
             Self::ElectronCount(v) => MulticenterBondConstraintAst::ElectronCount(v),
         }
@@ -679,7 +679,7 @@ mod tests {
         #[case] expected: MulticenterBondDsl,
     ) {
         assert_eq!(
-            MulticenterBondDsl::from_ast(&input, &MulticenterBondDefaults::zeroed()),
+            MulticenterBondDsl::from_ir(&input, &MulticenterBondDefaults::zeroed()),
             expected,
         );
     }
@@ -694,7 +694,7 @@ mod tests {
         #[case] input: MulticenterBondDsl,
         #[case] expected: MulticenterBondAst,
     ) {
-        assert_eq!(input.into_ast(&MulticenterBondDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&MulticenterBondDefaults::zeroed()), expected);
     }
 
     #[rustfmt::skip]
@@ -817,7 +817,7 @@ mod tests {
         #[case] input: MulticenterBondConstraintAst,
         #[case] expected: MulticenterBondConstraintDsl,
     ) {
-        assert_eq!(MulticenterBondConstraintDsl::from_ast(&input), expected);
+        assert_eq!(MulticenterBondConstraintDsl::from_ir(&input), expected);
     }
 
     #[rustfmt::skip]
@@ -827,7 +827,7 @@ mod tests {
         #[case] input: MulticenterBondConstraintDsl,
         #[case] expected: MulticenterBondConstraintAst,
     ) {
-        assert_eq!(input.into_ast(), expected);
+        assert_eq!(input.into_ir(), expected);
     }
 
     #[rustfmt::skip]

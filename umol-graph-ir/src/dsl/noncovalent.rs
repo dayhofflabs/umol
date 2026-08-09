@@ -20,7 +20,7 @@ use crate::ir::constraint::NoncovalentBondConstraintAst;
 use crate::ir::noncovalent::{
     NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate,
 };
-use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
 /// Surface DSL wrapper around `NoncovalentBondAst`.
 #[repr(transparent)]
@@ -78,18 +78,18 @@ impl ToEdn for NoncovalentBondDsl {
     }
 }
 
-impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
+impl FromIr<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
 
-    fn from_ast(ast: &NoncovalentBondAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &NoncovalentBondAst, _ctx: &Self::Ctx) -> Self {
         NoncovalentBondDsl(ast.clone())
     }
 }
 
-impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
+impl IntoIr<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> NoncovalentBondAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> NoncovalentBondAst {
         self.0
     }
 }
@@ -98,7 +98,7 @@ impl FromStr for NoncovalentBondAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(NoncovalentBondDsl::from_str(s)?.into_ast(&NoncovalentBondDefaults::default()))
+        Ok(NoncovalentBondDsl::from_str(s)?.into_ir(&NoncovalentBondDefaults::default()))
     }
 }
 
@@ -110,11 +110,11 @@ impl Display for NoncovalentBondAst {
 
 impl<'de> FromEdn<'de> for NoncovalentBondAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(NoncovalentBondDsl::from_edn(edn)?.into_ast(&NoncovalentBondDefaults::default()))
+        Ok(NoncovalentBondDsl::from_edn(edn)?.into_ir(&NoncovalentBondDefaults::default()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        Ok(NoncovalentBondDsl::from_edn_str(input)?.into_ast(&NoncovalentBondDefaults::default()))
+        Ok(NoncovalentBondDsl::from_edn_str(input)?.into_ir(&NoncovalentBondDefaults::default()))
     }
 }
 
@@ -273,18 +273,18 @@ impl NoncovalentBondUpdateDsl {
     }
 }
 
-impl FromAst<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
+impl FromIr<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &NoncovalentBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &NoncovalentBondUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
+impl IntoIr<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> NoncovalentBondUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> NoncovalentBondUpdate {
         self.0
     }
 }
@@ -301,7 +301,7 @@ impl FromStr for NoncovalentBondUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(NoncovalentBondUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(NoncovalentBondUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -435,14 +435,14 @@ impl ToEdn for NoncovalentBondConstraintDsl {
 
 impl NoncovalentBondConstraintDsl {
     /// Build from the narrow inline AST form.
-    pub(crate) fn from_ast(c: &NoncovalentBondConstraintAst) -> Self {
+    pub(crate) fn from_ir(c: &NoncovalentBondConstraintAst) -> Self {
         match c {
             NoncovalentBondConstraintAst::Intramolecular(b) => Self::Intramolecular(*b),
         }
     }
 
     /// Convert into the narrow inline AST form.
-    pub(crate) fn into_ast(self) -> NoncovalentBondConstraintAst {
+    pub(crate) fn into_ir(self) -> NoncovalentBondConstraintAst {
         match self {
             Self::Intramolecular(b) => NoncovalentBondConstraintAst::Intramolecular(b),
         }
@@ -565,7 +565,7 @@ mod tests {
         #[case] expected: NoncovalentBondDsl,
     ) {
         assert_eq!(
-            NoncovalentBondDsl::from_ast(&input, &NoncovalentBondDefaults::zeroed()),
+            NoncovalentBondDsl::from_ir(&input, &NoncovalentBondDefaults::zeroed()),
             expected,
         );
     }
@@ -580,7 +580,7 @@ mod tests {
         #[case] input: NoncovalentBondDsl,
         #[case] expected: NoncovalentBondAst,
     ) {
-        assert_eq!(input.into_ast(&NoncovalentBondDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&NoncovalentBondDefaults::zeroed()), expected);
     }
 
     #[rustfmt::skip]
@@ -744,7 +744,7 @@ mod tests {
         #[case] ast: NoncovalentBondConstraintAst,
         #[case] expected: NoncovalentBondConstraintDsl,
     ) {
-        assert_eq!(NoncovalentBondConstraintDsl::from_ast(&ast), expected);
+        assert_eq!(NoncovalentBondConstraintDsl::from_ir(&ast), expected);
     }
 
     #[rustfmt::skip]
@@ -754,6 +754,6 @@ mod tests {
         #[case] dsl: NoncovalentBondConstraintDsl,
         #[case] expected: NoncovalentBondConstraintAst,
     ) {
-        assert_eq!(dsl.into_ast(), expected);
+        assert_eq!(dsl.into_ir(), expected);
     }
 }

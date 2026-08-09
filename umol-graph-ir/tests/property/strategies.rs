@@ -35,12 +35,12 @@ pub(crate) use umol_graph_ir::ir::{
     ConstraintEdit, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange, DativeBondHandle,
     DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsAst,
-    ElementAst, Entity, EntityHandle, EntityKind, FluxionalityAst, FromAst, IntoAst,
-    IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
-    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondAst,
-    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
-    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
-    MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
+    ElementAst, Entity, EntityHandle, EntityKind, FluxionalityAst, FromIr, IntoIr, IsotopeMassAst,
+    Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
+    MoleculeCorrespondence, MoleculeEntries, MulticenterBondAst, MulticenterBondConstraintAst,
+    MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondDelta,
+    MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
+    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
     NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
     NoncovalentBondUpdate, OrientedLigandPermutation, ReactionAst, ReactionSpanAst, RelOp,
@@ -1644,7 +1644,7 @@ impl ConstraintCounts {
         }
     }
 
-    fn from_ast(ast: &MoleculeAst) -> Self {
+    fn from_ir(ast: &MoleculeAst) -> Self {
         Self {
             atom: ast.atoms().count(),
             bond: ast.bonds().count(),
@@ -2106,7 +2106,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     let target_counts = counts;
     let sub_pattern = molecule_ast_strategy()
         .prop_flat_map(move |pattern| {
-            let pattern_counts = ConstraintCounts::from_ast(&pattern);
+            let pattern_counts = ConstraintCounts::from_ir(&pattern);
             (
                 Just(pattern),
                 sub_pattern_anchor_strategy(target_counts, pattern_counts),
@@ -2480,7 +2480,7 @@ pub(crate) fn invalid_metadata_for(
 
 pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
     molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
-        let counts = ConstraintCounts::from_ast(&ast);
+        let counts = ConstraintCounts::from_ir(&ast);
         metadata_for(counts).prop_map(move |metadata| {
             MoleculeDsl::new(ast.clone(), metadata).expect("generated metadata is coherent")
         })
@@ -2490,7 +2490,7 @@ pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
 pub(crate) fn invalid_molecule_dsl_parts_strategy(
 ) -> impl Strategy<Value = (MoleculeAst, MoleculeMetadata, Entity)> {
     molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
-        let counts = ConstraintCounts::from_ast(&ast);
+        let counts = ConstraintCounts::from_ir(&ast);
         invalid_metadata_for(counts)
             .prop_map(move |(metadata, entity)| (ast.clone(), metadata, entity))
     })
@@ -2499,7 +2499,7 @@ pub(crate) fn invalid_molecule_dsl_parts_strategy(
 pub(crate) fn molecule_metadata_with_atom_subset_strategy(
 ) -> impl Strategy<Value = (MoleculeAst, MoleculeMetadata, Vec<AtomId>)> {
     molecule_ast_with_atom_subset_strategy().prop_flat_map(|(ast, atoms)| {
-        metadata_for(ConstraintCounts::from_ast(&ast))
+        metadata_for(ConstraintCounts::from_ir(&ast))
             .prop_map(move |metadata| (ast.clone(), metadata, atoms.clone()))
     })
 }
@@ -2544,7 +2544,7 @@ fn delta_keyword(entity: Entity) -> String {
 
 pub(crate) fn reaction_dsl_strategy() -> impl Strategy<Value = ReactionDsl> {
     comprehensive_reaction_strategy().prop_flat_map(|reaction| {
-        metadata_for(ConstraintCounts::from_ast(&reaction.lhs)).prop_map(move |lhs| {
+        metadata_for(ConstraintCounts::from_ir(&reaction.lhs)).prop_map(move |lhs| {
             let mut metadata = ReactionMetadata::from(lhs);
             for entity in added_entities(&reaction) {
                 metadata
@@ -2564,7 +2564,7 @@ pub(crate) fn invalid_reaction_dsl_parts_strategy(
 ) -> impl Strategy<Value = (ReactionAst, ReactionMetadata, MetadataError)> {
     prop_oneof![
         comprehensive_reaction_strategy().prop_flat_map(|reaction| {
-            invalid_metadata_for(ConstraintCounts::from_ast(&reaction.lhs)).prop_map(
+            invalid_metadata_for(ConstraintCounts::from_ir(&reaction.lhs)).prop_map(
                 move |(lhs, entity)| {
                     (
                         reaction.clone(),

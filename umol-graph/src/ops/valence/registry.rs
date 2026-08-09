@@ -17,7 +17,7 @@ use umol_chem::element::Element;
 use umol_graph_ir::dsl::{
     AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
 };
-use umol_graph_ir::ir::{AtomAst, ElementAst, IntoAst, ValueAst};
+use umol_graph_ir::ir::{AtomAst, ElementAst, IntoIr, ValueAst};
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
@@ -189,7 +189,7 @@ fn parse_entry(
     let dsl: AtomDsl = source
         .parse()
         .map_err(|e| ConfigError::InvalidAtomTypeRegistry(format!("{}: {}", source, e)))?;
-    let atom: AtomAst = dsl.into_ast(defaults);
+    let atom: AtomAst = dsl.into_ir(defaults);
     let &ElementAst::Lit(atom_element) = &atom.element else {
         return Err(ConfigError::InvalidAtomTypeRegistry(format!(
             "atom '{}' has non-literal element",
@@ -232,9 +232,9 @@ macro_rules! registry {
             let dsl: ::umol_graph_ir::dsl::AtomDsl = $source
                 .parse()
                 .expect("invalid atom DSL");
-            let atom: ::umol_graph_ir::ir::AtomAst = <_ as ::umol_graph_ir::ir::IntoAst<
+            let atom: ::umol_graph_ir::ir::AtomAst = <_ as ::umol_graph_ir::ir::IntoIr<
                 ::umol_graph_ir::ir::AtomAst,
-            >>::into_ast(dsl, &::umol_graph_ir::dsl::AtomDefaults::zeroed());
+            >>::into_ir(dsl, &::umol_graph_ir::dsl::AtomDefaults::zeroed());
             registry.add(atom);
         )*
         registry
@@ -308,7 +308,7 @@ mod tests {
         };
         let expected = AtomTypeRegistry::from_atoms(
             ["C#c0#v4#a0", "O#c-#n3#v#a0"]
-                .map(|source| source.parse::<AtomDsl>().unwrap().into_ast(&defaults)),
+                .map(|source| source.parse::<AtomDsl>().unwrap().into_ir(&defaults)),
         );
 
         assert_eq!(AtomTypeRegistry::from_toml_str(input), Ok(expected));
@@ -336,7 +336,7 @@ mod tests {
         let defaults = AtomDefaults::zeroed();
         let expected = AtomTypeRegistry::from_atoms(
             ["C#c0#v4", "C#c+#h3"]
-                .map(|source| source.parse::<AtomDsl>().unwrap().into_ast(&defaults)),
+                .map(|source| source.parse::<AtomDsl>().unwrap().into_ir(&defaults)),
         );
 
         assert_eq!(registry!["C#c0#v4", "C#c+#h3"], expected);

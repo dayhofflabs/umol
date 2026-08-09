@@ -87,7 +87,7 @@ proptest! {
         ast in molecule_ast_with_constraints_strategy(),
     ) {
         let defaults = MoleculeDefaults::new();
-        let rebuilt = MoleculeDsl::from_ast(&ast, &defaults).into_ast(&defaults);
+        let rebuilt = MoleculeDsl::from_ir(&ast, &defaults).into_ir(&defaults);
         prop_assert_eq!(rebuilt, ast);
     }
 
@@ -97,8 +97,8 @@ proptest! {
     ) {
         let required = MoleculeDefaults::new();
         let ground = MoleculeDefaults::ground();
-        let grounded = MoleculeDsl::from_ast(&ast, &required).into_ast(&ground);
-        let rebuilt = MoleculeDsl::from_ast(&grounded, &ground).into_ast(&ground);
+        let grounded = MoleculeDsl::from_ir(&ast, &required).into_ir(&ground);
+        let rebuilt = MoleculeDsl::from_ir(&grounded, &ground).into_ir(&ground);
         prop_assert_eq!(rebuilt, grounded);
     }
 }

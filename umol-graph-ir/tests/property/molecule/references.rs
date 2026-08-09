@@ -43,7 +43,7 @@ proptest! {
     /// `resolve_*_structural` paths cross-checked against positional resolution.
     #[test]
     fn test_structural_ref_resolves_like_positional(ast in molecule_ast_strategy()) {
-        let context = MoleculeContext::from_ast(&ast);
+        let context = MoleculeContext::from_ir(&ast);
 
         let bond_keys: Vec<[usize; 2]> = ast
             .bonds()
@@ -157,7 +157,7 @@ proptest! {
     /// (`InvalidRef`), never silently hitting a wrong id — one guaranteed-miss perturbation per kind.
     #[test]
     fn test_structural_ref_wrong_participants_error(ast in molecule_ast_strategy()) {
-        let context = MoleculeContext::from_ast(&ast);
+        let context = MoleculeContext::from_ir(&ast);
 
         // A two-atom entity: a self-pair is never a bond (endpoints are distinct).
         for view in ast.bonds().iter() {

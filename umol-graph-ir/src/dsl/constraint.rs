@@ -48,7 +48,7 @@ use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ir::molecule::MoleculeAst;
 use crate::ir::spin::UnpairedElectronsAst;
 use crate::ir::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::value::ValueAst;
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
@@ -85,8 +85,8 @@ pub(super) fn read_unpaired_electrons(
     let mut multiplicity = None;
     read_map(de, |d, key| {
         match key {
-            "count" => count = Some(read_value_dsl(d)?.into_ast(&())),
-            "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ast(&())),
+            "count" => count = Some(read_value_dsl(d)?.into_ir(&())),
+            "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ir(&())),
             _ => d.read_skip_value()?,
         }
         Ok(())
@@ -117,7 +117,7 @@ pub(super) fn read_aromatic_valence_dsl(
             let key = read_single_key_map_header(de)?;
             match key.as_str() {
                 "aromatic" => {
-                    let v = read_value_dsl(de)?.into_ast(&());
+                    let v = read_value_dsl(de)?.into_ir(&());
                     consume_single_key_map_close(de, "aromatic-valence")?;
                     Ok(AromaticValenceDsl(AromaticValenceAst::Aromatic(v)))
                 }
@@ -159,7 +159,7 @@ pub(super) fn read_multicenter_valence_dsl(
             let key = read_single_key_map_header(de)?;
             match key.as_str() {
                 "multicenter" => {
-                    let v = read_value_dsl(de)?.into_ast(&());
+                    let v = read_value_dsl(de)?.into_ir(&());
                     consume_single_key_map_close(de, "multicenter-valence")?;
                     Ok(MulticenterValenceDsl(MulticenterValenceAst::Multicenter(v)))
                 }
@@ -188,7 +188,7 @@ fn read_ring_membership_dsl(
     read_map(de, |de, key| {
         match key {
             "size" => size = Some(de.read_i64()? as u8),
-            "count" => count = Some(read_value_dsl(de)?.into_ast(&())),
+            "count" => count = Some(read_value_dsl(de)?.into_ir(&())),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -221,7 +221,7 @@ impl ToEdn for RingMembershipDsl {
         }
         m.insert(
             Edn::Keyword(EdnKeyword::owned("count".into())),
-            ValueDsl::from_ast(&self.0.count, &()).to_edn(),
+            ValueDsl::from_ir(&self.0.count, &()).to_edn(),
         );
         Edn::Map(m)
     }
@@ -257,7 +257,7 @@ impl<'de> FromEdn<'de> for RingMembershipDsl {
                     };
                     scope = RingScope::Size(*n as u8);
                 }
-                "count" => count = Some(ValueDsl::from_edn(v)?.into_ast(&())),
+                "count" => count = Some(ValueDsl::from_edn(v)?.into_ir(&())),
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -331,7 +331,7 @@ macro_rules! read_stereo_site_dsl {
                     let key = read_single_key_map_header(de)?;
                     match key.as_str() {
                         "stereo" => {
-                            let coset = read_stereo_coset_dsl(de, $kind.degree())?.into_ast(&());
+                            let coset = read_stereo_coset_dsl(de, $kind.degree())?.into_ir(&());
                             consume_single_key_map_close(de, "stereo-configuration")?;
                             Ok($ast::Stereo(coset))
                         }
@@ -361,21 +361,21 @@ pub(super) fn read_atom_constraint_dsl(
 ) -> Result<AtomConstraintDsl, EdnError> {
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
-        "valence" => AtomConstraintAst::Valence(read_value_dsl(de)?.into_ast(&())),
-        "total-valence" => AtomConstraintAst::TotalValence(read_value_dsl(de)?.into_ast(&())),
+        "valence" => AtomConstraintAst::Valence(read_value_dsl(de)?.into_ir(&())),
+        "total-valence" => AtomConstraintAst::TotalValence(read_value_dsl(de)?.into_ir(&())),
         "aromatic-valence" => {
-            AtomConstraintAst::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()))
+            AtomConstraintAst::AromaticValence(read_aromatic_valence_dsl(de)?.into_ir(&()))
         }
         "multicenter-valence" => {
-            AtomConstraintAst::MulticenterValence(read_multicenter_valence_dsl(de)?.into_ast(&()))
+            AtomConstraintAst::MulticenterValence(read_multicenter_valence_dsl(de)?.into_ir(&()))
         }
-        "donated-pairs" => AtomConstraintAst::DonatedPairs(read_value_dsl(de)?.into_ast(&())),
-        "accepted-pairs" => AtomConstraintAst::AcceptedPairs(read_value_dsl(de)?.into_ast(&())),
-        "degree" => AtomConstraintAst::Degree(read_value_dsl(de)?.into_ast(&())),
-        "total-degree" => AtomConstraintAst::TotalDegree(read_value_dsl(de)?.into_ast(&())),
-        "ring-degree" => AtomConstraintAst::RingDegree(read_value_dsl(de)?.into_ast(&())),
-        "ring-valence" => AtomConstraintAst::RingValence(read_value_dsl(de)?.into_ast(&())),
-        "total-hydrogens" => AtomConstraintAst::TotalHydrogens(read_value_dsl(de)?.into_ast(&())),
+        "donated-pairs" => AtomConstraintAst::DonatedPairs(read_value_dsl(de)?.into_ir(&())),
+        "accepted-pairs" => AtomConstraintAst::AcceptedPairs(read_value_dsl(de)?.into_ir(&())),
+        "degree" => AtomConstraintAst::Degree(read_value_dsl(de)?.into_ir(&())),
+        "total-degree" => AtomConstraintAst::TotalDegree(read_value_dsl(de)?.into_ir(&())),
+        "ring-degree" => AtomConstraintAst::RingDegree(read_value_dsl(de)?.into_ir(&())),
+        "ring-valence" => AtomConstraintAst::RingValence(read_value_dsl(de)?.into_ir(&())),
+        "total-hydrogens" => AtomConstraintAst::TotalHydrogens(read_value_dsl(de)?.into_ir(&())),
         "ring-membership" => AtomConstraintAst::RingMembership(read_ring_membership_dsl(de)?),
         "tetrahedral-stereo" => {
             AtomConstraintAst::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?)
@@ -463,7 +463,7 @@ pub(super) fn read_aromatic_system_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "electron-count" => {
-            AromaticSystemConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ast(&()))
+            AromaticSystemConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ir(&()))
         }
         other => {
             return Err(DeError::UnknownField {
@@ -483,7 +483,7 @@ pub(super) fn read_multicenter_bond_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "electron-count" => {
-            MulticenterBondConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ast(&()))
+            MulticenterBondConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ir(&()))
         }
         other => {
             return Err(DeError::UnknownField {
@@ -1061,7 +1061,7 @@ pub(super) fn read_molecule_constraint_dsl(
                     "pattern" => {
                         let input = read_molecule_input(d)?;
                         let (ast, _metadata) = input
-                            .into_ast()
+                            .into_ir()
                             .map_err(|e| DeError::Custom(e.to_string()))?;
                         pattern = Some(Box::new(ast));
                     }
@@ -1269,14 +1269,14 @@ fn resolve_bond_subset<N: Namespace>(
 }
 
 impl MoleculeConstraintDsl {
-    pub(crate) fn from_ast<M: Metadata>(
+    pub(crate) fn from_ir<M: Metadata>(
         c: &MoleculeConstraint,
         meta: &M,
     ) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: denote_atom_subset(atoms, meta),
-                sum: ValueDsl::from_ast(sum, &()),
+                sum: ValueDsl::from_ir(sum, &()),
             },
             MoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
@@ -1287,7 +1287,7 @@ impl MoleculeConstraintDsl {
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: denote_bond_subset(bonds, meta),
-                sum: ValueDsl::from_ast(sum, &()),
+                sum: ValueDsl::from_ir(sum, &()),
             },
             MoleculeConstraint::Connected { atoms } => Self::Connected {
                 atoms: denote_atom_subset(atoms, meta),
@@ -1303,14 +1303,14 @@ impl MoleculeConstraintDsl {
         })
     }
 
-    pub(crate) fn into_ast<N: Namespace>(
+    pub(crate) fn into_ir<N: Namespace>(
         self,
         namespace: &N,
     ) -> Result<MoleculeConstraint, ParseError> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
                 atoms: resolve_atom_subset(atoms, namespace)?,
-                sum: sum.into_ast(&()),
+                sum: sum.into_ir(&()),
             },
             Self::UnpairedElectronCoupling {
                 atoms,
@@ -1321,13 +1321,13 @@ impl MoleculeConstraintDsl {
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
                 bonds: resolve_bond_subset(bonds, namespace)?,
-                sum: sum.into_ast(&()),
+                sum: sum.into_ir(&()),
             },
             Self::Connected { atoms } => MoleculeConstraint::Connected {
                 atoms: resolve_atom_subset(atoms, namespace)?,
             },
             Self::SubPattern { anchor, pattern } => {
-                let pattern_context = MoleculeContext::from_ast(&pattern);
+                let pattern_context = MoleculeContext::from_ir(&pattern);
                 let anchor_ast = anchor.into_ast_pair(namespace, &pattern_context)?;
                 MoleculeConstraint::SubPattern {
                     anchor: anchor_ast,
@@ -1841,8 +1841,8 @@ pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectron
             path: vec!["unpaired-electrons".into()],
         })?;
     Ok(UnpairedElectronsAst {
-        count: ValueDsl::from_edn(count)?.into_ast(&()),
-        multiplicity: ValueDsl::from_edn(multiplicity)?.into_ast(&()),
+        count: ValueDsl::from_edn(count)?.into_ir(&()),
+        multiplicity: ValueDsl::from_edn(multiplicity)?.into_ir(&()),
     })
 }
 
@@ -1850,11 +1850,11 @@ pub(super) fn render_unpaired_electrons(unpaired_electrons: &UnpairedElectronsAs
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("count"),
-        ValueDsl::from_ast(&unpaired_electrons.count, &()).to_edn(),
+        ValueDsl::from_ir(&unpaired_electrons.count, &()).to_edn(),
     );
     m.insert(
         Edn::keyword("multiplicity"),
-        ValueDsl::from_ast(&unpaired_electrons.multiplicity, &()).to_edn(),
+        ValueDsl::from_ir(&unpaired_electrons.multiplicity, &()).to_edn(),
     );
     Edn::Map(m)
 }
@@ -1991,71 +1991,71 @@ impl ToEdn for ConstraintDsl {
 }
 
 impl ConstraintDsl {
-    pub(crate) fn from_ast<M: Metadata>(c: &Constraint, meta: &M) -> Result<Self, ParseError> {
+    pub(crate) fn from_ir<M: Metadata>(c: &Constraint, meta: &M) -> Result<Self, ParseError> {
         Ok(match c {
             Constraint::Atom(id, c) => Self::Atom(
                 AtomRef::denote(*id, meta),
-                AtomConstraintDsl::from_ast(c, &()),
+                AtomConstraintDsl::from_ir(c, &()),
             ),
             Constraint::Bond(id, c) => Self::Bond(
                 BondRef::denote(*id, meta),
-                BondConstraintDsl::from_ast(c, &()),
+                BondConstraintDsl::from_ir(c, &()),
             ),
             Constraint::DativeBond(id, c) => Self::DativeBond(
                 DativeBondRef::denote(*id, meta),
-                DativeBondConstraintDsl::from_ast(c),
+                DativeBondConstraintDsl::from_ir(c),
             ),
             Constraint::AromaticSystem(id, c) => Self::AromaticSystem(
                 AromaticSystemRef::denote(*id, meta),
-                AromaticSystemConstraintDsl::from_ast(c),
+                AromaticSystemConstraintDsl::from_ir(c),
             ),
             Constraint::MulticenterBond(id, c) => Self::MulticenterBond(
                 MulticenterBondRef::denote(*id, meta),
-                MulticenterBondConstraintDsl::from_ast(c),
+                MulticenterBondConstraintDsl::from_ir(c),
             ),
             Constraint::NoncovalentBond(id, c) => Self::NoncovalentBond(
                 NoncovalentBondRef::denote(*id, meta),
-                NoncovalentBondConstraintDsl::from_ast(c),
+                NoncovalentBondConstraintDsl::from_ir(c),
             ),
             Constraint::StereoAtom(id, kind, c) => Self::StereoAtom(
                 StereoAtomRef::denote(*id, meta),
-                StereoAtomConstraintDsl::from_ast(c, kind),
+                StereoAtomConstraintDsl::from_ir(c, kind),
             ),
             Constraint::StereoBond(id, kind, c) => Self::StereoBond(
                 StereoBondRef::denote(*id, meta),
-                StereoBondConstraintDsl::from_ast(c, kind),
+                StereoBondConstraintDsl::from_ir(c, kind),
             ),
             Constraint::Relational(rel) => {
-                Self::Relational(RelationalConstraintDsl::from_ast(rel, meta))
+                Self::Relational(RelationalConstraintDsl::from_ir(rel, meta))
             }
-            Constraint::Molecule(m) => Self::Molecule(MoleculeConstraintDsl::from_ast(m, meta)?),
+            Constraint::Molecule(m) => Self::Molecule(MoleculeConstraintDsl::from_ir(m, meta)?),
             Constraint::And(xs) => Self::And(
                 xs.iter()
-                    .map(|c| ConstraintDsl::from_ast(c, meta))
+                    .map(|c| ConstraintDsl::from_ir(c, meta))
                     .collect::<Result<_, _>>()?,
             ),
             Constraint::Or(xs) => Self::Or(
                 xs.iter()
-                    .map(|c| ConstraintDsl::from_ast(c, meta))
+                    .map(|c| ConstraintDsl::from_ir(c, meta))
                     .collect::<Result<_, _>>()?,
             ),
-            Constraint::Not(c) => Self::Not(Box::new(ConstraintDsl::from_ast(c, meta)?)),
+            Constraint::Not(c) => Self::Not(Box::new(ConstraintDsl::from_ir(c, meta)?)),
         })
     }
 
-    pub(crate) fn into_ast<N: Namespace>(self, namespace: &N) -> Result<Constraint, ParseError> {
+    pub(crate) fn into_ir<N: Namespace>(self, namespace: &N) -> Result<Constraint, ParseError> {
         Ok(match self {
-            Self::Atom(r, c) => Constraint::Atom(r.resolve(namespace)?, c.into_ast(&())),
-            Self::Bond(r, c) => Constraint::Bond(r.resolve(namespace)?, c.into_ast(&())),
-            Self::DativeBond(r, c) => Constraint::DativeBond(r.resolve(namespace)?, c.into_ast()),
+            Self::Atom(r, c) => Constraint::Atom(r.resolve(namespace)?, c.into_ir(&())),
+            Self::Bond(r, c) => Constraint::Bond(r.resolve(namespace)?, c.into_ir(&())),
+            Self::DativeBond(r, c) => Constraint::DativeBond(r.resolve(namespace)?, c.into_ir()),
             Self::AromaticSystem(r, c) => {
-                Constraint::AromaticSystem(r.resolve(namespace)?, c.into_ast())
+                Constraint::AromaticSystem(r.resolve(namespace)?, c.into_ir())
             }
             Self::MulticenterBond(r, c) => {
-                Constraint::MulticenterBond(r.resolve(namespace)?, c.into_ast())
+                Constraint::MulticenterBond(r.resolve(namespace)?, c.into_ir())
             }
             Self::NoncovalentBond(r, c) => {
-                Constraint::NoncovalentBond(r.resolve(namespace)?, c.into_ast())
+                Constraint::NoncovalentBond(r.resolve(namespace)?, c.into_ir())
             }
             Self::StereoAtom(r, StereoAtomConstraintDsl(kind, c)) => {
                 Constraint::StereoAtom(r.resolve(namespace)?, kind, c)
@@ -2063,19 +2063,19 @@ impl ConstraintDsl {
             Self::StereoBond(r, StereoBondConstraintDsl(kind, c)) => {
                 Constraint::StereoBond(r.resolve(namespace)?, kind, c)
             }
-            Self::Relational(r) => Constraint::Relational(r.into_ast(namespace)?),
-            Self::Molecule(m) => Constraint::Molecule(m.into_ast(namespace)?),
+            Self::Relational(r) => Constraint::Relational(r.into_ir(namespace)?),
+            Self::Molecule(m) => Constraint::Molecule(m.into_ir(namespace)?),
             Self::And(xs) => Constraint::And(
                 xs.into_iter()
-                    .map(|c| c.into_ast(namespace))
+                    .map(|c| c.into_ir(namespace))
                     .collect::<Result<_, _>>()?,
             ),
             Self::Or(xs) => Constraint::Or(
                 xs.into_iter()
-                    .map(|c| c.into_ast(namespace))
+                    .map(|c| c.into_ir(namespace))
                     .collect::<Result<_, _>>()?,
             ),
-            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(namespace)?)),
+            Self::Not(c) => Constraint::Not(Box::new(c.into_ir(namespace)?)),
         })
     }
 }
@@ -2113,19 +2113,19 @@ impl ConstraintsDsl {
     /// during the AST → DSL lowering, matching the canonical-rendering
     /// rule: a constraint that asserts nothing does not appear in the
     /// canonical surface form.
-    pub(crate) fn from_ast<M: Metadata>(cs: &Constraints, meta: &M) -> Result<Self, ParseError> {
+    pub(crate) fn from_ir<M: Metadata>(cs: &Constraints, meta: &M) -> Result<Self, ParseError> {
         Ok(Self(
             cs.iter()
                 .filter(|c| !c.is_vacuous())
-                .map(|c| ConstraintDsl::from_ast(c, meta))
+                .map(|c| ConstraintDsl::from_ir(c, meta))
                 .collect::<Result<_, _>>()?,
         ))
     }
 
-    pub(crate) fn into_ast<N: Namespace>(self, namespace: &N) -> Result<Constraints, ParseError> {
+    pub(crate) fn into_ir<N: Namespace>(self, namespace: &N) -> Result<Constraints, ParseError> {
         let mut out = Constraints::new();
         for c in self.0 {
-            out.push(c.into_ast(namespace)?);
+            out.push(c.into_ir(namespace)?);
         }
         Ok(out)
     }
@@ -2326,12 +2326,12 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = MoleculeMetadata::default();
-        let dsl = MoleculeConstraintDsl::from_ast(&input, &meta).unwrap();
+        let dsl = MoleculeConstraintDsl::from_ir(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = MoleculeConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&namespace).unwrap();
+        let back = parsed.into_ir(&namespace).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -2373,12 +2373,12 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = MoleculeMetadata::default();
-        let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
+        let dsl = ConstraintDsl::from_ir(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string(edn_source).unwrap(), "render mismatch");
         let back = ConstraintDsl::from_edn(&edn)
             .unwrap()
-            .into_ast(&namespace)
+            .into_ir(&namespace)
             .unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
@@ -2538,12 +2538,12 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = MoleculeMetadata::default();
-        let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
+        let dsl = ConstraintDsl::from_ir(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = ConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&namespace).unwrap();
+        let back = parsed.into_ir(&namespace).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -2573,12 +2573,12 @@ mod tests {
         #[case] input: AtomConstraintAst,
         #[case] edn_source: &str,
     ) {
-        let dsl = AtomConstraintDsl::from_ast(&input, &());
+        let dsl = AtomConstraintDsl::from_ir(&input, &());
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&());
+        let back = parsed.into_ir(&());
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -2596,12 +2596,12 @@ mod tests {
     ) {
         let wrapped = Constraint::Bond(BondId(0), input.clone());
         let meta = MoleculeMetadata::default();
-        let dsl = ConstraintDsl::from_ast(&wrapped, &meta).unwrap();
+        let dsl = ConstraintDsl::from_ir(&wrapped, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected);
         let parsed = ConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&namespace).unwrap();
+        let back = parsed.into_ir(&namespace).unwrap();
         assert_eq!(back, wrapped);
     }
 
@@ -2646,11 +2646,11 @@ mod tests {
     fn test_constraints_dsl_empty_roundtrip(#[from(full_namespace)] namespace: MoleculeContext) {
         let meta = MoleculeMetadata::default();
         let cs = Constraints::new();
-        let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
+        let dsl = ConstraintsDsl::from_ir(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("[]").unwrap());
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&namespace).unwrap();
+        let back = parsed.into_ir(&namespace).unwrap();
         assert_eq!(back, cs);
     }
 
@@ -2665,13 +2665,13 @@ mod tests {
         cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),
         }));
-        let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
+        let dsl = ConstraintsDsl::from_ir(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected =
             read_string("[{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}}]").unwrap();
         assert_eq!(edn, expected);
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&namespace).unwrap();
+        let back = parsed.into_ir(&namespace).unwrap();
         assert_eq!(back, cs);
     }
 }

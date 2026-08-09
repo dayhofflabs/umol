@@ -23,7 +23,7 @@ use super::refs::{
     StereoAtomRef, StereoBondRef,
 };
 use crate::ir::constraint::RelationalConstraint;
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 
 /// Surface DSL wrapper around [`RelationalConstraint`]. Structural parallel
 /// to the AST enum — same 18 variants, with surface refs ([`AtomRef`],
@@ -263,7 +263,7 @@ impl ToEdn for RelationalConstraintDsl {
 }
 
 impl RelationalConstraintDsl {
-    pub(crate) fn from_ast<M: Metadata>(rel: &RelationalConstraint, meta: &M) -> Self {
+    pub(crate) fn from_ir<M: Metadata>(rel: &RelationalConstraint, meta: &M) -> Self {
         use RelationalConstraint::*;
         match rel {
             DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
@@ -280,11 +280,11 @@ impl RelationalConstraintDsl {
             },
             DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
                 bond: DativeBondRef::denote(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
                 bond: DativeBondRef::denote(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             DativeBondAcceptor { bond, atom } => Self::DativeBondAcceptor {
                 bond: DativeBondRef::denote(*bond, meta),
@@ -292,7 +292,7 @@ impl RelationalConstraintDsl {
             },
             DativeBondAcceptorSatisfies { bond, predicate } => Self::DativeBondAcceptorSatisfies {
                 bond: DativeBondRef::denote(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
                 dative: DativeBondRef::denote(*dative, meta),
@@ -312,11 +312,11 @@ impl RelationalConstraintDsl {
             },
             AromaticSystemAllAtoms { system, predicate } => Self::AromaticSystemAllAtoms {
                 system: AromaticSystemRef::denote(*system, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             AromaticSystemAnyAtom { system, predicate } => Self::AromaticSystemAnyAtom {
                 system: AromaticSystemRef::denote(*system, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             MulticenterBondAtoms { bond, atoms } => Self::MulticenterBondAtoms {
                 bond: MulticenterBondRef::denote(*bond, meta),
@@ -332,11 +332,11 @@ impl RelationalConstraintDsl {
             },
             MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
                 bond: MulticenterBondRef::denote(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             MulticenterBondAnyAtom { bond, predicate } => Self::MulticenterBondAnyAtom {
                 bond: MulticenterBondRef::denote(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             NoncovalentBondEnds { bond, atoms } => Self::NoncovalentBondEnds {
                 bond: NoncovalentBondRef::denote(*bond, meta),
@@ -352,8 +352,8 @@ impl RelationalConstraintDsl {
             NoncovalentBondEndsSatisfy { bond, predicates } => Self::NoncovalentBondEndsSatisfy {
                 bond: NoncovalentBondRef::denote(*bond, meta),
                 predicates: [
-                    Box::new(AtomConstraintDsl::from_ast(&predicates[0], &())),
-                    Box::new(AtomConstraintDsl::from_ast(&predicates[1], &())),
+                    Box::new(AtomConstraintDsl::from_ir(&predicates[0], &())),
+                    Box::new(AtomConstraintDsl::from_ir(&predicates[1], &())),
                 ],
             },
             StereoAtomSite { stereo_atom, atom } => Self::StereoAtomSite {
@@ -373,14 +373,14 @@ impl RelationalConstraintDsl {
                 predicate,
             } => Self::StereoAtomAllLigands {
                 stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand {
                 stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             StereoBondSite { stereo_bond, bond } => Self::StereoBondSite {
                 stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
@@ -399,19 +399,19 @@ impl RelationalConstraintDsl {
                 predicate,
             } => Self::StereoBondAllLigands {
                 stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
             StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand {
                 stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+                predicate: Box::new(AtomConstraintDsl::from_ir(predicate, &())),
             },
         }
     }
 
-    pub(crate) fn into_ast<N: Namespace>(
+    pub(crate) fn into_ir<N: Namespace>(
         self,
         namespace: &N,
     ) -> Result<RelationalConstraint, ParseError> {
@@ -439,11 +439,11 @@ impl RelationalConstraintDsl {
             }
             DativeBondAllDonors { bond, predicate } => RelationalConstraint::DativeBondAllDonors {
                 bond: bond.resolve(namespace)?,
-                predicate: Box::new(predicate.into_ast(&())),
+                predicate: Box::new(predicate.into_ir(&())),
             },
             DativeBondAnyDonor { bond, predicate } => RelationalConstraint::DativeBondAnyDonor {
                 bond: bond.resolve(namespace)?,
-                predicate: Box::new(predicate.into_ast(&())),
+                predicate: Box::new(predicate.into_ir(&())),
             },
             DativeBondAcceptor { bond, atom } => RelationalConstraint::DativeBondAcceptor {
                 bond: bond.resolve(namespace)?,
@@ -452,7 +452,7 @@ impl RelationalConstraintDsl {
             DativeBondAcceptorSatisfies { bond, predicate } => {
                 RelationalConstraint::DativeBondAcceptorSatisfies {
                     bond: bond.resolve(namespace)?,
-                    predicate: Box::new(predicate.into_ast(&())),
+                    predicate: Box::new(predicate.into_ir(&())),
                 }
             }
             DativeBondParallels { dative, parallel } => RelationalConstraint::DativeBondParallels {
@@ -484,13 +484,13 @@ impl RelationalConstraintDsl {
             AromaticSystemAllAtoms { system, predicate } => {
                 RelationalConstraint::AromaticSystemAllAtoms {
                     system: system.resolve(namespace)?,
-                    predicate: Box::new(predicate.into_ast(&())),
+                    predicate: Box::new(predicate.into_ir(&())),
                 }
             }
             AromaticSystemAnyAtom { system, predicate } => {
                 RelationalConstraint::AromaticSystemAnyAtom {
                     system: system.resolve(namespace)?,
-                    predicate: Box::new(predicate.into_ast(&())),
+                    predicate: Box::new(predicate.into_ir(&())),
                 }
             }
             MulticenterBondAtoms { bond, atoms } => RelationalConstraint::MulticenterBondAtoms {
@@ -518,13 +518,13 @@ impl RelationalConstraintDsl {
             MulticenterBondAllAtoms { bond, predicate } => {
                 RelationalConstraint::MulticenterBondAllAtoms {
                     bond: bond.resolve(namespace)?,
-                    predicate: Box::new(predicate.into_ast(&())),
+                    predicate: Box::new(predicate.into_ir(&())),
                 }
             }
             MulticenterBondAnyAtom { bond, predicate } => {
                 RelationalConstraint::MulticenterBondAnyAtom {
                     bond: bond.resolve(namespace)?,
-                    predicate: Box::new(predicate.into_ast(&())),
+                    predicate: Box::new(predicate.into_ir(&())),
                 }
             }
             NoncovalentBondEnds { bond, atoms } => {
@@ -544,7 +544,7 @@ impl RelationalConstraintDsl {
                 let [a, b] = predicates;
                 RelationalConstraint::NoncovalentBondEndsSatisfy {
                     bond: bond.resolve(namespace)?,
-                    predicates: [Box::new(a.into_ast(&())), Box::new(b.into_ast(&()))],
+                    predicates: [Box::new(a.into_ir(&())), Box::new(b.into_ir(&()))],
                 }
             }
             StereoAtomSite { stereo_atom, atom } => RelationalConstraint::StereoAtomSite {
@@ -567,14 +567,14 @@ impl RelationalConstraintDsl {
                 predicate,
             } => RelationalConstraint::StereoAtomAllLigands {
                 stereo_atom: stereo_atom.resolve(namespace)?,
-                predicate: Box::new(predicate.into_ast(&())),
+                predicate: Box::new(predicate.into_ir(&())),
             },
             StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => RelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom: stereo_atom.resolve(namespace)?,
-                predicate: Box::new(predicate.into_ast(&())),
+                predicate: Box::new(predicate.into_ir(&())),
             },
             StereoBondSite { stereo_bond, bond } => RelationalConstraint::StereoBondSite {
                 stereo_bond: stereo_bond.resolve(namespace)?,
@@ -596,14 +596,14 @@ impl RelationalConstraintDsl {
                 predicate,
             } => RelationalConstraint::StereoBondAllLigands {
                 stereo_bond: stereo_bond.resolve(namespace)?,
-                predicate: Box::new(predicate.into_ast(&())),
+                predicate: Box::new(predicate.into_ir(&())),
             },
             StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => RelationalConstraint::StereoBondAnyLigand {
                 stereo_bond: stereo_bond.resolve(namespace)?,
-                predicate: Box::new(predicate.into_ast(&())),
+                predicate: Box::new(predicate.into_ir(&())),
             },
         })
     }
@@ -1152,12 +1152,12 @@ mod tests {
         #[case] input: RelationalConstraint,
         #[case] edn_source: &str,
     ) {
-        let dsl = RelationalConstraintDsl::from_ast(&input, &meta);
+        let dsl = RelationalConstraintDsl::from_ir(&input, &meta);
         let edn = dsl.clone().to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = RelationalConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&namespace).unwrap();
+        let back = parsed.into_ir(&namespace).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -1200,7 +1200,7 @@ mod tests {
             bond: DativeBondRef::Index(0),
             atom: AtomRef::Index(99),
         };
-        let err = dsl.into_ast(&context).unwrap_err();
+        let err = dsl.into_ir(&context).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {
@@ -1225,7 +1225,7 @@ mod tests {
             bond: DativeBondRef::Index(99),
             atom: AtomRef::Index(0),
         };
-        let err = dsl.into_ast(&context).unwrap_err();
+        let err = dsl.into_ir(&context).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {

@@ -1,6 +1,6 @@
 //! The perceived-molecule boundary type. Bond perception over a geometric
 //! `Molecule` yields per-atom elements, perceived bond orders, and the geometry's
-//! total charge and multiplicity; the type lifts into a `MoleculeAst` via [`IntoAst`].
+//! total charge and multiplicity; the type lifts into a `MoleculeAst` via [`IntoIr`].
 //! Resolution of the lifted AST (hydrogens, per-atom valence, aromaticity) is the
 //! caller's job.
 
@@ -8,7 +8,7 @@ use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
 use umol_geometric::molecule::Molecule;
 use umol_graph_ir::ir::{
-    AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoAst, MoleculeAst,
+    AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoIr, MoleculeAst,
     MoleculeConstraint, MoleculeEntries, UnpairedElectronsAst, ValueAst,
 };
 
@@ -16,7 +16,7 @@ use crate::bond_perception::{perceive_bonds, BondPerceptionConfig};
 
 /// A molecule perceived from 3D geometry: the per-atom elements, the perceived
 /// bonds, and the geometry's total charge and multiplicity. This is the boundary between
-/// the geometric model and the AST — it lifts into a `MoleculeAst` via [`IntoAst`].
+/// the geometric model and the AST — it lifts into a `MoleculeAst` via [`IntoIr`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct PerceivedMolecule {
     /// Element per atom, in geometric-atom order.
@@ -49,14 +49,14 @@ impl PerceivedMolecule {
     }
 }
 
-impl IntoAst<MoleculeAst> for PerceivedMolecule {
+impl IntoIr<MoleculeAst> for PerceivedMolecule {
     type Ctx = ();
 
     /// Each atom carries only its element; hydrogens, per-atom charge, and per-atom
     /// spin are left undetermined for the caller's resolver. The total charge and
     /// spin become molecule-scope `ChargeSum` / `UnpairedElectronCoupling`
     /// constraints over the whole molecule.
-    fn into_ast(self, _ctx: &Self::Ctx) -> MoleculeAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> MoleculeAst {
         let atoms: Vec<AtomAst> = self
             .elements
             .iter()
@@ -164,6 +164,6 @@ mod tests {
         #[case] perceived: PerceivedMolecule,
         #[case] expected: MoleculeAst,
     ) {
-        assert_eq!(perceived.into_ast(&()), expected);
+        assert_eq!(perceived.into_ir(&()), expected);
     }
 }

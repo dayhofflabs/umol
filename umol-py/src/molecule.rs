@@ -11,7 +11,7 @@ use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
-    AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromAst, IntoAst,
+    AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr,
     MoleculeAst as GraphIrMoleculeAst, MoleculeEntries as GraphIrMoleculeEntries,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
@@ -63,7 +63,7 @@ impl MoleculeAst {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         let molecule = GraphIrMoleculeDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ast(&defaults);
+            .into_ir(&defaults);
         Ok(Self::from_rust(molecule))
     }
 
@@ -78,7 +78,7 @@ impl MoleculeAst {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
         let dsl = GraphIrMoleculeDsl::from_str(text).map_err(parse_error)?;
         let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
-        Ok((Self::from_rust(dsl.into_ast(&defaults)), metadata))
+        Ok((Self::from_rust(dsl.into_ir(&defaults)), metadata))
     }
 
     /// Render a canonical positional DSL representation without entity
@@ -86,7 +86,7 @@ impl MoleculeAst {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        GraphIrMoleculeDsl::from_ast(&self.0, &defaults).to_string()
+        GraphIrMoleculeDsl::from_ir(&self.0, &defaults).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -100,7 +100,7 @@ impl MoleculeAst {
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let lowered = GraphIrMoleculeDsl::from_ast(&self.0, &defaults)
+        let lowered = GraphIrMoleculeDsl::from_ir(&self.0, &defaults)
             .into_parts()
             .0;
         GraphIrMoleculeDsl::new(lowered, metadata.to_rust())

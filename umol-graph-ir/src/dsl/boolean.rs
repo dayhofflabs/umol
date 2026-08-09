@@ -10,24 +10,24 @@ use winnow::Parser;
 use super::edn_utils::eof_err;
 use super::error::{PResult, ParseError};
 use crate::ir::boolean::BooleanAst;
-use crate::ir::traits::{FromAst, IntoAst};
+use crate::ir::traits::{FromIr, IntoIr};
 
 /// Boundary type for [`BooleanAst`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BooleanDsl(pub BooleanAst);
 
-impl FromAst<BooleanAst> for BooleanDsl {
+impl FromIr<BooleanAst> for BooleanDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &BooleanAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &BooleanAst, _ctx: &Self::Ctx) -> Self {
         Self(*ast)
     }
 }
 
-impl IntoAst<BooleanAst> for BooleanDsl {
+impl IntoIr<BooleanAst> for BooleanDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> BooleanAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> BooleanAst {
         self.0
     }
 }

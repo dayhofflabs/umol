@@ -33,7 +33,7 @@ use crate::ir::stereo::{
     StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
     Stereogenicity, TetrahedralStereoAst, Topicity,
 };
-use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
 /// Surface DSL wrapper for `StereoAtomAst`
 #[repr(transparent)]
@@ -66,7 +66,7 @@ impl FromStr for StereoAtomAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(StereoAtomDsl::from_str(s)?.into_ast(&StereoAtomDefaults::default()))
+        Ok(StereoAtomDsl::from_str(s)?.into_ir(&StereoAtomDefaults::default()))
     }
 }
 
@@ -143,19 +143,19 @@ fn stereo_atom_keyword_for(ast: &StereoAtomAst) -> Option<&'static str> {
     }
 }
 
-impl FromAst<StereoAtomAst> for StereoAtomDsl {
+impl FromIr<StereoAtomAst> for StereoAtomDsl {
     type Ctx = StereoAtomDefaults;
 
-    fn from_ast(ast: &StereoAtomAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &StereoAtomAst, _ctx: &Self::Ctx) -> Self {
         let ast = ast.clone();
         StereoAtomDsl(ast.clone())
     }
 }
 
-impl IntoAst<StereoAtomAst> for StereoAtomDsl {
+impl IntoIr<StereoAtomAst> for StereoAtomDsl {
     type Ctx = StereoAtomDefaults;
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoAtomAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> StereoAtomAst {
         self.0
     }
 }
@@ -255,7 +255,7 @@ impl FromStr for StereoBondAst {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(StereoBondDsl::from_str(s)?.into_ast(&StereoBondDefaults::default()))
+        Ok(StereoBondDsl::from_str(s)?.into_ir(&StereoBondDefaults::default()))
     }
 }
 
@@ -332,18 +332,18 @@ fn stereo_bond_keyword_for(ast: &StereoBondAst) -> Option<&'static str> {
     }
 }
 
-impl FromAst<StereoBondAst> for StereoBondDsl {
+impl FromIr<StereoBondAst> for StereoBondDsl {
     type Ctx = StereoBondDefaults;
 
-    fn from_ast(ast: &StereoBondAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &StereoBondAst, _ctx: &Self::Ctx) -> Self {
         StereoBondDsl(ast.clone())
     }
 }
 
-impl IntoAst<StereoBondAst> for StereoBondDsl {
+impl IntoIr<StereoBondAst> for StereoBondDsl {
     type Ctx = StereoBondDefaults;
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoBondAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> StereoBondAst {
         self.0
     }
 }
@@ -856,18 +856,18 @@ impl StereoAtomUpdateDsl {
     }
 }
 
-impl FromAst<StereoAtomUpdate> for StereoAtomUpdateDsl {
+impl FromIr<StereoAtomUpdate> for StereoAtomUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &StereoAtomUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &StereoAtomUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<StereoAtomUpdate> for StereoAtomUpdateDsl {
+impl IntoIr<StereoAtomUpdate> for StereoAtomUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoAtomUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> StereoAtomUpdate {
         self.0
     }
 }
@@ -884,7 +884,7 @@ impl FromStr for StereoAtomUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(StereoAtomUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(StereoAtomUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -1000,18 +1000,18 @@ impl StereoBondUpdateDsl {
     }
 }
 
-impl FromAst<StereoBondUpdate> for StereoBondUpdateDsl {
+impl FromIr<StereoBondUpdate> for StereoBondUpdateDsl {
     type Ctx = ();
 
-    fn from_ast(update: &StereoBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &StereoBondUpdate, _ctx: &Self::Ctx) -> Self {
         Self(update.clone())
     }
 }
 
-impl IntoAst<StereoBondUpdate> for StereoBondUpdateDsl {
+impl IntoIr<StereoBondUpdate> for StereoBondUpdateDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoBondUpdate {
+    fn into_ir(self, _ctx: &Self::Ctx) -> StereoBondUpdate {
         self.0
     }
 }
@@ -1028,7 +1028,7 @@ impl FromStr for StereoBondUpdate {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(StereoBondUpdateDsl::from_str(s)?.into_ast(&()))
+        Ok(StereoBondUpdateDsl::from_str(s)?.into_ir(&()))
     }
 }
 
@@ -1423,18 +1423,18 @@ impl<'de> FromEdn<'de> for StereogenicityDsl {
     }
 }
 
-impl FromAst<StereogenicityAst> for StereogenicityDsl {
+impl FromIr<StereogenicityAst> for StereogenicityDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &StereogenicityAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &StereogenicityAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<StereogenicityAst> for StereogenicityDsl {
+impl IntoIr<StereogenicityAst> for StereogenicityDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereogenicityAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> StereogenicityAst {
         self.0
     }
 }
@@ -1511,18 +1511,18 @@ impl<'de> FromEdn<'de> for TopicityDsl {
     }
 }
 
-impl FromAst<TopicityAst> for TopicityDsl {
+impl FromIr<TopicityAst> for TopicityDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &TopicityAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &TopicityAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<TopicityAst> for TopicityDsl {
+impl IntoIr<TopicityAst> for TopicityDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> TopicityAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> TopicityAst {
         self.0
     }
 }
@@ -1742,18 +1742,18 @@ macro_rules! stereo_constraint_dsl {
             }
         }
 
-        impl FromAst<$constraint> for $dsl {
+        impl FromIr<$constraint> for $dsl {
             type Ctx = StereoKind;
 
-            fn from_ast(ast: &$constraint, ctx: &Self::Ctx) -> Self {
+            fn from_ir(ast: &$constraint, ctx: &Self::Ctx) -> Self {
                 Self(*ctx, ast.clone())
             }
         }
 
-        impl IntoAst<$constraint> for $dsl {
+        impl IntoIr<$constraint> for $dsl {
             type Ctx = ();
 
-            fn into_ast(self, _ctx: &Self::Ctx) -> $constraint {
+            fn into_ir(self, _ctx: &Self::Ctx) -> $constraint {
                 self.1
             }
         }
@@ -1781,18 +1781,18 @@ pub(crate) fn coset_lit(n: i64) -> Result<u32, DeError> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoCosetDsl(pub StereoCoset);
 
-impl FromAst<StereoCoset> for StereoCosetDsl {
+impl FromIr<StereoCoset> for StereoCosetDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &StereoCoset, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &StereoCoset, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<StereoCoset> for StereoCosetDsl {
+impl IntoIr<StereoCoset> for StereoCosetDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoCoset {
+    fn into_ir(self, _ctx: &Self::Ctx) -> StereoCoset {
         self.0
     }
 }
@@ -1884,18 +1884,18 @@ macro_rules! stereo_site_dsl {
         #[derive(Clone, Debug, PartialEq, Eq)]
         pub struct $dsl(pub $ast);
 
-        impl FromAst<$ast> for $dsl {
+        impl FromIr<$ast> for $dsl {
             type Ctx = ();
 
-            fn from_ast(ast: &$ast, _ctx: &Self::Ctx) -> Self {
+            fn from_ir(ast: &$ast, _ctx: &Self::Ctx) -> Self {
                 Self(ast.clone())
             }
         }
 
-        impl IntoAst<$ast> for $dsl {
+        impl IntoIr<$ast> for $dsl {
             type Ctx = ();
 
-            fn into_ast(self, _ctx: &Self::Ctx) -> $ast {
+            fn into_ir(self, _ctx: &Self::Ctx) -> $ast {
                 self.0
             }
         }
@@ -1916,7 +1916,7 @@ macro_rules! stereo_site_dsl {
                         };
                         match key.name() {
                             "stereo" => Ok(Self($ast::Stereo(
-                                StereoCosetDsl::from_edn(v)?.into_ast(&()),
+                                StereoCosetDsl::from_edn(v)?.into_ir(&()),
                             ))),
                             other => Err(DeError::UnknownField {
                                 key: other.to_string(),
@@ -1941,7 +1941,7 @@ macro_rules! stereo_site_dsl {
                     }
                     $ast::NotStereo => Edn::Keyword(EdnKeyword::owned("not-stereo".to_string())),
                     $ast::Stereo(coset) => {
-                        single_key_map("stereo", StereoCosetDsl::from_ast(coset, &()).to_edn())
+                        single_key_map("stereo", StereoCosetDsl::from_ir(coset, &()).to_edn())
                     }
                 }
             }
@@ -2291,11 +2291,11 @@ mod tests {
     fn test_stereo_atom_dsl_into_ast() {
         let ast = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
         assert_eq!(
-            StereoAtomDsl(ast.clone()).into_ast(&StereoAtomDefaults::default()),
+            StereoAtomDsl(ast.clone()).into_ir(&StereoAtomDefaults::default()),
             ast
         );
         assert_eq!(
-            StereoAtomDsl::from_ast(&ast, &StereoAtomDefaults::default()),
+            StereoAtomDsl::from_ir(&ast, &StereoAtomDefaults::default()),
             StereoAtomDsl(ast)
         );
     }
@@ -2458,8 +2458,8 @@ mod tests {
     #[case::lit_set(StereoCoset::lit_set([1, 2]))]
     #[case::term_swap(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))]
     fn test_stereo_coset_dsl_into_ast(#[case] ast: StereoCoset) {
-        assert_eq!(StereoCosetDsl(ast.clone()).into_ast(&()), ast);
-        assert_eq!(StereoCosetDsl::from_ast(&ast, &()), StereoCosetDsl(ast));
+        assert_eq!(StereoCosetDsl(ast.clone()).into_ir(&()), ast);
+        assert_eq!(StereoCosetDsl::from_ir(&ast, &()), StereoCosetDsl(ast));
     }
 
     #[rustfmt::skip]
@@ -2510,8 +2510,8 @@ mod tests {
     #[case::not_stereo(TetrahedralStereoAst::NotStereo)]
     #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]
     fn test_tetrahedral_stereo_dsl_into_ast(#[case] ast: TetrahedralStereoAst) {
-        assert_eq!(TetrahedralStereoDsl(ast.clone()).into_ast(&()), ast);
-        assert_eq!(TetrahedralStereoDsl::from_ast(&ast, &()), TetrahedralStereoDsl(ast));
+        assert_eq!(TetrahedralStereoDsl(ast.clone()).into_ir(&()), ast);
+        assert_eq!(TetrahedralStereoDsl::from_ir(&ast, &()), TetrahedralStereoDsl(ast));
     }
 
     #[rustfmt::skip]

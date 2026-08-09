@@ -1,6 +1,6 @@
 //! Conversion benchmarks for `MoleculeDsl` ↔ `MoleculeAst`.
 //!
-//! Measures the `FromAst` and `IntoAst` paths on `MoleculeDsl` — separate
+//! Measures the `FromIr` and `IntoIr` paths on `MoleculeDsl` — separate
 //! from `FromEdn`/`ToEdn`, which bypass these traits via `MoleculeInput`.
 //! Used as a regression net for `MoleculeMetadata` / DSL-newtype refactors.
 
@@ -9,7 +9,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use umol_edn::FromEdn;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_graph_ir::ir::{FromAst, IntoAst};
+use umol_graph_ir::ir::{FromIr, IntoIr};
 
 #[path = "fixtures.rs"]
 mod fixtures;
@@ -38,7 +38,7 @@ fn bench_molecule_from_ast(c: &mut Criterion) {
         let ast = MoleculeDsl::from_edn_str(source).unwrap().into_parts().0;
         g.throughput(Throughput::Bytes(source.len() as u64));
         g.bench_function(label, |b| {
-            b.iter(|| MoleculeDsl::from_ast(black_box(&ast), &cfg))
+            b.iter(|| MoleculeDsl::from_ir(black_box(&ast), &cfg))
         });
     }
     g.finish();
@@ -53,7 +53,7 @@ fn bench_molecule_into_ast(c: &mut Criterion) {
         g.bench_function(label, |b| {
             b.iter_batched(
                 || dsl.clone(),
-                |dsl| dsl.into_ast(&cfg),
+                |dsl| dsl.into_ir(&cfg),
                 BatchSize::SmallInput,
             )
         });

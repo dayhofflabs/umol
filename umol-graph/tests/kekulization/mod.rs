@@ -7,7 +7,7 @@ use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, 
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
-    ElementAst, IntoAst, UnpairedElectronsAst, ValueAst,
+    ElementAst, IntoIr, UnpairedElectronsAst, ValueAst,
 };
 use umol_utils::solution::Solution;
 
@@ -207,7 +207,7 @@ struct KekulizationFixture {
 )]
 fn test_kekulization_fixture(#[case] source: &str, #[case] expected: KekulizationFixture) {
     let dsl: MoleculeDsl = source.parse().unwrap();
-    let molecule = dsl.into_ast(&MoleculeDefaults::ground());
+    let molecule = dsl.into_ir(&MoleculeDefaults::ground());
 
     assert!(molecule.is_ground());
     assert_eq!(molecule.aromatic_systems().count(), 1);
@@ -325,9 +325,9 @@ fn test_kekulization_fixture_output(
     #[case] expected_exposed_atom: Option<AtomId>,
 ) {
     let input_dsl: MoleculeDsl = source.parse().unwrap();
-    let input = input_dsl.into_ast(&MoleculeDefaults::ground());
+    let input = input_dsl.into_ir(&MoleculeDefaults::ground());
     let expected_dsl: MoleculeDsl = expected_source.parse().unwrap();
-    let expected = expected_dsl.into_ast(&MoleculeDefaults::ground());
+    let expected = expected_dsl.into_ir(&MoleculeDefaults::ground());
     let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id).collect();
     let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
 
@@ -450,7 +450,7 @@ fn test_kekulization_fixture_output_error(
     let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")
         .parse()
         .unwrap();
-    let mut input = dsl.into_ast(&MoleculeDefaults::ground());
+    let mut input = dsl.into_ir(&MoleculeDefaults::ground());
     input.atom_mut(AtomId(4)).ast.charge = exposed_charge;
     input.atom_mut(AtomId(4)).ast.lone_pairs = exposed_lone_pairs;
     let original = input.clone();

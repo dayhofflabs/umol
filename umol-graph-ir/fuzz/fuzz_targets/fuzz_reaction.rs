@@ -1,6 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use umol_graph_ir::ir::{IntoAst, SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_ir::ir::{IntoIr, SubstructureMatchAlgorithm, SubstructureMatchConfig};
 use umol_graph_ir::dsl::{ReactionDefaults, ReactionDsl};
 use umol_edn::{read_string, FromEdn};
 use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
@@ -19,7 +19,7 @@ fuzz_target!(|data: &str| {
     assert_eq!(stream, tree, "streaming and tree reaction parsers disagree");
 
     if let Some(dsl) = stream {
-        let reaction = dsl.into_ast(&ReactionDefaults::default());
+        let reaction = dsl.into_ir(&ReactionDefaults::default());
         let _ = reaction.validate_application(&reaction.lhs);
         if let Ok(applications) = reaction.apply(
             &reaction.lhs,

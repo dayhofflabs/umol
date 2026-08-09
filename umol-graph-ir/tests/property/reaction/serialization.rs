@@ -48,7 +48,7 @@ proptest! {
     #[test]
     fn test_reaction_defaults_roundtrip(reaction in comprehensive_reaction_strategy()) {
         let defaults = ReactionDefaults::new();
-        let rebuilt = ReactionDsl::from_ast(&reaction, &defaults).into_ast(&defaults);
+        let rebuilt = ReactionDsl::from_ir(&reaction, &defaults).into_ir(&defaults);
         prop_assert_eq!(rebuilt, reaction);
     }
 
@@ -56,8 +56,8 @@ proptest! {
     fn test_reaction_defaults_roundtrip_ground(reaction in comprehensive_reaction_strategy()) {
         let required = ReactionDefaults::new();
         let ground = ReactionDefaults::ground();
-        let grounded = ReactionDsl::from_ast(&reaction, &required).into_ast(&ground);
-        let rebuilt = ReactionDsl::from_ast(&grounded, &ground).into_ast(&ground);
+        let grounded = ReactionDsl::from_ir(&reaction, &required).into_ir(&ground);
+        let rebuilt = ReactionDsl::from_ir(&grounded, &ground).into_ir(&ground);
         prop_assert_eq!(rebuilt, grounded);
     }
 
@@ -88,8 +88,8 @@ proptest! {
         if let Ok(span) = reaction.to_reaction_span() {
             let required = MoleculeDefaults::new();
             let ground = MoleculeDefaults::ground();
-            let grounded = ReactionSpanDsl::from_ast(&span, &required).into_ast(&ground);
-            let rebuilt = ReactionSpanDsl::from_ast(&grounded, &ground).into_ast(&ground);
+            let grounded = ReactionSpanDsl::from_ir(&span, &required).into_ir(&ground);
+            let rebuilt = ReactionSpanDsl::from_ir(&grounded, &ground).into_ir(&ground);
             prop_assert_eq!(rebuilt, grounded);
         }
     }

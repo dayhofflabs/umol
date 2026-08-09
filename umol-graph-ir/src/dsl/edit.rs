@@ -63,7 +63,7 @@ use crate::ir::stereo::{
     StereoAtomUpdate, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate,
     StereoKind,
 };
-use crate::ir::traits::{FromAst, IntoAst, Lattice};
+use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
 /// Surface form shared by every typed handle in a standalone edit document.
 ///
@@ -221,10 +221,10 @@ impl ToEdn for EditsDsl {
     }
 }
 
-impl FromAst<Edits> for EditsDsl {
+impl FromIr<Edits> for EditsDsl {
     type Ctx = MoleculeDefaults;
 
-    fn from_ast(edits: &Edits, defaults: &Self::Ctx) -> Self {
+    fn from_ir(edits: &Edits, defaults: &Self::Ctx) -> Self {
         let mut inputs = Vec::new();
         for edit in edits.iter() {
             inputs.extend(
@@ -236,10 +236,10 @@ impl FromAst<Edits> for EditsDsl {
     }
 }
 
-impl IntoAst<Edits> for EditsDsl {
+impl IntoIr<Edits> for EditsDsl {
     type Ctx = MoleculeDefaults;
 
-    fn into_ast(self, defaults: &Self::Ctx) -> Edits {
+    fn into_ir(self, defaults: &Self::Ctx) -> Edits {
         let mut edits = Edits::new();
         for input in self.inputs {
             input
@@ -606,7 +606,7 @@ impl EditInput {
     fn append_to(self, edits: &mut Edits, defaults: &MoleculeDefaults) -> Result<(), DeError> {
         match self {
             Self::AtomAdd(ast) => {
-                edits.add_atom(ast.into_ast(&defaults.atom));
+                edits.add_atom(ast.into_ir(&defaults.atom));
             }
             Self::AtomRemove(id) => edits.remove_atom(id),
             Self::AtomModify { id, expect, update } => {
@@ -616,7 +616,7 @@ impl EditInput {
                 atoms: [first, second],
                 ast,
             } => {
-                edits.add_bond(first, second, ast.into_ast(&defaults.bond));
+                edits.add_bond(first, second, ast.into_ir(&defaults.bond));
             }
             Self::BondRemove(id) => edits.remove_bond(id),
             Self::BondModify { id, expect, update } => {
@@ -628,61 +628,61 @@ impl EditInput {
                 ast,
             } => {
                 donors.push(acceptor);
-                edits.add_dative_bond(donors, ast.into_ast(&defaults.dative_bond));
+                edits.add_dative_bond(donors, ast.into_ir(&defaults.dative_bond));
             }
             Self::DativeBondsRemove(removes) => edits.remove_dative_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ast(&defaults.dative_bond)))
+                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.dative_bond)))
                     .collect(),
             ),
             Self::DativeBondModify { id, expect, update } => {
                 append_dative_bond_modify(edits, id, expect, update)?;
             }
             Self::AromaticSystemAdd { atoms, ast } => {
-                edits.add_aromatic_system(atoms, ast.into_ast(&defaults.aromatic_system));
+                edits.add_aromatic_system(atoms, ast.into_ir(&defaults.aromatic_system));
             }
             Self::AromaticSystemsRemove(removes) => edits.remove_aromatic_systems(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ast(&defaults.aromatic_system)))
+                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.aromatic_system)))
                     .collect(),
             ),
             Self::AromaticSystemModify { id, expect, update } => {
                 append_aromatic_system_modify(edits, id, expect, update)?;
             }
             Self::MulticenterBondAdd { atoms, ast } => {
-                edits.add_multicenter_bond(atoms, ast.into_ast(&defaults.multicenter_bond));
+                edits.add_multicenter_bond(atoms, ast.into_ir(&defaults.multicenter_bond));
             }
             Self::MulticenterBondsRemove(removes) => edits.remove_multicenter_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ast(&defaults.multicenter_bond)))
+                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.multicenter_bond)))
                     .collect(),
             ),
             Self::MulticenterBondModify { id, expect, update } => {
                 append_multicenter_bond_modify(edits, id, expect, update)?;
             }
             Self::NoncovalentBondAdd { atoms, ast } => {
-                edits.add_noncovalent_bond(atoms, ast.into_ast(&defaults.noncovalent_bond));
+                edits.add_noncovalent_bond(atoms, ast.into_ir(&defaults.noncovalent_bond));
             }
             Self::NoncovalentBondsRemove(removes) => edits.remove_noncovalent_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ast(&defaults.noncovalent_bond)))
+                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.noncovalent_bond)))
                     .collect(),
             ),
             Self::NoncovalentBondModify { id, expect, update } => {
                 append_noncovalent_bond_modify(edits, id, expect, update)?;
             }
             Self::StereoAtomAdd { site, ligands, ast } => {
-                edits.add_stereo_atom(site, ligands, ast.into_ast(&defaults.stereo_atom));
+                edits.add_stereo_atom(site, ligands, ast.into_ir(&defaults.stereo_atom));
             }
             Self::StereoAtomsRemove(removes) => edits.remove_stereo_atoms(
                 removes
                     .into_iter()
                     .map(|(id, site, ligands, ast)| {
-                        (id, site, ligands, ast.into_ast(&defaults.stereo_atom))
+                        (id, site, ligands, ast.into_ir(&defaults.stereo_atom))
                     })
                     .collect(),
             ),
@@ -690,13 +690,13 @@ impl EditInput {
                 append_stereo_atom_modify(edits, id, expect, update)?;
             }
             Self::StereoBondAdd { site, ligands, ast } => {
-                edits.add_stereo_bond(site, ligands, ast.into_ast(&defaults.stereo_bond));
+                edits.add_stereo_bond(site, ligands, ast.into_ir(&defaults.stereo_bond));
             }
             Self::StereoBondsRemove(removes) => edits.remove_stereo_bonds(
                 removes
                     .into_iter()
                     .map(|(id, site, ligands, ast)| {
-                        (id, site, ligands, ast.into_ast(&defaults.stereo_bond))
+                        (id, site, ligands, ast.into_ir(&defaults.stereo_bond))
                     })
                     .collect(),
             ),
@@ -714,13 +714,13 @@ impl EditInput {
         let inputs = match edit {
             Edit::AddAtoms { atoms } => atoms
                 .iter()
-                .map(|ast| Self::AtomAdd(AtomDsl::from_ast(ast, &defaults.atom)))
+                .map(|ast| Self::AtomAdd(AtomDsl::from_ir(ast, &defaults.atom)))
                 .collect(),
             Edit::AddBonds { bonds } => bonds
                 .iter()
                 .map(|bond| Self::BondAdd {
                     atoms: bond.endpoints.clone(),
-                    ast: BondDsl::from_ast(&bond.ast, &defaults.bond),
+                    ast: BondDsl::from_ir(&bond.ast, &defaults.bond),
                 })
                 .collect(),
             Edit::RemoveTopology { atoms, bonds } if atoms.len() == 1 && bonds.is_empty() => {
@@ -772,7 +772,7 @@ impl EditInput {
                 vec![Self::DativeBondAdd {
                     donors: donors.to_vec(),
                     acceptor: acceptor.clone(),
-                    ast: DativeBondDsl::from_ast(ast, &defaults.dative_bond),
+                    ast: DativeBondDsl::from_ir(ast, &defaults.dative_bond),
                 }]
             }
             Edit::RemoveDativeBonds { removes } => vec![Self::DativeBondsRemove(
@@ -787,7 +787,7 @@ impl EditInput {
                         Ok((
                             id.clone(),
                             atoms.clone(),
-                            DativeBondDsl::from_ast(ast, &defaults.dative_bond),
+                            DativeBondDsl::from_ir(ast, &defaults.dative_bond),
                         ))
                     })
                     .collect::<Result<_, _>>()?,
@@ -810,7 +810,7 @@ impl EditInput {
             }
             Edit::AddAromaticSystem { atoms, ast } => vec![Self::AromaticSystemAdd {
                 atoms: atoms.clone(),
-                ast: AromaticSystemDsl::from_ast(ast, &defaults.aromatic_system),
+                ast: AromaticSystemDsl::from_ir(ast, &defaults.aromatic_system),
             }],
             Edit::RemoveAromaticSystems { removes } => vec![Self::AromaticSystemsRemove(
                 removes
@@ -819,7 +819,7 @@ impl EditInput {
                         (
                             id.clone(),
                             atoms.clone(),
-                            AromaticSystemDsl::from_ast(ast, &defaults.aromatic_system),
+                            AromaticSystemDsl::from_ir(ast, &defaults.aromatic_system),
                         )
                     })
                     .collect(),
@@ -842,7 +842,7 @@ impl EditInput {
             }
             Edit::AddMulticenterBond { atoms, ast } => vec![Self::MulticenterBondAdd {
                 atoms: atoms.clone(),
-                ast: MulticenterBondDsl::from_ast(ast, &defaults.multicenter_bond),
+                ast: MulticenterBondDsl::from_ir(ast, &defaults.multicenter_bond),
             }],
             Edit::RemoveMulticenterBonds { removes } => vec![Self::MulticenterBondsRemove(
                 removes
@@ -851,7 +851,7 @@ impl EditInput {
                         (
                             id.clone(),
                             atoms.clone(),
-                            MulticenterBondDsl::from_ast(ast, &defaults.multicenter_bond),
+                            MulticenterBondDsl::from_ir(ast, &defaults.multicenter_bond),
                         )
                     })
                     .collect(),
@@ -874,7 +874,7 @@ impl EditInput {
             }
             Edit::AddNoncovalentBond { atoms, ast } => vec![Self::NoncovalentBondAdd {
                 atoms: atoms.clone(),
-                ast: NoncovalentBondDsl::from_ast(ast, &defaults.noncovalent_bond),
+                ast: NoncovalentBondDsl::from_ir(ast, &defaults.noncovalent_bond),
             }],
             Edit::RemoveNoncovalentBonds { removes } => vec![Self::NoncovalentBondsRemove(
                 removes
@@ -883,7 +883,7 @@ impl EditInput {
                         (
                             id.clone(),
                             atoms.clone(),
-                            NoncovalentBondDsl::from_ast(ast, &defaults.noncovalent_bond),
+                            NoncovalentBondDsl::from_ir(ast, &defaults.noncovalent_bond),
                         )
                     })
                     .collect(),
@@ -907,7 +907,7 @@ impl EditInput {
             Edit::AddStereoAtom { site, ligands, ast } => vec![Self::StereoAtomAdd {
                 site: site.clone(),
                 ligands: ligands.clone(),
-                ast: StereoAtomDsl::from_ast(ast, &defaults.stereo_atom),
+                ast: StereoAtomDsl::from_ir(ast, &defaults.stereo_atom),
             }],
             Edit::RemoveStereoAtoms { removes } => vec![Self::StereoAtomsRemove(
                 removes
@@ -917,7 +917,7 @@ impl EditInput {
                             id.clone(),
                             site.clone(),
                             ligands.clone(),
-                            StereoAtomDsl::from_ast(ast, &defaults.stereo_atom),
+                            StereoAtomDsl::from_ir(ast, &defaults.stereo_atom),
                         )
                     })
                     .collect(),
@@ -941,7 +941,7 @@ impl EditInput {
             Edit::AddStereoBond { site, ligands, ast } => vec![Self::StereoBondAdd {
                 site: site.clone(),
                 ligands: ligands.clone(),
-                ast: StereoBondDsl::from_ast(ast, &defaults.stereo_bond),
+                ast: StereoBondDsl::from_ir(ast, &defaults.stereo_bond),
             }],
             Edit::RemoveStereoBonds { removes } => vec![Self::StereoBondsRemove(
                 removes
@@ -951,7 +951,7 @@ impl EditInput {
                             id.clone(),
                             site.clone(),
                             ligands.clone(),
-                            StereoBondDsl::from_ast(ast, &defaults.stereo_bond),
+                            StereoBondDsl::from_ir(ast, &defaults.stereo_bond),
                         )
                     })
                     .collect(),
@@ -1571,8 +1571,8 @@ fn parse_atom_checked_update(
     helper.finalize()?;
     Ok((
         AtomHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1605,8 +1605,8 @@ fn parse_bond_checked_update(
     helper.finalize()?;
     Ok((
         BondHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1639,8 +1639,8 @@ fn parse_dative_bond_checked_update(
     helper.finalize()?;
     Ok((
         DativeBondHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1680,8 +1680,8 @@ fn parse_aromatic_system_checked_update(
     helper.finalize()?;
     Ok((
         AromaticSystemHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1721,8 +1721,8 @@ fn parse_multicenter_bond_checked_update(
     helper.finalize()?;
     Ok((
         MulticenterBondHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1762,8 +1762,8 @@ fn parse_noncovalent_bond_checked_update(
     helper.finalize()?;
     Ok((
         NoncovalentBondHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1796,8 +1796,8 @@ fn parse_stereo_atom_checked_update(
     helper.finalize()?;
     Ok((
         StereoAtomHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -1830,8 +1830,8 @@ fn parse_stereo_bond_checked_update(
     helper.finalize()?;
     Ok((
         StereoBondHandle::from_edn(&parts[0])?,
-        expect.into_ast(&()),
-        update.into_ast(&()),
+        expect.into_ir(&()),
+        update.into_ir(&()),
     ))
 }
 
@@ -3244,42 +3244,42 @@ fn parse_constraint(edn: &Edn<'_>, handles: &mut ConstraintHandles) -> Result<Co
             let (handle, constraint) = parse_pair(payload, key)?;
             Constraint::Atom(
                 handles.atom(AtomHandle::from_edn(handle)?),
-                AtomConstraintDsl::from_edn(constraint)?.into_ast(&()),
+                AtomConstraintDsl::from_edn(constraint)?.into_ir(&()),
             )
         }
         "bond" => {
             let (handle, constraint) = parse_pair(payload, key)?;
             Constraint::Bond(
                 handles.bond(BondHandle::from_edn(handle)?),
-                BondConstraintDsl::from_edn(constraint)?.into_ast(&()),
+                BondConstraintDsl::from_edn(constraint)?.into_ir(&()),
             )
         }
         "dative-bond" => {
             let (handle, constraint) = parse_pair(payload, key)?;
             Constraint::DativeBond(
                 handles.dative_bond(DativeBondHandle::from_edn(handle)?),
-                DativeBondConstraintDsl::from_edn(constraint)?.into_ast(),
+                DativeBondConstraintDsl::from_edn(constraint)?.into_ir(),
             )
         }
         "aromatic-system" => {
             let (handle, constraint) = parse_pair(payload, key)?;
             Constraint::AromaticSystem(
                 handles.aromatic_system(AromaticSystemHandle::from_edn(handle)?),
-                AromaticSystemConstraintDsl::from_edn(constraint)?.into_ast(),
+                AromaticSystemConstraintDsl::from_edn(constraint)?.into_ir(),
             )
         }
         "multicenter-bond" => {
             let (handle, constraint) = parse_pair(payload, key)?;
             Constraint::MulticenterBond(
                 handles.multicenter_bond(MulticenterBondHandle::from_edn(handle)?),
-                MulticenterBondConstraintDsl::from_edn(constraint)?.into_ast(),
+                MulticenterBondConstraintDsl::from_edn(constraint)?.into_ir(),
             )
         }
         "noncovalent-bond" => {
             let (handle, constraint) = parse_pair(payload, key)?;
             Constraint::NoncovalentBond(
                 handles.noncovalent_bond(NoncovalentBondHandle::from_edn(handle)?),
-                NoncovalentBondConstraintDsl::from_edn(constraint)?.into_ast(),
+                NoncovalentBondConstraintDsl::from_edn(constraint)?.into_ir(),
             )
         }
         "stereo-atom" => {
@@ -3319,42 +3319,42 @@ fn render_constraint(constraint: &Constraint, handles: &ConstraintHandles) -> Ed
         Constraint::Atom(id, constraint) => entity_leaf_edn(
             "atom",
             handles.atoms[id.index()].to_edn(),
-            AtomConstraintDsl::from_ast(constraint, &()).to_edn(),
+            AtomConstraintDsl::from_ir(constraint, &()).to_edn(),
         ),
         Constraint::Bond(id, constraint) => entity_leaf_edn(
             "bond",
             handles.bonds[id.index()].to_edn(),
-            BondConstraintDsl::from_ast(constraint, &()).to_edn(),
+            BondConstraintDsl::from_ir(constraint, &()).to_edn(),
         ),
         Constraint::DativeBond(id, constraint) => entity_leaf_edn(
             "dative-bond",
             handles.dative_bonds[id.index()].to_edn(),
-            DativeBondConstraintDsl::from_ast(constraint).to_edn(),
+            DativeBondConstraintDsl::from_ir(constraint).to_edn(),
         ),
         Constraint::AromaticSystem(id, constraint) => entity_leaf_edn(
             "aromatic-system",
             handles.aromatic_systems[id.index()].to_edn(),
-            AromaticSystemConstraintDsl::from_ast(constraint).to_edn(),
+            AromaticSystemConstraintDsl::from_ir(constraint).to_edn(),
         ),
         Constraint::MulticenterBond(id, constraint) => entity_leaf_edn(
             "multicenter-bond",
             handles.multicenter_bonds[id.index()].to_edn(),
-            MulticenterBondConstraintDsl::from_ast(constraint).to_edn(),
+            MulticenterBondConstraintDsl::from_ir(constraint).to_edn(),
         ),
         Constraint::NoncovalentBond(id, constraint) => entity_leaf_edn(
             "noncovalent-bond",
             handles.noncovalent_bonds[id.index()].to_edn(),
-            NoncovalentBondConstraintDsl::from_ast(constraint).to_edn(),
+            NoncovalentBondConstraintDsl::from_ir(constraint).to_edn(),
         ),
         Constraint::StereoAtom(id, kind, constraint) => entity_leaf_edn(
             "stereo-atom",
             handles.stereo_atoms[id.index()].to_edn(),
-            StereoAtomConstraintDsl::from_ast(constraint, kind).to_edn(),
+            StereoAtomConstraintDsl::from_ir(constraint, kind).to_edn(),
         ),
         Constraint::StereoBond(id, kind, constraint) => entity_leaf_edn(
             "stereo-bond",
             handles.stereo_bonds[id.index()].to_edn(),
-            StereoBondConstraintDsl::from_ast(constraint, kind).to_edn(),
+            StereoBondConstraintDsl::from_ir(constraint, kind).to_edn(),
         ),
         Constraint::Relational(constraint) => render_relational_constraint(constraint, handles),
         Constraint::Molecule(constraint) => render_molecule_constraint(constraint, handles),
@@ -3455,7 +3455,7 @@ fn parse_molecule_constraint(
             helper.finalize()?;
             MoleculeConstraint::ChargeSum {
                 atoms,
-                sum: sum.into_ast(&()),
+                sum: sum.into_ir(&()),
             }
         }
         "unpaired-electron-coupling" => {
@@ -3486,7 +3486,7 @@ fn parse_molecule_constraint(
             helper.finalize()?;
             MoleculeConstraint::BondOrderSum {
                 bonds,
-                sum: sum.into_ast(&()),
+                sum: sum.into_ir(&()),
             }
         }
         "connected" => {
@@ -3520,7 +3520,7 @@ fn render_molecule_constraint(
                     ),
                 );
             }
-            map.insert(Edn::keyword("sum"), ValueDsl::from_ast(sum, &()).to_edn());
+            map.insert(Edn::keyword("sum"), ValueDsl::from_ir(sum, &()).to_edn());
             single_key_map("charge-sum", Edn::Map(map))
         }
         MoleculeConstraint::UnpairedElectronCoupling {
@@ -3558,7 +3558,7 @@ fn render_molecule_constraint(
                     ),
                 );
             }
-            map.insert(Edn::keyword("sum"), ValueDsl::from_ast(sum, &()).to_edn());
+            map.insert(Edn::keyword("sum"), ValueDsl::from_ir(sum, &()).to_edn());
             single_key_map("bond-order-sum", Edn::Map(map))
         }
         MoleculeConstraint::Connected { atoms } => {
@@ -3596,7 +3596,7 @@ fn parse_sub_pattern(
             "sub-pattern molecule must be anonymous: no :id or :atom-aliases".to_string(),
         ));
     }
-    let pattern_context = MoleculeContext::from_ast(&pattern);
+    let pattern_context = MoleculeContext::from_ir(&pattern);
     let anchor = parse_sub_pattern_anchor(&anchor, handles, &pattern_context)?;
     Ok(MoleculeConstraint::SubPattern {
         anchor,
@@ -3874,14 +3874,14 @@ fn parse_relational_constraint(
             let (bond, predicate) = parse_pair(payload, key)?;
             R::DativeBondAllDonors {
                 bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "dative-bond-any-donor" => {
             let (bond, predicate) = parse_pair(payload, key)?;
             R::DativeBondAnyDonor {
                 bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "dative-bond-acceptor" => {
@@ -3895,7 +3895,7 @@ fn parse_relational_constraint(
             let (bond, predicate) = parse_pair(payload, key)?;
             R::DativeBondAcceptorSatisfies {
                 bond: handles.dative_bond(DativeBondHandle::from_edn(bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "dative-bond-parallels" => {
@@ -3936,14 +3936,14 @@ fn parse_relational_constraint(
             let (system, predicate) = parse_pair(payload, key)?;
             R::AromaticSystemAllAtoms {
                 system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "aromatic-system-any-atom" => {
             let (system, predicate) = parse_pair(payload, key)?;
             R::AromaticSystemAnyAtom {
                 system: handles.aromatic_system(AromaticSystemHandle::from_edn(system)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "multicenter-bond-atoms" => {
@@ -3977,14 +3977,14 @@ fn parse_relational_constraint(
             let (bond, predicate) = parse_pair(payload, key)?;
             R::MulticenterBondAllAtoms {
                 bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "multicenter-bond-any-atom" => {
             let (bond, predicate) = parse_pair(payload, key)?;
             R::MulticenterBondAnyAtom {
                 bond: handles.multicenter_bond(MulticenterBondHandle::from_edn(bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "noncovalent-bond-ends" => {
@@ -4011,8 +4011,8 @@ fn parse_relational_constraint(
             R::NoncovalentBondEndsSatisfy {
                 bond: handles.noncovalent_bond(NoncovalentBondHandle::from_edn(bond)?),
                 predicates: [
-                    Box::new(AtomConstraintDsl::from_edn(first)?.into_ast(&())),
-                    Box::new(AtomConstraintDsl::from_edn(second)?.into_ast(&())),
+                    Box::new(AtomConstraintDsl::from_edn(first)?.into_ir(&())),
+                    Box::new(AtomConstraintDsl::from_edn(second)?.into_ir(&())),
                 ],
             }
         }
@@ -4044,14 +4044,14 @@ fn parse_relational_constraint(
             let (stereo_atom, predicate) = parse_pair(payload, key)?;
             R::StereoAtomAllLigands {
                 stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "stereo-atom-any-ligand" => {
             let (stereo_atom, predicate) = parse_pair(payload, key)?;
             R::StereoAtomAnyLigand {
                 stereo_atom: handles.stereo_atom(StereoAtomHandle::from_edn(stereo_atom)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "stereo-bond-site" => {
@@ -4082,14 +4082,14 @@ fn parse_relational_constraint(
             let (stereo_bond, predicate) = parse_pair(payload, key)?;
             R::StereoBondAllLigands {
                 stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         "stereo-bond-any-ligand" => {
             let (stereo_bond, predicate) = parse_pair(payload, key)?;
             R::StereoBondAnyLigand {
                 stereo_bond: handles.stereo_bond(StereoBondHandle::from_edn(stereo_bond)?),
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ast(&())),
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?.into_ir(&())),
             }
         }
         other => {
@@ -4134,14 +4134,14 @@ fn render_relational_constraint(
             "dative-bond-all-donors",
             relation_pair(
                 handles.dative_bonds[bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::DativeBondAnyDonor { bond, predicate } => (
             "dative-bond-any-donor",
             relation_pair(
                 handles.dative_bonds[bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::DativeBondAcceptor { bond, atom } => (
@@ -4155,7 +4155,7 @@ fn render_relational_constraint(
             "dative-bond-acceptor-satisfies",
             relation_pair(
                 handles.dative_bonds[bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::DativeBondParallels { dative, parallel } => (
@@ -4190,14 +4190,14 @@ fn render_relational_constraint(
             "aromatic-system-all-atoms",
             relation_pair(
                 handles.aromatic_systems[system.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::AromaticSystemAnyAtom { system, predicate } => (
             "aromatic-system-any-atom",
             relation_pair(
                 handles.aromatic_systems[system.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::MulticenterBondAtoms { bond, atoms } => (
@@ -4225,14 +4225,14 @@ fn render_relational_constraint(
             "multicenter-bond-all-atoms",
             relation_pair(
                 handles.multicenter_bonds[bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::MulticenterBondAnyAtom { bond, predicate } => (
             "multicenter-bond-any-atom",
             relation_pair(
                 handles.multicenter_bonds[bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::NoncovalentBondEnds { bond, atoms } => (
@@ -4261,8 +4261,8 @@ fn render_relational_constraint(
                 handles.noncovalent_bonds[bond.index()].to_edn(),
                 Edn::Vector(
                     vec![
-                        AtomConstraintDsl::from_ast(&predicates[0], &()).to_edn(),
-                        AtomConstraintDsl::from_ast(&predicates[1], &()).to_edn(),
+                        AtomConstraintDsl::from_ir(&predicates[0], &()).to_edn(),
+                        AtomConstraintDsl::from_ir(&predicates[1], &()).to_edn(),
                     ]
                     .into(),
                 ),
@@ -4296,7 +4296,7 @@ fn render_relational_constraint(
             "stereo-atom-all-ligands",
             relation_pair(
                 handles.stereo_atoms[stereo_atom.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::StereoAtomAnyLigand {
@@ -4306,7 +4306,7 @@ fn render_relational_constraint(
             "stereo-atom-any-ligand",
             relation_pair(
                 handles.stereo_atoms[stereo_atom.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::StereoBondSite { stereo_bond, bond } => (
@@ -4337,7 +4337,7 @@ fn render_relational_constraint(
             "stereo-bond-all-ligands",
             relation_pair(
                 handles.stereo_bonds[stereo_bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
         R::StereoBondAnyLigand {
@@ -4347,7 +4347,7 @@ fn render_relational_constraint(
             "stereo-bond-any-ligand",
             relation_pair(
                 handles.stereo_bonds[stereo_bond.index()].to_edn(),
-                AtomConstraintDsl::from_ast(predicate, &()).to_edn(),
+                AtomConstraintDsl::from_ir(predicate, &()).to_edn(),
             ),
         ),
     };
@@ -4452,8 +4452,8 @@ mod tests {
         let dsl = EditsDsl::from_str(input).unwrap();
         let rendered = dsl.to_edn();
         let displayed = dsl.to_string();
-        let edits = dsl.into_ast(&defaults);
-        let rebuilt = EditsDsl::from_ast(&expected, &defaults);
+        let edits = dsl.into_ir(&defaults);
+        let rebuilt = EditsDsl::from_ir(&expected, &defaults);
 
         assert_eq!(edits, expected);
         assert_eq!(rendered, read_string(input).unwrap());
