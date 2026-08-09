@@ -19,7 +19,7 @@ use super::error::{PResult, ParseError};
 use super::predicate::{fmt_ring_membership, ring_membership};
 use super::value::{fmt_value, value};
 use crate::ir::boolean::BooleanForm;
-use crate::ir::constraint::{DativeBondConstraintForm, RingMembershipAst, RingScope};
+use crate::ir::constraint::{DativeBondConstraintForm, RingMembershipForm, RingScope};
 use crate::ir::dative::{DativeBondForm, DativeBondUpdate};
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::NumForm;
@@ -399,7 +399,7 @@ fn fmt_undetermined_constraint(
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DativeBondConstraintDsl {
     Aromatic(BooleanForm),
-    RingMembership(RingMembershipAst),
+    RingMembership(RingMembershipForm),
 }
 
 impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
@@ -719,8 +719,8 @@ mod tests {
     #[case::aromatic("{:aromatic true}", DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)))]
     #[case::aromatic_false("{:aromatic false}", DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)))]
     #[case::aromatic_undetermined("{:aromatic :undetermined}", DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined))]
-    #[case::ring_membership_all("{:ring-membership {:count 2}}", DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::All, count: NumForm::Lit(2) }))]
-    #[case::ring_membership_size("{:ring-membership {:size 6 :count 1}}", DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
+    #[case::ring_membership_all("{:ring-membership {:count 2}}", DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::All, count: NumForm::Lit(2) }))]
+    #[case::ring_membership_size("{:ring-membership {:size 6 :count 1}}", DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
     fn test_dative_bond_constraint_dsl_from_edn(
         #[case] input: &str,
         #[case] expected: DativeBondConstraintDsl,
@@ -749,8 +749,8 @@ mod tests {
     #[case::aromatic(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)), "{:aromatic true}")]
     #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)), "{:aromatic false}")]
     #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined), "{:aromatic :undetermined}")]
-    #[case::ring_membership_all(DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::All, count: NumForm::Lit(2) }), "{:ring-membership {:count 2}}")]
-    #[case::ring_membership_size(DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }), "{:ring-membership {:size 6 :count 1}}")]
+    #[case::ring_membership_all(DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::All, count: NumForm::Lit(2) }), "{:ring-membership {:count 2}}")]
+    #[case::ring_membership_size(DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }), "{:ring-membership {:size 6 :count 1}}")]
     fn test_dative_bond_constraint_dsl_to_edn(
         #[case] input: DativeBondConstraintDsl,
         #[case] expected: &str,
@@ -763,7 +763,7 @@ mod tests {
     #[case::aromatic(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)))]
     #[case::aromatic_false(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)), DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)))]
     #[case::aromatic_undetermined(DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined), DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined))]
-    #[case::ring_membership(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64), DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
+    #[case::ring_membership(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64), DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
     fn test_dative_bond_constraint_dsl_from_ast(
         #[case] input: DativeBondConstraintForm,
         #[case] expected: DativeBondConstraintDsl,
@@ -776,7 +776,7 @@ mod tests {
     #[case::aromatic(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)))]
     #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)))]
     #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined), DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined))]
-    #[case::ring_membership(DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }), DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64))]
+    #[case::ring_membership(DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }), DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64))]
     fn test_dative_bond_constraint_dsl_into_ast(
         #[case] input: DativeBondConstraintDsl,
         #[case] expected: DativeBondConstraintForm,

@@ -2213,12 +2213,12 @@ mod tests {
         NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
         NoncovalentBondKind as GraphIrNoncovalentBondKind,
         NoncovalentBondKindForm as GraphIrNoncovalentBondKindForm, NumForm as GraphIrNumForm,
-        StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
-        StereoBondConstraintAst as GraphIrStereoBondConstraintAst,
+        StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
+        StereoBondConstraintForm as GraphIrStereoBondConstraintForm,
         StereoConfigurationForm as GraphIrStereoConfigurationForm,
         StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
         StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
-        Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
+        Stereogenicity as GraphIrStereogenicity, StereogenicityForm as GraphIrStereogenicityForm,
         UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
     use umol_perm::Permutation as PermPermutation;
@@ -4158,26 +4158,26 @@ mod tests {
         id: GraphIrStereoAtomId(5),
         kind: Some(GraphIrStereoKind::Tetrahedral),
         old: None,
-        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::constraint_removed_without_kind(GraphIrStereoAtomDelta::ModifyConstraint {
         id: GraphIrStereoAtomId(5),
         kind: None,
-        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
         new: None,
     })]
     #[case::constraint_modified(GraphIrStereoAtomDelta::ModifyConstraint {
         id: GraphIrStereoAtomId(5),
         kind: Some(GraphIrStereoKind::Tetrahedral),
-        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
-        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::apply(GraphIrStereoAtomDelta::Apply {
@@ -4317,8 +4317,8 @@ mod tests {
             id: GraphIrStereoAtomId(5),
             kind: Some(GraphIrStereoKind::Tetrahedral),
             old: None,
-            new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-                GraphIrStereogenicityAst::Undetermined,
+            new: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+                GraphIrStereogenicityForm::Undetermined,
             )),
         },
         "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
@@ -4395,26 +4395,26 @@ mod tests {
         id: GraphIrStereoAtomId(5),
         kind: Some(GraphIrStereoKind::Tetrahedral),
         old: None,
-        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::constraint_removed_without_kind(GraphIrStereoAtomDelta::ModifyConstraint {
         id: GraphIrStereoAtomId(5),
         kind: None,
-        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
         new: None,
     })]
     #[case::constraint_modified(GraphIrStereoAtomDelta::ModifyConstraint {
         id: GraphIrStereoAtomId(5),
         kind: Some(GraphIrStereoKind::Tetrahedral),
-        old: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
-        new: Some(GraphIrStereoAtomConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoAtomConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::apply(GraphIrStereoAtomDelta::Apply {
@@ -4477,26 +4477,26 @@ mod tests {
         id: GraphIrStereoBondId(5),
         kind: Some(GraphIrStereoKind::CisTrans),
         old: None,
-        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::constraint_removed_without_kind(GraphIrStereoBondDelta::ModifyConstraint {
         id: GraphIrStereoBondId(5),
         kind: None,
-        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
         new: None,
     })]
     #[case::constraint_modified(GraphIrStereoBondDelta::ModifyConstraint {
         id: GraphIrStereoBondId(5),
         kind: Some(GraphIrStereoKind::CisTrans),
-        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
-        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::apply(GraphIrStereoBondDelta::Apply {
@@ -4636,8 +4636,8 @@ mod tests {
             id: GraphIrStereoBondId(5),
             kind: Some(GraphIrStereoKind::CisTrans),
             old: None,
-            new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-                GraphIrStereogenicityAst::Undetermined,
+            new: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+                GraphIrStereogenicityForm::Undetermined,
             )),
         },
         "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
@@ -4714,26 +4714,26 @@ mod tests {
         id: GraphIrStereoBondId(5),
         kind: Some(GraphIrStereoKind::CisTrans),
         old: None,
-        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::constraint_removed_without_kind(GraphIrStereoBondDelta::ModifyConstraint {
         id: GraphIrStereoBondId(5),
         kind: None,
-        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
         new: None,
     })]
     #[case::constraint_modified(GraphIrStereoBondDelta::ModifyConstraint {
         id: GraphIrStereoBondId(5),
         kind: Some(GraphIrStereoKind::CisTrans),
-        old: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Undetermined,
+        old: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Undetermined,
         )),
-        new: Some(GraphIrStereoBondConstraintAst::Stereogenicity(
-            GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic),
+        new: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
+            GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
     #[case::apply(GraphIrStereoBondDelta::Apply {

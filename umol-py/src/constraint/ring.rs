@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    RingMembershipAst as GraphIrRingMembershipAst, RingScope as GraphIrRingScope,
+    RingMembershipForm as GraphIrRingMembershipForm, RingScope as GraphIrRingScope,
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
@@ -87,25 +87,25 @@ impl RingMembershipAst {
 
 impl_py_lattice!(
     RingMembershipAst,
-    GraphIrRingMembershipAst,
-    |value: &RingMembershipAst, py: Python<'_>| -> PyResult<GraphIrRingMembershipAst> {
+    GraphIrRingMembershipForm,
+    |value: &RingMembershipAst, py: Python<'_>| -> PyResult<GraphIrRingMembershipForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrRingMembershipAst| -> PyResult<RingMembershipAst> {
+    |py: Python<'_>, value: GraphIrRingMembershipForm| -> PyResult<RingMembershipAst> {
         RingMembershipAst::from_rust(py, &value)
     }
 );
 
 impl RingMembershipAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrRingMembershipAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrRingMembershipForm) -> PyResult<Self> {
         Ok(Self {
             scope: into_py_variant(py, RingScope::from_rust(&ast.scope))?,
             count: into_py_variant(py, ValueAst::from_rust(py, &ast.count)?)?,
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrRingMembershipAst {
-        GraphIrRingMembershipAst::new(
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrRingMembershipForm {
+        GraphIrRingMembershipForm::new(
             self.scope.bind(py).borrow().to_rust(),
             self.count.bind(py).borrow().to_rust(py),
         )
@@ -126,9 +126,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrRingMembershipAst::new(GraphIrRingScope::All, 2))]
-    #[case(GraphIrRingMembershipAst::new(GraphIrRingScope::Size(6), 1))]
-    fn test_ring_membership_ast_roundtrip(#[case] ast: GraphIrRingMembershipAst) {
+    #[case(GraphIrRingMembershipForm::new(GraphIrRingScope::All, 2))]
+    #[case(GraphIrRingMembershipForm::new(GraphIrRingScope::Size(6), 1))]
+    fn test_ring_membership_ast_roundtrip(#[case] ast: GraphIrRingMembershipForm) {
         Python::attach(|py| {
             assert_eq!(
                 RingMembershipAst::from_rust(py, &ast).unwrap().to_rust(py),

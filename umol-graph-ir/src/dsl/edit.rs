@@ -38,8 +38,8 @@ use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
     DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintAst,
-    StereoBondConstraintAst, SubPatternAnchor,
+    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
+    StereoBondConstraintForm, SubPatternAnchor,
 };
 use crate::ir::dative::DativeBondUpdate;
 use crate::ir::edit::{
@@ -2006,8 +2006,8 @@ fn validate_stereo_atom_update_pair(
     let constraints_match = expect
         .constraints
         .iter()
-        .map(StereoAtomConstraintAst::key)
-        .eq(update.constraints.iter().map(StereoAtomConstraintAst::key));
+        .map(StereoAtomConstraintForm::key)
+        .eq(update.constraints.iter().map(StereoAtomConstraintForm::key));
     if expect_changes_configuration != update_changes_configuration || !constraints_match {
         return Err(DeError::Custom(
             "stereo-atom :modify :expect and :update must address the same field and constraints"
@@ -2050,8 +2050,8 @@ fn validate_stereo_bond_update_pair(
     let constraints_match = expect
         .constraints
         .iter()
-        .map(StereoBondConstraintAst::key)
-        .eq(update.constraints.iter().map(StereoBondConstraintAst::key));
+        .map(StereoBondConstraintForm::key)
+        .eq(update.constraints.iter().map(StereoBondConstraintForm::key));
     if expect_changes_configuration != update_changes_configuration || !constraints_match {
         return Err(DeError::Custom(
             "stereo-bond :modify :expect and :update must address the same field and constraints"
@@ -2897,8 +2897,8 @@ fn noncovalent_bond_constraint_updates(
 
 fn stereo_atom_constraint_updates(
     kind: Option<StereoKind>,
-    old: &Option<StereoAtomConstraintAst>,
-    new: &Option<StereoAtomConstraintAst>,
+    old: &Option<StereoAtomConstraintForm>,
+    new: &Option<StereoAtomConstraintForm>,
 ) -> Result<(StereoAtomUpdate, StereoAtomUpdate), DeError> {
     let Some(kind) = kind else {
         return Err(DeError::Custom(
@@ -2943,8 +2943,8 @@ fn stereo_atom_constraint_updates(
 
 fn stereo_bond_constraint_updates(
     kind: Option<StereoKind>,
-    old: &Option<StereoBondConstraintAst>,
-    new: &Option<StereoBondConstraintAst>,
+    old: &Option<StereoBondConstraintForm>,
+    new: &Option<StereoBondConstraintForm>,
 ) -> Result<(StereoBondUpdate, StereoBondUpdate), DeError> {
     let Some(kind) = kind else {
         return Err(DeError::Custom(
@@ -4382,8 +4382,8 @@ mod tests {
     use crate::ir::constraint::{
         AromaticSystemConstraintForm, AtomConstraintsForm, BondConstraintsForm, Constraint,
         DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-        NoncovalentBondConstraintForm, RingMembershipAst, RingScope, StereoAtomConstraintAst,
-        StereoBondConstraintAst, StereogenicityAst,
+        NoncovalentBondConstraintForm, RingMembershipForm, RingScope, StereoAtomConstraintForm,
+        StereoBondConstraintForm, StereogenicityForm,
     };
     use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::AddBond;
@@ -4770,7 +4770,7 @@ mod tests {
         Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(0)),
             old: None,
-            new: Some(BondConstraintForm::RingMembership(RingMembershipAst::new(
+            new: Some(BondConstraintForm::RingMembership(RingMembershipForm::new(
                 RingScope::Size(6),
                 NumForm::Lit(1),
             ))),
@@ -5144,7 +5144,7 @@ mod tests {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
             kind: Some(StereoKind::Tetrahedral),
             old: None,
-            new: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
         },
     )]
     #[case::stereo_atom_constraint_remove(
@@ -5152,7 +5152,7 @@ mod tests {
         Edit::ModifyStereoAtomConstraint {
             id: StereoAtomHandle::New(1),
             kind: Some(StereoKind::Tetrahedral),
-            old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
             new: None,
         },
     )]
@@ -5211,8 +5211,8 @@ mod tests {
         Edit::ModifyStereoBondConstraint {
             id: StereoBondHandle::New(0),
             kind: Some(StereoKind::CisTrans),
-            old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-            new: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
+            old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
         },
     )]
     #[case::stereo_bond_constraint_add(
@@ -5221,7 +5221,7 @@ mod tests {
             id: StereoBondHandle::Id(StereoBondId(0)),
             kind: Some(StereoKind::CisTrans),
             old: None,
-            new: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
         },
     )]
     #[case::stereo_bond_constraint_remove(
@@ -5229,7 +5229,7 @@ mod tests {
         Edit::ModifyStereoBondConstraint {
             id: StereoBondHandle::New(1),
             kind: Some(StereoKind::CisTrans),
-            old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
             new: None,
         },
     )]
@@ -5406,7 +5406,7 @@ mod tests {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
             kind: None,
             old: None,
-            new: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(
+            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
                 Stereogenicity::Stereogenic,
             ))),
         },
@@ -5417,7 +5417,7 @@ mod tests {
             id: StereoBondHandle::Id(StereoBondId(0)),
             kind: None,
             old: None,
-            new: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
                 Stereogenicity::Stereogenic,
             ))),
         },

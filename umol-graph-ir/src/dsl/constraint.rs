@@ -39,10 +39,10 @@ use super::value::{parse_value, ValueDsl};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     AromaticValenceForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
-    FluxionalityAst, LigandPermutation, LigandSymmetryAst, MoleculeConstraint,
-    MulticenterValenceForm, OrientedLigandPermutation, RingMembershipAst, RingScope,
-    StereoAtomConstraintAst, StereoBondConstraintAst, StereoLigandPair, StereogenicityAst,
-    SubPatternAnchor, TopicityAst,
+    FluxionalityForm, LigandPermutation, LigandSymmetryForm, MoleculeConstraint,
+    MulticenterValenceForm, OrientedLigandPermutation, RingMembershipForm, RingScope,
+    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
+    SubPatternAnchor, TopicityForm,
 };
 use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ir::molecule::MoleculeAst;
@@ -184,7 +184,7 @@ pub(super) fn read_multicenter_valence_dsl(
 /// Streaming-read the `{:size? :count}` map (value of a `:ring-membership` key).
 fn read_ring_membership_dsl(
     de: &mut EdnStreamDeserializer<'_>,
-) -> Result<RingMembershipAst, EdnError> {
+) -> Result<RingMembershipForm, EdnError> {
     let mut size: Option<u8> = None;
     let mut count: Option<NumForm> = None;
     read_map(de, |de, key| {
@@ -203,14 +203,14 @@ fn read_ring_membership_dsl(
     })?;
     let count =
         count.ok_or_else(|| DeError::Custom("ring-membership missing :count".to_string()))?;
-    Ok(RingMembershipAst::new(
+    Ok(RingMembershipForm::new(
         size.map_or(RingScope::All, RingScope::Size),
         count,
     ))
 }
 
 /// EDN boundary for a ring-membership fact: `{:size? <int> :count <value>}`.
-pub struct RingMembershipDsl(pub RingMembershipAst);
+pub struct RingMembershipDsl(pub RingMembershipForm);
 
 impl ToEdn for RingMembershipDsl {
     fn to_edn(&self) -> Edn<'static> {
@@ -270,7 +270,7 @@ impl<'de> FromEdn<'de> for RingMembershipDsl {
         }
         let count =
             count.ok_or_else(|| DeError::Custom("ring-membership missing :count".into()))?;
-        Ok(Self(RingMembershipAst::new(scope, count)))
+        Ok(Self(RingMembershipForm::new(scope, count)))
     }
 }
 
@@ -588,7 +588,7 @@ fn read_relation_value(de: &mut EdnStreamDeserializer<'_>) -> Result<RelationVal
 fn read_ligand_symmetry(
     de: &mut EdnStreamDeserializer<'_>,
     kind: StereoKind,
-) -> Result<LigandSymmetryAst, EdnError> {
+) -> Result<LigandSymmetryForm, EdnError> {
     let mut permutation = None;
     let mut orientation = Orientation::Proper;
     let mut invariant = BooleanForm::Lit(true);
@@ -620,7 +620,7 @@ fn read_ligand_symmetry(
     })?;
     let permutation = permutation
         .ok_or_else(|| DeError::Custom("ligand-symmetry missing :permutation".to_string()))?;
-    Ok(LigandSymmetryAst {
+    Ok(LigandSymmetryForm {
         permutation: OrientedLigandPermutation {
             permutation: LigandPermutation(permutation),
             orientation,
@@ -632,7 +632,7 @@ fn read_ligand_symmetry(
 fn read_fluxionality(
     de: &mut EdnStreamDeserializer<'_>,
     kind: StereoKind,
-) -> Result<FluxionalityAst, EdnError> {
+) -> Result<FluxionalityForm, EdnError> {
     let mut permutation = None;
     let mut active = BooleanForm::Lit(true);
     read_map(de, |de, key| {
@@ -651,13 +651,13 @@ fn read_fluxionality(
     })?;
     let permutation = permutation
         .ok_or_else(|| DeError::Custom("fluxionality missing :permutation".to_string()))?;
-    Ok(FluxionalityAst {
+    Ok(FluxionalityForm {
         permutation: LigandPermutation(permutation),
         active,
     })
 }
 
-fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnError> {
+fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityForm, EdnError> {
     let mut pair = None;
     let mut value = None;
     read_map(de, |de, key| {
@@ -685,13 +685,13 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
     })?;
     let pair = pair.ok_or_else(|| DeError::Custom("topicity missing :pair".to_string()))?;
     let value = value.ok_or_else(|| DeError::Custom("topicity missing :relation".to_string()))?;
-    Ok(TopicityAst {
+    Ok(TopicityForm {
         pair,
         relation: read_topicity_relation(value)?,
     })
 }
 
-fn read_stereogenicity(de: &mut EdnStreamDeserializer<'_>) -> Result<StereogenicityAst, EdnError> {
+fn read_stereogenicity(de: &mut EdnStreamDeserializer<'_>) -> Result<StereogenicityForm, EdnError> {
     let mut value = None;
     read_map(de, |de, key| {
         match key {
@@ -740,11 +740,11 @@ macro_rules! read_stereo_constraint_dsl {
 }
 
 read_stereo_constraint_dsl! {
-    read_stereo_atom_constraint_dsl, StereoAtomConstraintAst, StereoAtomConstraintDsl,
+    read_stereo_atom_constraint_dsl, StereoAtomConstraintForm, StereoAtomConstraintDsl,
     "stereo-atom-constraint"
 }
 read_stereo_constraint_dsl! {
-    read_stereo_bond_constraint_dsl, StereoBondConstraintAst, StereoBondConstraintDsl,
+    read_stereo_bond_constraint_dsl, StereoBondConstraintForm, StereoBondConstraintDsl,
     "stereo-bond-constraint"
 }
 
@@ -2202,9 +2202,9 @@ mod tests {
     use super::*;
     use crate::ir::constraint::{
         AromaticValenceForm, AtomConstraintForm, BondConstraintForm, DativeBondConstraintForm,
-        FluxionalityAst, LigandPermutation, LigandSymmetryAst, MulticenterValenceForm,
-        OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintAst, StereoLigandPair,
-        StereogenicityAst, TopicityAst, TopicityRelationAst,
+        FluxionalityForm, LigandPermutation, LigandSymmetryForm, MulticenterValenceForm,
+        OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintForm,
+        StereoLigandPair, StereogenicityForm, TopicityForm, TopicityRelationForm,
     };
     use crate::ir::id::{
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
@@ -2344,33 +2344,33 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(true) })),
+            StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
     #[case::fluxionality_absent(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) })),
+            StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :active false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper },
                 invariant: BooleanForm::Lit(false) })),
         "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
                 invariant: BooleanForm::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
-            StereoAtomConstraintAst::Topicity(TopicityAst {
+            StereoAtomConstraintForm::Topicity(TopicityForm {
                 pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
-                relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+                relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })),
         "{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation :enantiotopic}}]]}")]
     #[case::stereogenicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
         "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
         #[from(full_namespace)] namespace: MoleculeContext,

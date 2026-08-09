@@ -5,7 +5,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::boolean::BooleanForm;
-use super::super::constraint::ring::{RingMembershipAst, RingScope};
+use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::CisTransStereoForm;
@@ -18,7 +18,7 @@ pub enum BondConstraintForm {
     Aromatic(BooleanForm),
     CisTransStereo(CisTransStereoForm),
     /// Ring count in the fixed Relevant ring projection, optionally restricted by size.
-    RingMembership(RingMembershipAst),
+    RingMembership(RingMembershipForm),
 }
 
 impl BondConstraintForm {
@@ -31,7 +31,7 @@ impl BondConstraintForm {
     }
 
     pub fn ring_membership(scope: RingScope, count: impl Into<NumForm>) -> Self {
-        Self::RingMembership(RingMembershipAst::new(scope, count.into()))
+        Self::RingMembership(RingMembershipForm::new(scope, count.into()))
     }
 
     /// Bond constraint key, unique within a `BondConstraintsForm` container.
@@ -49,7 +49,7 @@ impl BondConstraintForm {
             Self::Aromatic(_) => Self::Aromatic(BooleanForm::Undetermined),
             Self::CisTransStereo(_) => Self::CisTransStereo(CisTransStereoForm::Undetermined),
             Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, NumForm::Undetermined))
+                Self::RingMembership(RingMembershipForm::new(m.scope, NumForm::Undetermined))
             }
         }
     }
@@ -504,13 +504,13 @@ mod tests {
     #[rstest]
     #[case::aromatic(BondConstraintForm::Aromatic(BooleanForm::Lit(true)), Ok(BondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
     #[case::ring_count_litset_singleton(
-        BondConstraintForm::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set([2]))),
+        BondConstraintForm::RingMembership(RingMembershipForm::new(RingScope::All, NumForm::lit_set([2]))),
         Ok(BondConstraintForm::ring_membership(RingScope::All, 2)))]
     #[case::cis_trans_lifts_term(
         BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
         Ok(BondConstraintForm::cis_trans_stereo(CisTransStereoForm::stereo(1_u32))))]
     #[case::empty_litset_contradiction(
-        BondConstraintForm::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
+        BondConstraintForm::RingMembership(RingMembershipForm::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
     fn test_bond_constraint_form_canonicalize(
         #[case] constraint: BondConstraintForm,

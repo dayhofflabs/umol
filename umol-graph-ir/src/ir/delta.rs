@@ -23,8 +23,8 @@ use super::constraint::{
     AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
     AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
     DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
-    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, StereoAtomConstraintAst,
-    StereoAtomConstraintKey, StereoBondConstraintAst, StereoBondConstraintKey,
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoBondConstraintForm, StereoBondConstraintKey,
 };
 use super::dative::{DativeBondForm, DativeBondUpdate};
 use super::edit::{
@@ -649,8 +649,8 @@ pub enum StereoAtomDelta {
         /// permutation degree, `~` shortcut). `None` for a kind-free constraint on an
         /// `Undetermined`-geometry center. Not read by apply/canonicalize/diff.
         kind: Option<StereoKind>,
-        old: Option<StereoAtomConstraintAst>,
-        new: Option<StereoAtomConstraintAst>,
+        old: Option<StereoAtomConstraintForm>,
+        new: Option<StereoAtomConstraintForm>,
     },
     Apply {
         id: StereoAtomId,
@@ -785,8 +785,8 @@ pub enum StereoBondDelta {
         id: StereoBondId,
         /// Serialization context — see `StereoAtomDelta::ModifyConstraint`.
         kind: Option<StereoKind>,
-        old: Option<StereoBondConstraintAst>,
-        new: Option<StereoBondConstraintAst>,
+        old: Option<StereoBondConstraintForm>,
+        new: Option<StereoBondConstraintForm>,
     },
     Apply {
         id: StereoBondId,
@@ -1957,7 +1957,7 @@ impl EntityPatch for StereoAtomDelta {
     type Id = StereoAtomId;
     type Ast = StereoAtomForm;
     type FieldChange = StereoAtomFieldChange;
-    type Constraint = StereoAtomConstraintAst;
+    type Constraint = StereoAtomConstraintForm;
 
     fn modify_field(id: StereoAtomId, change: StereoAtomFieldChange) -> Self {
         StereoAtomDelta::ModifyField { id, change }
@@ -1967,8 +1967,8 @@ impl EntityPatch for StereoAtomDelta {
     /// `diff`, which stamps `kind` from the entity's config. Stereo's flow never uses this arm.
     fn modify_constraint(
         id: StereoAtomId,
-        old: Option<StereoAtomConstraintAst>,
-        new: Option<StereoAtomConstraintAst>,
+        old: Option<StereoAtomConstraintForm>,
+        new: Option<StereoAtomConstraintForm>,
     ) -> Self {
         StereoAtomDelta::ModifyConstraint {
             id,
@@ -1978,7 +1978,7 @@ impl EntityPatch for StereoAtomDelta {
         }
     }
 
-    diff_field_ops!(StereoAtomFieldChange, StereoAtomForm, StereoAtomConstraintAst, {
+    diff_field_ops!(StereoAtomFieldChange, StereoAtomForm, StereoAtomConstraintForm, {
         Configuration => configuration,
     });
 
@@ -1988,8 +1988,8 @@ impl EntityPatch for StereoAtomDelta {
 
     fn apply_constraint(
         ast: &mut StereoAtomForm,
-        old: Option<StereoAtomConstraintAst>,
-        new: Option<StereoAtomConstraintAst>,
+        old: Option<StereoAtomConstraintForm>,
+        new: Option<StereoAtomConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1999,7 +1999,7 @@ impl EntityPatch for StereoBondDelta {
     type Id = StereoBondId;
     type Ast = StereoBondForm;
     type FieldChange = StereoBondFieldChange;
-    type Constraint = StereoBondConstraintAst;
+    type Constraint = StereoBondConstraintForm;
 
     fn modify_field(id: StereoBondId, change: StereoBondFieldChange) -> Self {
         StereoBondDelta::ModifyField { id, change }
@@ -2008,8 +2008,8 @@ impl EntityPatch for StereoBondDelta {
     /// Kind-less fallback — see `StereoAtomDelta::modify_constraint`.
     fn modify_constraint(
         id: StereoBondId,
-        old: Option<StereoBondConstraintAst>,
-        new: Option<StereoBondConstraintAst>,
+        old: Option<StereoBondConstraintForm>,
+        new: Option<StereoBondConstraintForm>,
     ) -> Self {
         StereoBondDelta::ModifyConstraint {
             id,
@@ -2019,7 +2019,7 @@ impl EntityPatch for StereoBondDelta {
         }
     }
 
-    diff_field_ops!(StereoBondFieldChange, StereoBondForm, StereoBondConstraintAst, {
+    diff_field_ops!(StereoBondFieldChange, StereoBondForm, StereoBondConstraintForm, {
         Configuration => configuration,
     });
 
@@ -2029,8 +2029,8 @@ impl EntityPatch for StereoBondDelta {
 
     fn apply_constraint(
         ast: &mut StereoBondForm,
-        old: Option<StereoBondConstraintAst>,
-        new: Option<StereoBondConstraintAst>,
+        old: Option<StereoBondConstraintForm>,
+        new: Option<StereoBondConstraintForm>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -2305,8 +2305,8 @@ fn fold_stereo_atom_group(
     let mut constraints: HashMap<
         StereoAtomConstraintKey,
         (
-            Option<StereoAtomConstraintAst>,
-            Option<StereoAtomConstraintAst>,
+            Option<StereoAtomConstraintForm>,
+            Option<StereoAtomConstraintForm>,
         ),
     > = HashMap::new();
     let mut removed: Option<(AtomId, Vec<StereoLigand>, StereoAtomForm)> = None;
@@ -2475,8 +2475,8 @@ fn fold_stereo_bond_group(
     let mut constraints: HashMap<
         StereoBondConstraintKey,
         (
-            Option<StereoBondConstraintAst>,
-            Option<StereoBondConstraintAst>,
+            Option<StereoBondConstraintForm>,
+            Option<StereoBondConstraintForm>,
         ),
     > = HashMap::new();
     let mut removed: Option<(BondId, Vec<StereoLigand>, StereoBondForm)> = None;
@@ -3138,9 +3138,9 @@ mod tests {
         AromaticSystemConstraintsForm, AtomConstraintsForm, BondConstraintsForm, BooleanForm,
         DativeBondConstraintsForm, ElectronCountsForm, ElementForm, IsotopeMassForm,
         MulticenterBondConstraintsForm, NoncovalentBondConstraintsForm, NoncovalentBondKindForm,
-        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationForm,
+        RingScope, StereoAtomConstraintsForm, StereoBondConstraintsForm, StereoConfigurationForm,
         StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
-        StereogenicityAst, UnpairedElectronsForm, UnpairedElectronsUpdate,
+        StereogenicityForm, UnpairedElectronsForm, UnpairedElectronsUpdate,
     };
 
     #[rstest]
@@ -3629,12 +3629,12 @@ mod tests {
             id: StereoAtomId(2),
             kind: Some(StereoKind::Tetrahedral),
             old: None,
-            new: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         },
         StereoAtomDelta::ModifyConstraint {
             id: StereoAtomId(2),
             kind: Some(StereoKind::Tetrahedral),
-            old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
             new: None,
         }
     )]
@@ -3661,10 +3661,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) },
-            constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         },
         vec![
             StereoAtomDelta::ModifyField {
@@ -3674,7 +3674,7 @@ mod tests {
             StereoAtomDelta::ModifyConstraint {
                 id: StereoAtomId(7),
                 kind: Some(StereoKind::Tetrahedral),
-                old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
                 new: None,
             },
         ],
@@ -3694,7 +3694,7 @@ mod tests {
     #[rstest]
     #[case::empty(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
     #[case::relative(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
-    #[case::absent_constraint_removal(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() })]
     fn test_stereo_atom_delta_for_update_identity(
         #[case] current: StereoAtomForm,
         #[case] update: StereoAtomUpdate,
@@ -3743,10 +3743,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) },
-            constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         },
         vec![
             StereoBondDelta::ModifyField {
@@ -3756,7 +3756,7 @@ mod tests {
             StereoBondDelta::ModifyConstraint {
                 id: StereoBondId(7),
                 kind: Some(StereoKind::CisTrans),
-                old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
                 new: None,
             },
         ],
@@ -3776,7 +3776,7 @@ mod tests {
     #[rstest]
     #[case::empty(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
     #[case::relative(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
-    #[case::absent_constraint_removal(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() })]
     fn test_stereo_bond_delta_for_update_identity(
         #[case] current: StereoBondForm,
         #[case] update: StereoBondUpdate,

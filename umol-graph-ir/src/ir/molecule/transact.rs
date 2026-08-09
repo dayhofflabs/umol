@@ -1782,8 +1782,8 @@ impl MoleculeEditor {
     fn apply_modify_stereo_atom_constraint(
         &mut self,
         id: StereoAtomId,
-        old: Option<super::super::constraint::StereoAtomConstraintAst>,
-        new: Option<super::super::constraint::StereoAtomConstraintAst>,
+        old: Option<super::super::constraint::StereoAtomConstraintForm>,
+        new: Option<super::super::constraint::StereoAtomConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1797,8 +1797,8 @@ impl MoleculeEditor {
     fn apply_modify_stereo_bond_constraint(
         &mut self,
         id: StereoBondId,
-        old: Option<super::super::constraint::StereoBondConstraintAst>,
-        new: Option<super::super::constraint::StereoBondConstraintAst>,
+        old: Option<super::super::constraint::StereoBondConstraintForm>,
+        new: Option<super::super::constraint::StereoBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -2323,8 +2323,8 @@ mod tests {
     use super::super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-        NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintAst,
-        StereoBondConstraintAst, StereogenicityAst, SubPatternAnchor,
+        NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
+        StereoBondConstraintForm, StereogenicityForm, SubPatternAnchor,
     };
     use super::super::super::dative::DativeBondForm;
     use super::super::super::edit::EntityHandle;
@@ -3068,12 +3068,12 @@ mod tests {
             Constraint::StereoAtom(
                 StereoAtomId(1),
                 StereoKind::Tetrahedral,
-                StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
             ),
             Constraint::StereoBond(
                 StereoBondId(1),
                 StereoKind::CisTrans,
-                StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
             ),
         ]);
         let before = batched_overlays.clone().build();
@@ -3138,12 +3138,12 @@ mod tests {
             Constraint::StereoAtom(
                 StereoAtomId(7),
                 StereoKind::Tetrahedral,
-                StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
             ),
             Constraint::StereoBond(
                 StereoBondId(7),
                 StereoKind::CisTrans,
-                StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
             ),
             Constraint::Relational(RelationalConstraint::DativeBondParallels {
                 dative: DativeBondId(7),
@@ -3203,12 +3203,12 @@ mod tests {
             Constraint::StereoAtom(
                 StereoAtomId(0),
                 StereoKind::Tetrahedral,
-                StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
             ),
             Constraint::StereoBond(
                 StereoBondId(0),
                 StereoKind::CisTrans,
-                StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
             ),
             Constraint::Relational(RelationalConstraint::DativeBondParallels {
                 dative: DativeBondId(0),

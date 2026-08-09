@@ -15,8 +15,8 @@ use umol_graph_ir_macros::{Canonicalize, Lattice};
 use umol_perm::{ClassKey, Permutation};
 
 use super::constraint::{
-    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
-    StereoBondConstraintsAst,
+    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
+    StereoBondConstraintsForm,
 };
 use super::error::{Contradiction, NoJoin};
 use super::ligand::StereoLigand;
@@ -129,12 +129,12 @@ macro_rules! stereo_element {
 
 stereo_element! {
     /// Stereo atom form with geometry class, configuration, and per-site constraints.
-    StereoAtomForm, StereoAtomConstraintsAst, StereoAtomConstraintAst
+    StereoAtomForm, StereoAtomConstraintsForm, StereoAtomConstraintForm
 }
 
 stereo_element! {
     /// Stereo bond form with cis/trans configuration and per-site constraints.
-    StereoBondForm, StereoBondConstraintsAst, StereoBondConstraintAst
+    StereoBondForm, StereoBondConstraintsForm, StereoBondConstraintForm
 }
 
 /// Configuration portion of a stereo-element update.
@@ -184,14 +184,14 @@ impl StereoConfigurationUpdate {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoAtomUpdate {
     pub configuration: StereoConfigurationUpdate,
-    pub constraints: StereoAtomConstraintsAst,
+    pub constraints: StereoAtomConstraintsForm,
 }
 
 /// Attribute update for a stereo bond.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoBondUpdate {
     pub configuration: StereoConfigurationUpdate,
-    pub constraints: StereoBondConstraintsAst,
+    pub constraints: StereoBondConstraintsForm,
 }
 
 impl StereoAtomForm {
@@ -207,7 +207,7 @@ impl StereoAtomForm {
 
     /// Derive the minimal canonical attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> StereoAtomUpdate {
-        let mut constraints = StereoAtomConstraintsAst::new();
+        let mut constraints = StereoAtomConstraintsForm::new();
         for new in other.constraints.iter() {
             if self
                 .constraints
@@ -258,7 +258,7 @@ impl StereoBondForm {
 
     /// Derive the minimal canonical attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> StereoBondUpdate {
-        let mut constraints = StereoBondConstraintsAst::new();
+        let mut constraints = StereoBondConstraintsForm::new();
         for new in other.constraints.iter() {
             if self
                 .constraints
@@ -1070,7 +1070,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::super::constraint::StereogenicityAst;
+    use super::super::constraint::StereogenicityForm;
     use super::super::id::AtomId;
     use super::super::ligand::StereoLigandKind;
     use super::*;
@@ -1483,7 +1483,7 @@ mod tests {
             stereo_atom.configuration,
             StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
         );
-        assert_eq!(stereo_atom.constraints, StereoAtomConstraintsAst::new());
+        assert_eq!(stereo_atom.constraints, StereoAtomConstraintsForm::new());
     }
 
     #[rustfmt::skip]
@@ -1526,12 +1526,12 @@ mod tests {
     )]
     #[case::constraint_set(
         StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
     )]
     #[case::constraint_remove(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
-        StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() },
         StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
     )]
     fn test_stereo_atom_form_update(
@@ -1551,14 +1551,14 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomForm::default(),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
     )]
     #[case::constraint_context(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
     )]
     fn test_stereo_atom_form_difference_to(
         #[case] atom: StereoAtomForm,
@@ -1598,12 +1598,12 @@ mod tests {
     )]
     #[case::constraint_set(
         StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
     )]
     #[case::constraint_remove(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
-        StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() },
         StereoBondForm::new(StereoKind::CisTrans, 1_u32),
     )]
     fn test_stereo_bond_form_update(
@@ -1623,14 +1623,14 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoBondForm::default(),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
     )]
     #[case::constraint_context(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
     )]
     fn test_stereo_bond_form_difference_to(
         #[case] bond: StereoBondForm,
@@ -1705,7 +1705,7 @@ mod tests {
             stereo_bond.configuration,
             StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
         );
-        assert_eq!(stereo_bond.constraints, StereoBondConstraintsAst::new())
+        assert_eq!(stereo_bond.constraints, StereoBondConstraintsForm::new())
     }
 
     #[rustfmt::skip]

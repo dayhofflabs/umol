@@ -2084,8 +2084,8 @@ mod tests {
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-        NoncovalentBondConstraintForm, StereoAtomConstraintAst, StereoBondConstraintAst,
-        StereogenicityAst,
+        NoncovalentBondConstraintForm, StereoAtomConstraintForm, StereoBondConstraintForm,
+        StereogenicityForm,
     };
     use super::super::delta::Deltas;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
@@ -2777,7 +2777,7 @@ mod tests {
         Constraint::StereoAtom(
             StereoAtomId(0),
             StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
         Entity::StereoAtom(StereoAtomId(0))
     )]
@@ -2785,7 +2785,7 @@ mod tests {
         Constraint::StereoBond(
             StereoBondId(0),
             StereoKind::CisTrans,
-            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
         Entity::StereoBond(StereoBondId(0))
     )]

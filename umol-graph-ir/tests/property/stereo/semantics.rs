@@ -35,7 +35,7 @@ proptest! {
     }
 
     #[test]
-    fn test_ligand_symmetry_ast_matches_is_equality(
+    fn test_ligand_symmetry_form_matches_is_equality(
         (x, y) in (2usize..=6)
             .prop_flat_map(|d| (ligand_symmetry_strategy(d), ligand_symmetry_strategy(d))),
     ) {

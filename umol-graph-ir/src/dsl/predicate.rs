@@ -10,7 +10,7 @@ use winnow::Parser;
 use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
-use crate::ir::constraint::{RingMembershipAst, RingScope};
+use crate::ir::constraint::{RingMembershipForm, RingScope};
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::value::NumForm;
 
@@ -49,12 +49,12 @@ pub(crate) fn ring_count(i: &mut &str) -> PResult<NumForm> {
 
 /// Parse the body after `#R`: an optional `(size)` then a count, yielding the
 /// `RingScope` (`All` when no size) and its count.
-pub(crate) fn ring_membership(i: &mut &str) -> PResult<RingMembershipAst> {
+pub(crate) fn ring_membership(i: &mut &str) -> PResult<RingMembershipForm> {
     let size: Option<u8> = opt(delimited('(', dec_uint::<_, u8, _>, ')'))
         .parse_next(i)
         .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))?;
     let count = ring_count(i)?;
-    Ok(RingMembershipAst::new(
+    Ok(RingMembershipForm::new(
         size.map_or(RingScope::All, RingScope::Size),
         count,
     ))
@@ -146,7 +146,7 @@ pub(crate) fn fmt_unpaired_electrons(
 
 pub(crate) fn fmt_ring_membership(
     f: &mut fmt::Formatter<'_>,
-    m: &RingMembershipAst,
+    m: &RingMembershipForm,
 ) -> fmt::Result {
     let v = &m.count;
     if matches!(v, NumForm::Undetermined) {
@@ -315,13 +315,13 @@ mod tests {
         #[case] count: NumForm,
         #[case] expected: &str,
     ) {
-        struct W(RingMembershipAst);
+        struct W(RingMembershipForm);
         impl fmt::Display for W {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 fmt_ring_membership(f, &self.0)
             }
         }
-        assert_eq!(W(RingMembershipAst { scope, count }).to_string(), expected);
+        assert_eq!(W(RingMembershipForm { scope, count }).to_string(), expected);
     }
 
     #[rustfmt::skip]

@@ -6,7 +6,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::boolean::BooleanForm;
-use super::super::constraint::ring::{RingMembershipAst, RingScope};
+use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
@@ -18,7 +18,7 @@ pub enum DativeBondConstraintForm {
     Aromatic(BooleanForm),
     /// Asserted ring count, optionally restricted by size. Derivation from topology requires a
     /// ring model that includes dative overlays rather than the localized atom-bond projection.
-    RingMembership(RingMembershipAst),
+    RingMembership(RingMembershipForm),
 }
 
 impl DativeBondConstraintForm {
@@ -27,7 +27,7 @@ impl DativeBondConstraintForm {
     }
 
     pub fn ring_membership(scope: RingScope, count: impl Into<NumForm>) -> Self {
-        Self::RingMembership(RingMembershipAst::new(scope, count))
+        Self::RingMembership(RingMembershipForm::new(scope, count))
     }
 
     /// Dative bond constraint key, unique within a `DativeBondConstraintsForm` container.
@@ -43,7 +43,7 @@ impl DativeBondConstraintForm {
         match self {
             Self::Aromatic(_) => Self::Aromatic(BooleanForm::Undetermined),
             Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, NumForm::Undetermined))
+                Self::RingMembership(RingMembershipForm::new(m.scope, NumForm::Undetermined))
             }
         }
     }
@@ -468,10 +468,10 @@ mod tests {
     #[rstest]
     #[case::aromatic(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)), Ok(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
     #[case::ring_count_litset_singleton(
-        DativeBondConstraintForm::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set([2]))),
+        DativeBondConstraintForm::RingMembership(RingMembershipForm::new(RingScope::All, NumForm::lit_set([2]))),
         Ok(DativeBondConstraintForm::ring_membership(RingScope::All, 2)))]
     #[case::empty_litset_contradiction(
-        DativeBondConstraintForm::RingMembership(RingMembershipAst::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
+        DativeBondConstraintForm::RingMembership(RingMembershipForm::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
     fn test_dative_bond_constraint_form_canonicalize(
         #[case] constraint: DativeBondConstraintForm,

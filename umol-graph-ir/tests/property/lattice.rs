@@ -208,7 +208,7 @@ proptest! {
     }
 
     #[test]
-    fn test_topicity_relation_ast_lattice_laws_raw(
+    fn test_topicity_relation_form_lattice_laws_raw(
         a in raw_topicity_relation_strategy(),
         b in raw_topicity_relation_strategy(),
         c in raw_topicity_relation_strategy(),
@@ -217,7 +217,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereogenicity_ast_lattice_laws_raw(
+    fn test_stereogenicity_form_lattice_laws_raw(
         a in raw_stereogenicity_relation_strategy(),
         b in raw_stereogenicity_relation_strategy(),
         c in raw_stereogenicity_relation_strategy(),
@@ -326,7 +326,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereogenicity_ast_lattice_laws(
+    fn test_stereogenicity_form_lattice_laws(
         ra in stereogenicity_relation_lattice_strategy(),
         rb in stereogenicity_relation_lattice_strategy(),
         rc in stereogenicity_relation_lattice_strategy(),
@@ -559,7 +559,7 @@ proptest! {
     }
 
     #[test]
-    fn test_topicity_relation_ast_lattice_laws(
+    fn test_topicity_relation_form_lattice_laws(
         a in topicity_relation_lattice_strategy(),
         b in topicity_relation_lattice_strategy(),
         c in topicity_relation_lattice_strategy(),
@@ -572,7 +572,7 @@ proptest! {
     // permutation / pair) so a triple spans fibers, exercising the cross-fiber
     // `meet` → `None` / `join` → `Err(NoJoin)` path the containers never reach.
     #[test]
-    fn test_ring_membership_ast_lattice_laws(
+    fn test_ring_membership_form_lattice_laws(
         a in ring_membership_lattice_strategy(),
         b in ring_membership_lattice_strategy(),
         c in ring_membership_lattice_strategy(),
@@ -582,7 +582,7 @@ proptest! {
     }
 
     #[test]
-    fn test_ligand_symmetry_ast_lattice_laws(
+    fn test_ligand_symmetry_form_lattice_laws(
         a in ligand_symmetry_strategy(4),
         b in ligand_symmetry_strategy(4),
         c in ligand_symmetry_strategy(4),
@@ -592,7 +592,7 @@ proptest! {
     }
 
     #[test]
-    fn test_fluxionality_ast_lattice_laws(
+    fn test_fluxionality_form_lattice_laws(
         a in fluxionality_strategy(4),
         b in fluxionality_strategy(4),
         c in fluxionality_strategy(4),
@@ -602,7 +602,7 @@ proptest! {
     }
 
     #[test]
-    fn test_topicity_ast_lattice_laws(
+    fn test_topicity_form_lattice_laws(
         a in topicity_strategy(4),
         b in topicity_strategy(4),
         c in topicity_strategy(4),

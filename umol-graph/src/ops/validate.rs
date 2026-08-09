@@ -269,8 +269,8 @@ mod tests {
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
         MoleculeConstraintContradiction, MoleculeEntries, NumForm, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
-        StereoAtomConstraintAst, StereoAtomId, StereoBondConstraintAst, StereoBondId, StereoKind,
-        StereogenicityAst, UnpairedElectronsForm,
+        StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId, StereoKind,
+        StereogenicityForm, UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -383,12 +383,12 @@ mod tests {
     #[case::stereo_atom(ConstraintContradiction::StereoAtom {
         id: StereoAtomId(0),
         kind: StereoKind::Tetrahedral,
-        constraint: StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        constraint: StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
     })]
     #[case::stereo_bond(ConstraintContradiction::StereoBond {
         id: StereoBondId(0),
         kind: StereoKind::CisTrans,
-        constraint: StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+        constraint: StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
     })]
     fn test_validator_contradiction_from(#[case] input: ConstraintContradiction) {
         assert_eq!(

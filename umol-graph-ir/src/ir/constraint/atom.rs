@@ -6,7 +6,7 @@ use std::mem;
 
 use smallvec::SmallVec;
 
-use super::super::constraint::ring::{RingMembershipAst, RingScope};
+use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::TetrahedralStereoForm;
@@ -31,7 +31,7 @@ pub enum AtomConstraintForm {
     RingValence(NumForm),
     TotalHydrogens(NumForm),
     /// Ring count in the fixed Relevant ring projection, optionally restricted by size.
-    RingMembership(RingMembershipAst),
+    RingMembership(RingMembershipForm),
 }
 
 impl AtomConstraintForm {
@@ -84,7 +84,7 @@ impl AtomConstraintForm {
     }
 
     pub fn ring_membership(scope: RingScope, count: impl Into<NumForm>) -> Self {
-        Self::RingMembership(RingMembershipAst::new(scope, count))
+        Self::RingMembership(RingMembershipForm::new(scope, count))
     }
 
     /// Atom constraint key, unique within an `AtomConstraintsForm` container.
@@ -126,7 +126,7 @@ impl AtomConstraintForm {
             Self::RingValence(_) => Self::RingValence(NumForm::Undetermined),
             Self::TotalHydrogens(_) => Self::TotalHydrogens(NumForm::Undetermined),
             Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, NumForm::Undetermined))
+                Self::RingMembership(RingMembershipForm::new(m.scope, NumForm::Undetermined))
             }
         }
     }
@@ -1081,8 +1081,8 @@ mod tests {
     #[case::ring_degree(AtomConstraintForm::ring_degree(2), AtomConstraintForm::RingDegree(NumForm::Lit(2)))]
     #[case::ring_valence(AtomConstraintForm::ring_valence(3), AtomConstraintForm::RingValence(NumForm::Lit(3)))]
     #[case::total_hydrogens(AtomConstraintForm::total_hydrogens(3), AtomConstraintForm::TotalHydrogens(NumForm::Lit(3)))]
-    #[case::ring_membership_all(AtomConstraintForm::ring_membership(RingScope::All, 1), AtomConstraintForm::RingMembership(RingMembershipAst { scope: RingScope::All, count: NumForm::Lit(1) }))]
-    #[case::ring_membership_size(AtomConstraintForm::ring_membership(RingScope::Size(6), 1), AtomConstraintForm::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
+    #[case::ring_membership_all(AtomConstraintForm::ring_membership(RingScope::All, 1), AtomConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::All, count: NumForm::Lit(1) }))]
+    #[case::ring_membership_size(AtomConstraintForm::ring_membership(RingScope::Size(6), 1), AtomConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
     #[case::aromatic_valence(
         AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
         AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic),
@@ -1129,7 +1129,7 @@ mod tests {
     #[rstest]
     #[case::valence_litset_singleton(AtomConstraintForm::Valence(NumForm::lit_set([4])), Ok(AtomConstraintForm::valence(4)))]
     #[case::ring_count_litset_singleton(
-        AtomConstraintForm::RingMembership(RingMembershipAst::new(RingScope::Size(6), NumForm::lit_set([2]))),
+        AtomConstraintForm::RingMembership(RingMembershipForm::new(RingScope::Size(6), NumForm::lit_set([2]))),
         Ok(AtomConstraintForm::ring_membership(RingScope::Size(6), 2)))]
     #[case::empty_litset_contradiction(AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
     fn test_atom_constraint_form_canonicalize(

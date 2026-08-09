@@ -407,7 +407,7 @@ proptest! {
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, StereoAtomConstraintsAst::new());
+        prop_assert_eq!(constraints, StereoAtomConstraintsForm::new());
     }
 
     #[test]
@@ -417,7 +417,7 @@ proptest! {
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
         assert_exact_values(constraints.take(), &expected, prefix)?;
-        prop_assert_eq!(constraints, StereoBondConstraintsAst::new());
+        prop_assert_eq!(constraints, StereoBondConstraintsForm::new());
     }
 }
 

@@ -20,8 +20,8 @@ use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
     DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintAst,
-    StereoBondConstraintAst,
+    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
+    StereoBondConstraintForm,
 };
 use super::dative::{DativeBondForm, DativeBondUpdate};
 use super::electrons::ElectronCountsForm;
@@ -419,15 +419,15 @@ pub enum Edit {
         id: StereoAtomHandle,
         /// Geometry context required to parse and render the constraint DSL.
         kind: Option<StereoKind>,
-        old: Option<StereoAtomConstraintAst>,
-        new: Option<StereoAtomConstraintAst>,
+        old: Option<StereoAtomConstraintForm>,
+        new: Option<StereoAtomConstraintForm>,
     },
     ModifyStereoBondConstraint {
         id: StereoBondHandle,
         /// Geometry context required to parse and render the constraint DSL.
         kind: Option<StereoKind>,
-        old: Option<StereoBondConstraintAst>,
-        new: Option<StereoBondConstraintAst>,
+        old: Option<StereoBondConstraintForm>,
+        new: Option<StereoBondConstraintForm>,
     },
 
     // Molecule-list constraints — a true multiset, so add/remove by value
@@ -1923,7 +1923,7 @@ mod tests {
         AromaticSystemConstraintsForm, AromaticValenceForm, AtomConstraintsForm,
         BondConstraintsForm, DativeBondConstraintsForm, MoleculeConstraint,
         MulticenterBondConstraintsForm, NoncovalentBondConstraintsForm, RelationalConstraint,
-        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereogenicityAst,
+        RingScope, StereoAtomConstraintsForm, StereoBondConstraintsForm, StereogenicityForm,
         SubPatternAnchor,
     };
     use super::super::molecule::{MoleculeAst, MoleculeEntries};
@@ -3134,10 +3134,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) },
-            constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         },
         vec![
             Edit::ModifyStereoAtomField {
@@ -3147,7 +3147,7 @@ mod tests {
             Edit::ModifyStereoAtomConstraint {
                 id: StereoAtomHandle::Id(StereoAtomId(7)),
                 kind: Some(StereoKind::Tetrahedral),
-                old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
                 new: None,
             },
         ],
@@ -3196,7 +3196,7 @@ mod tests {
     #[rstest]
     #[case::empty(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
     #[case::relative(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
-    #[case::absent_constraint_removal(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_stereo_atom_identity(
         #[case] current: StereoAtomForm,
         #[case] update: StereoAtomUpdate,
@@ -3214,10 +3214,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::configuration_and_constraint(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
             configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) },
-            constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         },
         vec![
             Edit::ModifyStereoBondField {
@@ -3227,7 +3227,7 @@ mod tests {
             Edit::ModifyStereoBondConstraint {
                 id: StereoBondHandle::Id(StereoBondId(7)),
                 kind: Some(StereoKind::CisTrans),
-                old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
                 new: None,
             },
         ],
@@ -3277,7 +3277,7 @@ mod tests {
     #[rstest]
     #[case::empty(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
     #[case::relative(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
-    #[case::absent_constraint_removal(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(StereoBondForm::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_stereo_bond_identity(
         #[case] current: StereoBondForm,
         #[case] update: StereoBondUpdate,
@@ -3417,8 +3417,8 @@ mod tests {
             Constraint::AromaticSystem(AromaticSystemId(10), AromaticSystemConstraintForm::electron_count(6_i64)),
             Constraint::MulticenterBond(MulticenterBondId(11), MulticenterBondConstraintForm::electron_count(2_i64)),
             Constraint::NoncovalentBond(NoncovalentBondId(12), NoncovalentBondConstraintForm::intramolecular(true)),
-            Constraint::StereoAtom(StereoAtomId(13), StereoKind::Tetrahedral, StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
-            Constraint::StereoBond(StereoBondId(14), StereoKind::CisTrans, StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+            Constraint::StereoAtom(StereoAtomId(13), StereoKind::Tetrahedral, StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+            Constraint::StereoBond(StereoBondId(14), StereoKind::CisTrans, StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         ]),
         vec![
             (Entity::Atom(AtomId(7)), EntityHandle::Atom(AtomHandle::New(0))),
@@ -3438,8 +3438,8 @@ mod tests {
                 Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintForm::electron_count(6_i64)),
                 Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintForm::electron_count(2_i64)),
                 Constraint::NoncovalentBond(NoncovalentBondId(0), NoncovalentBondConstraintForm::intramolecular(true)),
-                Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
-                Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+                Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+                Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
             ]),
             atoms: vec![AtomHandle::New(0)], bonds: vec![BondHandle::New(1)], dative_bonds: vec![DativeBondHandle::New(2)], aromatic_systems: vec![AromaticSystemHandle::New(3)],
             multicenter_bonds: vec![MulticenterBondHandle::New(4)], noncovalent_bonds: vec![NoncovalentBondHandle::New(5)], stereo_atoms: vec![StereoAtomHandle::New(6)], stereo_bonds: vec![StereoBondHandle::New(7)],

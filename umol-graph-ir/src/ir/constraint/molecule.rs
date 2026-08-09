@@ -25,7 +25,7 @@ use super::dative::DativeBondConstraintForm;
 use super::multicenter::MulticenterBondConstraintForm;
 use super::noncovalent::NoncovalentBondConstraintForm;
 use super::relational::RelationalConstraint;
-use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
+use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 
 /// Tree node type: per-entity leaf, molecule-scope leaf, relational leaf, or
 /// combinator. The bare entity-leaf forms appear only inside a combinator
@@ -43,8 +43,8 @@ pub enum Constraint {
     AromaticSystem(AromaticSystemId, AromaticSystemConstraintForm),
     MulticenterBond(MulticenterBondId, MulticenterBondConstraintForm),
     NoncovalentBond(NoncovalentBondId, NoncovalentBondConstraintForm),
-    StereoAtom(StereoAtomId, StereoKind, StereoAtomConstraintAst),
-    StereoBond(StereoBondId, StereoKind, StereoBondConstraintAst),
+    StereoAtom(StereoAtomId, StereoKind, StereoAtomConstraintForm),
+    StereoBond(StereoBondId, StereoKind, StereoBondConstraintForm),
     Relational(RelationalConstraint),
     Molecule(MoleculeConstraint),
     And(Vec<Constraint>),

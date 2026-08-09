@@ -36,8 +36,8 @@ pub(crate) use umol_graph_ir::ir::{
     DativeBondConstraintKey, DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange,
     DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator,
     Edit, Edits, ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind,
-    FluxionalityAst, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
-    LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MoleculeCorrespondence,
+    FluxionalityForm, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
+    LigandSymmetryForm, MemOp, MoleculeAst, MoleculeConstraint, MoleculeCorrespondence,
     MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
     MulticenterBondConstraintsForm, MulticenterBondDelta, MulticenterBondFieldChange,
     MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
@@ -45,14 +45,14 @@ pub(crate) use umol_graph_ir::ir::{
     NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
     NumForm, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst, RelOp,
-    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomConstraintAst,
-    StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
-    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintAst,
-    StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
+    RelationalConstraint, RingMembershipForm, RingScope, StereoAtomConstraintForm,
+    StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
+    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
+    StereoBondConstraintsForm, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
     StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationForm,
     StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
-    TetrahedralStereoForm, Topicity, TopicityAst, TopicityRelationAst, TransactionError,
+    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm, SubPatternAnchor,
+    TetrahedralStereoForm, Topicity, TopicityForm, TopicityRelationForm, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
 pub(crate) use umol_perm::{Orientation, Permutation};
@@ -272,20 +272,20 @@ pub(crate) fn raw_stereo_configuration_strategy() -> BoxedStrategy<StereoConfigu
     .boxed()
 }
 
-pub(crate) fn raw_topicity_relation_strategy() -> BoxedStrategy<TopicityRelationAst> {
+pub(crate) fn raw_topicity_relation_strategy() -> BoxedStrategy<TopicityRelationForm> {
     prop_oneof![
-        2 => Just(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic]))),
-        2 => Just(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Diastereotopic]))),
+        2 => Just(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic]))),
+        2 => Just(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Diastereotopic]))),
         3 => topicity_relation_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
     .boxed()
 }
 
-pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<StereogenicityAst> {
+pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<StereogenicityForm> {
     prop_oneof![
-        2 => Just(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Symmetric]))),
-        2 => Just(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
+        2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric]))),
+        2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
         3 => stereogenicity_relation_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
@@ -1083,35 +1083,35 @@ pub(crate) fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = Stere
 
 /// Non-vacuous topicity relations only (`Undetermined` elides on render, so it
 /// would break the render → reparse roundtrip — mirrors `tetrahedral_stereo_strategy`).
-pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRelationAst> {
+pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRelationForm> {
     prop_oneof![
-        Just(TopicityRelationAst::Lit(Topicity::Homotopic)),
-        Just(TopicityRelationAst::Lit(Topicity::Enantiotopic)),
-        Just(TopicityRelationAst::Lit(Topicity::Diastereotopic)),
-        Just(TopicityRelationAst::NotSet(BTreeSet::from([
+        Just(TopicityRelationForm::Lit(Topicity::Homotopic)),
+        Just(TopicityRelationForm::Lit(Topicity::Enantiotopic)),
+        Just(TopicityRelationForm::Lit(Topicity::Diastereotopic)),
+        Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Homotopic
         ]))),
-        Just(TopicityRelationAst::NotSet(BTreeSet::from([
+        Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Enantiotopic
         ]))),
-        Just(TopicityRelationAst::NotSet(BTreeSet::from([
+        Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Diastereotopic
         ]))),
     ]
 }
 
-pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityAst> {
+pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityForm> {
     prop_oneof![
-        Just(StereogenicityAst::Lit(Stereogenicity::Symmetric)),
-        Just(StereogenicityAst::Lit(Stereogenicity::Prochiral)),
-        Just(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-        Just(StereogenicityAst::NotSet(BTreeSet::from([
+        Just(StereogenicityForm::Lit(Stereogenicity::Symmetric)),
+        Just(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+        Just(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        Just(StereogenicityForm::NotSet(BTreeSet::from([
             Stereogenicity::Symmetric
         ]))),
-        Just(StereogenicityAst::NotSet(BTreeSet::from([
+        Just(StereogenicityForm::NotSet(BTreeSet::from([
             Stereogenicity::Prochiral
         ]))),
-        Just(StereogenicityAst::NotSet(BTreeSet::from([
+        Just(StereogenicityForm::NotSet(BTreeSet::from([
             Stereogenicity::Stereogenic
         ]))),
     ]
@@ -1119,28 +1119,28 @@ pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = Stereo
 
 /// Topicity relations spanning the full lattice: the non-vacuous singletons /
 /// complements plus `Undetermined` (top).
-pub(crate) fn topicity_relation_lattice_strategy() -> impl Strategy<Value = TopicityRelationAst> {
+pub(crate) fn topicity_relation_lattice_strategy() -> impl Strategy<Value = TopicityRelationForm> {
     prop_oneof![
-        Just(TopicityRelationAst::Undetermined),
+        Just(TopicityRelationForm::Undetermined),
         topicity_relation_strategy(),
     ]
 }
 
-pub(crate) fn stereogenicity_relation_lattice_strategy() -> impl Strategy<Value = StereogenicityAst>
+pub(crate) fn stereogenicity_relation_lattice_strategy() -> impl Strategy<Value = StereogenicityForm>
 {
     prop_oneof![
-        Just(StereogenicityAst::Undetermined),
+        Just(StereogenicityForm::Undetermined),
         stereogenicity_relation_strategy(),
     ]
 }
 
-pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = LigandSymmetryAst> {
+pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = LigandSymmetryForm> {
     (
         permutation_strategy(degree),
         orientation_strategy(),
         any::<bool>(),
     )
-        .prop_map(|(permutation, orientation, invariant)| LigandSymmetryAst {
+        .prop_map(|(permutation, orientation, invariant)| LigandSymmetryForm {
             permutation: OrientedLigandPermutation {
                 permutation: LigandPermutation(permutation),
                 orientation,
@@ -1149,32 +1149,32 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
         })
 }
 
-pub(crate) fn fluxionality_strategy(degree: usize) -> impl Strategy<Value = FluxionalityAst> {
+pub(crate) fn fluxionality_strategy(degree: usize) -> impl Strategy<Value = FluxionalityForm> {
     (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
-        FluxionalityAst {
+        FluxionalityForm {
             permutation: LigandPermutation(permutation),
             active: BooleanForm::Lit(active),
         }
     })
 }
 
-pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = TopicityAst> {
+pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = TopicityForm> {
     (
         ligand_pair_strategy(degree),
         topicity_relation_lattice_strategy(),
     )
-        .prop_map(|(pair, relation)| TopicityAst { pair, relation })
+        .prop_map(|(pair, relation)| TopicityForm { pair, relation })
 }
 
-/// Canonical, fiber-spanning `RingMembershipAst`: the `scope` varies (`All` and
+/// Canonical, fiber-spanning `RingMembershipForm`: the `scope` varies (`All` and
 /// `Size(3..=10)`) so a value triple lands in different fibers, exercising the
 /// cross-scope `meet` → `None` / `join` → `Err(NoJoin)` path.
-pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMembershipAst> {
+pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMembershipForm> {
     prop_oneof![
         constraint_value_strategy(0..=6)
-            .prop_map(|count| RingMembershipAst::new(RingScope::All, count)),
+            .prop_map(|count| RingMembershipForm::new(RingScope::All, count)),
         (3u8..=10, constraint_value_strategy(0..=6))
-            .prop_map(|(size, count)| RingMembershipAst::new(RingScope::Size(size), count)),
+            .prop_map(|(size, count)| RingMembershipForm::new(RingScope::Size(size), count)),
     ]
     .prop_map(|membership| {
         membership
@@ -1253,7 +1253,7 @@ macro_rules! stereo_constraint_strategy {
                     any::<bool>()
                 )
                     .prop_map(|(permutation, orientation, invariant)| {
-                        $constraint::LigandSymmetry(LigandSymmetryAst {
+                        $constraint::LigandSymmetry(LigandSymmetryForm {
                             permutation: OrientedLigandPermutation {
                                 permutation: LigandPermutation(permutation),
                                 orientation,
@@ -1262,13 +1262,13 @@ macro_rules! stereo_constraint_strategy {
                         })
                     }),
                 (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
-                    $constraint::Fluxionality(FluxionalityAst {
+                    $constraint::Fluxionality(FluxionalityForm {
                         permutation: LigandPermutation(permutation),
                         active: BooleanForm::Lit(active),
                     })
                 }),
                 (ligand_pair_strategy(degree), topicity_relation_strategy()).prop_map(
-                    |(pair, relation)| $constraint::Topicity(TopicityAst { pair, relation })
+                    |(pair, relation)| $constraint::Topicity(TopicityForm { pair, relation })
                 ),
                 stereogenicity_relation_strategy().prop_map(|rel| $constraint::Stereogenicity(rel)),
             ]
@@ -1277,14 +1277,14 @@ macro_rules! stereo_constraint_strategy {
     };
 }
 
-stereo_constraint_strategy! { stereo_atom_constraint_strategy, StereoAtomConstraintAst }
-stereo_constraint_strategy! { stereo_bond_constraint_strategy, StereoBondConstraintAst }
+stereo_constraint_strategy! { stereo_atom_constraint_strategy, StereoAtomConstraintForm }
+stereo_constraint_strategy! { stereo_bond_constraint_strategy, StereoBondConstraintForm }
 
 pub(crate) fn stereo_atom_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = StereoAtomConstraintsAst> {
+) -> impl Strategy<Value = StereoAtomConstraintsForm> {
     prop::collection::vec(stereo_atom_constraint_strategy(kind), 0..=3).prop_map(|list| {
-        let mut cs = StereoAtomConstraintsAst::new();
+        let mut cs = StereoAtomConstraintsForm::new();
         for c in list {
             cs.set(c);
         }
@@ -1294,9 +1294,9 @@ pub(crate) fn stereo_atom_constraints_strategy(
 
 pub(crate) fn stereo_bond_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = StereoBondConstraintsAst> {
+) -> impl Strategy<Value = StereoBondConstraintsForm> {
     prop::collection::vec(stereo_bond_constraint_strategy(kind), 0..=3).prop_map(|list| {
-        let mut cs = StereoBondConstraintsAst::new();
+        let mut cs = StereoBondConstraintsForm::new();
         for c in list {
             cs.set(c);
         }
@@ -1313,7 +1313,7 @@ pub(crate) fn stereo_atom_form_strategy() -> impl Strategy<Value = StereoAtomFor
 
 pub(crate) fn stereo_atom_update_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = StereoAtomConstraintsAst> {
+) -> impl Strategy<Value = StereoAtomConstraintsForm> {
     prop::collection::vec(
         prop_oneof![
             stereo_atom_constraint_strategy(kind),
@@ -1322,7 +1322,7 @@ pub(crate) fn stereo_atom_update_constraints_strategy(
         ],
         0..=3,
     )
-    .prop_map(StereoAtomConstraintsAst::from_iter)
+    .prop_map(StereoAtomConstraintsForm::from_iter)
 }
 
 pub(crate) fn stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomUpdate> {
@@ -1360,7 +1360,7 @@ pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondFor
 
 pub(crate) fn stereo_bond_update_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = StereoBondConstraintsAst> {
+) -> impl Strategy<Value = StereoBondConstraintsForm> {
     prop::collection::vec(
         prop_oneof![
             stereo_bond_constraint_strategy(kind),
@@ -1369,7 +1369,7 @@ pub(crate) fn stereo_bond_update_constraints_strategy(
         ],
         0..=3,
     )
-    .prop_map(StereoBondConstraintsAst::from_iter)
+    .prop_map(StereoBondConstraintsForm::from_iter)
 }
 
 pub(crate) fn stereo_bond_update_strategy() -> impl Strategy<Value = StereoBondUpdate> {
@@ -3501,16 +3501,16 @@ fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
             kind: Some(StereoKind::Tetrahedral),
             old: None,
-            new: Some(StereoAtomConstraintAst::Stereogenicity(
-                StereogenicityAst::Lit(Stereogenicity::Stereogenic),
+            new: Some(StereoAtomConstraintForm::Stereogenicity(
+                StereogenicityForm::Lit(Stereogenicity::Stereogenic),
             )),
         },
         Edit::ModifyStereoBondConstraint {
             id: StereoBondHandle::Id(StereoBondId(0)),
             kind: Some(StereoKind::CisTrans),
             old: None,
-            new: Some(StereoBondConstraintAst::Stereogenicity(
-                StereogenicityAst::Lit(Stereogenicity::Stereogenic),
+            new: Some(StereoBondConstraintForm::Stereogenicity(
+                StereogenicityForm::Lit(Stereogenicity::Stereogenic),
             )),
         },
     ]
@@ -3652,12 +3652,12 @@ fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, 
         Constraint::StereoAtom(
             StereoAtomId(7),
             StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
         Constraint::StereoBond(
             StereoBondId(7),
             StereoKind::CisTrans,
-            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
     ]);
     let mappings = HashMap::from([
@@ -3821,7 +3821,7 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
         EntityKind::StereoAtom => Constraint::StereoAtom(
             StereoAtomId(id),
             StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(match value % 3 {
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(match value % 3 {
                 0 => Stereogenicity::Symmetric,
                 1 => Stereogenicity::Prochiral,
                 _ => Stereogenicity::Stereogenic,
@@ -3830,7 +3830,7 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
         EntityKind::StereoBond => Constraint::StereoBond(
             StereoBondId(id),
             StereoKind::CisTrans,
-            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(match value % 3 {
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(match value % 3 {
                 0 => Stereogenicity::Symmetric,
                 1 => Stereogenicity::Prochiral,
                 _ => Stereogenicity::Stereogenic,

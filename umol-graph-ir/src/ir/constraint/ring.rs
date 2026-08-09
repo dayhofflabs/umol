@@ -19,12 +19,12 @@ pub enum RingScope {
 
 /// A ring count under the semantics of its containing entity constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RingMembershipAst {
+pub struct RingMembershipForm {
     pub scope: RingScope,
     pub count: NumForm,
 }
 
-impl RingMembershipAst {
+impl RingMembershipForm {
     pub fn new(scope: RingScope, count: impl Into<NumForm>) -> Self {
         Self {
             scope,
@@ -33,7 +33,7 @@ impl RingMembershipAst {
     }
 }
 
-impl Canonicalize for RingMembershipAst {
+impl Canonicalize for RingMembershipForm {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(Self::new(self.scope, self.count.canonicalize()?))
     }
@@ -42,7 +42,7 @@ impl Canonicalize for RingMembershipAst {
 /// Meet-semilattice keyed by `scope`: same scope delegates to the `count`
 /// value-lattice, different scopes lie in different fibers (`meet` → `None`,
 /// `join` → `Err(NoJoin)`).
-impl Lattice for RingMembershipAst {
+impl Lattice for RingMembershipForm {
     fn is_undetermined(&self) -> bool {
         self.count.is_undetermined()
     }
@@ -84,29 +84,29 @@ mod tests {
 
     #[rstest]
     #[case::folds_count(
-        RingMembershipAst::new(RingScope::Size(6), NumForm::lit_set([2])),
-        Ok(RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(2)))
+        RingMembershipForm::new(RingScope::Size(6), NumForm::lit_set([2])),
+        Ok(RingMembershipForm::new(RingScope::Size(6), NumForm::Lit(2)))
     )]
     #[case::empty_count_contradiction(
-        RingMembershipAst::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new())),
+        RingMembershipForm::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction)
     )]
-    fn test_ring_membership_ast_canonicalize(
-        #[case] input: RingMembershipAst,
-        #[case] expected: Result<RingMembershipAst, Contradiction>,
+    fn test_ring_membership_form_canonicalize(
+        #[case] input: RingMembershipForm,
+        #[case] expected: Result<RingMembershipForm, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
     }
 
     #[rstest]
     #[case::undetermined(
-        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipForm::new(RingScope::All, NumForm::Undetermined),
         true,
         false
     )]
-    #[case::ground(RingMembershipAst::new(RingScope::All, NumForm::Lit(3)), false, true)]
-    fn test_ring_membership_ast_lattice_position(
-        #[case] membership: RingMembershipAst,
+    #[case::ground(RingMembershipForm::new(RingScope::All, NumForm::Lit(3)), false, true)]
+    fn test_ring_membership_form_lattice_position(
+        #[case] membership: RingMembershipForm,
         #[case] is_undetermined: bool,
         #[case] is_ground: bool,
     ) {
@@ -116,66 +116,66 @@ mod tests {
 
     #[rstest]
     #[case::same_scope_narrows(
-        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        Some(RingMembershipAst::new(RingScope::All, NumForm::Lit(3)))
+        RingMembershipForm::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        Some(RingMembershipForm::new(RingScope::All, NumForm::Lit(3)))
     )]
     #[case::same_scope_incompatible(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(4)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(4)),
         None
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::Size(6), NumForm::Lit(3)),
         None
     )]
-    fn test_ring_membership_ast_meet(
-        #[case] a: RingMembershipAst,
-        #[case] b: RingMembershipAst,
-        #[case] expected: Option<RingMembershipAst>,
+    fn test_ring_membership_form_meet(
+        #[case] a: RingMembershipForm,
+        #[case] b: RingMembershipForm,
+        #[case] expected: Option<RingMembershipForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
     #[case::same_scope(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        Ok(RingMembershipAst::new(RingScope::All, NumForm::Lit(3)))
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        Ok(RingMembershipForm::new(RingScope::All, NumForm::Lit(3)))
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::Size(6), NumForm::Lit(3)),
         Err(NoJoin)
     )]
-    fn test_ring_membership_ast_join(
-        #[case] a: RingMembershipAst,
-        #[case] b: RingMembershipAst,
-        #[case] expected: Result<RingMembershipAst, NoJoin>,
+    fn test_ring_membership_form_join(
+        #[case] a: RingMembershipForm,
+        #[case] b: RingMembershipForm,
+        #[case] expected: Result<RingMembershipForm, NoJoin>,
     ) {
         assert_eq!(a.join(&b), expected);
     }
 
     #[rstest]
     #[case::same_scope_matches(
-        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
         true
     )]
     #[case::same_scope_no_match(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(4)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(4)),
         false
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
-        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipForm::new(RingScope::Size(6), NumForm::Lit(3)),
         false
     )]
-    fn test_ring_membership_ast_matches(
-        #[case] pattern: RingMembershipAst,
-        #[case] target: RingMembershipAst,
+    fn test_ring_membership_form_matches(
+        #[case] pattern: RingMembershipForm,
+        #[case] target: RingMembershipForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -183,23 +183,23 @@ mod tests {
 
     #[rstest]
     #[case::same_scope_compatible(
-        RingMembershipAst::new(RingScope::All, NumForm::Undetermined),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Undetermined),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
         true
     )]
     #[case::same_scope_incompatible(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(4)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(4)),
         false
     )]
     #[case::different_scope(
-        RingMembershipAst::new(RingScope::All, NumForm::Lit(3)),
-        RingMembershipAst::new(RingScope::Size(6), NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
+        RingMembershipForm::new(RingScope::Size(6), NumForm::Lit(3)),
         false
     )]
-    fn test_ring_membership_ast_is_compatible(
-        #[case] a: RingMembershipAst,
-        #[case] b: RingMembershipAst,
+    fn test_ring_membership_form_is_compatible(
+        #[case] a: RingMembershipForm,
+        #[case] b: RingMembershipForm,
         #[case] expected: bool,
     ) {
         assert_eq!(a.is_compatible(&b), expected);

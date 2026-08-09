@@ -1225,9 +1225,10 @@ mod tests {
         MoleculeAst as GraphIrMoleculeAst,
         MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
         NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
-        NumForm as GraphIrNumForm, StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
-        StereoBondConstraintAst as GraphIrStereoBondConstraintAst, StereoKind as GraphIrStereoKind,
-        Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
+        NumForm as GraphIrNumForm, StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
+        StereoBondConstraintForm as GraphIrStereoBondConstraintForm,
+        StereoKind as GraphIrStereoKind, Stereogenicity as GraphIrStereogenicity,
+        StereogenicityForm as GraphIrStereogenicityForm,
         UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
 
@@ -1466,14 +1467,14 @@ mod tests {
     #[case::stereo_atom(GraphIrConstraint::StereoAtom(
         GraphIrStereoAtomId(10),
         GraphIrStereoKind::Tetrahedral,
-        GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+        GraphIrStereoAtomConstraintForm::Stereogenicity(GraphIrStereogenicityForm::Lit(
             GraphIrStereogenicity::Stereogenic,
         )),
     ))]
     #[case::stereo_bond(GraphIrConstraint::StereoBond(
         GraphIrStereoBondId(11),
         GraphIrStereoKind::CisTrans,
-        GraphIrStereoBondConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(
+        GraphIrStereoBondConstraintForm::Stereogenicity(GraphIrStereogenicityForm::Lit(
             GraphIrStereogenicity::Prochiral,
         )),
     ))]

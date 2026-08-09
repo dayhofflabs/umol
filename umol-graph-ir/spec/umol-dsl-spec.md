@@ -428,7 +428,7 @@ count           ::= '*' | '+' | '!' | value-expr
 - **special counts**: **`*`** = **`Undetermined`** (no constraint, **elided** on render, **§7.1**); **`+`** = **`RangeFrom(1)`** ("in at least one ring"); **`!`** = **`Lit(0)`** (acyclic, or no ring of that size).
 - SMARTS parity: **`R`** → **`#R+`**, **`Rn`** → **`#Rn`**, **`R0`** → **`#R!`**, **`rn`** → **`#R(n)+`**.
 
-It lowers to **`RingMembershipAst`** (a **`count`** value plus a **`RingScope`** of **`All`** or **`Size(n)`**); its structured EDN form is **`ring-membership-form`** (**§7.12**). The **`#R`** predicate **MAY** appear **multiple** times on one entity — one per ring scope (total and/or per-size).
+It lowers to **`RingMembershipForm`** (a **`count`** value plus a **`RingScope`** of **`All`** or **`Size(n)`**); its structured EDN form is **`ring-membership-form`** (**§7.12**). The **`#R`** predicate **MAY** appear **multiple** times on one entity — one per ring scope (total and/or per-size).
 
 **Ring enumeration parameters.** Derived ring predicates use one fixed projection; their syntax does not carry a ring-set selector or an enumeration configuration.
 
@@ -441,7 +441,7 @@ It lowers to **`RingMembershipAst`** (a **`count`** value plus a **`RingScope`**
 
 The model fields define the observable projection: **`All`** counts relevant rings of at most 22 bonds, and **`Size(n)`** counts rings of exactly **n** bonds within that projection (therefore zero when **n > 22**). The algorithm field is operational and MUST NOT change the resulting ring set. The general **`MoleculeAst::rings`** API accepts an explicit **`RingModel`** and **`RingConfig`**, but those parameters are not part of molecule DSL syntax and do not alter the meaning of atom **`#R`**, atom **`#x`**, atom **`#y`**, or localized-bond **`#R`**.
 
-This projection is defined over the localized atom-bond graph. Dative-bond **`#R`** remains an asserted **`RingMembershipAst`** value: deriving it requires a ring model that includes dative overlays, whose semantics are not defined by this specification.
+This projection is defined over the localized atom-bond graph. Dative-bond **`#R`** remains an asserted **`RingMembershipForm`** value: deriving it requires a ring model that includes dative overlays, whose semantics are not defined by this specification.
 
 ### 5.6 Electron counts
 

@@ -24,7 +24,7 @@ pub use ring::{RingConstraintContradiction, RingConstraintValidator};
 
 use super::super::constraint::{
     AtomConstraintForm, BondConstraintForm, Constraint, DativeBondConstraintForm,
-    MoleculeConstraint, StereoAtomConstraintAst, StereoBondConstraintAst,
+    MoleculeConstraint, StereoAtomConstraintForm, StereoBondConstraintForm,
 };
 use super::super::entity::Entity;
 use super::super::id::{
@@ -74,13 +74,13 @@ pub enum ConstraintContradiction {
     StereoAtom {
         id: StereoAtomId,
         kind: StereoKind,
-        constraint: StereoAtomConstraintAst,
+        constraint: StereoAtomConstraintForm,
     },
     #[error("stereo bond {id:?} of kind {kind:?} does not satisfy constraint {constraint:?}")]
     StereoBond {
         id: StereoBondId,
         kind: StereoKind,
-        constraint: StereoBondConstraintAst,
+        constraint: StereoBondConstraintForm,
     },
 }
 
@@ -406,7 +406,7 @@ impl<'a> ConstraintEvaluation<'a> {
         &self,
         id: StereoAtomId,
         kind: StereoKind,
-        constraint: &StereoAtomConstraintAst,
+        constraint: &StereoAtomConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         let stereo = self
             .ast
@@ -431,7 +431,7 @@ impl<'a> ConstraintEvaluation<'a> {
         &self,
         id: StereoBondId,
         kind: StereoKind,
-        constraint: &StereoBondConstraintAst,
+        constraint: &StereoBondConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         let stereo = self
             .ast

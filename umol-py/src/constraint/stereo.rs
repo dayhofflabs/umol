@@ -7,15 +7,16 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    FluxionalityAst as GraphIrFluxionalityAst, LigandSymmetryAst as GraphIrLigandSymmetryAst,
-    StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
+    FluxionalityForm as GraphIrFluxionalityForm, LigandSymmetryForm as GraphIrLigandSymmetryForm,
+    StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
     StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
-    StereoAtomConstraintsAst as GraphIrStereoAtomConstraintsAst,
-    StereoAtomId as GraphIrStereoAtomId, StereoBondConstraintAst as GraphIrStereoBondConstraintAst,
+    StereoAtomConstraintsForm as GraphIrStereoAtomConstraintsForm,
+    StereoAtomId as GraphIrStereoAtomId,
+    StereoBondConstraintForm as GraphIrStereoBondConstraintForm,
     StereoBondConstraintKey as GraphIrStereoBondConstraintKey,
-    StereoBondConstraintsAst as GraphIrStereoBondConstraintsAst,
-    StereoBondId as GraphIrStereoBondId, StereogenicityAst as GraphIrStereogenicityAst,
-    TopicityAst as GraphIrTopicityAst, TopicityRelationAst as GraphIrTopicityRelationAst,
+    StereoBondConstraintsForm as GraphIrStereoBondConstraintsForm,
+    StereoBondId as GraphIrStereoBondId, StereogenicityForm as GraphIrStereogenicityForm,
+    TopicityForm as GraphIrTopicityForm, TopicityRelationForm as GraphIrTopicityRelationForm,
 };
 
 use crate::boolean::{BooleanAst, BooleanLike};
@@ -69,39 +70,39 @@ impl TopicityRelationAst {
 
 impl_py_lattice!(
     TopicityRelationAst,
-    GraphIrTopicityRelationAst,
-    |value: &TopicityRelationAst, _py: Python<'_>| -> PyResult<GraphIrTopicityRelationAst> {
+    GraphIrTopicityRelationForm,
+    |value: &TopicityRelationAst, _py: Python<'_>| -> PyResult<GraphIrTopicityRelationForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrTopicityRelationAst| -> PyResult<TopicityRelationAst> {
+    |_py: Python<'_>, value: GraphIrTopicityRelationForm| -> PyResult<TopicityRelationAst> {
         Ok(TopicityRelationAst::from_rust(&value))
     }
 );
 
 impl TopicityRelationAst {
-    pub(crate) fn from_rust(ast: &GraphIrTopicityRelationAst) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrTopicityRelationForm) -> Self {
         match ast {
-            GraphIrTopicityRelationAst::Undetermined => Self::Undetermined(),
-            GraphIrTopicityRelationAst::Lit(topicity) => Self::Lit(Topicity::from_rust(*topicity)),
-            GraphIrTopicityRelationAst::LitSet(topicities) => {
+            GraphIrTopicityRelationForm::Undetermined => Self::Undetermined(),
+            GraphIrTopicityRelationForm::Lit(topicity) => Self::Lit(Topicity::from_rust(*topicity)),
+            GraphIrTopicityRelationForm::LitSet(topicities) => {
                 Self::LitSet(topicities.iter().map(|t| Topicity::from_rust(*t)).collect())
             }
-            GraphIrTopicityRelationAst::NotSet(topicities) => {
+            GraphIrTopicityRelationForm::NotSet(topicities) => {
                 Self::NotSet(topicities.iter().map(|t| Topicity::from_rust(*t)).collect())
             }
         }
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrTopicityRelationAst {
+    pub(crate) fn to_rust(&self) -> GraphIrTopicityRelationForm {
         match self {
-            Self::Undetermined() => GraphIrTopicityRelationAst::Undetermined,
-            Self::Lit(topicity) => GraphIrTopicityRelationAst::Lit(topicity.to_rust()),
-            Self::LitSet(topicities) => {
-                GraphIrTopicityRelationAst::LitSet(topicities.iter().map(|t| t.to_rust()).collect())
-            }
-            Self::NotSet(topicities) => {
-                GraphIrTopicityRelationAst::NotSet(topicities.iter().map(|t| t.to_rust()).collect())
-            }
+            Self::Undetermined() => GraphIrTopicityRelationForm::Undetermined,
+            Self::Lit(topicity) => GraphIrTopicityRelationForm::Lit(topicity.to_rust()),
+            Self::LitSet(topicities) => GraphIrTopicityRelationForm::LitSet(
+                topicities.iter().map(|t| t.to_rust()).collect(),
+            ),
+            Self::NotSet(topicities) => GraphIrTopicityRelationForm::NotSet(
+                topicities.iter().map(|t| t.to_rust()).collect(),
+            ),
         }
     }
 }
@@ -168,29 +169,29 @@ impl StereogenicityAst {
 
 impl_py_lattice!(
     StereogenicityAst,
-    GraphIrStereogenicityAst,
-    |value: &StereogenicityAst, _py: Python<'_>| -> PyResult<GraphIrStereogenicityAst> {
+    GraphIrStereogenicityForm,
+    |value: &StereogenicityAst, _py: Python<'_>| -> PyResult<GraphIrStereogenicityForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrStereogenicityAst| -> PyResult<StereogenicityAst> {
+    |_py: Python<'_>, value: GraphIrStereogenicityForm| -> PyResult<StereogenicityAst> {
         Ok(StereogenicityAst::from_rust(&value))
     }
 );
 
 impl StereogenicityAst {
-    pub(crate) fn from_rust(ast: &GraphIrStereogenicityAst) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrStereogenicityForm) -> Self {
         match ast {
-            GraphIrStereogenicityAst::Undetermined => Self::Undetermined(),
-            GraphIrStereogenicityAst::Lit(stereogenicity) => {
+            GraphIrStereogenicityForm::Undetermined => Self::Undetermined(),
+            GraphIrStereogenicityForm::Lit(stereogenicity) => {
                 Self::Lit(Stereogenicity::from_rust(*stereogenicity))
             }
-            GraphIrStereogenicityAst::LitSet(stereogenicities) => Self::LitSet(
+            GraphIrStereogenicityForm::LitSet(stereogenicities) => Self::LitSet(
                 stereogenicities
                     .iter()
                     .map(|g| Stereogenicity::from_rust(*g))
                     .collect(),
             ),
-            GraphIrStereogenicityAst::NotSet(stereogenicities) => Self::NotSet(
+            GraphIrStereogenicityForm::NotSet(stereogenicities) => Self::NotSet(
                 stereogenicities
                     .iter()
                     .map(|g| Stereogenicity::from_rust(*g))
@@ -199,14 +200,14 @@ impl StereogenicityAst {
         }
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrStereogenicityAst {
+    pub(crate) fn to_rust(&self) -> GraphIrStereogenicityForm {
         match self {
-            Self::Undetermined() => GraphIrStereogenicityAst::Undetermined,
-            Self::Lit(stereogenicity) => GraphIrStereogenicityAst::Lit(stereogenicity.to_rust()),
-            Self::LitSet(stereogenicities) => GraphIrStereogenicityAst::LitSet(
+            Self::Undetermined() => GraphIrStereogenicityForm::Undetermined,
+            Self::Lit(stereogenicity) => GraphIrStereogenicityForm::Lit(stereogenicity.to_rust()),
+            Self::LitSet(stereogenicities) => GraphIrStereogenicityForm::LitSet(
                 stereogenicities.iter().map(|g| g.to_rust()).collect(),
             ),
-            Self::NotSet(stereogenicities) => GraphIrStereogenicityAst::NotSet(
+            Self::NotSet(stereogenicities) => GraphIrStereogenicityForm::NotSet(
                 stereogenicities.iter().map(|g| g.to_rust()).collect(),
             ),
         }
@@ -269,25 +270,25 @@ impl LigandSymmetryAst {
 
 impl_py_lattice!(
     LigandSymmetryAst,
-    GraphIrLigandSymmetryAst,
-    |value: &LigandSymmetryAst, py: Python<'_>| -> PyResult<GraphIrLigandSymmetryAst> {
+    GraphIrLigandSymmetryForm,
+    |value: &LigandSymmetryAst, py: Python<'_>| -> PyResult<GraphIrLigandSymmetryForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrLigandSymmetryAst| -> PyResult<LigandSymmetryAst> {
+    |py: Python<'_>, value: GraphIrLigandSymmetryForm| -> PyResult<LigandSymmetryAst> {
         LigandSymmetryAst::from_rust(py, &value)
     }
 );
 
 impl LigandSymmetryAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrLigandSymmetryAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrLigandSymmetryForm) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation: OrientedLigandPermutation::from_rust(ast.permutation),
             invariant: into_py_variant(py, BooleanAst::from_rust(&ast.invariant))?,
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrLigandSymmetryAst {
-        GraphIrLigandSymmetryAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrLigandSymmetryForm {
+        GraphIrLigandSymmetryForm {
             permutation: self.permutation.to_rust(),
             invariant: self.invariant.bind(py).borrow().to_rust(),
         }
@@ -345,25 +346,25 @@ impl FluxionalityAst {
 
 impl_py_lattice!(
     FluxionalityAst,
-    GraphIrFluxionalityAst,
-    |value: &FluxionalityAst, py: Python<'_>| -> PyResult<GraphIrFluxionalityAst> {
+    GraphIrFluxionalityForm,
+    |value: &FluxionalityAst, py: Python<'_>| -> PyResult<GraphIrFluxionalityForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrFluxionalityAst| -> PyResult<FluxionalityAst> {
+    |py: Python<'_>, value: GraphIrFluxionalityForm| -> PyResult<FluxionalityAst> {
         FluxionalityAst::from_rust(py, &value)
     }
 );
 
 impl FluxionalityAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrFluxionalityAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrFluxionalityForm) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation: LigandPermutation::from_rust(ast.permutation),
             active: into_py_variant(py, BooleanAst::from_rust(&ast.active))?,
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrFluxionalityAst {
-        GraphIrFluxionalityAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrFluxionalityForm {
+        GraphIrFluxionalityForm {
             permutation: self.permutation.to_rust(),
             active: self.active.bind(py).borrow().to_rust(),
         }
@@ -425,23 +426,25 @@ impl TopicityAst {
 
 impl_py_lattice!(
     TopicityAst,
-    GraphIrTopicityAst,
-    |value: &TopicityAst, py: Python<'_>| -> PyResult<GraphIrTopicityAst> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrTopicityAst| -> PyResult<TopicityAst> {
+    GraphIrTopicityForm,
+    |value: &TopicityAst, py: Python<'_>| -> PyResult<GraphIrTopicityForm> {
+        Ok(value.to_rust(py))
+    },
+    |py: Python<'_>, value: GraphIrTopicityForm| -> PyResult<TopicityAst> {
         TopicityAst::from_rust(py, &value)
     }
 );
 
 impl TopicityAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTopicityAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTopicityForm) -> PyResult<Self> {
         Ok(TopicityAst {
             pair: StereoLigandPair::from_rust(ast.pair),
             relation: into_py_variant(py, TopicityRelationAst::from_rust(&ast.relation))?,
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTopicityAst {
-        GraphIrTopicityAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTopicityForm {
+        GraphIrTopicityForm {
             pair: self.pair.to_rust(),
             relation: self.relation.bind(py).borrow().to_rust(),
         }
@@ -1239,7 +1242,7 @@ stereo_constraints! {
     StereoAtomConstraintKey, StereoAtomConstraintAst, StereoAtomConstraintsAst,
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
-    GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintAst, GraphIrStereoAtomConstraintsAst,
+    GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
     StereoAtomAst, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
     GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut, "stereo atom id out of range",
 }
@@ -1248,7 +1251,7 @@ stereo_constraints! {
     StereoBondConstraintKey, StereoBondConstraintAst, StereoBondConstraintsAst,
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
-    GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintAst, GraphIrStereoBondConstraintsAst,
+    GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,
     StereoBondAst, StereoBondConstraintsView, StereoBondConstraintsBacking,
     GraphIrStereoBondId, stereo_bonds, stereo_bond_mut, "stereo bond id out of range",
 }

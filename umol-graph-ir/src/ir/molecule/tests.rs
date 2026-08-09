@@ -21,8 +21,8 @@ use super::super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintsForm, BondConstraintForm,
     BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
     DativeBondConstraintsForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintAst,
-    StereoBondConstraintAst, StereogenicityAst, SubPatternAnchor,
+    NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
+    StereoBondConstraintForm, StereogenicityForm, SubPatternAnchor,
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondForm;
@@ -400,12 +400,12 @@ fn test_molecule_ast_try_from_entries_constraint_error(
         Entity::StereoAtom(id) => Constraint::StereoAtom(
             id,
             StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
         Entity::StereoBond(id) => Constraint::StereoBond(
             id,
             StereoKind::CisTrans,
-            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
     };
     entries.constraints = Constraint::Not(Box::new(constraint)).into();
