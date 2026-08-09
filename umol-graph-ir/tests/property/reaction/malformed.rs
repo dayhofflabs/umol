@@ -218,7 +218,7 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, App
                     Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
                         Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                             atoms: Some(vec![AtomId(0), AtomId(missing)]),
-                            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                            unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
                         }),
                     ))]),
                 ),

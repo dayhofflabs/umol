@@ -13,13 +13,13 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 /// compared whole — never sorted, deduped, or matched cell-by-cell. `i64` to
 /// mirror the other electron-count quantities (`charge`, the `#e` constraint).
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ElectronCountsAst {
+pub enum ElectronCountsForm {
     #[default]
     Undetermined,
     Lit(Vec<i64>),
 }
 
-impl ElectronCountsAst {
+impl ElectronCountsForm {
     pub fn undetermined() -> Self {
         Self::Undetermined
     }
@@ -43,13 +43,13 @@ impl ElectronCountsAst {
     }
 }
 
-impl From<Vec<i64>> for ElectronCountsAst {
+impl From<Vec<i64>> for ElectronCountsForm {
     fn from(counts: Vec<i64>) -> Self {
         Self::Lit(counts)
     }
 }
 
-impl Canonicalize for ElectronCountsAst {
+impl Canonicalize for ElectronCountsForm {
     /// Positional vector — both variants are already canonical (no sort/dedup).
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(self)
@@ -60,7 +60,7 @@ impl Canonicalize for ElectronCountsAst {
     }
 }
 
-impl AsLit for ElectronCountsAst {
+impl AsLit for ElectronCountsForm {
     type Lit = Vec<i64>;
 
     /// The concrete count vector, only when it is a literal.
@@ -73,7 +73,7 @@ impl AsLit for ElectronCountsAst {
     }
 }
 
-impl Lattice for ElectronCountsAst {
+impl Lattice for ElectronCountsForm {
     #[inline]
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
@@ -111,66 +111,66 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::triple(vec![1, 1, 1], ElectronCountsAst::Lit(vec![1, 1, 1]))]
-    #[case::mixed(vec![2, 0, 2], ElectronCountsAst::Lit(vec![2, 0, 2]))]
-    fn test_electron_counts_ast_from(
+    #[case::triple(vec![1, 1, 1], ElectronCountsForm::Lit(vec![1, 1, 1]))]
+    #[case::mixed(vec![2, 0, 2], ElectronCountsForm::Lit(vec![2, 0, 2]))]
+    fn test_electron_counts_form_from(
         #[case] counts: Vec<i64>,
-        #[case] expected: ElectronCountsAst,
+        #[case] expected: ElectronCountsForm,
     ) {
-        assert_eq!(ElectronCountsAst::from(counts), expected);
+        assert_eq!(ElectronCountsForm::from(counts), expected);
     }
 
     #[rstest]
-    #[case::undetermined(ElectronCountsAst::Undetermined, ElectronCountsAst::Undetermined)]
-    #[case::lit(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1, 1]))]
-    fn test_electron_counts_ast_constructors(
-        #[case] actual: ElectronCountsAst,
-        #[case] expected: ElectronCountsAst,
+    #[case::undetermined(ElectronCountsForm::Undetermined, ElectronCountsForm::Undetermined)]
+    #[case::lit(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1, 1]))]
+    fn test_electron_counts_form_constructors(
+        #[case] actual: ElectronCountsForm,
+        #[case] expected: ElectronCountsForm,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
     #[case::reorder(
-        ElectronCountsAst::Lit(vec![10, 20, 30]),
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
         vec![ParticipantPosition(2), ParticipantPosition(0), ParticipantPosition(1)],
-        ElectronCountsAst::Lit(vec![30, 10, 20]),
+        ElectronCountsForm::Lit(vec![30, 10, 20]),
     )]
     #[case::undetermined(
-        ElectronCountsAst::Undetermined,
+        ElectronCountsForm::Undetermined,
         vec![ParticipantPosition(1), ParticipantPosition(0)],
-        ElectronCountsAst::Undetermined,
+        ElectronCountsForm::Undetermined,
     )]
-    fn test_electron_counts_ast_permute(
-        #[case] mut input: ElectronCountsAst,
+    fn test_electron_counts_form_permute(
+        #[case] mut input: ElectronCountsForm,
         #[case] order: Vec<ParticipantPosition>,
-        #[case] expected: ElectronCountsAst,
+        #[case] expected: ElectronCountsForm,
     ) {
         input.permute(&order);
         assert_eq!(input, expected);
     }
 
     #[rstest]
-    #[case::undetermined(ElectronCountsAst::Undetermined)]
-    #[case::lit(ElectronCountsAst::Lit(vec![1, 1, 1]))]
-    fn test_electron_counts_ast_canonicalize_identity(#[case] input: ElectronCountsAst) {
+    #[case::undetermined(ElectronCountsForm::Undetermined)]
+    #[case::lit(ElectronCountsForm::Lit(vec![1, 1, 1]))]
+    fn test_electron_counts_form_canonicalize_identity(#[case] input: ElectronCountsForm) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(ElectronCountsAst::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
-    #[case::undetermined(ElectronCountsAst::Undetermined, None)]
-    fn test_electron_counts_ast_as_lit(#[case] ast: ElectronCountsAst, #[case] expected: Option<Vec<i64>>) {
+    #[case::lit(ElectronCountsForm::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
+    #[case::undetermined(ElectronCountsForm::Undetermined, None)]
+    fn test_electron_counts_form_as_lit(#[case] ast: ElectronCountsForm, #[case] expected: Option<Vec<i64>>) {
         assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rstest]
-    #[case::undetermined(ElectronCountsAst::Undetermined, true)]
-    #[case::lit(ElectronCountsAst::Lit(vec![1, 1, 1]), false)]
-    fn test_electron_counts_ast_is_undetermined(
-        #[case] ast: ElectronCountsAst,
+    #[case::undetermined(ElectronCountsForm::Undetermined, true)]
+    #[case::lit(ElectronCountsForm::Lit(vec![1, 1, 1]), false)]
+    fn test_electron_counts_form_is_undetermined(
+        #[case] ast: ElectronCountsForm,
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_undetermined(), expected);
@@ -178,46 +178,46 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(ElectronCountsAst::Undetermined, ElectronCountsAst::Lit(vec![1, 1, 1]), Some(ElectronCountsAst::Lit(vec![1, 1, 1])))]
-    #[case::lit_und(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Undetermined, Some(ElectronCountsAst::Lit(vec![1, 1, 1])))]
-    #[case::und_und(ElectronCountsAst::Undetermined, ElectronCountsAst::Undetermined, Some(ElectronCountsAst::Undetermined))]
-    #[case::lit_lit_eq(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1, 1]), Some(ElectronCountsAst::Lit(vec![1, 1, 1])))]
-    #[case::lit_lit_neq(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![2, 0, 2]), None)]
-    #[case::lit_lit_len_mismatch(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1]), None)]
-    fn test_electron_counts_ast_meet(
-        #[case] a: ElectronCountsAst,
-        #[case] b: ElectronCountsAst,
-        #[case] expected: Option<ElectronCountsAst>,
+    #[case::und_lit(ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![1, 1, 1]), Some(ElectronCountsForm::Lit(vec![1, 1, 1])))]
+    #[case::lit_und(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Undetermined, Some(ElectronCountsForm::Lit(vec![1, 1, 1])))]
+    #[case::und_und(ElectronCountsForm::Undetermined, ElectronCountsForm::Undetermined, Some(ElectronCountsForm::Undetermined))]
+    #[case::lit_lit_eq(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1, 1]), Some(ElectronCountsForm::Lit(vec![1, 1, 1])))]
+    #[case::lit_lit_neq(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![2, 0, 2]), None)]
+    #[case::lit_lit_len_mismatch(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1]), None)]
+    fn test_electron_counts_form_meet(
+        #[case] a: ElectronCountsForm,
+        #[case] b: ElectronCountsForm,
+        #[case] expected: Option<ElectronCountsForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(ElectronCountsAst::Undetermined, ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Undetermined)]
-    #[case::und_und(ElectronCountsAst::Undetermined, ElectronCountsAst::Undetermined, ElectronCountsAst::Undetermined)]
-    #[case::lit_lit_eq(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1, 1]))]
-    #[case::lit_lit_neq(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![2, 0, 2]), ElectronCountsAst::Undetermined)]
-    #[case::lit_lit_len_mismatch(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1]), ElectronCountsAst::Undetermined)]
-    fn test_electron_counts_ast_join(
-        #[case] a: ElectronCountsAst,
-        #[case] b: ElectronCountsAst,
-        #[case] expected: ElectronCountsAst,
+    #[case::und_lit(ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Undetermined)]
+    #[case::und_und(ElectronCountsForm::Undetermined, ElectronCountsForm::Undetermined, ElectronCountsForm::Undetermined)]
+    #[case::lit_lit_eq(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1, 1]))]
+    #[case::lit_lit_neq(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![2, 0, 2]), ElectronCountsForm::Undetermined)]
+    #[case::lit_lit_len_mismatch(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1]), ElectronCountsForm::Undetermined)]
+    fn test_electron_counts_form_join(
+        #[case] a: ElectronCountsForm,
+        #[case] b: ElectronCountsForm,
+        #[case] expected: ElectronCountsForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(ElectronCountsAst::Undetermined, ElectronCountsAst::Lit(vec![1, 1, 1]), true)]
-    #[case::und_und(ElectronCountsAst::Undetermined, ElectronCountsAst::Undetermined, true)]
-    #[case::lit_und(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Undetermined, false)]
-    #[case::lit_lit_match(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1, 1]), true)]
-    #[case::lit_lit_mismatch(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![2, 0, 2]), false)]
-    #[case::lit_lit_len_mismatch(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1]), false)]
-    fn test_electron_counts_ast_matches(
-        #[case] pattern: ElectronCountsAst,
-        #[case] target: ElectronCountsAst,
+    #[case::und_lit(ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![1, 1, 1]), true)]
+    #[case::und_und(ElectronCountsForm::Undetermined, ElectronCountsForm::Undetermined, true)]
+    #[case::lit_und(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Undetermined, false)]
+    #[case::lit_lit_match(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1, 1]), true)]
+    #[case::lit_lit_mismatch(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![2, 0, 2]), false)]
+    #[case::lit_lit_len_mismatch(ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![1, 1]), false)]
+    fn test_electron_counts_form_matches(
+        #[case] pattern: ElectronCountsForm,
+        #[case] target: ElectronCountsForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);

@@ -6,14 +6,14 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use thiserror::Error;
 use umol_utils::solution::Solution;
 
-use super::super::electrons::ElectronCountsAst;
+use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 
 /// Structural shape checks on per-relation entities: per-relation participant
 /// well-formedness (no self-loops, no duplicate or role-conflicting
 /// participants), no same-type parallel relations, aromatic-system disjointness,
-/// distinct stereo sites, and the `electrons: ElectronCountsAst` length match for
+/// distinct stereo sites, and the `electrons: ElectronCountsForm` length match for
 /// aromatic systems and multicenter bonds. Cross-type parallelism (a localized
 /// and a dative bond on the same atom pair) is permitted.
 #[derive(Clone, Copy, Debug, Default)]
@@ -177,7 +177,7 @@ fn noncovalent_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContr
 /// per-entity `has_conflict` primitive; the detailed contradiction locates the offending atom.
 fn aromatic_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
     for view in ast.aromatic_systems().iter() {
-        if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
+        if let ElectronCountsForm::Lit(counts) = &view.ast.electrons {
             let atoms_len = view.atom_ids().count();
             if counts.len() != atoms_len {
                 return Some(
@@ -215,7 +215,7 @@ fn aromatic_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradi
 /// locates the offender.
 fn multicenter_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
     for view in ast.multicenter_bonds().iter() {
-        if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
+        if let ElectronCountsForm::Lit(counts) = &view.ast.electrons {
             let atoms_len = view.atom_ids().count();
             if counts.len() != atoms_len {
                 return Some(

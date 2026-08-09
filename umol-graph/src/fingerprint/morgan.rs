@@ -12,7 +12,7 @@
 use umol_chem::isotope::Isotope;
 use umol_graph_core::CircularRefinementAlgorithm;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingConfig, RingModel, RingSet,
+    AsLit, AtomId, BondId, IsotopeMassForm, MoleculeAst, RingConfig, RingModel, RingSet,
 };
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
@@ -80,8 +80,8 @@ fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let hydrogens = atom.total_hydrogens().as_lit().expect("ground atom");
     let charge = atom.charge().as_lit().expect("ground atom");
     let delta_mass: i32 = match atom.isotope_mass() {
-        IsotopeMassAst::Natural => 0,
-        IsotopeMassAst::Lit(mass_number) => {
+        IsotopeMassForm::Natural => 0,
+        IsotopeMassForm::Lit(mass_number) => {
             let isotope = Isotope::new(element, *mass_number).expect("valid isotope");
             (isotope.mass() - element.mass()) as i32
         }

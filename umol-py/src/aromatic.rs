@@ -569,8 +569,8 @@ mod tests {
         AromaticSystemConstraintKey as GraphIrAromaticSystemConstraintKey,
         AromaticSystemConstraintsAst as GraphIrAromaticSystemConstraintsAst,
         AtomAst as GraphIrAtomAst, AtomId as GraphIrAtomId,
-        ElectronCountsAst as GraphIrElectronCountsAst, MoleculeEntries, NumForm as GraphIrNumForm,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
+        ElectronCountsForm as GraphIrElectronCountsForm, MoleculeEntries,
+        NumForm as GraphIrNumForm, UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
 
     use super::*;
@@ -593,7 +593,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_new() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
                 UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
@@ -608,7 +608,7 @@ mod tests {
             );
             assert_eq!(
                 system.inner().electrons,
-                GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
+                GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
             assert_eq!(system.inner().charge, GraphIrNumForm::Lit(-2));
             assert_eq!(system.inner().unpaired_electrons, unpaired_electrons_ast);
@@ -669,12 +669,12 @@ mod tests {
                 ]));
             assert_eq!(
                 system.electrons().to_rust(),
-                GraphIrElectronCountsAst::Lit(vec![1, 1, 1])
+                GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
             system.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2]));
             assert_eq!(
                 system.electrons().to_rust(),
-                GraphIrElectronCountsAst::Lit(vec![2, 2])
+                GraphIrElectronCountsForm::Lit(vec![2, 2])
             );
         });
     }
@@ -697,7 +697,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
                 UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
@@ -795,7 +795,7 @@ mod tests {
             };
             assert_eq!(
                 view.electrons(py).unwrap().to_rust(),
-                GraphIrElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])
+                GraphIrElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1])
             );
             view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2, 2, 2, 2]));
             let fresh = AromaticSystemView {
@@ -804,7 +804,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.electrons(py).unwrap().to_rust(),
-                GraphIrElectronCountsAst::Lit(vec![2, 2, 2, 2, 2, 2])
+                GraphIrElectronCountsForm::Lit(vec![2, 2, 2, 2, 2, 2])
             );
         });
     }
@@ -832,7 +832,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_view_unpaired_electrons() {
         Python::attach(|py| {
-            let unpaired_electrons_ast = GraphIrUnpairedElectronsAst::from((0_u8, 1_u8));
+            let unpaired_electrons_ast = GraphIrUnpairedElectronsForm::from((0_u8, 1_u8));
             let unpaired_electrons = Py::new(
                 py,
                 UnpairedElectronsAst::from_rust(py, &unpaired_electrons_ast).unwrap(),
@@ -972,7 +972,7 @@ mod tests {
             // value replaced, members preserved
             assert_eq!(
                 view.electrons(py).unwrap().to_rust(),
-                GraphIrElectronCountsAst::Lit(vec![2, 2, 2, 2, 2, 2])
+                GraphIrElectronCountsForm::Lit(vec![2, 2, 2, 2, 2, 2])
             );
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
             assert_eq!(atom_ids, vec![0, 1, 2, 3, 4, 5]);

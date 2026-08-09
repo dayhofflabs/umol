@@ -12,7 +12,7 @@ use umol_graph::ops::valence::{
     AtomTypeRegistry as GraphAtomTypeRegistry, ValenceEntry as GraphValenceEntry,
     ValenceTable as GraphValenceTable,
 };
-use umol_graph_ir::ir::{ElementAst as GraphIrElementAst, NumForm as GraphIrNumForm};
+use umol_graph_ir::ir::{ElementForm as GraphIrElementForm, NumForm as GraphIrNumForm};
 
 use crate::atom::AtomAst;
 use crate::element::Element;
@@ -37,7 +37,7 @@ impl AtomTypeRegistry {
         for (index, atom) in atoms.iter().enumerate() {
             let atom = atom.bind(py).borrow();
             let atom = atom.inner();
-            if !matches!(&atom.element, GraphIrElementAst::Lit(_)) {
+            if !matches!(&atom.element, GraphIrElementForm::Lit(_)) {
                 return Err(PyValueError::new_err(format!(
                     "atom type registry entry {index} must have a literal element"
                 )));

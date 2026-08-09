@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{AtomView, ElementAst, MoleculeAst, NumForm};
+use umol_graph_ir::ir::{AtomView, ElementForm, MoleculeAst, NumForm};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
@@ -80,7 +80,7 @@ impl Transformer for Aromatizer {
 /// - Anything else (sp³ C, two or more double bonds, undetermined data) →
 ///   `None`, marking the atom as not aromatic-eligible.
 pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
-    let ElementAst::Lit(element) = view.ast.element else {
+    let ElementForm::Lit(element) = view.ast.element else {
         return None;
     };
     let double_count = view
@@ -110,7 +110,7 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst,
-        MoleculeEntries, RingConfig, UnpairedElectronsAst,
+        MoleculeEntries, RingConfig, UnpairedElectronsForm,
     };
     use umol_graph_ir::mol_dsl_ground;
 
@@ -119,7 +119,7 @@ mod tests {
     fn kekule_carbon() -> AtomAst {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = NumForm::Lit(0);
-        atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
+        atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
         atom
     }
 

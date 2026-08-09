@@ -4,8 +4,8 @@ use std::convert::Infallible;
 use std::iter::once;
 
 use umol_graph_ir::ir::{
-    AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomId, ElectronCountsAst, ElementAst,
-    MoleculeAst, NumForm,
+    AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomId, ElectronCountsForm,
+    ElementForm, MoleculeAst, NumForm,
 };
 
 use crate::ops::transform::Transformer;
@@ -26,17 +26,17 @@ impl DelocalizationPlan {
         let view = ast.aromatic_system(system);
         let atom_ids: Vec<AtomId> = view.atom_ids().collect();
         let (&first, rest) = atom_ids.split_first()?;
-        let ElementAst::Lit(element) = ast.atom(first).ast.element else {
+        let ElementForm::Lit(element) = ast.atom(first).ast.element else {
             return None;
         };
         if rest
             .iter()
-            .any(|&atom| ast.atom(atom).ast.element != ElementAst::Lit(element))
+            .any(|&atom| ast.atom(atom).ast.element != ElementForm::Lit(element))
         {
             return None;
         }
 
-        let ElectronCountsAst::Lit(old_electrons) = &view.ast.electrons else {
+        let ElectronCountsForm::Lit(old_electrons) = &view.ast.electrons else {
             return None;
         };
         if old_electrons.len() != atom_ids.len() {
@@ -89,7 +89,7 @@ impl DelocalizationPlan {
         }
         let system = &mut ast.aromatic_system_mut(self.system).ast;
         system.charge = NumForm::Lit(self.charge);
-        system.electrons = ElectronCountsAst::Lit(self.electrons);
+        system.electrons = ElectronCountsForm::Lit(self.electrons);
     }
 }
 

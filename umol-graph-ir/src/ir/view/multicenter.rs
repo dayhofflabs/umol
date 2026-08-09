@@ -5,11 +5,11 @@ use std::collections::{BTreeSet, HashSet};
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::constraint::MulticenterBondConstraintsAst;
-use super::super::electrons::ElectronCountsAst;
+use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::multicenter::MulticenterBondAst;
-use super::super::spin::UnpairedElectronsAst;
+use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
 use super::atom::AtomView;
@@ -180,7 +180,7 @@ pub struct MulticenterBondView<'a> {
 
 impl<'a> MulticenterBondView<'a> {
     #[inline]
-    pub fn electrons(&self) -> &'a ElectronCountsAst {
+    pub fn electrons(&self) -> &'a ElectronCountsForm {
         &self.ast.electrons
     }
 
@@ -190,7 +190,7 @@ impl<'a> MulticenterBondView<'a> {
     }
 
     #[inline]
-    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsAst {
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
         &self.ast.unpaired_electrons
     }
 
@@ -214,8 +214,8 @@ impl<'a> MulticenterBondView<'a> {
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     pub fn electron_count(&self) -> NumForm {
         match &self.ast.electrons {
-            ElectronCountsAst::Lit(counts) => NumForm::Lit(counts.iter().sum()),
-            ElectronCountsAst::Undetermined => NumForm::Undetermined,
+            ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
+            ElectronCountsForm::Undetermined => NumForm::Undetermined,
         }
     }
 

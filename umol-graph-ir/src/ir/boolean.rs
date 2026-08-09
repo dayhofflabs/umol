@@ -1,4 +1,4 @@
-//! Boolean AST.
+//! Boolean form.
 
 use std::borrow::Cow;
 
@@ -6,13 +6,13 @@ use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum BooleanAst {
+pub enum BooleanForm {
     #[default]
     Undetermined,
     Lit(bool),
 }
 
-impl BooleanAst {
+impl BooleanForm {
     pub fn undetermined() -> Self {
         Self::Undetermined
     }
@@ -22,13 +22,13 @@ impl BooleanAst {
     }
 }
 
-impl From<bool> for BooleanAst {
+impl From<bool> for BooleanForm {
     fn from(b: bool) -> Self {
         Self::lit(b)
     }
 }
 
-impl Canonicalize for BooleanAst {
+impl Canonicalize for BooleanForm {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }
@@ -38,7 +38,7 @@ impl Canonicalize for BooleanAst {
     }
 }
 
-impl AsLit for BooleanAst {
+impl AsLit for BooleanForm {
     type Lit = bool;
 
     fn as_lit(&self) -> Option<bool> {
@@ -49,7 +49,7 @@ impl AsLit for BooleanAst {
     }
 }
 
-impl Lattice for BooleanAst {
+impl Lattice for BooleanForm {
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -82,76 +82,76 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::lit_true(BooleanAst::Lit(true), Some(true))]
-    #[case::lit_false(BooleanAst::Lit(false), Some(false))]
-    #[case::undetermined(BooleanAst::Undetermined, None)]
-    fn test_boolean_ast_as_lit(#[case] b: BooleanAst, #[case] expected: Option<bool>) {
+    #[case::lit_true(BooleanForm::Lit(true), Some(true))]
+    #[case::lit_false(BooleanForm::Lit(false), Some(false))]
+    #[case::undetermined(BooleanForm::Undetermined, None)]
+    fn test_boolean_form_as_lit(#[case] b: BooleanForm, #[case] expected: Option<bool>) {
         assert_eq!(b.as_lit(), expected);
     }
 
     #[rstest]
-    #[case::undetermined(BooleanAst::Undetermined, true)]
-    #[case::lit(BooleanAst::Lit(true), false)]
-    fn test_boolean_ast_is_undetermined(#[case] b: BooleanAst, #[case] expected: bool) {
+    #[case::undetermined(BooleanForm::Undetermined, true)]
+    #[case::lit(BooleanForm::Lit(true), false)]
+    fn test_boolean_form_is_undetermined(#[case] b: BooleanForm, #[case] expected: bool) {
         assert_eq!(b.is_undetermined(), expected);
     }
 
     #[rstest]
-    #[case::lit(BooleanAst::Lit(false), true)]
-    #[case::undetermined(BooleanAst::Undetermined, false)]
-    fn test_boolean_ast_is_ground(#[case] b: BooleanAst, #[case] expected: bool) {
+    #[case::lit(BooleanForm::Lit(false), true)]
+    #[case::undetermined(BooleanForm::Undetermined, false)]
+    fn test_boolean_form_is_ground(#[case] b: BooleanForm, #[case] expected: bool) {
         assert_eq!(b.is_ground(), expected);
     }
 
     #[rstest]
     #[case::top_left(
-        BooleanAst::Undetermined,
-        BooleanAst::Lit(true),
-        Some(BooleanAst::Lit(true))
+        BooleanForm::Undetermined,
+        BooleanForm::Lit(true),
+        Some(BooleanForm::Lit(true))
     )]
     #[case::top_right(
-        BooleanAst::Lit(false),
-        BooleanAst::Undetermined,
-        Some(BooleanAst::Lit(false))
+        BooleanForm::Lit(false),
+        BooleanForm::Undetermined,
+        Some(BooleanForm::Lit(false))
     )]
     #[case::same(
-        BooleanAst::Lit(true),
-        BooleanAst::Lit(true),
-        Some(BooleanAst::Lit(true))
+        BooleanForm::Lit(true),
+        BooleanForm::Lit(true),
+        Some(BooleanForm::Lit(true))
     )]
-    #[case::incompatible(BooleanAst::Lit(true), BooleanAst::Lit(false), None)]
-    fn test_boolean_ast_meet(
-        #[case] a: BooleanAst,
-        #[case] b: BooleanAst,
-        #[case] expected: Option<BooleanAst>,
+    #[case::incompatible(BooleanForm::Lit(true), BooleanForm::Lit(false), None)]
+    fn test_boolean_form_meet(
+        #[case] a: BooleanForm,
+        #[case] b: BooleanForm,
+        #[case] expected: Option<BooleanForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    #[case::same(BooleanAst::Lit(true), BooleanAst::Lit(true), BooleanAst::Lit(true))]
+    #[case::same(BooleanForm::Lit(true), BooleanForm::Lit(true), BooleanForm::Lit(true))]
     #[case::differ(
-        BooleanAst::Lit(true),
-        BooleanAst::Lit(false),
-        BooleanAst::Undetermined
+        BooleanForm::Lit(true),
+        BooleanForm::Lit(false),
+        BooleanForm::Undetermined
     )]
     #[case::top(
-        BooleanAst::Undetermined,
-        BooleanAst::Lit(true),
-        BooleanAst::Undetermined
+        BooleanForm::Undetermined,
+        BooleanForm::Lit(true),
+        BooleanForm::Undetermined
     )]
-    fn test_boolean_ast_join(
-        #[case] a: BooleanAst,
-        #[case] b: BooleanAst,
-        #[case] expected: BooleanAst,
+    fn test_boolean_form_join(
+        #[case] a: BooleanForm,
+        #[case] b: BooleanForm,
+        #[case] expected: BooleanForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]
-    #[case::lit(BooleanAst::Lit(true))]
-    #[case::undetermined(BooleanAst::Undetermined)]
-    fn test_boolean_ast_canonicalize(#[case] b: BooleanAst) {
+    #[case::lit(BooleanForm::Lit(true))]
+    #[case::undetermined(BooleanForm::Undetermined)]
+    fn test_boolean_form_canonicalize(#[case] b: BooleanForm) {
         assert_eq!(b.canonicalize(), Ok(b));
     }
 }

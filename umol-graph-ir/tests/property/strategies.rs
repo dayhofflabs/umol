@@ -31,16 +31,16 @@ pub(crate) use umol_graph_ir::ir::{
     AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintKey,
     AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomHandle, AtomId, AtomUpdate, BondAst,
     BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta, BondFieldChange,
-    BondHandle, BondId, BondUpdate, BooleanAst, Canonicalize, CisTransStereoAst, Constraint,
+    BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize, CisTransStereoAst, Constraint,
     ConstraintEdit, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange, DativeBondHandle,
-    DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsAst,
-    ElementAst, Entity, EntityHandle, EntityKind, FluxionalityAst, FromIr, IntoIr, IsotopeMassAst,
-    Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
-    MoleculeCorrespondence, MoleculeEntries, MulticenterBondAst, MulticenterBondConstraintAst,
-    MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondDelta,
-    MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
-    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
+    DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits, ElectronCountsForm,
+    ElementForm, Entity, EntityHandle, EntityKind, FluxionalityAst, FromIr, IntoIr,
+    IsotopeMassForm, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
+    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondAst,
+    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
+    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondHandle, MulticenterBondId,
+    MulticenterBondUpdate, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
     NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
     NoncovalentBondUpdate, NumForm, OrientedLigandPermutation, PredExpr, ReactionAst,
@@ -51,7 +51,7 @@ pub(crate) use umol_graph_ir::ir::{
     StereoBondId, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
     StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition,
     Stereogenicity, StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity,
-    TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsAst,
+    TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsForm,
     UnpairedElectronsUpdate,
 };
 pub(crate) use umol_perm::{Orientation, Permutation};
@@ -84,19 +84,19 @@ pub(crate) fn id_strategy() -> impl Strategy<Value = String> {
     "[a-zA-Z][a-zA-Z0-9_]{0,3}".prop_map(|s| s.to_string())
 }
 
-pub(crate) fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
+pub(crate) fn element_form_strategy() -> impl Strategy<Value = ElementForm> {
     prop_oneof![
-        6 => element_strategy().prop_map(ElementAst::Lit),
-        2 => Just(ElementAst::Undetermined),
-        2 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(ElementAst::lit_set),
-        1 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(ElementAst::not_set),
-        1 => id_strategy().prop_map(ElementAst::var),
+        6 => element_strategy().prop_map(ElementForm::Lit),
+        2 => Just(ElementForm::Undetermined),
+        2 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(ElementForm::lit_set),
+        1 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(ElementForm::not_set),
+        1 => id_strategy().prop_map(ElementForm::var),
         1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
-            .prop_map(|(id, set)| ElementAst::var_in(id, set)),
+            .prop_map(|(id, set)| ElementForm::var_in(id, set)),
         1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
-            .prop_map(|(id, set)| ElementAst::var_not_in(id, set)),
+            .prop_map(|(id, set)| ElementForm::var_not_in(id, set)),
     ]
-    .prop_map(|e| e.canonicalize().unwrap_or(ElementAst::Undetermined))
+    .prop_map(|e| e.canonicalize().unwrap_or(ElementForm::Undetermined))
 }
 
 pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = NumForm> {
@@ -204,19 +204,19 @@ pub(crate) fn raw_num_form_strategy() -> BoxedStrategy<NumForm> {
 // filters to satisfiable values (the `matches` law's RHS only agrees with the
 // default on satisfiable targets).
 
-pub(crate) fn raw_element_ast_strategy() -> BoxedStrategy<ElementAst> {
+pub(crate) fn raw_element_form_strategy() -> BoxedStrategy<ElementForm> {
     prop_oneof![
-        3 => element_strategy().prop_map(|e| ElementAst::lit_set([e])),
-        3 => id_strategy().prop_map(|id| ElementAst::var_in(id, Element::all().to_vec())),
-        2 => element_ast_strategy(),
+        3 => element_strategy().prop_map(|e| ElementForm::lit_set([e])),
+        3 => id_strategy().prop_map(|id| ElementForm::var_in(id, Element::all().to_vec())),
+        2 => element_form_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
     .boxed()
 }
 
-pub(crate) fn raw_isotope_strategy() -> BoxedStrategy<IsotopeMassAst> {
+pub(crate) fn raw_isotope_strategy() -> BoxedStrategy<IsotopeMassForm> {
     prop_oneof![
-        3 => (0u32..=250).prop_map(|m| IsotopeMassAst::lit_set(vec![m])),
+        3 => (0u32..=250).prop_map(|m| IsotopeMassForm::lit_set(vec![m])),
         2 => isotope_strategy(),
     ]
     .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
@@ -291,33 +291,33 @@ pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<Stereogeni
     .boxed()
 }
 
-pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
+pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassForm> {
     prop_oneof![
-        3 => Just(IsotopeMassAst::Natural),
-        3 => Just(IsotopeMassAst::Undetermined),
-        3 => (0u32..=250).prop_map(IsotopeMassAst::Lit),
-        2 => prop::collection::vec(0u32..=250, 1..=3).prop_map(IsotopeMassAst::lit_set),
-        1 => id_strategy().prop_map(IsotopeMassAst::var),
+        3 => Just(IsotopeMassForm::Natural),
+        3 => Just(IsotopeMassForm::Undetermined),
+        3 => (0u32..=250).prop_map(IsotopeMassForm::Lit),
+        2 => prop::collection::vec(0u32..=250, 1..=3).prop_map(IsotopeMassForm::lit_set),
+        1 => id_strategy().prop_map(IsotopeMassForm::var),
         1 => (id_strategy(), prop::collection::vec(0u32..=250, 1..=3))
-            .prop_map(|(id, v)| IsotopeMassAst::var_in(id, v)),
+            .prop_map(|(id, v)| IsotopeMassForm::var_in(id, v)),
     ]
-    .prop_map(|i| i.canonicalize().unwrap_or(IsotopeMassAst::Undetermined))
+    .prop_map(|i| i.canonicalize().unwrap_or(IsotopeMassForm::Undetermined))
 }
 
-pub(crate) fn unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedElectronsAst> {
+pub(crate) fn unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedElectronsForm> {
     // The components are structurally independent; physical compatibility is
     // validated only when converting to `SpinState`.
     (value_basic(0..=6), value_basic(1..=7)).prop_map(|(count, multiplicity)| {
-        UnpairedElectronsAst {
+        UnpairedElectronsForm {
             count,
             multiplicity,
         }
     })
 }
 
-pub(crate) fn raw_unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedElectronsAst> {
+pub(crate) fn raw_unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedElectronsForm> {
     (raw_num_form_strategy(), raw_num_form_strategy()).prop_map(|(count, multiplicity)| {
-        UnpairedElectronsAst {
+        UnpairedElectronsForm {
             count,
             multiplicity,
         }
@@ -350,13 +350,13 @@ pub(crate) fn partial_unpaired_electrons_update_strategy(
     ]
 }
 
-/// `UnpairedElectronsAst` with at least one of `count` / `multiplicity` not
+/// `UnpairedElectronsForm` with at least one of `count` / `multiplicity` not
 /// `Undetermined`. Used inside `MoleculeConstraint::UnpairedElectronCoupling` and similar
 /// where a fully vacuous unpaired-electron state would elide on render.
 pub(crate) fn non_vacuous_unpaired_electrons_strategy(
-) -> impl Strategy<Value = UnpairedElectronsAst> {
+) -> impl Strategy<Value = UnpairedElectronsForm> {
     (value_basic(0..=6), value_basic(1..=7))
-        .prop_map(|(u, m)| UnpairedElectronsAst {
+        .prop_map(|(u, m)| UnpairedElectronsForm {
             count: u,
             multiplicity: m,
         })
@@ -473,7 +473,7 @@ pub(crate) fn atom_update_constraints_strategy() -> impl Strategy<Value = AtomCo
 
 pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraintAst> {
     prop_oneof![
-        any::<bool>().prop_map(|b| BondConstraintAst::Aromatic(BooleanAst::Lit(b))),
+        any::<bool>().prop_map(|b| BondConstraintAst::Aromatic(BooleanForm::Lit(b))),
         constraint_inner_value_strategy(0..=6)
             .prop_map(|v| BondConstraintAst::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6))
@@ -506,7 +506,7 @@ pub(crate) fn bond_update_constraints_strategy() -> impl Strategy<Value = BondCo
 
 pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintAst> {
     prop_oneof![
-        any::<bool>().prop_map(|b| DativeBondConstraintAst::Aromatic(BooleanAst::Lit(b))),
+        any::<bool>().prop_map(|b| DativeBondConstraintAst::Aromatic(BooleanForm::Lit(b))),
         constraint_inner_value_strategy(0..=6)
             .prop_map(|v| DativeBondConstraintAst::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| {
@@ -542,7 +542,7 @@ pub(crate) fn dative_bond_update_constraints_strategy(
 prop_compose! {
     pub(crate) fn atom_ast_strategy()
     (
-        element in element_ast_strategy(),
+        element in element_form_strategy(),
         isotope in isotope_strategy(),
         charge in value_basic(-2..=2),
         implicit_hydrogens in value_basic(0..=4),
@@ -565,7 +565,7 @@ prop_compose! {
 prop_compose! {
     pub(crate) fn atom_update_strategy()
     (
-        element in prop::option::of(element_ast_strategy()),
+        element in prop::option::of(element_form_strategy()),
         isotope_mass in prop::option::of(isotope_strategy()),
         charge in prop::option::of(value_basic(-2..=2)),
         implicit_hydrogens in prop::option::of(value_basic(0..=4)),
@@ -630,7 +630,7 @@ pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst
         Just(BondAst::new(NumForm::Lit(4))),
         Just(
             BondAst::new(NumForm::Lit(1))
-                .with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                .with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ),
     ]
 }
@@ -760,10 +760,10 @@ pub(crate) fn electron_count_value_strategy(
 }
 
 /// Leaf strategy: `Undetermined` or a concrete `Lit` count vector (length 1–4).
-pub(crate) fn electron_counts_ast_strategy() -> impl Strategy<Value = ElectronCountsAst> {
+pub(crate) fn electron_counts_form_strategy() -> impl Strategy<Value = ElectronCountsForm> {
     prop_oneof![
-        Just(ElectronCountsAst::Undetermined),
-        prop::collection::vec(0i64..=8, 1..=4).prop_map(ElectronCountsAst::Lit),
+        Just(ElectronCountsForm::Undetermined),
+        prop::collection::vec(0i64..=8, 1..=4).prop_map(ElectronCountsForm::Lit),
     ]
 }
 
@@ -773,9 +773,9 @@ pub(crate) fn electron_counts_ast_strategy() -> impl Strategy<Value = ElectronCo
 pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
     (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(|(charge, constraints)| {
         AromaticSystemAst {
-            electrons: ElectronCountsAst::Undetermined,
+            electrons: ElectronCountsForm::Undetermined,
             charge,
-            unpaired_electrons: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsForm::default(),
             constraints,
         }
     })
@@ -783,7 +783,7 @@ pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSy
 
 pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
     (
-        electron_counts_ast_strategy(),
+        electron_counts_form_strategy(),
         value_basic(-2..=2),
         unpaired_electrons_strategy(),
         optional_aromatic_electron_count(),
@@ -801,7 +801,7 @@ pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = Arom
 prop_compose! {
     pub(crate) fn aromatic_system_update_strategy()
     (
-        electrons in prop::option::of(electron_counts_ast_strategy()),
+        electrons in prop::option::of(electron_counts_form_strategy()),
         charge in prop::option::of(value_basic(-2..=2)),
         unpaired_electrons in unpaired_electrons_update_strategy(),
         constraints in aromatic_system_update_constraints_strategy(),
@@ -823,9 +823,9 @@ pub(crate) fn aromatic_system_ast_for(
         optional_aromatic_electron_count(),
     )
         .prop_map(|(charge, electrons, constraints)| AromaticSystemAst {
-            electrons: ElectronCountsAst::Lit(electrons),
+            electrons: ElectronCountsForm::Lit(electrons),
             charge,
-            unpaired_electrons: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsForm::default(),
             constraints,
         })
 }
@@ -833,9 +833,9 @@ pub(crate) fn aromatic_system_ast_for(
 pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
     (value_basic(-2..=2), optional_multicenter_electron_count()).prop_map(
         |(charge, constraints)| MulticenterBondAst {
-            electrons: ElectronCountsAst::Undetermined,
+            electrons: ElectronCountsForm::Undetermined,
             charge,
-            unpaired_electrons: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsForm::default(),
             constraints,
         },
     )
@@ -843,7 +843,7 @@ pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = Multicent
 
 pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
     (
-        electron_counts_ast_strategy(),
+        electron_counts_form_strategy(),
         value_basic(-2..=2),
         unpaired_electrons_strategy(),
         optional_multicenter_electron_count(),
@@ -861,7 +861,7 @@ pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = Mul
 prop_compose! {
     pub(crate) fn multicenter_bond_update_strategy()
     (
-        electrons in prop::option::of(electron_counts_ast_strategy()),
+        electrons in prop::option::of(electron_counts_form_strategy()),
         charge in prop::option::of(value_basic(-2..=2)),
         unpaired_electrons in unpaired_electrons_update_strategy(),
         constraints in multicenter_bond_update_constraints_strategy(),
@@ -879,9 +879,9 @@ pub(crate) fn multicenter_bond_ast_for(
         optional_multicenter_electron_count(),
     )
         .prop_map(|(charge, electrons, constraints)| MulticenterBondAst {
-            electrons: ElectronCountsAst::Lit(electrons),
+            electrons: ElectronCountsForm::Lit(electrons),
             charge,
-            unpaired_electrons: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsForm::default(),
             constraints,
         })
 }
@@ -897,7 +897,7 @@ pub(crate) fn noncovalent_bond_kind_ast_strategy() -> impl Strategy<Value = Nonc
 pub(crate) fn noncovalent_bond_constraint_strategy() -> BoxedStrategy<NoncovalentBondConstraintAst>
 {
     any::<bool>()
-        .prop_map(|b| NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Lit(b)))
+        .prop_map(|b| NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Lit(b)))
         .boxed()
 }
 
@@ -918,10 +918,10 @@ pub(crate) fn noncovalent_bond_update_constraints_strategy(
         0.5,
         prop_oneof![
             any::<bool>().prop_map(|value| {
-                NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Lit(value))
+                NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Lit(value))
             }),
             Just(NoncovalentBondConstraintAst::Intramolecular(
-                BooleanAst::Undetermined,
+                BooleanForm::Undetermined,
             )),
         ],
     )
@@ -1140,7 +1140,7 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
                 permutation: LigandPermutation(permutation),
                 orientation,
             },
-            invariant: BooleanAst::Lit(invariant),
+            invariant: BooleanForm::Lit(invariant),
         })
 }
 
@@ -1148,7 +1148,7 @@ pub(crate) fn fluxionality_strategy(degree: usize) -> impl Strategy<Value = Flux
     (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
         FluxionalityAst {
             permutation: LigandPermutation(permutation),
-            active: BooleanAst::Lit(active),
+            active: BooleanForm::Lit(active),
         }
     })
 }
@@ -1253,13 +1253,13 @@ macro_rules! stereo_constraint_strategy {
                                 permutation: LigandPermutation(permutation),
                                 orientation,
                             },
-                            invariant: BooleanAst::Lit(invariant),
+                            invariant: BooleanForm::Lit(invariant),
                         })
                     }),
                 (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
                     $constraint::Fluxionality(FluxionalityAst {
                         permutation: LigandPermutation(permutation),
-                        active: BooleanAst::Lit(active),
+                        active: BooleanForm::Lit(active),
                     })
                 }),
                 (ligand_pair_strategy(degree), topicity_relation_strategy()).prop_map(
@@ -3326,15 +3326,15 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::Element {
-                old: ElementAst::Lit(Element::C),
-                new: ElementAst::Lit(Element::N),
+                old: ElementForm::Lit(Element::C),
+                new: ElementForm::Lit(Element::N),
             },
         }),
         value(Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::IsotopeMass {
-                old: IsotopeMassAst::default(),
-                new: IsotopeMassAst::Lit(13),
+                old: IsotopeMassForm::default(),
+                new: IsotopeMassForm::Lit(13),
             },
         }),
         value(Edit::ModifyAtomField {
@@ -3361,8 +3361,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsAst::default(),
-                new: UnpairedElectronsAst::from((2_u8, 1_u8)),
+                old: UnpairedElectronsForm::default(),
+                new: UnpairedElectronsForm::from((2_u8, 1_u8)),
             },
         }),
         value(Edit::ModifyBondField {
@@ -3382,8 +3382,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyBondField {
             id: BondHandle::Id(BondId(0)),
             change: BondFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsAst::default(),
-                new: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                old: UnpairedElectronsForm::default(),
+                new: UnpairedElectronsForm::from((2_u8, 3_u8)),
             },
         }),
         value(Edit::ModifyDativeBondField {
@@ -3396,8 +3396,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyAromaticSystemField {
             id: AromaticSystemHandle::Id(AromaticSystemId(0)),
             change: AromaticSystemFieldChange::Electrons {
-                old: ElectronCountsAst::default(),
-                new: ElectronCountsAst::Lit(vec![1, 1, 1]),
+                old: ElectronCountsForm::default(),
+                new: ElectronCountsForm::Lit(vec![1, 1, 1]),
             },
         }),
         value(Edit::ModifyAromaticSystemField {
@@ -3410,15 +3410,15 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyAromaticSystemField {
             id: AromaticSystemHandle::Id(AromaticSystemId(0)),
             change: AromaticSystemFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsAst::default(),
-                new: UnpairedElectronsAst::from((1_u8, 2_u8)),
+                old: UnpairedElectronsForm::default(),
+                new: UnpairedElectronsForm::from((1_u8, 2_u8)),
             },
         }),
         value(Edit::ModifyMulticenterBondField {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             change: MulticenterBondFieldChange::Electrons {
-                old: ElectronCountsAst::default(),
-                new: ElectronCountsAst::Lit(vec![1, 1, 1]),
+                old: ElectronCountsForm::default(),
+                new: ElectronCountsForm::Lit(vec![1, 1, 1]),
             },
         }),
         value(Edit::ModifyMulticenterBondField {
@@ -3431,8 +3431,8 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
         value(Edit::ModifyMulticenterBondField {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             change: MulticenterBondFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsAst::default(),
-                new: UnpairedElectronsAst::from((1_u8, 2_u8)),
+                old: UnpairedElectronsForm::default(),
+                new: UnpairedElectronsForm::from((1_u8, 2_u8)),
             },
         }),
         value(Edit::ModifyNoncovalentBondField {
@@ -4426,8 +4426,8 @@ pub(crate) fn aromatic_system_update_for(
 ) -> impl Strategy<Value = AromaticSystemUpdate> {
     (
         prop::option::of(prop_oneof![
-            Just(ElectronCountsAst::Undetermined),
-            prop::collection::vec(0i64..=2, atom_count).prop_map(ElectronCountsAst::Lit),
+            Just(ElectronCountsForm::Undetermined),
+            prop::collection::vec(0i64..=2, atom_count).prop_map(ElectronCountsForm::Lit),
         ]),
         prop::option::of(value_basic(-2..=2)),
         unpaired_electrons_update_strategy(),
@@ -4448,8 +4448,8 @@ pub(crate) fn multicenter_bond_update_for(
 ) -> impl Strategy<Value = MulticenterBondUpdate> {
     (
         prop::option::of(prop_oneof![
-            Just(ElectronCountsAst::Undetermined),
-            prop::collection::vec(0i64..=2, atom_count).prop_map(ElectronCountsAst::Lit),
+            Just(ElectronCountsForm::Undetermined),
+            prop::collection::vec(0i64..=2, atom_count).prop_map(ElectronCountsForm::Lit),
         ]),
         prop::option::of(value_basic(-2..=2)),
         unpaired_electrons_update_strategy(),
@@ -4926,7 +4926,7 @@ fn build_reaction(
         deltas.push(Delta::DativeBond(DativeBondDelta::ModifyConstraint {
             id,
             old: None,
-            new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         }));
     }
     // Part B — stereo edits on survivors. Relative ops resolve `old` from the host at apply;

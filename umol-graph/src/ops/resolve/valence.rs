@@ -104,7 +104,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomConstraintAst, AtomFieldChange, AtomHandle, AtomId, Edit, Edits, IsotopeMassAst,
+        AtomConstraintAst, AtomFieldChange, AtomHandle, AtomId, Edit, Edits, IsotopeMassForm,
         NumForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
@@ -147,8 +147,8 @@ mod tests {
             Solution::Determined(Edits::from_iter([Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::IsotopeMass {
-                    old: IsotopeMassAst::Undetermined,
-                    new: IsotopeMassAst::Natural,
+                    old: IsotopeMassForm::Undetermined,
+                    new: IsotopeMassForm::Natural,
                 },
             }]))
         );

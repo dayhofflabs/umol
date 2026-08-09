@@ -10,8 +10,8 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
-    AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanAst, Edits, IsotopeMassAst, Lattice,
-    MoleculeAst, NumForm, TransactionError, UnpairedElectronsAst,
+    AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanForm, Edits, IsotopeMassForm, Lattice,
+    MoleculeAst, NumForm, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -72,7 +72,7 @@ impl CountsInput {
             is_aromatic: atom.is_in_aromatic_system()
                 || atom
                     .neighbors()
-                    .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
+                    .any(|n| matches!(n.bond().constraints().aromatic(), BooleanForm::Lit(true)))
                 || atom
                     .constraints()
                     .aromatic_valence()
@@ -156,7 +156,7 @@ impl<'a> CountsValence<'a> {
         let input = CountsInput::for_molecule_atom(atom);
         let mut selected = self.select_candidate(atom.ast, input)?;
         if selected.isotope_mass.is_undetermined() {
-            selected.isotope_mass = IsotopeMassAst::Natural;
+            selected.isotope_mass = IsotopeMassForm::Natural;
         }
         Ok(Some(selected))
     }
@@ -402,7 +402,7 @@ fn derive_atom(
     AtomAst {
         implicit_hydrogens: NumForm::Lit(implicit_hydrogens),
         lone_pairs: NumForm::Lit(lone_pairs),
-        unpaired_electrons: UnpairedElectronsAst {
+        unpaired_electrons: UnpairedElectronsForm {
             count: NumForm::Lit(unpaired_electrons),
             multiplicity: NumForm::Lit(multiplicity),
         },
@@ -418,7 +418,7 @@ fn derive_atom(
     }
 }
 
-fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsAst, count: i64) -> Option<i64> {
+fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsForm, count: i64) -> Option<i64> {
     let multiplicity = match unpaired_electrons.multiplicity {
         NumForm::Lit(multiplicity) => multiplicity,
         NumForm::Undetermined => count.checked_add(1)?,
@@ -444,47 +444,47 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::explicit_triplet(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) },
         2,
         Some(3),
     )]
     #[case::explicit_open_shell_singlet(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
         2,
         Some(1),
     )]
     #[case::incompatible(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) },
         2,
         None,
     )]
     #[case::negative_multiplicity(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(-1) },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(-1) },
         2,
         None,
     )]
     #[case::derived(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
         2,
         Some(3),
     )]
     #[case::negative_count(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
         -1,
         None,
     )]
     #[case::pattern(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::lit_set([1, 3]) },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::lit_set([1, 3]) },
         2,
         None,
     )]
     #[case::overflow(
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined },
         i64::MAX,
         None,
     )]
     fn test_derive_multiplicity(
-        #[case] unpaired_electrons: UnpairedElectronsAst,
+        #[case] unpaired_electrons: UnpairedElectronsForm,
         #[case] count: i64,
         #[case] expected: Option<i64>,
     ) {
@@ -501,8 +501,8 @@ mod tests {
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::IsotopeMass {
-                        old: IsotopeMassAst::Undetermined,
-                        new: IsotopeMassAst::Natural,
+                        old: IsotopeMassForm::Undetermined,
+                        new: IsotopeMassForm::Natural,
                     },
                 },
                 Edit::ModifyAtomField {
@@ -522,8 +522,8 @@ mod tests {
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::UnpairedElectrons {
-                        old: UnpairedElectronsAst::default(),
-                        new: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                        old: UnpairedElectronsForm::default(),
+                        new: UnpairedElectronsForm::from((0_u8, 1_u8)),
                     },
                 },
                 Edit::ModifyAtomConstraint {

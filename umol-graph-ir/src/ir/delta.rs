@@ -3129,12 +3129,12 @@ mod tests {
     use super::super::value::NumForm;
     use super::*;
     use crate::ir::{
-        AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanAst,
-        DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst,
+        AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanForm,
+        DativeBondConstraintsAst, ElectronCountsForm, ElementForm, IsotopeMassForm,
         MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindAst,
         RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoConfigurationAst,
         StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
-        StereogenicityAst, UnpairedElectronsAst, UnpairedElectronsUpdate,
+        StereogenicityAst, UnpairedElectronsForm, UnpairedElectronsUpdate,
     };
 
     #[rstest]
@@ -3179,8 +3179,8 @@ mod tests {
             .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraint(AtomConstraintAst::valence(4_i64));
         let update = AtomUpdate {
-            element: Some(ElementAst::Lit(Element::N)),
-            isotope_mass: Some(IsotopeMassAst::Lit(13)),
+            element: Some(ElementForm::Lit(Element::N)),
+            isotope_mass: Some(IsotopeMassForm::Lit(13)),
             charge: Some(NumForm::Lit(1)),
             implicit_hydrogens: Some(NumForm::Lit(3)),
             lone_pairs: Some(NumForm::Lit(1)),
@@ -3199,15 +3199,15 @@ mod tests {
                 AtomDelta::ModifyField {
                     id: AtomId(7),
                     change: AtomFieldChange::Element {
-                        old: ElementAst::Lit(Element::C),
-                        new: ElementAst::Lit(Element::N),
+                        old: ElementForm::Lit(Element::C),
+                        new: ElementForm::Lit(Element::N),
                     },
                 },
                 AtomDelta::ModifyField {
                     id: AtomId(7),
                     change: AtomFieldChange::IsotopeMass {
-                        old: IsotopeMassAst::Lit(12),
-                        new: IsotopeMassAst::Lit(13),
+                        old: IsotopeMassForm::Lit(12),
+                        new: IsotopeMassForm::Lit(13),
                     },
                 },
                 AtomDelta::ModifyField {
@@ -3234,8 +3234,8 @@ mod tests {
                 AtomDelta::ModifyField {
                     id: AtomId(7),
                     change: AtomFieldChange::UnpairedElectrons {
-                        old: UnpairedElectronsAst::from((2_u8, 3_u8)),
-                        new: UnpairedElectronsAst::from((2_u8, 1_u8)),
+                        old: UnpairedElectronsForm::from((2_u8, 3_u8)),
+                        new: UnpairedElectronsForm::from((2_u8, 1_u8)),
                     },
                 },
                 AtomDelta::ModifyConstraint {
@@ -3297,11 +3297,11 @@ mod tests {
         BondDelta::ModifyConstraint {
             id: BondId(3),
             old: None,
-            new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         },
         BondDelta::ModifyConstraint {
             id: BondId(3),
-            old: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            old: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
             new: None,
         }
     )]
@@ -3328,7 +3328,7 @@ mod tests {
             },
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
-                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
             ]),
         };
         assert_eq!(
@@ -3351,14 +3351,14 @@ mod tests {
                 BondDelta::ModifyField {
                     id: BondId(7),
                     change: BondFieldChange::UnpairedElectrons {
-                        old: UnpairedElectronsAst::from((2_u8, 3_u8)),
-                        new: UnpairedElectronsAst::from((2_u8, 1_u8)),
+                        old: UnpairedElectronsForm::from((2_u8, 3_u8)),
+                        new: UnpairedElectronsForm::from((2_u8, 1_u8)),
                     },
                 },
                 BondDelta::ModifyConstraint {
                     id: BondId(7),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
                 BondDelta::ModifyConstraint {
                     id: BondId(7),
@@ -3389,7 +3389,7 @@ mod tests {
             order: Some(NumForm::Lit(2)),
             constraints: DativeBondConstraintsAst::from_iter([
                 DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined),
-                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)),
             ]),
         },
         vec![
@@ -3400,7 +3400,7 @@ mod tests {
             DativeBondDelta::ModifyConstraint {
                 id: DativeBondId(7),
                 old: None,
-                new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
             },
             DativeBondDelta::ModifyConstraint {
                 id: DativeBondId(7),
@@ -3437,7 +3437,7 @@ mod tests {
     #[case::fields_and_constraint(
         AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
         AromaticSystemUpdate {
-            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
             constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(NumForm::Undetermined)),
@@ -3445,7 +3445,7 @@ mod tests {
         vec![
             AromaticSystemDelta::ModifyField {
                 id: AromaticSystemId(7),
-                change: AromaticSystemFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Lit(vec![2, 2, 2]) },
+                change: AromaticSystemFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 1, 1]), new: ElectronCountsForm::Lit(vec![2, 2, 2]) },
             },
             AromaticSystemDelta::ModifyField {
                 id: AromaticSystemId(7),
@@ -3453,7 +3453,7 @@ mod tests {
             },
             AromaticSystemDelta::ModifyField {
                 id: AromaticSystemId(7),
-                change: AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
+                change: AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) },
             },
             AromaticSystemDelta::ModifyConstraint {
                 id: AromaticSystemId(7),
@@ -3490,7 +3490,7 @@ mod tests {
     #[case::fields_and_constraint(
         MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
         MulticenterBondUpdate {
-            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            electrons: Some(ElectronCountsForm::Lit(vec![2, 2, 2])),
             charge: Some(NumForm::Undetermined),
             unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) },
             constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(NumForm::Undetermined)),
@@ -3498,7 +3498,7 @@ mod tests {
         vec![
             MulticenterBondDelta::ModifyField {
                 id: MulticenterBondId(7),
-                change: MulticenterBondFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Lit(vec![2, 2, 2]) },
+                change: MulticenterBondFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 1, 1]), new: ElectronCountsForm::Lit(vec![2, 2, 2]) },
             },
             MulticenterBondDelta::ModifyField {
                 id: MulticenterBondId(7),
@@ -3506,7 +3506,7 @@ mod tests {
             },
             MulticenterBondDelta::ModifyField {
                 id: MulticenterBondId(7),
-                change: MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsAst::from((2_u8, 3_u8)), new: UnpairedElectronsAst::from((2_u8, 1_u8)) },
+                change: MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) },
             },
             MulticenterBondDelta::ModifyConstraint {
                 id: MulticenterBondId(7),
@@ -3547,7 +3547,7 @@ mod tests {
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
         NoncovalentBondUpdate {
             kind: Some(NoncovalentBondKindAst::Undetermined),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)),
+            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)),
         },
         vec![
             NoncovalentBondDelta::ModifyField {
@@ -3576,7 +3576,7 @@ mod tests {
     #[rstest]
     #[case::empty(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
     #[case::same_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
-    #[case::absent_constraint_removal(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() })]
+    #[case::absent_constraint_removal(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanForm::Undetermined)), ..Default::default() })]
     fn test_noncovalent_bond_delta_for_update_identity(
         #[case] current: NoncovalentBondAst,
         #[case] update: NoncovalentBondUpdate,

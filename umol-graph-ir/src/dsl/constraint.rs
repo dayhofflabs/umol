@@ -36,7 +36,7 @@ use super::stereo::{
     StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
-use crate::ir::boolean::BooleanAst;
+use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     AromaticValenceAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
     FluxionalityAst, LigandPermutation, LigandSymmetryAst, MoleculeConstraint,
@@ -46,7 +46,7 @@ use crate::ir::constraint::{
 };
 use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ir::molecule::MoleculeAst;
-use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
 use crate::ir::traits::{FromIr, IntoIr};
 use crate::ir::value::NumForm;
@@ -80,7 +80,7 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
 
 pub(super) fn read_unpaired_electrons(
     de: &mut EdnStreamDeserializer<'_>,
-) -> Result<UnpairedElectronsAst, EdnError> {
+) -> Result<UnpairedElectronsForm, EdnError> {
     let mut count = None;
     let mut multiplicity = None;
     read_map(de, |d, key| {
@@ -91,7 +91,7 @@ pub(super) fn read_unpaired_electrons(
         }
         Ok(())
     })?;
-    Ok(UnpairedElectronsAst {
+    Ok(UnpairedElectronsForm {
         count: count.ok_or_else(|| missing("count", "unpaired-electrons"))?,
         multiplicity: multiplicity.ok_or_else(|| missing("multiplicity", "unpaired-electrons"))?,
     })
@@ -589,7 +589,7 @@ fn read_ligand_symmetry(
 ) -> Result<LigandSymmetryAst, EdnError> {
     let mut permutation = None;
     let mut orientation = Orientation::Proper;
-    let mut invariant = BooleanAst::Lit(true);
+    let mut invariant = BooleanForm::Lit(true);
     read_map(de, |de, key| {
         match key {
             "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
@@ -632,7 +632,7 @@ fn read_fluxionality(
     kind: StereoKind,
 ) -> Result<FluxionalityAst, EdnError> {
     let mut permutation = None;
-    let mut active = BooleanAst::Lit(true);
+    let mut active = BooleanForm::Lit(true);
     read_map(de, |de, key| {
         match key {
             "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
@@ -1215,7 +1215,7 @@ pub enum MoleculeConstraintDsl {
     },
     UnpairedElectronCoupling {
         atoms: Option<Vec<AtomRef>>,
-        unpaired_electrons: UnpairedElectronsAst,
+        unpaired_electrons: UnpairedElectronsForm,
     },
     BondOrderSum {
         bonds: Option<Vec<BondRef>>,
@@ -1826,7 +1826,7 @@ fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &ValueDs
     Edn::Map(m)
 }
 
-pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsAst, DeError> {
+pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsForm, DeError> {
     let m = expect_map(edn, "unpaired-electrons")?;
     let count = m
         .get_keyword("count")
@@ -1840,13 +1840,15 @@ pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectron
             key: "multiplicity".into(),
             path: vec!["unpaired-electrons".into()],
         })?;
-    Ok(UnpairedElectronsAst {
+    Ok(UnpairedElectronsForm {
         count: ValueDsl::from_edn(count)?.into_ir(&()),
         multiplicity: ValueDsl::from_edn(multiplicity)?.into_ir(&()),
     })
 }
 
-pub(super) fn render_unpaired_electrons(unpaired_electrons: &UnpairedElectronsAst) -> Edn<'static> {
+pub(super) fn render_unpaired_electrons(
+    unpaired_electrons: &UnpairedElectronsForm,
+) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("count"),
@@ -2211,7 +2213,7 @@ mod tests {
         CisTransStereoAst, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity,
     };
     use crate::ir::value::NumForm;
-    use crate::ir::BooleanAst;
+    use crate::ir::BooleanForm;
 
     /// Every `fuzz_constraints` seed must parse as a `ConstraintDsl` or a `ConstraintsDsl` (tree) —
     /// guards the seed corpus against rot as the constraint DSL evolves.
@@ -2339,23 +2341,23 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
     #[case::fluxionality_absent(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(false) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :active false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper },
-                invariant: BooleanAst::Lit(false) })),
+                invariant: BooleanForm::Lit(false) })),
         "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
-                invariant: BooleanAst::Lit(true) })),
+                invariant: BooleanForm::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
@@ -2488,7 +2490,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(4))), "{:atom [0 {:valence 4}]}")]
-    #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraintAst::Aromatic(BooleanAst::Lit(true))), "{:bond [1 {:aromatic true}]}")]
+    #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraintAst::Aromatic(BooleanForm::Lit(true))), "{:bond [1 {:aromatic true}]}")]
     #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))),
         "{:dative-bond [0 {:ring-membership {:count 1}}]}")]
     #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }),
@@ -2528,7 +2530,7 @@ mod tests {
     #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
         "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
-    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(4))), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
+    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Lit(4))), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))]),
         "{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}")]
     #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(NumForm::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(NumForm::Lit(4)))]),
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
@@ -2584,7 +2586,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), "{:bond [0 {:aromatic true}]}")]
+    #[case::aromatic(BondConstraintAst::Aromatic(BooleanForm::Lit(true)), "{:bond [0 {:aromatic true}]}")]
     #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]

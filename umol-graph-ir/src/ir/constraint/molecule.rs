@@ -14,7 +14,7 @@ use super::super::id::{
 };
 use super::super::molecule::MoleculeAst;
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::spin::UnpairedElectronsAst;
+use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::NumForm;
@@ -353,7 +353,7 @@ pub enum MoleculeConstraint {
     },
     UnpairedElectronCoupling {
         atoms: Option<Vec<AtomId>>,
-        unpaired_electrons: UnpairedElectronsAst,
+        unpaired_electrons: UnpairedElectronsForm,
     },
     BondOrderSum {
         bonds: Option<Vec<BondId>>,
@@ -793,9 +793,9 @@ mod tests {
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::spin::UnpairedElectronsAst;
+    use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::value::{ArithExpr, NumForm};
-    use crate::ir::BooleanAst;
+    use crate::ir::BooleanForm;
 
     fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdCompaction {
         IdCompaction::new(
@@ -835,7 +835,7 @@ mod tests {
     #[case::atom_undetermined(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::Undetermined)), true)]
     #[case::bond_lit(Constraint::Bond(BondId(0), BondConstraintAst::ring_membership(RingScope::Size(6), 1)), false)]
     #[case::bond_undetermined(Constraint::Bond(BondId(0), BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)), true)]
-    #[case::bond_aromatic_flag(Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))), false)]
+    #[case::bond_aromatic_flag(Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))), false)]
     #[case::dative_undetermined(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)), true)]
     #[case::aromatic_system_undetermined(Constraint::AromaticSystem(AromaticSystemId(0),
         AromaticSystemConstraintAst::ElectronCount(NumForm::Undetermined)), true)]
@@ -850,7 +850,7 @@ mod tests {
     #[case::and_empty(Constraint::And(vec![]), true)]
     #[case::and_nonempty(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4))]), false)]
     #[case::or_empty(Constraint::Or(vec![]), true)]
-    #[case::or_nonempty(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]), false)]
+    #[case::or_nonempty(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))]), false)]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)))), false)]
     fn test_constraint_is_vacuous(#[case] c: Constraint, #[case] expected: bool) {
         assert_eq!(c.is_vacuous(), expected);
@@ -865,11 +865,11 @@ mod tests {
     #[case::and_flattens_nested(
         Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
+            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))]),
         ]),
         Ok(Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ])),
     )]
     #[case::and_drops_empty_or_child(
@@ -878,28 +878,28 @@ mod tests {
     )]
     #[case::and_sorts_and_dedups(
         Constraint::And(vec![
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
         ]),
         Ok(Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ])),
     )]
     #[case::or_flattens_nested(
         Constraint::Or(vec![
             Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4))]),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ]),
         Ok(Constraint::Or(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ])),
     )]
     #[case::or_drops_empty_and_child(
-        Constraint::Or(vec![Constraint::And(vec![]), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
-        Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))])),
+        Constraint::Or(vec![Constraint::And(vec![]), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))]),
+        Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))])),
     )]
     #[case::not_folds_child(
         Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::arith_expr(ArithExpr::Lit(4)))))),
@@ -929,22 +929,22 @@ mod tests {
         None,
     )]
     #[case::bond_shifts(
-        Constraint::Bond(BondId(3), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::Bond(BondId(3), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         id_compaction(vec![], vec![1]),
-        Some(Constraint::Bond(BondId(2), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))),
+        Some(Constraint::Bond(BondId(2), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))),
     )]
     #[case::bond_dropped(
-        Constraint::Bond(BondId(1), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::Bond(BondId(1), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         id_compaction(vec![], vec![1]),
         None,
     )]
     #[case::dative_shifts(
-        Constraint::DativeBond(DativeBondId(2), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::DativeBond(DativeBondId(2), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         relation_compaction(vec![0], vec![], vec![], vec![], vec![], vec![]),
-        Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)))),
+        Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)))),
     )]
     #[case::dative_dropped(
-        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         relation_compaction(vec![1], vec![], vec![], vec![], vec![], vec![]),
         None,
     )]
@@ -1082,14 +1082,14 @@ mod tests {
         Constraint::Atom(AtomId(5), AtomConstraintAst::valence(4)),
     )]
     #[case::bond(
-        Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         id_remapping(&[], &[(0, 3)], &[]),
-        Constraint::Bond(BondId(3), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::Bond(BondId(3), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
     )]
     #[case::dative_leaf(
-        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         id_remapping(&[], &[], &[(1, 0)]),
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
     )]
     #[case::molecule_charge_sum(
         Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: NumForm::Lit(1) }),
@@ -1097,14 +1097,14 @@ mod tests {
         Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(3), AtomId(4)]), sum: NumForm::Lit(1) }),
     )]
     #[case::molecule_unpaired_electron_coupling_subset(
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
         id_remapping(&[(0, 3), (2, 4)], &[], &[]),
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(3), AtomId(4)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(3), AtomId(4)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
     )]
     #[case::molecule_unpaired_electron_coupling_all_atoms(
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
         id_remapping(&[(0, 3), (2, 4)], &[], &[]),
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
     )]
     #[case::relational_dative_donor(
         Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) }),
@@ -1148,11 +1148,11 @@ mod tests {
     #[case::empty(vec![], 0)]
     #[case::molecule_leaves(vec![
             Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: NumForm::Lit(0) }),
-            Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+            Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
         ], 2)]
     #[case::combinator(vec![Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ])], 1)]
     fn test_constraints_push(
         #[case] items: Vec<Constraint>,
@@ -1211,7 +1211,7 @@ mod tests {
         cs.push(Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)));
         cs.push(Constraint::Bond(
             BondId(0),
-            BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
         ));
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
@@ -1220,7 +1220,7 @@ mod tests {
                 Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
                 Constraint::Bond(
                     BondId(0),
-                    BondConstraintAst::Aromatic(BooleanAst::Lit(true))
+                    BondConstraintAst::Aromatic(BooleanForm::Lit(true))
                 ),
             ],
         );
@@ -1344,21 +1344,21 @@ mod tests {
     #[rstest]
     #[case::flattens_top_level_and_then_sorts(
         Constraints::from(vec![
-            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
+            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))]),
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
         ]),
         Ok(Constraints::from(vec![
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ])),
     )]
     #[case::drops_empty_or_and_dedups(
         Constraints::from(vec![
             Constraint::Or(vec![]),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
-            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ]),
-        Ok(Constraints::from(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))])),
+        Ok(Constraints::from(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))])),
     )]
     #[case::inner_contradiction_propagates(
         Constraints::from(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(NumForm::lit_set(Vec::<i64>::new())))]),
@@ -1375,8 +1375,8 @@ mod tests {
     #[rstest]
     #[case::charge_sum_lit(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }, false)]
     #[case::charge_sum_undetermined(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Undetermined }, true)]
-    #[case::unpaired_electron_coupling_ground(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }, false)]
-    #[case::unpaired_electron_coupling_undetermined(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }, true)]
+    #[case::unpaired_electron_coupling_ground(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }, false)]
+    #[case::unpaired_electron_coupling_undetermined(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::default() }, true)]
     #[case::bond_order_sum_lit(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Lit(4) }, false)]
     #[case::bond_order_sum_undetermined(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Undetermined }, true)]
     #[case::connected(MoleculeConstraint::Connected { atoms: None }, false)]
@@ -1396,8 +1396,8 @@ mod tests {
     )]
     #[case::unpaired_electron_coupling_sorts_and_folds(
         MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(2), AtomId(0)]),
-            unpaired_electrons: UnpairedElectronsAst { count: NumForm::arith_expr(ArithExpr::Lit(0)), multiplicity: NumForm::arith_expr(ArithExpr::Lit(1)) } },
-        Ok(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+            unpaired_electrons: UnpairedElectronsForm { count: NumForm::arith_expr(ArithExpr::Lit(0)), multiplicity: NumForm::arith_expr(ArithExpr::Lit(1)) } },
+        Ok(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_sorts_and_folds(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: NumForm::arith_expr(ArithExpr::Lit(4)) },
@@ -1476,19 +1476,19 @@ mod tests {
         Some(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
     )]
     #[case::unpaired_electron_coupling_shifts(
-        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) },
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) },
         id_compaction(vec![1], vec![]),
-        Some(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(1)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Some(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(1)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
     )]
     #[case::unpaired_electron_coupling_drops_when_atom_removed(
-        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(1), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) },
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(1), AtomId(2)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) },
         id_compaction(vec![1], vec![]),
         None,
     )]
     #[case::unpaired_electron_coupling_all_atoms_passes_through(
-        MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) },
+        MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) },
         id_compaction(vec![1], vec![]),
-        Some(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
+        Some(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_shifts(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(2)]), sum: NumForm::Lit(4) },
@@ -1691,8 +1691,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single(
-        vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))],
-        vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))],
+        vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))],
+        vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanForm::Lit(true)))],
     )]
     #[case::preserves_order_and_duplicates(
         vec![
@@ -1719,7 +1719,7 @@ mod tests {
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
             Constraint::Bond(
                 BondId(0),
-                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
             ),
         ]);
         let collected: Vec<_> = cs.into_iter().collect();
@@ -1729,7 +1729,7 @@ mod tests {
                 Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
                 Constraint::Bond(
                     BondId(0),
-                    BondConstraintAst::Aromatic(BooleanAst::Lit(true))
+                    BondConstraintAst::Aromatic(BooleanForm::Lit(true))
                 ),
             ],
         );
@@ -1739,14 +1739,14 @@ mod tests {
     fn test_constraints_from_constraint() {
         let cs: Constraints = Constraint::Bond(
             BondId(0),
-            BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
         )
         .into();
         assert_eq!(
             cs.as_slice(),
             &[Constraint::Bond(
                 BondId(0),
-                BondConstraintAst::Aromatic(BooleanAst::Lit(true))
+                BondConstraintAst::Aromatic(BooleanForm::Lit(true))
             )],
         );
     }
@@ -1757,7 +1757,7 @@ mod tests {
             Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
             Constraint::Bond(
                 BondId(0),
-                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
             ),
         ]
         .into();
@@ -1767,7 +1767,7 @@ mod tests {
                 Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4)),
                 Constraint::Bond(
                     BondId(0),
-                    BondConstraintAst::Aromatic(BooleanAst::Lit(true))
+                    BondConstraintAst::Aromatic(BooleanForm::Lit(true))
                 ),
             ],
         );

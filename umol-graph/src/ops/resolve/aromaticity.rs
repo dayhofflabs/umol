@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use umol_graph_ir::ir::{
     AromaticSystemAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
     AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle, BondUpdate,
-    BooleanAst, Edits, MoleculeAst,
+    BooleanForm, Edits, MoleculeAst,
 };
 use umol_utils::solution::Solution;
 
@@ -199,7 +199,7 @@ impl AromaticityResolver {
                     let mut update = BondUpdate::default();
                     update
                         .constraints
-                        .set(BondConstraintAst::Aromatic(BooleanAst::Undetermined));
+                        .set(BondConstraintAst::Aromatic(BooleanForm::Undetermined));
                     edits.update_bond(BondHandle::Id(bond), ast.bond(bond).ast, &update);
                 }
 
@@ -293,14 +293,14 @@ impl AromaticityResolver {
         for bond_id in bond_ids {
             if matches!(
                 ast.bond(bond_id).ast.constraints.aromatic(),
-                BooleanAst::Lit(_)
+                BooleanForm::Lit(_)
             ) {
                 continue;
             }
             let mut update = BondUpdate::default();
             update
                 .constraints
-                .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraintAst::Aromatic(BooleanForm::Lit(true)));
             edits.update_bond(BondHandle::Id(bond_id), ast.bond(bond_id).ast, &update);
         }
         edits
@@ -316,7 +316,7 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, NumForm, RingConfig,
-        UnpairedElectronsAst,
+        UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -407,37 +407,37 @@ mod tests {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
                     ast: AromaticSystemAst::from_electrons(vec![1; 6])
                         .with_charge(0)
-                        .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(0)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(1)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(2)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(3)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(4)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
                 Edit::ModifyBondConstraint {
                     id: BondHandle::Id(BondId(5)),
                     old: None,
-                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                    new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
                 },
             ])))
         );
@@ -503,7 +503,7 @@ mod tests {
                 atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
                 ast: AromaticSystemAst::from_electrons(vec![2, 0, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             },
         ]))
     )]
@@ -574,7 +574,7 @@ mod tests {
         AromaticBondConstraintMismatchPolicy::RemoveConstraint,
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(0)),
-            old: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(false))),
+            old: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(false))),
             new: None,
         }]))
     )]
@@ -739,7 +739,7 @@ mod tests {
         );
         assert!(molecule.bonds().iter().all(|bond| matches!(
             bond.ast.constraints.get(BondConstraintKey::Aromatic),
-            Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true)))
+            Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true)))
         )));
     }
 

@@ -3,7 +3,7 @@
 use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, BooleanAst, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig,
+    AsLit, AtomId, BondId, BooleanForm, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig,
     Lattice, LigandSymmetryAst, MoleculeAst, StereoAtomId, StereoBondId, StereoKind,
     StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityAst, Topicity, TopicityAst,
     TopicityRelationAst,
@@ -332,9 +332,9 @@ impl StereoConformanceValidator {
                 OrientedPermutation::new(ls.permutation.permutation.0, ls.permutation.orientation);
             let in_group = sym.group().contains(op);
             let holds = match ls.invariant {
-                BooleanAst::Lit(true) => in_group,
-                BooleanAst::Lit(false) => !in_group,
-                BooleanAst::Undetermined => true,
+                BooleanForm::Lit(true) => in_group,
+                BooleanForm::Lit(false) => !in_group,
+                BooleanForm::Undetermined => true,
             };
             if !holds {
                 return Solution::Contradictory(
@@ -657,7 +657,7 @@ mod tests {
                         permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
-                    invariant: BooleanAst::Lit(true),
+                    invariant: BooleanForm::Lit(true),
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandSymmetryViolation {
@@ -666,7 +666,7 @@ mod tests {
                     permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
-                invariant: BooleanAst::Lit(true),
+                invariant: BooleanForm::Lit(true),
             },
         }
     )]

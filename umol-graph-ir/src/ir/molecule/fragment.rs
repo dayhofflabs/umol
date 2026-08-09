@@ -5,7 +5,7 @@
 
 use std::ops::Add;
 
-use super::super::atom::{AtomAst, ElementAst};
+use super::super::atom::{AtomAst, ElementForm};
 use super::super::bond::BondAst;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::id::AtomId;
@@ -129,7 +129,7 @@ impl Fragment {
     pub fn finish_open(self) -> MoleculeAst {
         let mut editor = self.body.edit();
         for port in self.ports {
-            let wildcard = editor.add_atom(AtomAst::new(ElementAst::undetermined()));
+            let wildcard = editor.add_atom(AtomAst::new(ElementForm::undetermined()));
             editor.add_bond(port.atom, wildcard, port.bond);
         }
         editor.build()
@@ -251,7 +251,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::{AtomAst, ElementAst};
+    use crate::ir::atom::{AtomAst, ElementForm};
     use crate::ir::id::BondId;
 
     #[rstest]
@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(pattern.atoms().count(), 2);
         assert_eq!(
             pattern.atom(AtomId(1)).ast,
-            &AtomAst::new(ElementAst::undetermined())
+            &AtomAst::new(ElementForm::undetermined())
         );
         assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
         assert_eq!(pattern.bond(BondId(0)).ast, &BondAst::from_order(2));

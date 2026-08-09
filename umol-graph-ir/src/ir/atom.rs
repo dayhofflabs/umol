@@ -9,7 +9,7 @@ use umol_graph_ir_macros::{Canonicalize, Lattice};
 use super::constraint::{AtomConstraintAst, AtomConstraintsAst};
 use super::error::{Contradiction, NoJoin};
 use super::operators::MemOp;
-use super::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{AsLit, Canonicalize, Lattice};
 use super::value::NumForm;
 
@@ -18,12 +18,12 @@ use super::value::NumForm;
 /// against the surrounding topology.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct AtomAst {
-    pub element: ElementAst,
-    pub isotope_mass: IsotopeMassAst,
+    pub element: ElementForm,
+    pub isotope_mass: IsotopeMassForm,
     pub charge: NumForm,
     pub implicit_hydrogens: NumForm,
     pub lone_pairs: NumForm,
-    pub unpaired_electrons: UnpairedElectronsAst,
+    pub unpaired_electrons: UnpairedElectronsForm,
     pub constraints: AtomConstraintsAst,
 }
 
@@ -33,8 +33,8 @@ pub struct AtomAst {
 /// their key.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomUpdate {
-    pub element: Option<ElementAst>,
-    pub isotope_mass: Option<IsotopeMassAst>,
+    pub element: Option<ElementForm>,
+    pub isotope_mass: Option<IsotopeMassForm>,
     pub charge: Option<NumForm>,
     pub implicit_hydrogens: Option<NumForm>,
     pub lone_pairs: Option<NumForm>,
@@ -43,7 +43,7 @@ pub struct AtomUpdate {
 }
 
 impl AtomAst {
-    pub fn new(element: ElementAst) -> Self {
+    pub fn new(element: ElementForm) -> Self {
         Self {
             element,
             ..Default::default()
@@ -51,15 +51,15 @@ impl AtomAst {
     }
 
     pub fn from_element(element: Element) -> Self {
-        Self::new(ElementAst::Lit(element))
+        Self::new(ElementForm::Lit(element))
     }
 
-    pub fn with_element(mut self, element: impl Into<ElementAst>) -> Self {
+    pub fn with_element(mut self, element: impl Into<ElementForm>) -> Self {
         self.element = element.into();
         self
     }
 
-    pub fn with_isotope_mass(mut self, mass: impl Into<IsotopeMassAst>) -> Self {
+    pub fn with_isotope_mass(mut self, mass: impl Into<IsotopeMassForm>) -> Self {
         self.isotope_mass = mass.into();
         self
     }
@@ -81,7 +81,7 @@ impl AtomAst {
 
     pub fn with_unpaired_electrons(
         mut self,
-        unpaired_electrons: impl Into<UnpairedElectronsAst>,
+        unpaired_electrons: impl Into<UnpairedElectronsForm>,
     ) -> Self {
         self.unpaired_electrons = unpaired_electrons.into();
         self
@@ -179,7 +179,7 @@ impl AtomAst {
     /// already ground.
     pub fn into_ground(mut self) -> Self {
         if self.isotope_mass.is_undetermined() {
-            self.isotope_mass = IsotopeMassAst::Natural;
+            self.isotope_mass = IsotopeMassForm::Natural;
         }
         if self.charge.is_undetermined() {
             self.charge = NumForm::Lit(0);
@@ -221,7 +221,7 @@ impl From<&str> for AtomAst {
 /// universe-relative: a semantic set of more than `⌊118/2⌋` elements is stored
 /// as its complement `NotSet(U∖S)`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ElementAst {
+pub enum ElementForm {
     #[default]
     Undetermined,
     Lit(Element),
@@ -231,7 +231,7 @@ pub enum ElementAst {
     Var(Box<(String, Option<(MemOp, BTreeSet<Element>)>)>),
 }
 
-impl ElementAst {
+impl ElementForm {
     pub fn undetermined() -> Self {
         Self::Undetermined
     }
@@ -277,33 +277,33 @@ impl ElementAst {
     }
 }
 
-impl From<Element> for ElementAst {
+impl From<Element> for ElementForm {
     fn from(element: Element) -> Self {
         Self::Lit(element)
     }
 }
 
-impl Canonicalize for ElementAst {
+impl Canonicalize for ElementForm {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            ElementAst::Undetermined => ElementAst::Undetermined,
-            ElementAst::Lit(e) => ElementAst::Lit(e),
-            ElementAst::LitSet(s) => canon_set(*s, false)?,
-            ElementAst::NotSet(s) => canon_set(*s, true)?,
-            ElementAst::Var(v) => {
+            ElementForm::Undetermined => ElementForm::Undetermined,
+            ElementForm::Lit(e) => ElementForm::Lit(e),
+            ElementForm::LitSet(s) => canon_set(*s, false)?,
+            ElementForm::NotSet(s) => canon_set(*s, true)?,
+            ElementForm::Var(v) => {
                 let (name, domain) = *v;
                 let domain = match domain {
                     None => None,
                     Some((op, set)) => canon_var_domain(op, set)?,
                 };
-                ElementAst::Var(Box::new((name, domain)))
+                ElementForm::Var(Box::new((name, domain)))
             }
         })
     }
 
     fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
-            ElementAst::Undetermined | ElementAst::Lit(_) => Ok(Cow::Borrowed(self)),
+            ElementForm::Undetermined | ElementForm::Lit(_) => Ok(Cow::Borrowed(self)),
             _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
         }
     }
@@ -321,7 +321,7 @@ fn complement(s: &BTreeSet<Element>) -> BTreeSet<Element> {
 /// denoting `U∖s`). The semantic set is stored on its smaller side: `≤ ⌊|U|/2⌋`
 /// → positive (`Lit`/`LitSet`), else `NotSet` of its complement (tiebreak
 /// positive). Empty semantic set → `Err`; full → `Undetermined`.
-fn canon_set(s: BTreeSet<Element>, negated: bool) -> Result<ElementAst, Contradiction> {
+fn canon_set(s: BTreeSet<Element>, negated: bool) -> Result<ElementForm, Contradiction> {
     let semantic_len = if negated {
         MAX_ATOMIC_NUMBER as usize - s.len()
     } else {
@@ -331,18 +331,18 @@ fn canon_set(s: BTreeSet<Element>, negated: bool) -> Result<ElementAst, Contradi
         return Err(Contradiction);
     }
     if semantic_len == MAX_ATOMIC_NUMBER as usize {
-        return Ok(ElementAst::Undetermined);
+        return Ok(ElementForm::Undetermined);
     }
     if semantic_len <= MAX_ATOMIC_NUMBER as usize / 2 {
         let positive = if negated { complement(&s) } else { s };
         Ok(if positive.len() == 1 {
-            ElementAst::Lit(*positive.iter().next().unwrap())
+            ElementForm::Lit(*positive.iter().next().unwrap())
         } else {
-            ElementAst::LitSet(Box::new(positive))
+            ElementForm::LitSet(Box::new(positive))
         })
     } else {
         let excluded = if negated { s } else { complement(&s) };
-        Ok(ElementAst::NotSet(Box::new(excluded)))
+        Ok(ElementForm::NotSet(Box::new(excluded)))
     }
 }
 
@@ -377,7 +377,7 @@ fn canon_var_domain(
     }))
 }
 
-impl AsLit for ElementAst {
+impl AsLit for ElementForm {
     type Lit = Element;
 
     /// The single element this denotes, only when it is a literal.
@@ -393,12 +393,12 @@ impl AsLit for ElementAst {
 
 /// The concrete forms as `(set, negated)`: `Lit`/`LitSet` positive, `NotSet` the
 /// complement. `Undetermined`/`Var` have no finite-set view.
-fn element_set_view(e: &ElementAst) -> Option<(BTreeSet<Element>, bool)> {
+fn element_set_view(e: &ElementForm) -> Option<(BTreeSet<Element>, bool)> {
     match e {
-        ElementAst::Lit(x) => Some((BTreeSet::from([*x]), false)),
-        ElementAst::LitSet(s) => Some(((**s).clone(), false)),
-        ElementAst::NotSet(s) => Some(((**s).clone(), true)),
-        ElementAst::Undetermined | ElementAst::Var(_) => None,
+        ElementForm::Lit(x) => Some((BTreeSet::from([*x]), false)),
+        ElementForm::LitSet(s) => Some(((**s).clone(), false)),
+        ElementForm::NotSet(s) => Some(((**s).clone(), true)),
+        ElementForm::Undetermined | ElementForm::Var(_) => None,
     }
 }
 
@@ -414,7 +414,7 @@ fn difference(s: &BTreeSet<Element>, t: &BTreeSet<Element>) -> BTreeSet<Element>
     s.difference(t).copied().collect()
 }
 
-impl Lattice for ElementAst {
+impl Lattice for ElementForm {
     #[inline]
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
@@ -432,7 +432,7 @@ impl Lattice for ElementAst {
     fn meet(&self, other: &Self) -> Option<Self> {
         let a = self.canonical().ok()?;
         let b = other.canonical().ok()?;
-        use ElementAst::*;
+        use ElementForm::*;
         match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) => Some(b.as_ref().clone()),
             (_, Undetermined) => Some(a.as_ref().clone()),
@@ -461,7 +461,7 @@ impl Lattice for ElementAst {
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        use ElementAst::*;
+        use ElementForm::*;
         Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Var(x), Var(y)) if x == y => a.as_ref().clone(),
@@ -520,7 +520,7 @@ pub enum IsotopeMass {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum IsotopeMassAst {
+pub enum IsotopeMassForm {
     #[default]
     Undetermined,
     Natural,
@@ -529,7 +529,7 @@ pub enum IsotopeMassAst {
     Var(Box<(String, Option<BTreeSet<u32>>)>),
 }
 
-impl IsotopeMassAst {
+impl IsotopeMassForm {
     pub fn undetermined() -> Self {
         Self::Undetermined
     }
@@ -557,13 +557,13 @@ impl IsotopeMassAst {
     }
 }
 
-impl From<u32> for IsotopeMassAst {
+impl From<u32> for IsotopeMassForm {
     fn from(mass: u32) -> Self {
         Self::Lit(mass)
     }
 }
 
-impl From<IsotopeMass> for IsotopeMassAst {
+impl From<IsotopeMass> for IsotopeMassForm {
     fn from(mass: IsotopeMass) -> Self {
         match mass {
             IsotopeMass::Natural => Self::Natural,
@@ -572,14 +572,14 @@ impl From<IsotopeMass> for IsotopeMassAst {
     }
 }
 
-impl Canonicalize for IsotopeMassAst {
+impl Canonicalize for IsotopeMassForm {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            IsotopeMassAst::Undetermined => IsotopeMassAst::Undetermined,
-            IsotopeMassAst::Natural => IsotopeMassAst::Natural,
-            IsotopeMassAst::Lit(n) => IsotopeMassAst::Lit(n),
-            IsotopeMassAst::LitSet(s) => canon_mass_set(*s)?,
-            IsotopeMassAst::Var(v) => {
+            IsotopeMassForm::Undetermined => IsotopeMassForm::Undetermined,
+            IsotopeMassForm::Natural => IsotopeMassForm::Natural,
+            IsotopeMassForm::Lit(n) => IsotopeMassForm::Lit(n),
+            IsotopeMassForm::LitSet(s) => canon_mass_set(*s)?,
+            IsotopeMassForm::Var(v) => {
                 let (name, domain) = *v;
                 let domain = match domain {
                     None => None,
@@ -590,14 +590,14 @@ impl Canonicalize for IsotopeMassAst {
                         Some(set)
                     }
                 };
-                IsotopeMassAst::Var(Box::new((name, domain)))
+                IsotopeMassForm::Var(Box::new((name, domain)))
             }
         })
     }
 
     fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
-            IsotopeMassAst::Undetermined | IsotopeMassAst::Natural | IsotopeMassAst::Lit(_) => {
+            IsotopeMassForm::Undetermined | IsotopeMassForm::Natural | IsotopeMassForm::Lit(_) => {
                 Ok(Cow::Borrowed(self))
             }
             _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
@@ -606,15 +606,15 @@ impl Canonicalize for IsotopeMassAst {
 }
 
 /// Canonicalize a mass set: empty → `Err`; singleton → `Lit`; else `LitSet`.
-fn canon_mass_set(s: BTreeSet<u32>) -> Result<IsotopeMassAst, Contradiction> {
+fn canon_mass_set(s: BTreeSet<u32>) -> Result<IsotopeMassForm, Contradiction> {
     match s.len() {
         0 => Err(Contradiction),
-        1 => Ok(IsotopeMassAst::Lit(*s.iter().next().unwrap())),
-        _ => Ok(IsotopeMassAst::LitSet(Box::new(s))),
+        1 => Ok(IsotopeMassForm::Lit(*s.iter().next().unwrap())),
+        _ => Ok(IsotopeMassForm::LitSet(Box::new(s))),
     }
 }
 
-impl AsLit for IsotopeMassAst {
+impl AsLit for IsotopeMassForm {
     type Lit = IsotopeMass;
 
     /// The exact natural-composition or mass-number value when ground.
@@ -630,15 +630,15 @@ impl AsLit for IsotopeMassAst {
 
 /// The positive mass set a concrete form denotes. `Undetermined`, `Natural`,
 /// and `Var` have no mass-set view.
-fn mass_set_view(iso: &IsotopeMassAst) -> Option<BTreeSet<u32>> {
+fn mass_set_view(iso: &IsotopeMassForm) -> Option<BTreeSet<u32>> {
     match iso {
-        IsotopeMassAst::Lit(n) => Some(BTreeSet::from([*n])),
-        IsotopeMassAst::LitSet(s) => Some((**s).clone()),
-        IsotopeMassAst::Undetermined | IsotopeMassAst::Natural | IsotopeMassAst::Var(_) => None,
+        IsotopeMassForm::Lit(n) => Some(BTreeSet::from([*n])),
+        IsotopeMassForm::LitSet(s) => Some((**s).clone()),
+        IsotopeMassForm::Undetermined | IsotopeMassForm::Natural | IsotopeMassForm::Var(_) => None,
     }
 }
 
-impl Lattice for IsotopeMassAst {
+impl Lattice for IsotopeMassForm {
     #[inline]
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
@@ -657,7 +657,7 @@ impl Lattice for IsotopeMassAst {
     fn meet(&self, other: &Self) -> Option<Self> {
         let a = self.canonical().ok()?;
         let b = other.canonical().ok()?;
-        use IsotopeMassAst::*;
+        use IsotopeMassForm::*;
         match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) => Some(b.as_ref().clone()),
             (_, Undetermined) => Some(a.as_ref().clone()),
@@ -679,7 +679,7 @@ impl Lattice for IsotopeMassAst {
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        use IsotopeMassAst::*;
+        use IsotopeMassForm::*;
         Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Natural, Natural) => Natural,
@@ -735,7 +735,7 @@ mod tests {
         assert_eq!(
             AtomAst::from_element(Element::C),
             AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 ..Default::default()
             },
         );
@@ -744,7 +744,7 @@ mod tests {
     #[rstest]
     fn test_atom_ast_from() {
         let expected = AtomAst {
-            element: ElementAst::Lit(Element::C),
+            element: ElementForm::Lit(Element::C),
             ..Default::default()
         };
         assert_eq!(AtomAst::from(Element::C), expected);
@@ -753,13 +753,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::with_element_ast(AtomAst::default().with_element(ElementAst::Lit(Element::C)), AtomAst { element: ElementAst::Lit(Element::C), ..Default::default() })]
-    #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementAst::Lit(Element::N), ..Default::default() })]
-    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_u32), AtomAst { isotope_mass: IsotopeMassAst::Lit(12), ..Default::default() })]
+    #[case::with_element_form(AtomAst::default().with_element(ElementForm::Lit(Element::C)), AtomAst { element: ElementForm::Lit(Element::C), ..Default::default() })]
+    #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementForm::Lit(Element::N), ..Default::default() })]
+    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_u32), AtomAst { isotope_mass: IsotopeMassForm::Lit(12), ..Default::default() })]
     #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: NumForm::Lit(1), ..Default::default() })]
     #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: NumForm::Lit(3), ..Default::default() })]
     #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: NumForm::Lit(2), ..Default::default() })]
-    #[case::with_unpaired_electrons_tuple(AtomAst::default().with_unpaired_electrons((0_u8, 1_u8)), AtomAst { unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() })]
+    #[case::with_unpaired_electrons_tuple(AtomAst::default().with_unpaired_electrons((0_u8, 1_u8)), AtomAst { unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() })]
     #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)),
         AtomAst { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)),..Default::default() })]
     #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)).with_constraints([AtomConstraintAst::donated_pairs(1_i64), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
@@ -772,10 +772,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::element(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementAst::Lit(Element::N)), ..Default::default() }, AtomAst::from_element(Element::N))]
-    #[case::element_undetermined(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementAst::Undetermined), ..Default::default() }, AtomAst::default())]
-    #[case::isotope_mass(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassAst::Lit(13)), ..Default::default() }, AtomAst::from_element(Element::C).with_isotope_mass(13_u32))]
-    #[case::isotope_mass_undetermined(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
+    #[case::element(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementForm::Lit(Element::N)), ..Default::default() }, AtomAst::from_element(Element::N))]
+    #[case::element_undetermined(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementForm::Undetermined), ..Default::default() }, AtomAst::default())]
+    #[case::isotope_mass(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassForm::Lit(13)), ..Default::default() }, AtomAst::from_element(Element::C).with_isotope_mass(13_u32))]
+    #[case::isotope_mass_undetermined(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassForm::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
     #[case::charge(AtomAst::from_element(Element::C).with_charge(0_i64), AtomUpdate { charge: Some(NumForm::Lit(1)), ..Default::default() }, AtomAst::from_element(Element::C).with_charge(1_i64))]
     #[case::charge_undetermined(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
     #[case::implicit_hydrogens(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(NumForm::Lit(3)), ..Default::default() }, AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64))]
@@ -785,8 +785,8 @@ mod tests {
     #[case::unpaired_electrons(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)))]
     #[case::unpaired_electrons_count(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 3_u8)))]
     #[case::unpaired_electrons_multiplicity(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 1_u8)))]
-    #[case::unpaired_electrons_count_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
-    #[case::unpaired_electrons_multiplicity_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
+    #[case::unpaired_electrons_count_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
+    #[case::unpaired_electrons_multiplicity_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
     #[case::constraint_set(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
     #[case::constraint_replace(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
     #[case::constraint_remove(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() }, AtomAst::from_element(Element::C))]
@@ -823,8 +823,8 @@ mod tests {
         assert_eq!(
             atom.difference_to(&other),
             AtomUpdate {
-                element: Some(ElementAst::Lit(Element::N)),
-                isotope_mass: Some(IsotopeMassAst::Lit(13)),
+                element: Some(ElementForm::Lit(Element::N)),
+                isotope_mass: Some(IsotopeMassForm::Lit(13)),
                 charge: Some(NumForm::Undetermined),
                 implicit_hydrogens: Some(NumForm::Lit(3)),
                 lone_pairs: Some(NumForm::Lit(1)),
@@ -850,14 +850,14 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
-        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
+        AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
+        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
     #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(0),
-        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
+        AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(0),
+        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
     #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
-        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
+        AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
+        lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
     fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
     }
@@ -865,26 +865,26 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::default_(AtomAst::default(), false)]
-    #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: NumForm::Lit(0),
-        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+    #[case::all_ground(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, true)]
-    #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeMassAst::Lit(12), charge: NumForm::Lit(0),
-        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+    #[case::element_undetermined(AtomAst { element: ElementForm::Undetermined, isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Undetermined, charge: NumForm::Lit(0),
-        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+    #[case::isotope_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Undetermined, charge: NumForm::Lit(0),
+        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: NumForm::Undetermined,
-        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+    #[case::charge_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Undetermined,
+        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: NumForm::Lit(0),
-        implicit_hydrogens: NumForm::Undetermined, lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+    #[case::hydrogens_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+        implicit_hydrogens: NumForm::Undetermined, lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: NumForm::Lit(0),
-        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+    #[case::lone_pairs_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::unpaired_electrons_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: NumForm::Lit(0),
-        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::default(),
+    #[case::unpaired_electrons_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+        implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(),
         constraints: AtomConstraintsAst::new() }, false)]
     fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
@@ -958,11 +958,11 @@ mod tests {
 
     #[rstest]
     #[case::element_mismatch_widens(AtomAst::from_element(Element::C), AtomAst::from_element(Element::N),
-        ElementAst::lit_set(vec![Element::C, Element::N]))]
+        ElementForm::lit_set(vec![Element::C, Element::N]))]
     fn test_atom_ast_join_element(
         #[case] a: AtomAst,
         #[case] b: AtomAst,
-        #[case] expected: ElementAst,
+        #[case] expected: ElementForm,
     ) {
         assert_eq!(a.join(&b).unwrap().element, expected);
     }
@@ -989,53 +989,53 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_set(ElementAst::lit_set([Element::C, Element::N]), ElementAst::LitSet(Box::new(BTreeSet::from([Element::C, Element::N]))))]
-    #[case::not(ElementAst::not(Element::H), ElementAst::NotSet(Box::new(BTreeSet::from([Element::H]))))]
-    #[case::not_set(ElementAst::not_set([Element::F, Element::Cl]), ElementAst::NotSet(Box::new(BTreeSet::from([Element::F, Element::Cl]))))]
-    #[case::var(ElementAst::var("x"), ElementAst::Var(Box::new(("x".to_string(), None))))]
-    #[case::var_in(ElementAst::var_in("x", [Element::C]), ElementAst::Var(Box::new(("x".to_string(), Some((MemOp::In, BTreeSet::from([Element::C])))))))]
-    #[case::var_not_in(ElementAst::var_not_in("x", [Element::C]), ElementAst::Var(Box::new(("x".to_string(), Some((MemOp::NotIn, BTreeSet::from([Element::C])))))))]
-    fn test_element_ast_constructors(#[case] actual: ElementAst, #[case] expected: ElementAst) {
+    #[case::lit_set(ElementForm::lit_set([Element::C, Element::N]), ElementForm::LitSet(Box::new(BTreeSet::from([Element::C, Element::N]))))]
+    #[case::not(ElementForm::not(Element::H), ElementForm::NotSet(Box::new(BTreeSet::from([Element::H]))))]
+    #[case::not_set(ElementForm::not_set([Element::F, Element::Cl]), ElementForm::NotSet(Box::new(BTreeSet::from([Element::F, Element::Cl]))))]
+    #[case::var(ElementForm::var("x"), ElementForm::Var(Box::new(("x".to_string(), None))))]
+    #[case::var_in(ElementForm::var_in("x", [Element::C]), ElementForm::Var(Box::new(("x".to_string(), Some((MemOp::In, BTreeSet::from([Element::C])))))))]
+    #[case::var_not_in(ElementForm::var_not_in("x", [Element::C]), ElementForm::Var(Box::new(("x".to_string(), Some((MemOp::NotIn, BTreeSet::from([Element::C])))))))]
+    fn test_element_form_constructors(#[case] actual: ElementForm, #[case] expected: ElementForm) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case::carbon(Element::C, ElementAst::Lit(Element::C))]
-    #[case::nitrogen(Element::N, ElementAst::Lit(Element::N))]
-    fn test_element_ast_from(#[case] element: Element, #[case] expected: ElementAst) {
-        assert_eq!(ElementAst::from(element), expected);
+    #[case::carbon(Element::C, ElementForm::Lit(Element::C))]
+    #[case::nitrogen(Element::N, ElementForm::Lit(Element::N))]
+    fn test_element_form_from(#[case] element: Element, #[case] expected: ElementForm) {
+        assert_eq!(ElementForm::from(element), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::litset_singleton(ElementAst::lit_set([Element::C]), Ok(ElementAst::Lit(Element::C)))]
-    #[case::litset_empty(ElementAst::lit_set([]), Err(Contradiction))]
-    #[case::notset_empty(ElementAst::not_set([]), Ok(ElementAst::Undetermined))]
-    #[case::var_in_empty(ElementAst::var_in("x", []), Err(Contradiction))]
-    #[case::var_not_in_vacuous(ElementAst::var_not_in("x", []), Ok(ElementAst::var("x")))]
-    fn test_element_ast_canonicalize(
-        #[case] input: ElementAst,
-        #[case] expected: Result<ElementAst, Contradiction>,
+    #[case::litset_singleton(ElementForm::lit_set([Element::C]), Ok(ElementForm::Lit(Element::C)))]
+    #[case::litset_empty(ElementForm::lit_set([]), Err(Contradiction))]
+    #[case::notset_empty(ElementForm::not_set([]), Ok(ElementForm::Undetermined))]
+    #[case::var_in_empty(ElementForm::var_in("x", []), Err(Contradiction))]
+    #[case::var_not_in_vacuous(ElementForm::var_not_in("x", []), Ok(ElementForm::var("x")))]
+    fn test_element_form_canonicalize(
+        #[case] input: ElementForm,
+        #[case] expected: Result<ElementForm, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(ElementAst::Undetermined)]
-    #[case::lit(ElementAst::Lit(Element::C))]
-    #[case::litset(ElementAst::lit_set([Element::C, Element::N]))]
-    #[case::notset(ElementAst::not(Element::H))]
-    #[case::var_free(ElementAst::var("x"))]
-    #[case::var_in(ElementAst::var_in("x", [Element::C]))]
-    fn test_element_ast_canonicalize_identity(#[case] input: ElementAst) {
+    #[case::undetermined(ElementForm::Undetermined)]
+    #[case::lit(ElementForm::Lit(Element::C))]
+    #[case::litset(ElementForm::lit_set([Element::C, Element::N]))]
+    #[case::notset(ElementForm::not(Element::H))]
+    #[case::var_free(ElementForm::var("x"))]
+    #[case::var_in(ElementForm::var_in("x", [Element::C]))]
+    fn test_element_form_canonicalize_identity(#[case] input: ElementForm) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     /// Cardinality polarity + universe boundaries (need the 118-element universe,
     /// so expected sets are computed from `Element::all()`, not hardcoded).
     #[rstest]
-    fn test_element_ast_canonicalize_cardinality() {
+    fn test_element_form_canonicalize_cardinality() {
         let take =
             |n: usize| -> BTreeSet<Element> { Element::all().iter().take(n).copied().collect() };
         let skip =
@@ -1043,141 +1043,141 @@ mod tests {
 
         // Tiebreak: 59 stays positive; 60 flips to the complement.
         assert_eq!(
-            ElementAst::LitSet(Box::new(take(59))).canonicalize(),
-            Ok(ElementAst::LitSet(Box::new(take(59))))
+            ElementForm::LitSet(Box::new(take(59))).canonicalize(),
+            Ok(ElementForm::LitSet(Box::new(take(59))))
         );
         assert_eq!(
-            ElementAst::LitSet(Box::new(take(60))).canonicalize(),
-            Ok(ElementAst::NotSet(Box::new(skip(60))))
+            ElementForm::LitSet(Box::new(take(60))).canonicalize(),
+            Ok(ElementForm::NotSet(Box::new(skip(60))))
         );
         // Full positive set → Undetermined; NotSet of the full set → Err.
         assert_eq!(
-            ElementAst::LitSet(Box::new(take(118))).canonicalize(),
-            Ok(ElementAst::Undetermined)
+            ElementForm::LitSet(Box::new(take(118))).canonicalize(),
+            Ok(ElementForm::Undetermined)
         );
         assert_eq!(
-            ElementAst::NotSet(Box::new(take(118))).canonicalize(),
+            ElementForm::NotSet(Box::new(take(118))).canonicalize(),
             Err(Contradiction)
         );
         // Large NotSet flips to a positive LitSet of its (small) complement.
         assert_eq!(
-            ElementAst::NotSet(Box::new(take(60))).canonicalize(),
-            Ok(ElementAst::LitSet(Box::new(skip(60))))
+            ElementForm::NotSet(Box::new(take(60))).canonicalize(),
+            Ok(ElementForm::LitSet(Box::new(skip(60))))
         );
         // Var In over a large domain flips to NotIn of the complement; full domain → free.
         assert_eq!(
-            ElementAst::var_in("x", take(60)).canonicalize(),
-            Ok(ElementAst::var_not_in("x", skip(60)))
+            ElementForm::var_in("x", take(60)).canonicalize(),
+            Ok(ElementForm::var_not_in("x", skip(60)))
         );
         assert_eq!(
-            ElementAst::var_in("x", take(118)).canonicalize(),
-            Ok(ElementAst::var("x"))
+            ElementForm::var_in("x", take(118)).canonicalize(),
+            Ok(ElementForm::var("x"))
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_carbon(ElementAst::Lit(Element::C), Some(Element::C))]
-    #[case::lit_nitrogen(ElementAst::Lit(Element::N), Some(Element::N))]
-    #[case::undetermined(ElementAst::Undetermined, None)]
-    #[case::litset(ElementAst::lit_set([Element::C, Element::N]), None)]
-    #[case::notset(ElementAst::not(Element::H), None)]
-    #[case::var_in(ElementAst::var_in("e", [Element::C]), None)]
-    #[case::var(ElementAst::var("e"), None)]
-    fn test_element_ast_as_lit(#[case] ast: ElementAst, #[case] expected: Option<Element>) {
+    #[case::lit_carbon(ElementForm::Lit(Element::C), Some(Element::C))]
+    #[case::lit_nitrogen(ElementForm::Lit(Element::N), Some(Element::N))]
+    #[case::undetermined(ElementForm::Undetermined, None)]
+    #[case::litset(ElementForm::lit_set([Element::C, Element::N]), None)]
+    #[case::notset(ElementForm::not(Element::H), None)]
+    #[case::var_in(ElementForm::var_in("e", [Element::C]), None)]
+    #[case::var(ElementForm::var("e"), None)]
+    fn test_element_form_as_lit(#[case] ast: ElementForm, #[case] expected: Option<Element>) {
         assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(ElementAst::Lit(Element::C), false)]
-    #[case::undetermined(ElementAst::Undetermined, true)]
-    #[case::litset(ElementAst::lit_set([Element::C, Element::N]), false)]
-    #[case::notset(ElementAst::not(Element::H), false)]
-    #[case::var_in(ElementAst::var_in("e", [Element::C]), false)]
-    #[case::var(ElementAst::var("e"), false)]
-    fn test_element_ast_is_undetermined(#[case] ast: ElementAst, #[case] expected: bool) {
+    #[case::lit(ElementForm::Lit(Element::C), false)]
+    #[case::undetermined(ElementForm::Undetermined, true)]
+    #[case::litset(ElementForm::lit_set([Element::C, Element::N]), false)]
+    #[case::notset(ElementForm::not(Element::H), false)]
+    #[case::var_in(ElementForm::var_in("e", [Element::C]), false)]
+    #[case::var(ElementForm::var("e"), false)]
+    fn test_element_form_is_undetermined(#[case] ast: ElementForm, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(ElementAst::Undetermined, ElementAst::Lit(Element::C), Some(ElementAst::Lit(Element::C)))]
-    #[case::lit_und(ElementAst::Lit(Element::C), ElementAst::Undetermined, Some(ElementAst::Lit(Element::C)))]
-    #[case::lit_lit_eq(ElementAst::Lit(Element::C), ElementAst::Lit(Element::C), Some(ElementAst::Lit(Element::C)))]
-    #[case::lit_lit_neq(ElementAst::Lit(Element::C), ElementAst::Lit(Element::N), None)]
-    #[case::lit_set_in(ElementAst::Lit(Element::C), ElementAst::lit_set([Element::C, Element::N]), Some(ElementAst::Lit(Element::C)))]
-    #[case::lit_set_out(ElementAst::Lit(Element::O), ElementAst::lit_set([Element::C, Element::N]), None)]
-    #[case::set_set_singleton(ElementAst::lit_set([Element::C, Element::N]), ElementAst::lit_set([Element::N, Element::O]), Some(ElementAst::Lit(Element::N)))]
-    #[case::set_set_multi(ElementAst::lit_set([Element::C, Element::N, Element::O]), ElementAst::lit_set([Element::N, Element::O, Element::F]), Some(ElementAst::lit_set([Element::N, Element::O])))]
-    #[case::set_set_disjoint(ElementAst::lit_set([Element::C, Element::N]), ElementAst::lit_set([Element::O, Element::F]), None)]
-    #[case::set_notset(ElementAst::lit_set([Element::C, Element::N]), ElementAst::not(Element::N), Some(ElementAst::Lit(Element::C)))]
-    #[case::notset_notset(ElementAst::not(Element::C), ElementAst::not(Element::N), Some(ElementAst::not_set([Element::C, Element::N])))]
-    #[case::lit_notset_in(ElementAst::Lit(Element::C), ElementAst::not(Element::N), Some(ElementAst::Lit(Element::C)))]
-    #[case::lit_notset_out(ElementAst::Lit(Element::C), ElementAst::not(Element::C), None)]
-    #[case::var_var_eq(ElementAst::var("e"), ElementAst::var("e"), Some(ElementAst::var("e")))]
-    #[case::var_var_neq(ElementAst::var("e"), ElementAst::var("f"), None)]
-    #[case::var_lit(ElementAst::var("e"), ElementAst::Lit(Element::C), None)]
-    #[case::lit_var(ElementAst::Lit(Element::C), ElementAst::var("e"), None)]
-    fn test_element_ast_meet(
-        #[case] a: ElementAst,
-        #[case] b: ElementAst,
-        #[case] expected: Option<ElementAst>,
+    #[case::und_lit(ElementForm::Undetermined, ElementForm::Lit(Element::C), Some(ElementForm::Lit(Element::C)))]
+    #[case::lit_und(ElementForm::Lit(Element::C), ElementForm::Undetermined, Some(ElementForm::Lit(Element::C)))]
+    #[case::lit_lit_eq(ElementForm::Lit(Element::C), ElementForm::Lit(Element::C), Some(ElementForm::Lit(Element::C)))]
+    #[case::lit_lit_neq(ElementForm::Lit(Element::C), ElementForm::Lit(Element::N), None)]
+    #[case::lit_set_in(ElementForm::Lit(Element::C), ElementForm::lit_set([Element::C, Element::N]), Some(ElementForm::Lit(Element::C)))]
+    #[case::lit_set_out(ElementForm::Lit(Element::O), ElementForm::lit_set([Element::C, Element::N]), None)]
+    #[case::set_set_singleton(ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([Element::N, Element::O]), Some(ElementForm::Lit(Element::N)))]
+    #[case::set_set_multi(ElementForm::lit_set([Element::C, Element::N, Element::O]), ElementForm::lit_set([Element::N, Element::O, Element::F]), Some(ElementForm::lit_set([Element::N, Element::O])))]
+    #[case::set_set_disjoint(ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([Element::O, Element::F]), None)]
+    #[case::set_notset(ElementForm::lit_set([Element::C, Element::N]), ElementForm::not(Element::N), Some(ElementForm::Lit(Element::C)))]
+    #[case::notset_notset(ElementForm::not(Element::C), ElementForm::not(Element::N), Some(ElementForm::not_set([Element::C, Element::N])))]
+    #[case::lit_notset_in(ElementForm::Lit(Element::C), ElementForm::not(Element::N), Some(ElementForm::Lit(Element::C)))]
+    #[case::lit_notset_out(ElementForm::Lit(Element::C), ElementForm::not(Element::C), None)]
+    #[case::var_var_eq(ElementForm::var("e"), ElementForm::var("e"), Some(ElementForm::var("e")))]
+    #[case::var_var_neq(ElementForm::var("e"), ElementForm::var("f"), None)]
+    #[case::var_lit(ElementForm::var("e"), ElementForm::Lit(Element::C), None)]
+    #[case::lit_var(ElementForm::Lit(Element::C), ElementForm::var("e"), None)]
+    fn test_element_form_meet(
+        #[case] a: ElementForm,
+        #[case] b: ElementForm,
+        #[case] expected: Option<ElementForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(ElementAst::Undetermined, ElementAst::Lit(Element::C), ElementAst::Undetermined)]
-    #[case::lit_lit_eq(ElementAst::Lit(Element::C), ElementAst::Lit(Element::C), ElementAst::Lit(Element::C))]
-    #[case::lit_lit_neq(ElementAst::Lit(Element::C), ElementAst::Lit(Element::N), ElementAst::lit_set([Element::C, Element::N]))]
-    #[case::lit_set(ElementAst::Lit(Element::O), ElementAst::lit_set([Element::C, Element::N]), ElementAst::lit_set([Element::C, Element::N, Element::O]))]
-    #[case::set_set(ElementAst::lit_set([Element::C, Element::N]), ElementAst::lit_set([Element::N, Element::O]), ElementAst::lit_set([Element::C, Element::N, Element::O]))]
-    #[case::lit_notset_out(ElementAst::Lit(Element::C), ElementAst::not(Element::N), ElementAst::not(Element::N))]
-    #[case::lit_notset_in(ElementAst::Lit(Element::N), ElementAst::not(Element::N), ElementAst::Undetermined)]
-    #[case::notset_notset_disjoint(ElementAst::not(Element::C), ElementAst::not(Element::N), ElementAst::Undetermined)]
-    #[case::notset_notset_overlap(ElementAst::not_set([Element::C, Element::N]), ElementAst::not_set([Element::N, Element::O]), ElementAst::not(Element::N))]
-    #[case::var_var_eq(ElementAst::var("e"), ElementAst::var("e"), ElementAst::var("e"))]
-    #[case::var_var_neq(ElementAst::var("e"), ElementAst::var("f"), ElementAst::Undetermined)]
-    #[case::var_lit(ElementAst::var("e"), ElementAst::Lit(Element::C), ElementAst::Undetermined)]
-    fn test_element_ast_join(
-        #[case] a: ElementAst,
-        #[case] b: ElementAst,
-        #[case] expected: ElementAst,
+    #[case::und_lit(ElementForm::Undetermined, ElementForm::Lit(Element::C), ElementForm::Undetermined)]
+    #[case::lit_lit_eq(ElementForm::Lit(Element::C), ElementForm::Lit(Element::C), ElementForm::Lit(Element::C))]
+    #[case::lit_lit_neq(ElementForm::Lit(Element::C), ElementForm::Lit(Element::N), ElementForm::lit_set([Element::C, Element::N]))]
+    #[case::lit_set(ElementForm::Lit(Element::O), ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([Element::C, Element::N, Element::O]))]
+    #[case::set_set(ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([Element::N, Element::O]), ElementForm::lit_set([Element::C, Element::N, Element::O]))]
+    #[case::lit_notset_out(ElementForm::Lit(Element::C), ElementForm::not(Element::N), ElementForm::not(Element::N))]
+    #[case::lit_notset_in(ElementForm::Lit(Element::N), ElementForm::not(Element::N), ElementForm::Undetermined)]
+    #[case::notset_notset_disjoint(ElementForm::not(Element::C), ElementForm::not(Element::N), ElementForm::Undetermined)]
+    #[case::notset_notset_overlap(ElementForm::not_set([Element::C, Element::N]), ElementForm::not_set([Element::N, Element::O]), ElementForm::not(Element::N))]
+    #[case::var_var_eq(ElementForm::var("e"), ElementForm::var("e"), ElementForm::var("e"))]
+    #[case::var_var_neq(ElementForm::var("e"), ElementForm::var("f"), ElementForm::Undetermined)]
+    #[case::var_lit(ElementForm::var("e"), ElementForm::Lit(Element::C), ElementForm::Undetermined)]
+    fn test_element_form_join(
+        #[case] a: ElementForm,
+        #[case] b: ElementForm,
+        #[case] expected: ElementForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(ElementAst::Undetermined, ElementAst::Lit(Element::C), true)]
-    #[case::und_und(ElementAst::Undetermined, ElementAst::Undetermined, true)]
-    #[case::und_set(ElementAst::Undetermined, ElementAst::lit_set([Element::C, Element::N]), true)]
-    #[case::und_var(ElementAst::Undetermined, ElementAst::var("e"), true)]
-    #[case::lit_und(ElementAst::Lit(Element::C), ElementAst::Undetermined, false)]
-    #[case::set_und(ElementAst::lit_set([Element::C, Element::N]), ElementAst::Undetermined, false)]
-    #[case::var_und(ElementAst::var("e"), ElementAst::Undetermined, false)]
-    #[case::lit_lit_match(ElementAst::Lit(Element::C), ElementAst::Lit(Element::C), true)]
-    #[case::lit_lit_mismatch(ElementAst::Lit(Element::C), ElementAst::Lit(Element::N), false)]
-    #[case::lit_singleton_set(ElementAst::Lit(Element::C), ElementAst::lit_set([Element::C]), true)]
-    #[case::lit_multi_set(ElementAst::Lit(Element::C), ElementAst::lit_set([Element::C, Element::N]), false)]
-    #[case::set_lit_in(ElementAst::lit_set([Element::C, Element::N]), ElementAst::Lit(Element::N), true)]
-    #[case::set_lit_out(ElementAst::lit_set([Element::C, Element::N]), ElementAst::Lit(Element::O), false)]
-    #[case::set_set_subset(ElementAst::lit_set([Element::C, Element::N, Element::O]), ElementAst::lit_set([Element::C, Element::N]), true)]
-    #[case::set_set_equal(ElementAst::lit_set([Element::C, Element::N]), ElementAst::lit_set([Element::C, Element::N]), true)]
-    #[case::set_set_superset(ElementAst::lit_set([Element::C]), ElementAst::lit_set([Element::C, Element::N]), false)]
-    #[case::notset_lit_admitted(ElementAst::not(Element::N), ElementAst::Lit(Element::C), true)]
-    #[case::notset_lit_excluded(ElementAst::not(Element::C), ElementAst::Lit(Element::C), false)]
-    #[case::var_var_equal(ElementAst::var("e"), ElementAst::var("e"), true)]
-    #[case::var_var_distinct(ElementAst::var("e"), ElementAst::var("f"), false)]
-    #[case::var_lit(ElementAst::var("e"), ElementAst::Lit(Element::C), false)]
-    #[case::lit_var(ElementAst::Lit(Element::C), ElementAst::var("e"), false)]
-    #[case::set_var(ElementAst::lit_set([Element::C]), ElementAst::var("e"), false)]
-    fn test_element_ast_matches(
-        #[case] pattern: ElementAst,
-        #[case] target: ElementAst,
+    #[case::und_lit(ElementForm::Undetermined, ElementForm::Lit(Element::C), true)]
+    #[case::und_und(ElementForm::Undetermined, ElementForm::Undetermined, true)]
+    #[case::und_set(ElementForm::Undetermined, ElementForm::lit_set([Element::C, Element::N]), true)]
+    #[case::und_var(ElementForm::Undetermined, ElementForm::var("e"), true)]
+    #[case::lit_und(ElementForm::Lit(Element::C), ElementForm::Undetermined, false)]
+    #[case::set_und(ElementForm::lit_set([Element::C, Element::N]), ElementForm::Undetermined, false)]
+    #[case::var_und(ElementForm::var("e"), ElementForm::Undetermined, false)]
+    #[case::lit_lit_match(ElementForm::Lit(Element::C), ElementForm::Lit(Element::C), true)]
+    #[case::lit_lit_mismatch(ElementForm::Lit(Element::C), ElementForm::Lit(Element::N), false)]
+    #[case::lit_singleton_set(ElementForm::Lit(Element::C), ElementForm::lit_set([Element::C]), true)]
+    #[case::lit_multi_set(ElementForm::Lit(Element::C), ElementForm::lit_set([Element::C, Element::N]), false)]
+    #[case::set_lit_in(ElementForm::lit_set([Element::C, Element::N]), ElementForm::Lit(Element::N), true)]
+    #[case::set_lit_out(ElementForm::lit_set([Element::C, Element::N]), ElementForm::Lit(Element::O), false)]
+    #[case::set_set_subset(ElementForm::lit_set([Element::C, Element::N, Element::O]), ElementForm::lit_set([Element::C, Element::N]), true)]
+    #[case::set_set_equal(ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([Element::C, Element::N]), true)]
+    #[case::set_set_superset(ElementForm::lit_set([Element::C]), ElementForm::lit_set([Element::C, Element::N]), false)]
+    #[case::notset_lit_admitted(ElementForm::not(Element::N), ElementForm::Lit(Element::C), true)]
+    #[case::notset_lit_excluded(ElementForm::not(Element::C), ElementForm::Lit(Element::C), false)]
+    #[case::var_var_equal(ElementForm::var("e"), ElementForm::var("e"), true)]
+    #[case::var_var_distinct(ElementForm::var("e"), ElementForm::var("f"), false)]
+    #[case::var_lit(ElementForm::var("e"), ElementForm::Lit(Element::C), false)]
+    #[case::lit_var(ElementForm::Lit(Element::C), ElementForm::var("e"), false)]
+    #[case::set_var(ElementForm::lit_set([Element::C]), ElementForm::var("e"), false)]
+    fn test_element_form_matches(
+        #[case] pattern: ElementForm,
+        #[case] target: ElementForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -1185,66 +1185,66 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_set(IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::LitSet(Box::new(BTreeSet::from([12, 13]))))]
-    #[case::var(IsotopeMassAst::var("m"), IsotopeMassAst::Var(Box::new(("m".to_string(), None))))]
-    #[case::var_in(IsotopeMassAst::var_in("m", [12, 13]), IsotopeMassAst::Var(Box::new(("m".to_string(), Some(BTreeSet::from([12, 13]))))))]
-    fn test_isotope_mass_ast_constructors(#[case] actual: IsotopeMassAst, #[case] expected: IsotopeMassAst) {
+    #[case::lit_set(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::LitSet(Box::new(BTreeSet::from([12, 13]))))]
+    #[case::var(IsotopeMassForm::var("m"), IsotopeMassForm::Var(Box::new(("m".to_string(), None))))]
+    #[case::var_in(IsotopeMassForm::var_in("m", [12, 13]), IsotopeMassForm::Var(Box::new(("m".to_string(), Some(BTreeSet::from([12, 13]))))))]
+    fn test_isotope_mass_form_constructors(#[case] actual: IsotopeMassForm, #[case] expected: IsotopeMassForm) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case::positive(13, IsotopeMassAst::Lit(13))]
-    #[case::zero(0, IsotopeMassAst::Lit(0))]
-    fn test_isotope_mass_ast_from(#[case] mass: u32, #[case] expected: IsotopeMassAst) {
-        assert_eq!(IsotopeMassAst::from(mass), expected);
+    #[case::positive(13, IsotopeMassForm::Lit(13))]
+    #[case::zero(0, IsotopeMassForm::Lit(0))]
+    fn test_isotope_mass_form_from(#[case] mass: u32, #[case] expected: IsotopeMassForm) {
+        assert_eq!(IsotopeMassForm::from(mass), expected);
     }
 
     #[rstest]
-    #[case::natural(IsotopeMass::Natural, IsotopeMassAst::Natural)]
-    #[case::mass_number(IsotopeMass::MassNumber(13), IsotopeMassAst::Lit(13))]
-    fn test_isotope_mass_ast_from_isotope_mass(
+    #[case::natural(IsotopeMass::Natural, IsotopeMassForm::Natural)]
+    #[case::mass_number(IsotopeMass::MassNumber(13), IsotopeMassForm::Lit(13))]
+    fn test_isotope_mass_form_from_isotope_mass(
         #[case] mass: IsotopeMass,
-        #[case] expected: IsotopeMassAst,
+        #[case] expected: IsotopeMassForm,
     ) {
-        assert_eq!(IsotopeMassAst::from(mass), expected);
+        assert_eq!(IsotopeMassForm::from(mass), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::litset_singleton(IsotopeMassAst::lit_set([12]), Ok(IsotopeMassAst::Lit(12)))]
-    #[case::litset_empty(IsotopeMassAst::lit_set([]), Err(Contradiction))]
-    #[case::var_in_empty(IsotopeMassAst::var_in("m", []), Err(Contradiction))]
-    fn test_isotope_mass_ast_canonicalize(
-        #[case] input: IsotopeMassAst,
-        #[case] expected: Result<IsotopeMassAst, Contradiction>,
+    #[case::litset_singleton(IsotopeMassForm::lit_set([12]), Ok(IsotopeMassForm::Lit(12)))]
+    #[case::litset_empty(IsotopeMassForm::lit_set([]), Err(Contradiction))]
+    #[case::var_in_empty(IsotopeMassForm::var_in("m", []), Err(Contradiction))]
+    fn test_isotope_mass_form_canonicalize(
+        #[case] input: IsotopeMassForm,
+        #[case] expected: Result<IsotopeMassForm, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(IsotopeMassAst::Undetermined)]
-    #[case::natural(IsotopeMassAst::Natural)]
-    #[case::lit(IsotopeMassAst::Lit(12))]
-    #[case::litset(IsotopeMassAst::lit_set([12, 13]))]
-    #[case::var_free(IsotopeMassAst::var("m"))]
-    #[case::var_in(IsotopeMassAst::var_in("m", [12, 13]))]
-    #[case::var_in_singleton(IsotopeMassAst::var_in("m", [12]))]
-    fn test_isotope_mass_ast_canonicalize_identity(#[case] input: IsotopeMassAst) {
+    #[case::undetermined(IsotopeMassForm::Undetermined)]
+    #[case::natural(IsotopeMassForm::Natural)]
+    #[case::lit(IsotopeMassForm::Lit(12))]
+    #[case::litset(IsotopeMassForm::lit_set([12, 13]))]
+    #[case::var_free(IsotopeMassForm::var("m"))]
+    #[case::var_in(IsotopeMassForm::var_in("m", [12, 13]))]
+    #[case::var_in_singleton(IsotopeMassForm::var_in("m", [12]))]
+    fn test_isotope_mass_form_canonicalize_identity(#[case] input: IsotopeMassForm) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(IsotopeMassAst::Lit(12), Some(IsotopeMass::MassNumber(12)))]
-    #[case::lit_zero(IsotopeMassAst::Lit(0), Some(IsotopeMass::MassNumber(0)))]
-    #[case::natural(IsotopeMassAst::Natural, Some(IsotopeMass::Natural))]
-    #[case::undetermined(IsotopeMassAst::Undetermined, None)]
-    #[case::litset(IsotopeMassAst::lit_set([12, 13]), None)]
-    #[case::var(IsotopeMassAst::var("m"), None)]
-    #[case::var_in(IsotopeMassAst::var_in("m", [12]), None)]
-    fn test_isotope_mass_ast_as_lit(
-        #[case] ast: IsotopeMassAst,
+    #[case::lit(IsotopeMassForm::Lit(12), Some(IsotopeMass::MassNumber(12)))]
+    #[case::lit_zero(IsotopeMassForm::Lit(0), Some(IsotopeMass::MassNumber(0)))]
+    #[case::natural(IsotopeMassForm::Natural, Some(IsotopeMass::Natural))]
+    #[case::undetermined(IsotopeMassForm::Undetermined, None)]
+    #[case::litset(IsotopeMassForm::lit_set([12, 13]), None)]
+    #[case::var(IsotopeMassForm::var("m"), None)]
+    #[case::var_in(IsotopeMassForm::var_in("m", [12]), None)]
+    fn test_isotope_mass_form_as_lit(
+        #[case] ast: IsotopeMassForm,
         #[case] expected: Option<IsotopeMass>,
     ) {
         assert_eq!(ast.as_lit(), expected);
@@ -1253,99 +1253,99 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(IsotopeMassAst::Undetermined, true)]
-    #[case::natural(IsotopeMassAst::Natural, false)]
-    #[case::lit(IsotopeMassAst::Lit(12), false)]
-    #[case::litset(IsotopeMassAst::lit_set([12, 13]), false)]
-    #[case::var(IsotopeMassAst::var("m"), false)]
-    #[case::var_in(IsotopeMassAst::var_in("m", [12]), false)]
-    fn test_isotope_mass_ast_is_undetermined(#[case] ast: IsotopeMassAst, #[case] expected: bool) {
+    #[case::undetermined(IsotopeMassForm::Undetermined, true)]
+    #[case::natural(IsotopeMassForm::Natural, false)]
+    #[case::lit(IsotopeMassForm::Lit(12), false)]
+    #[case::litset(IsotopeMassForm::lit_set([12, 13]), false)]
+    #[case::var(IsotopeMassForm::var("m"), false)]
+    #[case::var_in(IsotopeMassForm::var_in("m", [12]), false)]
+    fn test_isotope_mass_form_is_undetermined(#[case] ast: IsotopeMassForm, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::natural(IsotopeMassAst::Natural, true)]
-    #[case::lit(IsotopeMassAst::Lit(12), true)]
-    #[case::undetermined(IsotopeMassAst::Undetermined, false)]
-    #[case::litset(IsotopeMassAst::lit_set([12, 13]), false)]
-    #[case::var(IsotopeMassAst::var("m"), false)]
-    #[case::var_in(IsotopeMassAst::var_in("m", [12]), false)]
-    fn test_isotope_mass_ast_is_ground(#[case] ast: IsotopeMassAst, #[case] expected: bool) {
+    #[case::natural(IsotopeMassForm::Natural, true)]
+    #[case::lit(IsotopeMassForm::Lit(12), true)]
+    #[case::undetermined(IsotopeMassForm::Undetermined, false)]
+    #[case::litset(IsotopeMassForm::lit_set([12, 13]), false)]
+    #[case::var(IsotopeMassForm::var("m"), false)]
+    #[case::var_in(IsotopeMassForm::var_in("m", [12]), false)]
+    fn test_isotope_mass_form_is_ground(#[case] ast: IsotopeMassForm, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(IsotopeMassAst::Undetermined, IsotopeMassAst::Lit(12), Some(IsotopeMassAst::Lit(12)))]
-    #[case::lit_und(IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined, Some(IsotopeMassAst::Lit(12)))]
-    #[case::und_natural(IsotopeMassAst::Undetermined, IsotopeMassAst::Natural, Some(IsotopeMassAst::Natural))]
-    #[case::natural_natural(IsotopeMassAst::Natural, IsotopeMassAst::Natural, Some(IsotopeMassAst::Natural))]
-    #[case::natural_lit(IsotopeMassAst::Natural, IsotopeMassAst::Lit(12), None)]
-    #[case::lit_natural(IsotopeMassAst::Lit(12), IsotopeMassAst::Natural, None)]
-    #[case::lit_lit_eq(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(12), Some(IsotopeMassAst::Lit(12)))]
-    #[case::lit_lit_neq(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(13), None)]
-    #[case::lit_set_in(IsotopeMassAst::Lit(12), IsotopeMassAst::lit_set([12, 13]), Some(IsotopeMassAst::Lit(12)))]
-    #[case::lit_set_out(IsotopeMassAst::Lit(14), IsotopeMassAst::lit_set([12, 13]), None)]
-    #[case::set_set_singleton(IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::lit_set([13, 14]), Some(IsotopeMassAst::Lit(13)))]
-    #[case::set_set_multi(IsotopeMassAst::lit_set([12, 13, 14]), IsotopeMassAst::lit_set([13, 14, 15]), Some(IsotopeMassAst::lit_set([13, 14])))]
-    #[case::set_set_disjoint(IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::lit_set([14, 15]), None)]
-    #[case::var_var_eq(IsotopeMassAst::var("m"), IsotopeMassAst::var("m"), Some(IsotopeMassAst::var("m")))]
-    #[case::var_var_neq(IsotopeMassAst::var("m"), IsotopeMassAst::var("n"), None)]
-    #[case::var_lit(IsotopeMassAst::var("m"), IsotopeMassAst::Lit(12), None)]
-    fn test_isotope_mass_ast_meet(
-        #[case] a: IsotopeMassAst,
-        #[case] b: IsotopeMassAst,
-        #[case] expected: Option<IsotopeMassAst>,
+    #[case::und_lit(IsotopeMassForm::Undetermined, IsotopeMassForm::Lit(12), Some(IsotopeMassForm::Lit(12)))]
+    #[case::lit_und(IsotopeMassForm::Lit(12), IsotopeMassForm::Undetermined, Some(IsotopeMassForm::Lit(12)))]
+    #[case::und_natural(IsotopeMassForm::Undetermined, IsotopeMassForm::Natural, Some(IsotopeMassForm::Natural))]
+    #[case::natural_natural(IsotopeMassForm::Natural, IsotopeMassForm::Natural, Some(IsotopeMassForm::Natural))]
+    #[case::natural_lit(IsotopeMassForm::Natural, IsotopeMassForm::Lit(12), None)]
+    #[case::lit_natural(IsotopeMassForm::Lit(12), IsotopeMassForm::Natural, None)]
+    #[case::lit_lit_eq(IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(12), Some(IsotopeMassForm::Lit(12)))]
+    #[case::lit_lit_neq(IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(13), None)]
+    #[case::lit_set_in(IsotopeMassForm::Lit(12), IsotopeMassForm::lit_set([12, 13]), Some(IsotopeMassForm::Lit(12)))]
+    #[case::lit_set_out(IsotopeMassForm::Lit(14), IsotopeMassForm::lit_set([12, 13]), None)]
+    #[case::set_set_singleton(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([13, 14]), Some(IsotopeMassForm::Lit(13)))]
+    #[case::set_set_multi(IsotopeMassForm::lit_set([12, 13, 14]), IsotopeMassForm::lit_set([13, 14, 15]), Some(IsotopeMassForm::lit_set([13, 14])))]
+    #[case::set_set_disjoint(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([14, 15]), None)]
+    #[case::var_var_eq(IsotopeMassForm::var("m"), IsotopeMassForm::var("m"), Some(IsotopeMassForm::var("m")))]
+    #[case::var_var_neq(IsotopeMassForm::var("m"), IsotopeMassForm::var("n"), None)]
+    #[case::var_lit(IsotopeMassForm::var("m"), IsotopeMassForm::Lit(12), None)]
+    fn test_isotope_mass_form_meet(
+        #[case] a: IsotopeMassForm,
+        #[case] b: IsotopeMassForm,
+        #[case] expected: Option<IsotopeMassForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(IsotopeMassAst::Undetermined, IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined)]
-    #[case::natural_natural(IsotopeMassAst::Natural, IsotopeMassAst::Natural, IsotopeMassAst::Natural)]
-    #[case::natural_lit(IsotopeMassAst::Natural, IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined)]
-    #[case::lit_lit_eq(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(12))]
-    #[case::lit_lit_neq(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(13), IsotopeMassAst::lit_set([12, 13]))]
-    #[case::lit_set(IsotopeMassAst::Lit(14), IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::lit_set([12, 13, 14]))]
-    #[case::set_set(IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::lit_set([13, 14]), IsotopeMassAst::lit_set([12, 13, 14]))]
-    #[case::var_var_eq(IsotopeMassAst::var("m"), IsotopeMassAst::var("m"), IsotopeMassAst::var("m"))]
-    #[case::var_var_neq(IsotopeMassAst::var("m"), IsotopeMassAst::var("n"), IsotopeMassAst::Undetermined)]
-    #[case::var_lit(IsotopeMassAst::var("m"), IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined)]
-    fn test_isotope_mass_ast_join(
-        #[case] a: IsotopeMassAst,
-        #[case] b: IsotopeMassAst,
-        #[case] expected: IsotopeMassAst,
+    #[case::und_lit(IsotopeMassForm::Undetermined, IsotopeMassForm::Lit(12), IsotopeMassForm::Undetermined)]
+    #[case::natural_natural(IsotopeMassForm::Natural, IsotopeMassForm::Natural, IsotopeMassForm::Natural)]
+    #[case::natural_lit(IsotopeMassForm::Natural, IsotopeMassForm::Lit(12), IsotopeMassForm::Undetermined)]
+    #[case::lit_lit_eq(IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(12))]
+    #[case::lit_lit_neq(IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(13), IsotopeMassForm::lit_set([12, 13]))]
+    #[case::lit_set(IsotopeMassForm::Lit(14), IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([12, 13, 14]))]
+    #[case::set_set(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([13, 14]), IsotopeMassForm::lit_set([12, 13, 14]))]
+    #[case::var_var_eq(IsotopeMassForm::var("m"), IsotopeMassForm::var("m"), IsotopeMassForm::var("m"))]
+    #[case::var_var_neq(IsotopeMassForm::var("m"), IsotopeMassForm::var("n"), IsotopeMassForm::Undetermined)]
+    #[case::var_lit(IsotopeMassForm::var("m"), IsotopeMassForm::Lit(12), IsotopeMassForm::Undetermined)]
+    fn test_isotope_mass_form_join(
+        #[case] a: IsotopeMassForm,
+        #[case] b: IsotopeMassForm,
+        #[case] expected: IsotopeMassForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_lit(IsotopeMassAst::Undetermined, IsotopeMassAst::Lit(12), true)]
-    #[case::und_natural(IsotopeMassAst::Undetermined, IsotopeMassAst::Natural, true)]
-    #[case::und_und(IsotopeMassAst::Undetermined, IsotopeMassAst::Undetermined, true)]
-    #[case::und_set(IsotopeMassAst::Undetermined, IsotopeMassAst::lit_set([12, 13]), true)]
-    #[case::und_var(IsotopeMassAst::Undetermined, IsotopeMassAst::var("m"), true)]
-    #[case::lit_und(IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined, false)]
-    #[case::natural_und(IsotopeMassAst::Natural, IsotopeMassAst::Undetermined, false)]
-    #[case::natural_natural(IsotopeMassAst::Natural, IsotopeMassAst::Natural, true)]
-    #[case::natural_lit(IsotopeMassAst::Natural, IsotopeMassAst::Lit(12), false)]
-    #[case::lit_natural(IsotopeMassAst::Lit(12), IsotopeMassAst::Natural, false)]
-    #[case::lit_lit_match(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(12), true)]
-    #[case::lit_lit_mismatch(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(13), false)]
-    #[case::set_lit_in(IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::Lit(13), true)]
-    #[case::set_lit_out(IsotopeMassAst::lit_set([12, 13]), IsotopeMassAst::Lit(14), false)]
-    #[case::set_set_subset(IsotopeMassAst::lit_set([12, 13, 14]), IsotopeMassAst::lit_set([12, 13]), true)]
-    #[case::set_set_superset(IsotopeMassAst::lit_set([12]), IsotopeMassAst::lit_set([12, 13]), false)]
-    #[case::var_var_equal(IsotopeMassAst::var("m"), IsotopeMassAst::var("m"), true)]
-    #[case::var_var_distinct(IsotopeMassAst::var("m"), IsotopeMassAst::var("n"), false)]
-    #[case::var_lit(IsotopeMassAst::var("m"), IsotopeMassAst::Lit(12), false)]
-    #[case::lit_var(IsotopeMassAst::Lit(12), IsotopeMassAst::var("m"), false)]
-    fn test_isotope_mass_ast_matches(
-        #[case] pattern: IsotopeMassAst,
-        #[case] target: IsotopeMassAst,
+    #[case::und_lit(IsotopeMassForm::Undetermined, IsotopeMassForm::Lit(12), true)]
+    #[case::und_natural(IsotopeMassForm::Undetermined, IsotopeMassForm::Natural, true)]
+    #[case::und_und(IsotopeMassForm::Undetermined, IsotopeMassForm::Undetermined, true)]
+    #[case::und_set(IsotopeMassForm::Undetermined, IsotopeMassForm::lit_set([12, 13]), true)]
+    #[case::und_var(IsotopeMassForm::Undetermined, IsotopeMassForm::var("m"), true)]
+    #[case::lit_und(IsotopeMassForm::Lit(12), IsotopeMassForm::Undetermined, false)]
+    #[case::natural_und(IsotopeMassForm::Natural, IsotopeMassForm::Undetermined, false)]
+    #[case::natural_natural(IsotopeMassForm::Natural, IsotopeMassForm::Natural, true)]
+    #[case::natural_lit(IsotopeMassForm::Natural, IsotopeMassForm::Lit(12), false)]
+    #[case::lit_natural(IsotopeMassForm::Lit(12), IsotopeMassForm::Natural, false)]
+    #[case::lit_lit_match(IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(12), true)]
+    #[case::lit_lit_mismatch(IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(13), false)]
+    #[case::set_lit_in(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::Lit(13), true)]
+    #[case::set_lit_out(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::Lit(14), false)]
+    #[case::set_set_subset(IsotopeMassForm::lit_set([12, 13, 14]), IsotopeMassForm::lit_set([12, 13]), true)]
+    #[case::set_set_superset(IsotopeMassForm::lit_set([12]), IsotopeMassForm::lit_set([12, 13]), false)]
+    #[case::var_var_equal(IsotopeMassForm::var("m"), IsotopeMassForm::var("m"), true)]
+    #[case::var_var_distinct(IsotopeMassForm::var("m"), IsotopeMassForm::var("n"), false)]
+    #[case::var_lit(IsotopeMassForm::var("m"), IsotopeMassForm::Lit(12), false)]
+    #[case::lit_var(IsotopeMassForm::Lit(12), IsotopeMassForm::var("m"), false)]
+    fn test_isotope_mass_form_matches(
+        #[case] pattern: IsotopeMassForm,
+        #[case] target: IsotopeMassForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);

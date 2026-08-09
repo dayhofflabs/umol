@@ -18,8 +18,8 @@ use umol_chem::element::Element;
 use umol_edn::FromEdn;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    ArithExpr, AtomAst, AtomId, BondAst, ElementAst, IntoIr, IsotopeMassAst, MemOp, MoleculeAst,
-    MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsAst,
+    ArithExpr, AtomAst, AtomId, BondAst, ElementForm, IntoIr, IsotopeMassForm, MemOp, MoleculeAst,
+    MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsForm,
 };
 
 #[path = "fixtures.rs"]
@@ -63,12 +63,12 @@ fn arith_expr_heavy() -> MoleculeAst {
         ]))
     };
     let make_atom = |el: Element| AtomAst {
-        element: ElementAst::Lit(el),
-        isotope_mass: IsotopeMassAst::Lit(12),
+        element: ElementForm::Lit(el),
+        isotope_mass: IsotopeMassForm::Lit(12),
         charge: arith(),
         implicit_hydrogens: NumForm::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Lit(1)))),
         lone_pairs: arith(),
-        unpaired_electrons: UnpairedElectronsAst {
+        unpaired_electrons: UnpairedElectronsForm {
             count: arith(),
             multiplicity: arith(),
         },
@@ -89,7 +89,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             let bond = BondAst {
                 order: arith(),
                 charge: arith(),
-                unpaired_electrons: UnpairedElectronsAst::default(),
+                unpaired_electrons: UnpairedElectronsForm::default(),
                 constraints: Default::default(),
             };
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)

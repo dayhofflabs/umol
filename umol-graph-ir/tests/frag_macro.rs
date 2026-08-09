@@ -1,6 +1,6 @@
 use rstest::rstest;
 use umol_graph_ir::frag;
-use umol_graph_ir::ir::{AtomAst, AtomId, BondAst, BondId, ElementAst, Fragment, Port};
+use umol_graph_ir::ir::{AtomAst, AtomId, BondAst, BondId, ElementForm, Fragment, Port};
 
 #[rstest]
 fn test_frag_port() {
@@ -65,7 +65,7 @@ fn test_frag_finish_open() {
     assert_eq!(pattern.atoms().count(), 2);
     assert_eq!(
         pattern.atom(AtomId(1)).ast,
-        &AtomAst::new(ElementAst::undetermined())
+        &AtomAst::new(ElementForm::undetermined())
     );
     assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     assert_eq!(pattern.bond(BondId(0)).ast, &BondAst::from_order(1));

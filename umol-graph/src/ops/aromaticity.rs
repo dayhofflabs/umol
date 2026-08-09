@@ -26,7 +26,7 @@ use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
     AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomId, AtomView, BondConstraintAst,
-    BondId, BooleanAst, ElectronCountsAst, MoleculeAst, NumForm, RingConfig, RingModel,
+    BondId, BooleanForm, ElectronCountsForm, MoleculeAst, NumForm, RingConfig, RingModel,
     RingSetKind, TransactionError,
 };
 use umol_utils::solution::Solution;
@@ -201,7 +201,7 @@ impl AromaticityPerception {
         }) || ast
             .aromatic_systems()
             .iter()
-            .any(|system| matches!(system.ast.electrons, ElectronCountsAst::Undetermined))
+            .any(|system| matches!(system.ast.electrons, ElectronCountsForm::Undetermined))
         {
             return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
         }
@@ -249,7 +249,7 @@ impl AromaticityPerception {
 
         let mut valid_existing = Vec::new();
         for existing in ast.aromatic_systems().iter() {
-            let ElectronCountsAst::Lit(existing_electrons) = &existing.ast.electrons else {
+            let ElectronCountsForm::Lit(existing_electrons) = &existing.ast.electrons else {
                 return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
             };
             let existing_atoms: Vec<AtomId> = existing.atom_ids().collect();
@@ -292,7 +292,7 @@ impl AromaticityPerception {
                 if perceived_members != existing_members {
                     return false;
                 }
-                let ElectronCountsAst::Lit(perceived_electrons) = &perceived_system.electrons
+                let ElectronCountsForm::Lit(perceived_electrons) = &perceived_system.electrons
                 else {
                     return false;
                 };
@@ -349,7 +349,7 @@ impl AromaticityPerception {
             }
 
             for bond in ast.aromatic_system(system).bonds() {
-                if matches!(bond.ast.constraints.aromatic(), BooleanAst::Lit(false)) {
+                if matches!(bond.ast.constraints.aromatic(), BooleanForm::Lit(false)) {
                     inconsistencies.insert(
                         AromaticityInconsistency::AromaticBondConstraintMismatch {
                             bond: bond.id,
@@ -390,7 +390,7 @@ impl AromaticityPerception {
             let bond = ast.bond_mut(bond_id);
             bond.ast
                 .constraints
-                .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraintAst::Aromatic(BooleanForm::Lit(true)));
         }
     }
 
@@ -414,8 +414,8 @@ mod tests {
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
-        AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeEntries,
-        NumForm, UnpairedElectronsAst,
+        AtomId, BondAst, BondConstraintKey, ElectronCountsForm, MoleculeAst, MoleculeEntries,
+        NumForm, UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -461,7 +461,7 @@ mod tests {
     fn aromatic(element: Element, pi: i64) -> AtomAst {
         let mut atom = AtomAst::from_element(element);
         atom.charge = NumForm::Lit(0);
-        atom.unpaired_electrons = UnpairedElectronsAst::closed_shell();
+        atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
         atom.constraints.set(AtomConstraintAst::AromaticValence(
             AromaticValenceAst::Aromatic(NumForm::Lit(pi)),
         ));
@@ -537,7 +537,7 @@ mod tests {
                 vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
                 AromaticSystemAst::from_electrons(vec![2, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
             inconsistencies: vec![],
         }),
@@ -582,7 +582,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
             inconsistencies: vec![
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(6) },
@@ -616,7 +616,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
             inconsistencies: vec![],
         }),
@@ -644,7 +644,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
             inconsistencies: vec![
                 AromaticityInconsistency::AromaticValenceMismatch {
@@ -681,7 +681,7 @@ mod tests {
                 ],
                 AromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1])
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )],
             inconsistencies: vec![],
         }),
@@ -848,7 +848,7 @@ mod tests {
 
         let system = ast.aromatic_system(AromaticSystemId(0));
         assert_eq!(system.ast.charge, NumForm::Lit(system_charge));
-        assert_eq!(system.ast.electrons, ElectronCountsAst::Lit(electrons));
+        assert_eq!(system.ast.electrons, ElectronCountsForm::Lit(electrons));
         for (i, (q, k)) in atom_charges
             .iter()
             .zip(aromatic_valences.iter())

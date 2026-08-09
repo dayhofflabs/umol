@@ -10,10 +10,11 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
-    CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
-    MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst, NoncovalentBondAst,
-    NumForm, StereoCoset, TetrahedralStereoAst, TryIntoIr, UnpairedElectronsAst,
+    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst,
+    BooleanForm, CisTransStereoAst, Constraints, DativeBondAst, ElementForm, IsotopeMassForm,
+    Lattice, MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst,
+    NoncovalentBondAst, NumForm, StereoCoset, TetrahedralStereoAst, TryIntoIr,
+    UnpairedElectronsForm,
 };
 use umol_perm::{ClassKey, Permutation};
 use umol_utils::error::UmolError;
@@ -138,12 +139,12 @@ impl TryIntoIr<AtomAst> for &TableAtom {
     fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<AtomAst, RaiseError> {
         let mut atom = AtomAst {
             element: match self.element {
-                Some(element) => ElementAst::Lit(element),
-                None => ElementAst::Undetermined,
+                Some(element) => ElementForm::Lit(element),
+                None => ElementForm::Undetermined,
             },
             isotope_mass: match self.isotope_mass {
-                Some(m) => IsotopeMassAst::Lit(m),
-                None => IsotopeMassAst::Undetermined,
+                Some(m) => IsotopeMassForm::Lit(m),
+                None => IsotopeMassForm::Undetermined,
             },
             charge: match self.charge {
                 Some(c) => NumForm::Lit(c as i64),
@@ -157,7 +158,7 @@ impl TryIntoIr<AtomAst> for &TableAtom {
                 Some(n) => NumForm::Lit(n as i64),
                 None => NumForm::Undetermined,
             },
-            unpaired_electrons: UnpairedElectronsAst {
+            unpaired_electrons: UnpairedElectronsForm {
                 count: match self.unpaired_electrons {
                     Some(unpaired_electrons) => NumForm::Lit(unpaired_electrons as i64),
                     None => NumForm::Undetermined,
@@ -190,8 +191,8 @@ impl TryIntoIr<AtomAst> for &TableAtom {
             None => {}
         }
         // IO ground defaults for fields the table left unset.
-        if matches!(atom.isotope_mass, IsotopeMassAst::Undetermined) {
-            atom.isotope_mass = IsotopeMassAst::Natural;
+        if matches!(atom.isotope_mass, IsotopeMassForm::Undetermined) {
+            atom.isotope_mass = IsotopeMassForm::Natural;
         }
         if matches!(atom.charge, NumForm::Undetermined) {
             atom.charge = NumForm::Lit(0);
@@ -216,7 +217,7 @@ impl TryIntoIr<BondAst> for &TableBond {
         };
         if matches!(self.order, TableBondOrder::Aromatic) {
             bond.constraints
-                .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraintAst::Aromatic(BooleanForm::Lit(true)));
         }
         Ok(bond)
     }
@@ -472,12 +473,12 @@ mod tests {
             ast,
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst {
-                    element: ElementAst::Lit(Element::C),
-                    isotope_mass: IsotopeMassAst::Natural,
+                    element: ElementForm::Lit(Element::C),
+                    isotope_mass: IsotopeMassForm::Natural,
                     charge: NumForm::Lit(0),
                     implicit_hydrogens: NumForm::Lit(4),
                     lone_pairs: NumForm::Undetermined,
-                    unpaired_electrons: UnpairedElectronsAst {
+                    unpaired_electrons: UnpairedElectronsForm {
                         count: NumForm::Lit(0),
                         multiplicity: NumForm::Undetermined,
                     },
@@ -521,12 +522,12 @@ mod tests {
         None,
         None,
         AtomAst {
-            element: ElementAst::Undetermined,
-            isotope_mass: IsotopeMassAst::Natural,
+            element: ElementForm::Undetermined,
+            isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Undetermined,
             lone_pairs: NumForm::Undetermined,
-            unpaired_electrons: UnpairedElectronsAst {
+            unpaired_electrons: UnpairedElectronsForm {
                 count: NumForm::Lit(0),
                 multiplicity: NumForm::Undetermined,
             },
@@ -541,12 +542,12 @@ mod tests {
         Some(2),
         Some(SpinMultiplicity::SINGLET),
         AtomAst {
-            element: ElementAst::Undetermined,
-            isotope_mass: IsotopeMassAst::Lit(13),
+            element: ElementForm::Undetermined,
+            isotope_mass: IsotopeMassForm::Lit(13),
             charge: NumForm::Lit(-1),
             implicit_hydrogens: NumForm::Lit(2),
             lone_pairs: NumForm::Lit(1),
-            unpaired_electrons: UnpairedElectronsAst {
+            unpaired_electrons: UnpairedElectronsForm {
                 count: NumForm::Lit(2),
                 multiplicity: NumForm::Lit(1),
             },
@@ -583,12 +584,12 @@ mod tests {
         assert_eq!(
             atom.try_into_ir(&()),
             Ok(AtomAst {
-                element: ElementAst::Undetermined,
-                isotope_mass: IsotopeMassAst::Natural,
+                element: ElementForm::Undetermined,
+                isotope_mass: IsotopeMassForm::Natural,
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Undetermined,
                 lone_pairs: NumForm::Undetermined,
-                unpaired_electrons: UnpairedElectronsAst {
+                unpaired_electrons: UnpairedElectronsForm {
                     count: NumForm::Lit(0),
                     multiplicity: NumForm::Undetermined,
                 },
@@ -661,7 +662,7 @@ mod tests {
         assert!(bond
             .constraints
             .iter()
-            .any(|c| matches!(c, BondConstraintAst::Aromatic(BooleanAst::Lit(true)))));
+            .any(|c| matches!(c, BondConstraintAst::Aromatic(BooleanForm::Lit(true)))));
         for i in 0..2 {
             assert!(ast
                 .atom(AtomId(i))
@@ -707,12 +708,12 @@ mod tests {
         assert_eq!(
             ast.atom(AtomId(0)).ast,
             &AtomAst {
-                element: ElementAst::Undetermined,
-                isotope_mass: IsotopeMassAst::Natural,
+                element: ElementForm::Undetermined,
+                isotope_mass: IsotopeMassForm::Natural,
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Undetermined,
                 lone_pairs: NumForm::Undetermined,
-                unpaired_electrons: UnpairedElectronsAst {
+                unpaired_electrons: UnpairedElectronsForm {
                     count: NumForm::Lit(0),
                     multiplicity: NumForm::Undetermined,
                 },

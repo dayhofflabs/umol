@@ -19,10 +19,10 @@ proptest! {
     }
 
     #[test]
-    fn test_boolean_ast_lattice_laws(
-        a in prop_oneof![Just(BooleanAst::Undetermined), any::<bool>().prop_map(BooleanAst::Lit)],
-        b in prop_oneof![Just(BooleanAst::Undetermined), any::<bool>().prop_map(BooleanAst::Lit)],
-        c in prop_oneof![Just(BooleanAst::Undetermined), any::<bool>().prop_map(BooleanAst::Lit)],
+    fn test_boolean_form_lattice_laws(
+        a in prop_oneof![Just(BooleanForm::Undetermined), any::<bool>().prop_map(BooleanForm::Lit)],
+        b in prop_oneof![Just(BooleanForm::Undetermined), any::<bool>().prop_map(BooleanForm::Lit)],
+        c in prop_oneof![Just(BooleanForm::Undetermined), any::<bool>().prop_map(BooleanForm::Lit)],
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -42,7 +42,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unpaired_electrons_ast_lattice_laws_raw(
+    fn test_unpaired_electrons_form_lattice_laws_raw(
         a in raw_unpaired_electrons_strategy(),
         b in raw_unpaired_electrons_strategy(),
         c in raw_unpaired_electrons_strategy(),
@@ -51,16 +51,16 @@ proptest! {
     }
 
     #[test]
-    fn test_element_ast_lattice_laws_raw(
-        a in raw_element_ast_strategy(),
-        b in raw_element_ast_strategy(),
-        c in raw_element_ast_strategy(),
+    fn test_element_form_lattice_laws_raw(
+        a in raw_element_form_strategy(),
+        b in raw_element_form_strategy(),
+        c in raw_element_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_isotope_mass_ast_lattice_laws_raw(
+    fn test_isotope_mass_form_lattice_laws_raw(
         a in raw_isotope_strategy(),
         b in raw_isotope_strategy(),
         c in raw_isotope_strategy(),
@@ -114,7 +114,7 @@ proptest! {
     }
 
     #[test]
-    fn test_isotope_mass_ast_as_lit_laws(
+    fn test_isotope_mass_form_as_lit_laws(
         a in raw_isotope_strategy(),
         b in raw_isotope_strategy(),
     ) {
@@ -128,7 +128,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unpaired_electrons_ast_as_lit_laws(
+    fn test_unpaired_electrons_form_as_lit_laws(
         a in raw_unpaired_electrons_strategy(),
         b in raw_unpaired_electrons_strategy(),
     ) {
@@ -226,17 +226,17 @@ proptest! {
     }
 
     #[test]
-    fn test_element_ast_lattice_laws(
-        a in element_ast_strategy(),
-        b in element_ast_strategy(),
-        c in element_ast_strategy(),
+    fn test_element_form_lattice_laws(
+        a in element_form_strategy(),
+        b in element_form_strategy(),
+        c in element_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_isotope_mass_ast_lattice_laws(
+    fn test_isotope_mass_form_lattice_laws(
         a in isotope_strategy(),
         b in isotope_strategy(),
         c in isotope_strategy(),
@@ -246,7 +246,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unpaired_electrons_ast_lattice_laws(
+    fn test_unpaired_electrons_form_lattice_laws(
         a in unpaired_electrons_strategy(),
         b in unpaired_electrons_strategy(),
         c in unpaired_electrons_strategy(),
@@ -286,10 +286,10 @@ proptest! {
     }
 
     #[test]
-    fn test_electron_counts_ast_lattice_laws(
-        a in electron_counts_ast_strategy(),
-        b in electron_counts_ast_strategy(),
-        c in electron_counts_ast_strategy(),
+    fn test_electron_counts_form_lattice_laws(
+        a in electron_counts_form_strategy(),
+        b in electron_counts_form_strategy(),
+        c in electron_counts_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

@@ -45,29 +45,29 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AtomAst, ElementAst, NumForm, UnpairedElectronsAst};
+    use umol_graph_ir::ir::{AtomAst, ElementForm, NumForm, UnpairedElectronsForm};
 
     use super::*;
 
     #[rstest]
     #[case::higher_h(
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(1), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(1), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
         Ordering::Greater,
     )]
     #[case::higher_n(
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(1), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(1), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
         Ordering::Less,
     )]
     #[case::lower_u(
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsAst::from((2_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((2_u8, 1_u8)), ..Default::default() },
         Ordering::Greater,
     )]
     #[case::equal(
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(2), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
-        AtomAst { element: ElementAst::Lit(Element::C), implicit_hydrogens: NumForm::Lit(2), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(2), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
+        AtomAst { element: ElementForm::Lit(Element::C), implicit_hydrogens: NumForm::Lit(2), lone_pairs: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() },
         Ordering::Equal,
     )]
     fn test_compare_valence_preference(
@@ -87,24 +87,24 @@ mod tests {
     fn test_compare_valence_preference_iterator() {
         let candidates = [
             AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 implicit_hydrogens: NumForm::Lit(1),
                 lone_pairs: NumForm::Lit(1),
-                unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
                 ..Default::default()
             },
             AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 implicit_hydrogens: NumForm::Lit(3),
                 lone_pairs: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
                 ..Default::default()
             },
             AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 implicit_hydrogens: NumForm::Lit(2),
                 lone_pairs: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
                 ..Default::default()
             },
         ];

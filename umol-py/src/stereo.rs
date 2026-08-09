@@ -11,7 +11,7 @@ use pyo3::types::PyDict;
 // The `BooleanAst` Rust value is still `#[cfg(test)]` (only tests build it directly); its `to_rust`
 // peer is already live.
 #[cfg(test)]
-use umol_graph_ir::ir::BooleanAst as GraphIrBooleanAst;
+use umol_graph_ir::ir::BooleanForm as GraphIrBooleanForm;
 use umol_graph_ir::ir::{
     AsLit, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
     CisTransConfiguration as GraphIrCisTransConfiguration, CisTransStereo as GraphIrCisTransStereo,
@@ -2091,7 +2091,7 @@ mod tests {
             assert!(value.permutation() == permutation);
             assert_eq!(
                 value.invariant.bind(py).borrow().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
@@ -2144,14 +2144,14 @@ mod tests {
                         ])),
                         orientation: PermOrientation::Proper,
                     },
-                    invariant: GraphIrBooleanAst::Lit(true),
+                    invariant: GraphIrBooleanForm::Lit(true),
                 },
                 GraphIrLigandSymmetryAst {
                     permutation: GraphIrOrientedLigandPermutation {
                         permutation: GraphIrLigandPermutation(PermPermutation::identity(4)),
                         orientation: PermOrientation::Improper,
                     },
-                    invariant: GraphIrBooleanAst::Undetermined,
+                    invariant: GraphIrBooleanForm::Undetermined,
                 },
             ] {
                 assert_eq!(
@@ -2170,7 +2170,7 @@ mod tests {
             assert!(value.permutation() == permutation);
             assert_eq!(
                 value.active.bind(py).borrow().to_rust(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
             assert_eq!(
                 value.__repr__(py).unwrap(),
@@ -2215,11 +2215,11 @@ mod tests {
                     permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[
                         1, 0, 2, 3,
                     ])),
-                    active: GraphIrBooleanAst::Lit(false),
+                    active: GraphIrBooleanForm::Lit(false),
                 },
                 GraphIrFluxionalityAst {
                     permutation: GraphIrLigandPermutation(PermPermutation::identity(4)),
-                    active: GraphIrBooleanAst::Undetermined,
+                    active: GraphIrBooleanForm::Undetermined,
                 },
             ] {
                 assert_eq!(
@@ -2304,8 +2304,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(GraphIrStereoAtomConstraintAst::LigandSymmetry(GraphIrLigandSymmetryAst { permutation: GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: GraphIrBooleanAst::Lit(true) }))]
-    #[case(GraphIrStereoAtomConstraintAst::Fluxionality(GraphIrFluxionalityAst { permutation: GraphIrLigandPermutation(PermPermutation::identity(4)), active: GraphIrBooleanAst::Lit(false) }))]
+    #[case(GraphIrStereoAtomConstraintAst::LigandSymmetry(GraphIrLigandSymmetryAst { permutation: GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: GraphIrBooleanForm::Lit(true) }))]
+    #[case(GraphIrStereoAtomConstraintAst::Fluxionality(GraphIrFluxionalityAst { permutation: GraphIrLigandPermutation(PermPermutation::identity(4)), active: GraphIrBooleanForm::Lit(false) }))]
     #[case(GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst { pair: GraphIrStereoLigandPair::new(GraphIrStereoLigandPosition(0), GraphIrStereoLigandPosition(1)), relation: GraphIrTopicityRelationAst::Lit(GraphIrTopicity::Homotopic) }))]
     #[case(GraphIrStereoAtomConstraintAst::Stereogenicity(GraphIrStereogenicityAst::Lit(GraphIrStereogenicity::Stereogenic)))]
     fn test_stereo_atom_constraint_ast_roundtrip(#[case] ast: GraphIrStereoAtomConstraintAst) {
@@ -2417,7 +2417,7 @@ mod tests {
                         ])),
                         orientation: PermOrientation::Proper,
                     },
-                    invariant: GraphIrBooleanAst::Lit(true),
+                    invariant: GraphIrBooleanForm::Lit(true),
                 }),
                 GraphIrStereoAtomConstraintAst::Topicity(GraphIrTopicityAst {
                     pair: GraphIrStereoLigandPair::new(
@@ -2444,7 +2444,7 @@ mod tests {
             assert_eq!(ligand_symmetries.len(), 1);
             assert_eq!(
                 ligand_symmetries[0].to_rust(py).invariant,
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }

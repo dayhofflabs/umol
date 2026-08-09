@@ -235,7 +235,7 @@ mod tests {
     use crate::ir::{
         AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst,
         AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
-        BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, Entity,
+        BondUpdate, BooleanForm, DativeBondAst, DativeBondConstraintAst, ElementForm, Entity,
         MoleculeAst, MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
         NumForm, StereoAtomAst, StereoBondAst, StereoCoset, StereoKind,
     };
@@ -345,7 +345,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", AtomUpdate::default())]
-    #[case::element("C#h4", AtomUpdate { element: Some(ElementAst::Lit(Element::C)), implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
+    #[case::element("C#h4", AtomUpdate { element: Some(ElementForm::Lit(Element::C)), implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
     #[case::field_only("#h4", AtomUpdate { implicit_hydrogens: Some(NumForm::Lit(4)), ..Default::default() })]
     #[case::constraint_only("#v4", AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() })]
     fn test_atom_update_macro(#[case] input: &str, #[case] expected: AtomUpdate) {
@@ -355,7 +355,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", BondAst::from_order(2))]
-    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
     fn test_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(bond_dsl!(input), expected);
     }
@@ -378,7 +378,7 @@ mod tests {
     #[case::empty("", BondUpdate::default())]
     #[case::order("1", BondUpdate { order: Some(NumForm::Lit(1)), ..Default::default() })]
     #[case::field_only("#c+", BondUpdate { charge: Some(NumForm::Lit(1)), ..Default::default() })]
-    #[case::constraint_only("#a", BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() })]
+    #[case::constraint_only("#a", BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))), ..Default::default() })]
     fn test_bond_update_macro(#[case] input: &str, #[case] expected: BondUpdate) {
         assert_eq!(bond_update_dsl!(input), expected);
     }

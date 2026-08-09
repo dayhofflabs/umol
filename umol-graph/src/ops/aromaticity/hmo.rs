@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, UnpairedElectronsAst,
+    AromaticSystemAst, AtomId, AtomView, ElementForm, MoleculeAst, RingSet, UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
@@ -69,7 +69,7 @@ impl HmoAromaticity {
             .iter()
             .filter_map(|view| {
                 let element = match view.ast.element {
-                    ElementAst::Lit(e) => e,
+                    ElementForm::Lit(e) => e,
                     _ => return None,
                 };
                 if !self.is_element_supported(element) {
@@ -127,7 +127,7 @@ impl HmoAromaticity {
                     atoms,
                     AromaticSystemAst::from_electrons(electrons)
                         .with_charge(0)
-                        .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 ));
             }
         }
@@ -152,7 +152,7 @@ impl HmoAromaticity {
         for (i, &atom) in pi_atoms.iter().enumerate() {
             let view = ast.atom(atom);
             let element = match view.ast.element {
-                ElementAst::Lit(e) => e,
+                ElementForm::Lit(e) => e,
                 _ => {
                     return Err(HmoError::UndeterminedAtom(
                         "undetermined element".to_string(),

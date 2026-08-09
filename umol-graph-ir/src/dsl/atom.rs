@@ -29,7 +29,7 @@ use super::stereo::{
     fmt_tetrahedral_stereo_config, tetrahedral_stereo_config, TetrahedralStereoDsl,
 };
 use super::value::{fmt_set, fmt_value, terminator, value, variable_name, ValueDsl};
-use crate::ir::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
+use crate::ir::atom::{AtomAst, AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::ir::constraint::{
     AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
     MulticenterValenceAst, RingScope,
@@ -399,7 +399,7 @@ fn fmt_undetermined_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintAst
 /// and the applier folds them into the `AtomAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomPredicate {
-    IsotopeMass(IsotopeMassAst),
+    IsotopeMass(IsotopeMassForm),
     Charge(NumForm),
     ImplicitHydrogens(NumForm),
     LonePairs(NumForm),
@@ -475,18 +475,18 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
     }
 }
 
-fn element(i: &mut &str) -> PResult<ElementAst> {
+fn element(i: &mut &str) -> PResult<ElementForm> {
     alt((
-        '*'.value(ElementAst::Undetermined),
-        preceded('!', element_set).map(ElementAst::not_set),
-        preceded('!', element_literal).map(ElementAst::not),
-        element_set.map(ElementAst::lit_set),
+        '*'.value(ElementForm::Undetermined),
+        preceded('!', element_set).map(ElementForm::not_set),
+        preceded('!', element_literal).map(ElementForm::not),
+        element_set.map(ElementForm::lit_set),
         element_bind.map(|(name, set, mem_op)| match mem_op {
-            MemOp::In => ElementAst::var_in(name, set),
-            MemOp::NotIn => ElementAst::var_not_in(name, set),
+            MemOp::In => ElementForm::var_in(name, set),
+            MemOp::NotIn => ElementForm::var_not_in(name, set),
         }),
-        element_ref.map(ElementAst::var),
-        element_literal.map(ElementAst::Lit),
+        element_ref.map(ElementForm::var),
+        element_literal.map(ElementForm::Lit),
     ))
     .parse_next(i)
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedElement))
@@ -547,18 +547,18 @@ fn element_ref(i: &mut &str) -> PResult<String> {
     .parse_next(i)
 }
 
-fn isotope(i: &mut &str) -> PResult<IsotopeMassAst> {
+fn isotope(i: &mut &str) -> PResult<IsotopeMassForm> {
     preceded(
         multispace0,
         alt((
-            '='.value(IsotopeMassAst::Natural),
-            '*'.value(IsotopeMassAst::Undetermined),
-            isotope_set.map(IsotopeMassAst::lit_set),
+            '='.value(IsotopeMassForm::Natural),
+            '*'.value(IsotopeMassForm::Undetermined),
+            isotope_set.map(IsotopeMassForm::lit_set),
             terminated(isotope_var, (multispace0, terminator)).map(|(name, domain)| match domain {
-                Some(set) => IsotopeMassAst::var_in(name, set),
-                None => IsotopeMassAst::var(name),
+                Some(set) => IsotopeMassForm::var_in(name, set),
+                None => IsotopeMassForm::var(name),
             }),
-            terminated(dec_uint::<_, u32, _>, (multispace0, terminator)).map(IsotopeMassAst::Lit),
+            terminated(dec_uint::<_, u32, _>, (multispace0, terminator)).map(IsotopeMassForm::Lit),
         )),
     )
     .parse_next(i)
@@ -635,7 +635,7 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
     for pred in preds {
         match pred {
             AtomPredicate::IsotopeMass(v) => {
-                if !matches!(ast.isotope_mass, IsotopeMassAst::Undetermined) {
+                if !matches!(ast.isotope_mass, IsotopeMassForm::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#i".to_string()));
                 }
                 ast.isotope_mass = v;
@@ -687,20 +687,20 @@ fn fmt_atom_ast(f: &mut fmt::Formatter<'_>, ast: &AtomAst) -> fmt::Result {
     fmt_unpaired_electrons(f, &ast.unpaired_electrons)
 }
 
-fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
+fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementForm) -> fmt::Result {
     match expr {
-        ElementAst::Lit(e) => write!(f, "{}", e),
-        ElementAst::Undetermined => write!(f, "*"),
-        ElementAst::LitSet(es) => fmt_element_set(f, es.iter().copied()),
-        ElementAst::NotSet(es) if es.len() == 1 => {
+        ElementForm::Lit(e) => write!(f, "{}", e),
+        ElementForm::Undetermined => write!(f, "*"),
+        ElementForm::LitSet(es) => fmt_element_set(f, es.iter().copied()),
+        ElementForm::NotSet(es) if es.len() == 1 => {
             // A singleton complement renders as `!e` (no braces), e.g. `!H`.
             write!(f, "!{}", es.iter().next().unwrap())
         }
-        ElementAst::NotSet(es) => {
+        ElementForm::NotSet(es) => {
             write!(f, "!")?;
             fmt_element_set(f, es.iter().copied())
         }
-        ElementAst::Var(v) => {
+        ElementForm::Var(v) => {
             let (name, domain) = &**v;
             write!(f, "?{}", name)?;
             if let Some((op, set)) = domain {
@@ -726,16 +726,16 @@ fn fmt_element_set(
     write!(f, "}}")
 }
 
-fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassAst) -> fmt::Result {
+fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassForm) -> fmt::Result {
     match iso {
-        IsotopeMassAst::Undetermined => Ok(()),
-        IsotopeMassAst::Natural => write!(f, "#i="),
-        IsotopeMassAst::Lit(n) => write!(f, "#i{}", n),
-        IsotopeMassAst::LitSet(s) => {
+        IsotopeMassForm::Undetermined => Ok(()),
+        IsotopeMassForm::Natural => write!(f, "#i="),
+        IsotopeMassForm::Lit(n) => write!(f, "#i{}", n),
+        IsotopeMassForm::LitSet(s) => {
             write!(f, "#i")?;
             fmt_set(f, s.iter().copied())
         }
-        IsotopeMassAst::Var(v) => {
+        IsotopeMassForm::Var(v) => {
             let (name, domain) = &**v;
             write!(f, "#i?{}", name)?;
             match domain {
@@ -842,10 +842,10 @@ pub(crate) fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
         constraints,
     } = ast;
 
-    if matches!(*isotope_mass, IsotopeMassAst::Undetermined) {
+    if matches!(*isotope_mass, IsotopeMassForm::Undetermined) {
         *isotope_mass = match cfg.isotope {
-            IsotopeDefault::Natural => IsotopeMassAst::Natural,
-            IsotopeDefault::Required => IsotopeMassAst::Undetermined,
+            IsotopeDefault::Natural => IsotopeMassForm::Natural,
+            IsotopeDefault::Required => IsotopeMassForm::Undetermined,
         };
     }
     if matches!(*charge, NumForm::Undetermined) {
@@ -935,9 +935,9 @@ pub(crate) fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
 
     if matches!(
         (&cfg.isotope, &*isotope_mass),
-        (IsotopeDefault::Natural, IsotopeMassAst::Natural)
+        (IsotopeDefault::Natural, IsotopeMassForm::Natural)
     ) {
-        *isotope_mass = IsotopeMassAst::Undetermined;
+        *isotope_mass = IsotopeMassForm::Undetermined;
     }
     if matches!(
         (&cfg.charge, &*charge),
@@ -1304,14 +1304,14 @@ mod tests {
     use super::*;
     use crate::ir::constraint::RingScope;
     use crate::ir::operators::{MemOp, RelOp};
-    use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+    use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
     use crate::ir::stereo::{StereoCoset, StereoTerm};
     use crate::ir::value::{ArithExpr, PredExpr};
 
     #[rstest]
-    #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
-    #[case::double("Cl", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Cl))))]
-    #[case::transuranic("Og", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Og))))]
+    #[case::single("C", AtomDsl(AtomAst::new(ElementForm::Lit(Element::C))))]
+    #[case::double("Cl", AtomDsl(AtomAst::new(ElementForm::Lit(Element::Cl))))]
+    #[case::transuranic("Og", AtomDsl(AtomAst::new(ElementForm::Lit(Element::Og))))]
     fn test_parse_bare_element(#[case] input: &str, #[case] expected: AtomDsl) {
         assert_eq!(parse_bare_element(input), Some(expected));
     }
@@ -1335,70 +1335,70 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
-    #[case::iron("Fe", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Fe))))]
-    #[case::chlorine("Cl", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Cl))))]
-    #[case::whitespace("  C  ", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
-    #[case::undetermined("*", AtomDsl(AtomAst::new(ElementAst::Undetermined)))]
-    #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::lit_set(vec![Element::C, Element::N, Element::O]))))]
-    #[case::element_set_singleton("{C}", AtomDsl(AtomAst::new(ElementAst::lit_set(vec![Element::C]))))]
-    #[case::element_var_mem_in("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::var_in("e", vec![Element::C, Element::N]))))]
-    #[case::element_var("?e", AtomDsl(AtomAst::new(ElementAst::var("e".to_string()))))]
-    #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::isotope_natural("C#i=", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::charge_pos("C#c+2", AtomDsl(AtomAst { charge: NumForm::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::charge_neg("C#c-2", AtomDsl(AtomAst { charge: NumForm::Lit(-2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::charge_plus("C#c+", AtomDsl(AtomAst { charge: NumForm::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::charge_minus("C#c-", AtomDsl(AtomAst { charge: NumForm::Lit(-1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::charge_zero("C#c0", AtomDsl(AtomAst { charge: NumForm::Lit(0), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: NumForm::var("h"), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
-    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: NumForm::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
-    #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: NumForm::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
-    #[case::unpaired_electrons("C#u2", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::unpaired_no_canonicalization("C#u{1}", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: NumForm::lit_set([1]), multiplicity: NumForm::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::unpaired_omit("C#u", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multiplicity("C#s3", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multiplicity_omit("C#s", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::valence("C#v4", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::Lit(4))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::donated_pairs("N#d1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::DonatedPairs(NumForm::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
-    #[case::accepted_pairs("B#t1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AcceptedPairs(NumForm::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::B)) }))]
-    #[case::ring_membership_size("C#R(6)", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_not_aromatic("C#a!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::NotAromatic)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_undetermined("C#a*", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_plus("C#a+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Undetermined))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_zero("C#a0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(0)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_one("C#a1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_omit("C#a", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter_not("C#m!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter_undetermined("C#m*", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter_plus("C#m+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Undetermined))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter_zero("C#m0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(0)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter_one("C#m", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter("C#m2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(2)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::degree("C#D2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::Degree(NumForm::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::total_degree("C#X3", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TotalDegree(NumForm::Lit(3))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_degree("C#x2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::RingDegree(NumForm::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_valence("C#y3", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::RingValence(NumForm::Lit(3))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::total_valence("C#V5", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TotalValence(NumForm::Lit(5))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::total_hydrogens("C#H1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TotalHydrogens(NumForm::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_membership_all_bare("C#R", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_membership_all_star("C#R*", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_membership_all_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::RangeFrom(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_not_in_ring("C#R!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_membership_all("C#R2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_membership_size_conj("C#R(5)#R(6)", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::tetrahedral_stereo_stereo("C#T+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::tetrahedral_stereo_lit("C#T1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::tetrahedral_stereo_not_stereo("C#T!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::whitespace_before_predicate("C #h3", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::whitespace_between_predicates("C#c+ #h3", AtomDsl(AtomAst { charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::whitespace_surrounding_predicates("  C  #c+  #h3  ", AtomDsl(AtomAst { charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::carbon("C", AtomDsl(AtomAst::new(ElementForm::Lit(Element::C))))]
+    #[case::iron("Fe", AtomDsl(AtomAst::new(ElementForm::Lit(Element::Fe))))]
+    #[case::chlorine("Cl", AtomDsl(AtomAst::new(ElementForm::Lit(Element::Cl))))]
+    #[case::whitespace("  C  ", AtomDsl(AtomAst::new(ElementForm::Lit(Element::C))))]
+    #[case::undetermined("*", AtomDsl(AtomAst::new(ElementForm::Undetermined)))]
+    #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementForm::lit_set(vec![Element::C, Element::N, Element::O]))))]
+    #[case::element_set_singleton("{C}", AtomDsl(AtomAst::new(ElementForm::lit_set(vec![Element::C]))))]
+    #[case::element_var_mem_in("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementForm::var_in("e", vec![Element::C, Element::N]))))]
+    #[case::element_var("?e", AtomDsl(AtomAst::new(ElementForm::var("e".to_string()))))]
+    #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeMassForm::Lit(12), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::isotope_natural("C#i=", AtomDsl(AtomAst { isotope_mass: IsotopeMassForm::Natural, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::charge_pos("C#c+2", AtomDsl(AtomAst { charge: NumForm::Lit(2), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::charge_neg("C#c-2", AtomDsl(AtomAst { charge: NumForm::Lit(-2), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::charge_plus("C#c+", AtomDsl(AtomAst { charge: NumForm::Lit(1), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::charge_minus("C#c-", AtomDsl(AtomAst { charge: NumForm::Lit(-1), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::charge_zero("C#c0", AtomDsl(AtomAst { charge: NumForm::Lit(0), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Undetermined, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: NumForm::var("h"), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([2, 3]))), ..AtomAst::new(ElementForm::Lit(Element::N)) }))]
+    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(1), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: NumForm::Lit(2), ..AtomAst::new(ElementForm::Lit(Element::O)) }))]
+    #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: NumForm::Lit(1), ..AtomAst::new(ElementForm::Lit(Element::O)) }))]
+    #[case::unpaired_electrons("C#u2", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::unpaired_no_canonicalization("C#u{1}", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsForm { count: NumForm::lit_set([1]), multiplicity: NumForm::Undetermined }, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::unpaired_omit("C#u", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multiplicity("C#s3", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multiplicity_omit("C#s", AtomDsl(AtomAst { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) }, ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::valence("C#v4", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(NumForm::Lit(4))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::donated_pairs("N#d1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::DonatedPairs(NumForm::Lit(1))]), ..AtomAst::new(ElementForm::Lit(Element::N)) }))]
+    #[case::accepted_pairs("B#t1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AcceptedPairs(NumForm::Lit(1))]), ..AtomAst::new(ElementForm::Lit(Element::B)) }))]
+    #[case::ring_membership_size("C#R(6)", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::arom_not_aromatic("C#a!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::NotAromatic)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::arom_undetermined("C#a*", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Undetermined)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::arom_plus("C#a+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Undetermined))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::arom_zero("C#a0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(0)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::arom_one("C#a1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::arom_omit("C#a", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(NumForm::Lit(1)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multicenter_not("C#m!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multicenter_undetermined("C#m*", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Undetermined)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multicenter_plus("C#m+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Undetermined))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multicenter_zero("C#m0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(0)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multicenter_one("C#m", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(1)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::multicenter("C#m2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(NumForm::Lit(2)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::degree("C#D2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::Degree(NumForm::Lit(2))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::total_degree("C#X3", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TotalDegree(NumForm::Lit(3))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_degree("C#x2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::RingDegree(NumForm::Lit(2))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_valence("C#y3", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::RingValence(NumForm::Lit(3))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::total_valence("C#V5", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TotalValence(NumForm::Lit(5))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::total_hydrogens("C#H1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TotalHydrogens(NumForm::Lit(1))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_membership_all_bare("C#R", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_membership_all_star("C#R*", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_membership_all_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::RangeFrom(1))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_not_in_ring("C#R!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_membership_all("C#R2", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::All, NumForm::Lit(2))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::ring_membership_size_conj("C#R(5)#R(6)", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::tetrahedral_stereo_stereo("C#T+", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Undetermined))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::tetrahedral_stereo_lit("C#T1", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)))]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::tetrahedral_stereo_not_stereo("C#T!", AtomDsl(AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::whitespace_before_predicate("C #h3", AtomDsl(AtomAst { implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::whitespace_between_predicates("C#c+ #h3", AtomDsl(AtomAst { charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
+    #[case::whitespace_surrounding_predicates("  C  #c+  #h3  ", AtomDsl(AtomAst { charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(3), ..AtomAst::new(ElementForm::Lit(Element::C)) }))]
     fn test_parse_atom(#[case] input: &str, #[case] expected: AtomDsl) {
         let result = atom.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -1438,12 +1438,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", AtomUpdateDsl(AtomUpdate::default()))]
-    #[case::element_only("O", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Lit(Element::O)), ..Default::default() }))]
+    #[case::element_only("O", AtomUpdateDsl(AtomUpdate { element: Some(ElementForm::Lit(Element::O)), ..Default::default() }))]
     #[case::charge_only("#c-1", AtomUpdateDsl(AtomUpdate { charge: Some(NumForm::Lit(-1)), ..Default::default() }))]
-    #[case::element_and_pred("O#h1", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Lit(Element::O)), implicit_hydrogens: Some(NumForm::Lit(1)), ..Default::default() }))]
+    #[case::element_and_pred("O#h1", AtomUpdateDsl(AtomUpdate { element: Some(ElementForm::Lit(Element::O)), implicit_hydrogens: Some(NumForm::Lit(1)), ..Default::default() }))]
     #[case::unpaired_electrons_unpaired("#u2", AtomUpdateDsl(AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(2)), multiplicity: None }, ..Default::default() }))]
     #[case::unpaired_electrons_multiplicity("#s1", AtomUpdateDsl(AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }))]
-    #[case::explicit_undetermined("*#i*#c*#h*#n*#u*#s*", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(NumForm::Undetermined), implicit_hydrogens: Some(NumForm::Undetermined), lone_pairs: Some(NumForm::Undetermined), unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: Some(NumForm::Undetermined) }, constraints: Default::default() }))]
+    #[case::explicit_undetermined("*#i*#c*#h*#n*#u*#s*", AtomUpdateDsl(AtomUpdate { element: Some(ElementForm::Undetermined), isotope_mass: Some(IsotopeMassForm::Undetermined), charge: Some(NumForm::Undetermined), implicit_hydrogens: Some(NumForm::Undetermined), lone_pairs: Some(NumForm::Undetermined), unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: Some(NumForm::Undetermined) }, constraints: Default::default() }))]
     #[case::constraint_removal("#v*", AtomUpdateDsl(AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() }))]
     fn test_parse_atom_update(#[case] input: &str, #[case] expected: AtomUpdateDsl) {
         assert_eq!(parse_atom_update(input).unwrap(), expected);
@@ -1487,7 +1487,7 @@ mod tests {
     #[rstest]
     #[case::charge_only(AtomUpdateDsl(AtomUpdate { charge: Some(NumForm::Lit(-1)), ..Default::default() }), r##""#c-""##)]
     #[case::unpaired_electrons_multiplicity(AtomUpdateDsl(AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }), r##""#s""##)]
-    #[case::explicit_undetermined(AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(NumForm::Undetermined), implicit_hydrogens: Some(NumForm::Undetermined), lone_pairs: Some(NumForm::Undetermined), unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: Some(NumForm::Undetermined) }, constraints: Default::default() }), r##""*#i*#c*#h*#n*#u*#s*""##)]
+    #[case::explicit_undetermined(AtomUpdateDsl(AtomUpdate { element: Some(ElementForm::Undetermined), isotope_mass: Some(IsotopeMassForm::Undetermined), charge: Some(NumForm::Undetermined), implicit_hydrogens: Some(NumForm::Undetermined), lone_pairs: Some(NumForm::Undetermined), unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: Some(NumForm::Undetermined) }, constraints: Default::default() }), r##""*#i*#c*#h*#n*#u*#s*""##)]
     #[case::ring_size_removal(AtomUpdateDsl(AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::ring_membership(RingScope::Size(3), NumForm::Undetermined)), ..Default::default() }), r##""#R(3)*""##)]
     fn test_atom_update_dsl_to_edn(#[case] input: AtomUpdateDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
@@ -1555,24 +1555,24 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon("C", ElementAst::Lit(Element::C))]
-    #[case::iron("Fe", ElementAst::Lit(Element::Fe))]
-    #[case::chlorine("Cl", ElementAst::Lit(Element::Cl))]
-    #[case::undetermined("*", ElementAst::Undetermined)]
-    #[case::set("{C,N,O}", ElementAst::lit_set(vec![Element::C, Element::N, Element::O]))]
-    #[case::set_spaced("{ C, N}", ElementAst::lit_set(vec![Element::C, Element::N]))]
-    #[case::var_domain_paren("(?e :: {C,N})", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::var_domain_bare("?e :: {C,N}", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::var_domain_paren_paren("((?e :: {C,N}))", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::var_domain_not_in_lit("?e !: H", ElementAst::var_not_in("e", vec![Element::H]))]
-    #[case::var_domain_not_in_set("?e !: {F,Cl}", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
-    #[case::var_domain_not_in_paren("(?e !: {F,Cl})", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
-    #[case::var_bare("?e", ElementAst::var("e".to_string()))]
-    #[case::var_paren("(?e)", ElementAst::var("e".to_string()))]
-    #[case::var_paren_paren("((?e))", ElementAst::var("e".to_string()))]
-    #[case::not_lit("!H", ElementAst::not(Element::H))]
-    #[case::not_set("!{F,Cl}", ElementAst::not_set(vec![Element::F, Element::Cl]))]
-    fn test_element(#[case] input: &str, #[case] expected: ElementAst) {
+    #[case::carbon("C", ElementForm::Lit(Element::C))]
+    #[case::iron("Fe", ElementForm::Lit(Element::Fe))]
+    #[case::chlorine("Cl", ElementForm::Lit(Element::Cl))]
+    #[case::undetermined("*", ElementForm::Undetermined)]
+    #[case::set("{C,N,O}", ElementForm::lit_set(vec![Element::C, Element::N, Element::O]))]
+    #[case::set_spaced("{ C, N}", ElementForm::lit_set(vec![Element::C, Element::N]))]
+    #[case::var_domain_paren("(?e :: {C,N})", ElementForm::var_in("e", vec![Element::C, Element::N]))]
+    #[case::var_domain_bare("?e :: {C,N}", ElementForm::var_in("e", vec![Element::C, Element::N]))]
+    #[case::var_domain_paren_paren("((?e :: {C,N}))", ElementForm::var_in("e", vec![Element::C, Element::N]))]
+    #[case::var_domain_not_in_lit("?e !: H", ElementForm::var_not_in("e", vec![Element::H]))]
+    #[case::var_domain_not_in_set("?e !: {F,Cl}", ElementForm::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::var_domain_not_in_paren("(?e !: {F,Cl})", ElementForm::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::var_bare("?e", ElementForm::var("e".to_string()))]
+    #[case::var_paren("(?e)", ElementForm::var("e".to_string()))]
+    #[case::var_paren_paren("((?e))", ElementForm::var("e".to_string()))]
+    #[case::not_lit("!H", ElementForm::not(Element::H))]
+    #[case::not_set("!{F,Cl}", ElementForm::not_set(vec![Element::F, Element::Cl]))]
+    fn test_element(#[case] input: &str, #[case] expected: ElementForm) {
         let result = element.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
         let expr = result.unwrap();
@@ -1595,19 +1595,19 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::natural("=", IsotopeMassAst::Natural)]
-    #[case::lit("12", IsotopeMassAst::Lit(12))]
-    #[case::undetermined("*", IsotopeMassAst::Undetermined)]
-    #[case::set("{12,13,14}", IsotopeMassAst::lit_set([12, 13, 14]))]
-    #[case::set_spaced("{ 12, 13 }", IsotopeMassAst::lit_set([12, 13]))]
-    #[case::set_singleton("{12}", IsotopeMassAst::lit_set([12]))]
-    #[case::var_in_paren("(?m :: {12,13})", IsotopeMassAst::var_in("m", [12, 13]))]
-    #[case::var_in_bare("?m :: {12,13}", IsotopeMassAst::var_in("m", [12, 13]))]
-    #[case::var_in_paren_paren("((?m :: {12,13}))", IsotopeMassAst::var_in("m", [12, 13]))]
-    #[case::var_paren("(?m)", IsotopeMassAst::var("m"))]
-    #[case::var_bare("?m", IsotopeMassAst::var("m"))]
-    #[case::var_paren_paren("((?m))", IsotopeMassAst::var("m"))]
-    fn test_isotope(#[case] input: &str, #[case] expected: IsotopeMassAst) {
+    #[case::natural("=", IsotopeMassForm::Natural)]
+    #[case::lit("12", IsotopeMassForm::Lit(12))]
+    #[case::undetermined("*", IsotopeMassForm::Undetermined)]
+    #[case::set("{12,13,14}", IsotopeMassForm::lit_set([12, 13, 14]))]
+    #[case::set_spaced("{ 12, 13 }", IsotopeMassForm::lit_set([12, 13]))]
+    #[case::set_singleton("{12}", IsotopeMassForm::lit_set([12]))]
+    #[case::var_in_paren("(?m :: {12,13})", IsotopeMassForm::var_in("m", [12, 13]))]
+    #[case::var_in_bare("?m :: {12,13}", IsotopeMassForm::var_in("m", [12, 13]))]
+    #[case::var_in_paren_paren("((?m :: {12,13}))", IsotopeMassForm::var_in("m", [12, 13]))]
+    #[case::var_paren("(?m)", IsotopeMassForm::var("m"))]
+    #[case::var_bare("?m", IsotopeMassForm::var("m"))]
+    #[case::var_paren_paren("((?m))", IsotopeMassForm::var("m"))]
+    fn test_isotope(#[case] input: &str, #[case] expected: IsotopeMassForm) {
         let result = isotope.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
         let expr = result.unwrap();
@@ -1626,9 +1626,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::isotope_lit("#i12", AtomPredicate::IsotopeMass(IsotopeMassAst::Lit(12)))]
-    #[case::isotope_natural("#i=", AtomPredicate::IsotopeMass(IsotopeMassAst::Natural))]
-    #[case::isotope_undetermined("#i*", AtomPredicate::IsotopeMass(IsotopeMassAst::Undetermined))]
+    #[case::isotope_lit("#i12", AtomPredicate::IsotopeMass(IsotopeMassForm::Lit(12)))]
+    #[case::isotope_natural("#i=", AtomPredicate::IsotopeMass(IsotopeMassForm::Natural))]
+    #[case::isotope_undetermined("#i*", AtomPredicate::IsotopeMass(IsotopeMassForm::Undetermined))]
     #[case::charge_pos("#c+2", AtomPredicate::Charge(NumForm::Lit(2)))]
     #[case::charge_neg("#c-2", AtomPredicate::Charge(NumForm::Lit(-2)))]
     #[case::charge_plus("#c+", AtomPredicate::Charge(NumForm::Lit(1)))]
@@ -1696,12 +1696,12 @@ mod tests {
 
     #[rstest]
     fn test_atom_dsl_from_ast() {
-        let mut ast = AtomAst::new(ElementAst::Lit(Element::C));
+        let mut ast = AtomAst::new(ElementForm::Lit(Element::C));
         ast.charge = NumForm::Lit(0);
         ast.lone_pairs = NumForm::Lit(0);
         ast.implicit_hydrogens = NumForm::Lit(0);
-        ast.isotope_mass = IsotopeMassAst::Natural;
-        ast.unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
+        ast.isotope_mass = IsotopeMassForm::Natural;
+        ast.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
         ast.constraints
             .set(AtomConstraintAst::Valence(NumForm::Lit(0)));
         ast.constraints.set(AtomConstraintAst::AromaticValence(
@@ -1712,23 +1712,23 @@ mod tests {
         assert_eq!(dsl.0.charge, NumForm::Undetermined);
         assert_eq!(dsl.0.lone_pairs, NumForm::Undetermined);
         assert_eq!(dsl.0.implicit_hydrogens, NumForm::Undetermined);
-        assert_eq!(dsl.0.isotope_mass, IsotopeMassAst::Undetermined);
-        assert_eq!(dsl.0.unpaired_electrons, UnpairedElectronsAst::default());
+        assert_eq!(dsl.0.isotope_mass, IsotopeMassForm::Undetermined);
+        assert_eq!(dsl.0.unpaired_electrons, UnpairedElectronsForm::default());
         assert!(dsl.0.constraints.is_empty());
     }
 
     #[rstest]
     fn test_atom_dsl_into_ast() {
-        let dsl = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
+        let dsl = AtomDsl(AtomAst::new(ElementForm::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
         let ast = dsl.into_ir(&cfg);
         assert_eq!(ast.charge, NumForm::Lit(0));
         assert_eq!(ast.lone_pairs, NumForm::Lit(0));
         assert_eq!(ast.implicit_hydrogens, NumForm::Lit(0));
-        assert_eq!(ast.isotope_mass, IsotopeMassAst::Natural);
+        assert_eq!(ast.isotope_mass, IsotopeMassForm::Natural);
         assert_eq!(
             ast.unpaired_electrons,
-            UnpairedElectronsAst::from((0_u8, 1_u8))
+            UnpairedElectronsForm::from((0_u8, 1_u8))
         );
         assert_eq!(
             ast.constraints.get(AtomConstraintKey::Valence),
@@ -1783,7 +1783,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_dsl_roundtrip_zeroed() {
-        let input = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
+        let input = AtomDsl(AtomAst::new(ElementForm::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
         let raised = input.clone().into_ir(&cfg);
         let lowered = AtomDsl::from_ir(&raised, &cfg);
@@ -1910,7 +1910,7 @@ mod tests {
     #[rstest]
     fn test_atom_ast_from_str_carbon_element() {
         let ast: AtomAst = "C".parse().unwrap();
-        assert_eq!(ast.element, ElementAst::Lit(Element::C));
+        assert_eq!(ast.element, ElementForm::Lit(Element::C));
         assert_eq!(ast.charge, NumForm::Undetermined);
     }
 

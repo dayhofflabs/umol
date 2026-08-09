@@ -21,7 +21,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
-    ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
+    ElectronCountsForm, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, NumForm,
 };
 use umol_utils::solution::Solution;
@@ -139,7 +139,7 @@ impl MatchingInput {
     fn from_system(view: AromaticSystemView<'_>) -> Result<Self, KekulizerError> {
         let system = view.id;
         let atoms: Vec<AtomId> = view.atom_ids().collect();
-        let ElectronCountsAst::Lit(electrons) = view.electrons() else {
+        let ElectronCountsForm::Lit(electrons) = view.electrons() else {
             return Err(KekulizerError::UndeterminedElectrons(system));
         };
         if electrons.len() != atoms.len() {

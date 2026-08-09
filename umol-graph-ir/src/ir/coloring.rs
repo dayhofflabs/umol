@@ -220,7 +220,7 @@ mod tests {
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
-    use crate::ir::spin::UnpairedElectronsAst;
+    use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use crate::ir::value::NumForm;
 
@@ -321,20 +321,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::both_undetermined( UnpairedElectronsAst::default(), UnpairedElectronsAst::default(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
+    #[case::both_undetermined( UnpairedElectronsForm::default(), UnpairedElectronsForm::default(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
     #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
     #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
     #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
     #[case::partial_vs_undetermined(
-        UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
-        UnpairedElectronsAst::default(),
+        UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
+        UnpairedElectronsForm::default(),
         ConstitutionFeatures::UNPAIRED_ELECTRONS,
         false,
     )]
     #[case::unpaired_electrons_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::empty(), true)]
     fn test_constitution_coloring_color_unpaired_electrons(
-        #[case] unpaired_electrons_a: UnpairedElectronsAst,
-        #[case] unpaired_electrons_b: UnpairedElectronsAst,
+        #[case] unpaired_electrons_a: UnpairedElectronsForm,
+        #[case] unpaired_electrons_b: UnpairedElectronsForm,
         #[case] features: ConstitutionFeatures,
         #[case] expected_equal: bool,
     ) {

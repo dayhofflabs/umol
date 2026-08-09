@@ -539,7 +539,7 @@ mod tests {
     use umol_graph_ir::ir::{
         AtomAst as GraphIrAtomAst, BondConstraintAst as GraphIrBondConstraintAst,
         BondConstraintKey as GraphIrBondConstraintKey,
-        BondConstraintsAst as GraphIrBondConstraintsAst, BooleanAst as GraphIrBooleanAst,
+        BondConstraintsAst as GraphIrBondConstraintsAst, BooleanForm as GraphIrBooleanForm,
         CisTransStereoAst as GraphIrCisTransStereoAst, MoleculeEntries as GraphIrMoleculeEntries,
         NumForm as GraphIrNumForm, RingScope as GraphIrRingScope,
         StereoCoset as GraphIrStereoCoset,
@@ -587,7 +587,7 @@ mod tests {
     #[rstest]
     fn test_bond_ast_constraints() {
         let bond = BondAst(GraphIrBondAst::from_order(1).with_constraint(
-            GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+            GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
         ));
         assert_eq!(bond.inner().constraints.len(), 1);
     }
@@ -598,7 +598,7 @@ mod tests {
             let src = Py::new(
                 py,
                 BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
-                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
             .unwrap();
@@ -614,13 +614,13 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().inner().constraints.aromatic(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
 
     #[rstest]
-    #[case(GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)))]
+    #[case(GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)))]
     #[case(GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoAst::NotStereo))]
     #[case(
         GraphIrBondConstraintAst::cis_trans_stereo(GraphIrCisTransStereoAst::Stereo(
@@ -645,7 +645,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -679,7 +679,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -709,7 +709,7 @@ mod tests {
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
                 values.__next__().unwrap().bind(py).borrow().to_rust(py),
-                GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true))
+                GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true))
             );
 
             let mut items = constraints.items(py).unwrap();
@@ -720,7 +720,7 @@ mod tests {
             );
             assert_eq!(
                 value.bind(py).borrow().to_rust(py),
-                GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true))
+                GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true))
             );
         });
     }
@@ -732,7 +732,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -749,7 +749,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -782,14 +782,14 @@ mod tests {
     fn test_bond_constraints_ast_aromatic() {
         Python::attach(|py| {
             let empty = BondConstraintsAst::new(py, vec![]);
-            assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanAst::Undetermined);
+            assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanForm::Undetermined);
             assert!(empty.cis_trans_stereo(py).unwrap().is_none());
             assert!(empty.ring_count(py).unwrap().is_none());
             let aromatic = into_py_variant(
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -797,7 +797,7 @@ mod tests {
             let constraints = BondConstraintsAst::new(py, vec![aromatic]);
             assert_eq!(
                 constraints.aromatic().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -838,7 +838,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -847,7 +847,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.aromatic().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -859,7 +859,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -873,7 +873,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(BondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -886,7 +886,7 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let mut other = GraphIrBondConstraintsAst::new();
-            other.set(GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(
+            other.set(GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(
                 true,
             )));
             other.set(GraphIrBondConstraintAst::ring_membership(
@@ -903,7 +903,7 @@ mod tests {
             .unwrap();
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 2);
-            assert_eq!(c.aromatic().to_rust(), GraphIrBooleanAst::Lit(true));
+            assert_eq!(c.aromatic().to_rust(), GraphIrBooleanForm::Lit(true));
             assert_eq!(
                 c.ring_count(py).unwrap().unwrap().to_rust(py),
                 GraphIrNumForm::Lit(2)
@@ -919,7 +919,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -952,7 +952,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -966,7 +966,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().aromatic().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -980,7 +980,7 @@ mod tests {
             let bond = Py::new(
                 py,
                 BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
-                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
             .unwrap();
@@ -995,7 +995,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.aromatic(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1009,7 +1009,7 @@ mod tests {
             let bond = Py::new(
                 py,
                 BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
-                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
             .unwrap();
@@ -1026,7 +1026,7 @@ mod tests {
             view.update(py, BondConstraintsUpdate::View(other)).unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.aromatic(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1038,12 +1038,12 @@ mod tests {
             constraints.set_aromatic(py, BooleanLike::Lit(true));
             assert_eq!(
                 constraints.aromatic().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
             constraints.set_aromatic(py, BooleanLike::Lit(false));
             assert_eq!(
                 constraints.aromatic().to_rust(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1125,7 +1125,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -1144,7 +1144,7 @@ mod tests {
                 .unwrap()
             {
                 BondConstraintAst::Aromatic(b) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected Aromatic(Lit(true))"),
             }
@@ -1157,7 +1157,7 @@ mod tests {
             let bond = Py::new(
                 py,
                 BondAst::from_inner(GraphIrBondAst::from_order(1).with_constraint(
-                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
             .unwrap();
@@ -1172,7 +1172,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(BondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -1191,7 +1191,7 @@ mod tests {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
             let mut other = GraphIrBondConstraintsAst::new();
-            other.set(GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(
+            other.set(GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(
                 true,
             )));
             other.set(GraphIrBondConstraintAst::ring_membership(
@@ -1221,7 +1221,7 @@ mod tests {
             };
             assert_eq!(
                 view.aromatic(py).unwrap().to_rust(),
-                GraphIrBooleanAst::Undetermined
+                GraphIrBooleanForm::Undetermined
             );
             view.set_aromatic(py, BooleanLike::Lit(true));
             let fresh = BondConstraintsView {
@@ -1229,7 +1229,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.aromatic(py).unwrap().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1380,7 +1380,7 @@ mod tests {
                 py,
                 BondConstraintAst::from_rust(
                     py,
-                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanAst::Lit(true)),
+                    &GraphIrBondConstraintAst::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
@@ -1395,7 +1395,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.aromatic(py).unwrap().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }

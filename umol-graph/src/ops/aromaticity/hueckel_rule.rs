@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, RingView,
-    UnpairedElectronsAst,
+    AromaticSystemAst, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet, RingView,
+    UnpairedElectronsForm,
 };
 
 use crate::ops::model::{ElementScope, RingLimits};
@@ -98,7 +98,7 @@ impl HueckelRuleAromaticity {
                 atoms,
                 AromaticSystemAst::from_electrons(electrons)
                     .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             ));
         }
 
@@ -111,7 +111,7 @@ impl HueckelRuleAromaticity {
     {
         let view = ast.atom(atom);
         let element = match view.ast.element {
-            ElementAst::Lit(e) => e,
+            ElementForm::Lit(e) => e,
             _ => return false,
         };
         if !self.element_scope.contains(element) {
@@ -250,8 +250,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
-        ElementAst, MoleculeAst, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
+        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsForm,
+        ElementForm, MoleculeAst, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
 
     use super::*;
@@ -263,7 +263,7 @@ mod tests {
     fn aromatic_charged(element: Element, charge: i64, pi: i64) -> (AtomAst, Option<i64>) {
         (
             AtomAst {
-                element: ElementAst::Lit(element),
+                element: ElementForm::Lit(element),
                 charge: NumForm::Lit(charge),
                 ..Default::default()
             },
@@ -505,8 +505,8 @@ mod tests {
 
     fn electron_total(system: &(Vec<AtomId>, AromaticSystemAst)) -> i64 {
         match &system.1.electrons {
-            ElectronCountsAst::Lit(counts) => counts.iter().sum(),
-            ElectronCountsAst::Undetermined => 0,
+            ElectronCountsForm::Lit(counts) => counts.iter().sum(),
+            ElectronCountsForm::Undetermined => 0,
         }
     }
 

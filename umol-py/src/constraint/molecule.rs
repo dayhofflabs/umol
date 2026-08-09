@@ -1228,7 +1228,7 @@ mod tests {
         NumForm as GraphIrNumForm, StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
         StereoBondConstraintAst as GraphIrStereoBondConstraintAst, StereoKind as GraphIrStereoKind,
         Stereogenicity as GraphIrStereogenicity, StereogenicityAst as GraphIrStereogenicityAst,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
+        UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
 
     use super::*;
@@ -1417,7 +1417,7 @@ mod tests {
     })]
     #[case::unpaired_electron_coupling(GraphIrMoleculeConstraint::UnpairedElectronCoupling {
         atoms: Some(vec![GraphIrAtomId(3), GraphIrAtomId(4)]),
-        unpaired_electrons: GraphIrUnpairedElectronsAst::from((1, 2)),
+        unpaired_electrons: GraphIrUnpairedElectronsForm::from((1, 2)),
     })]
     #[case::bond_order_sum(GraphIrMoleculeConstraint::BondOrderSum {
         bonds: Some(vec![GraphIrBondId(5), GraphIrBondId(6)]),

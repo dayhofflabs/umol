@@ -7,7 +7,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{ElementAst, TryIntoIr};
+use umol_graph_ir::ir::{ElementForm, TryIntoIr};
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles};
 use umol_io::table_ir::{ExtendedMolecule, Span};
@@ -217,9 +217,9 @@ proptest! {
             .iter()
             .map(|symbol| {
                 if *symbol == b'C' {
-                    ElementAst::Lit(Element::C)
+                    ElementForm::Lit(Element::C)
                 } else {
-                    ElementAst::Undetermined
+                    ElementForm::Undetermined
                 }
             })
             .collect();

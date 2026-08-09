@@ -20,7 +20,7 @@ use super::config::{StereoAtomDefaults, StereoBondDefaults};
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::value::variable_name;
-use crate::ir::boolean::BooleanAst;
+use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     FluxionalityAst, LigandPermutation, LigandSymmetryAst, OrientedLigandPermutation,
     StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
@@ -1572,7 +1572,7 @@ fn render_edn_ligand_symmetry(ls: &LigandSymmetryAst) -> Edn<'static> {
     if ls.permutation.orientation == Orientation::Improper {
         m.insert(Edn::keyword("orientation"), Edn::keyword("improper"));
     }
-    if ls.invariant != BooleanAst::Lit(true) {
+    if ls.invariant != BooleanForm::Lit(true) {
         m.insert(Edn::keyword("invariant"), BooleanDsl(ls.invariant).to_edn());
     }
     Edn::Map(m)
@@ -1606,7 +1606,7 @@ fn read_edn_ligand_symmetry(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
         }
     };
     let invariant = match m.get_keyword("invariant") {
-        None => BooleanAst::Lit(true),
+        None => BooleanForm::Lit(true),
         Some(edn) => BooleanDsl::from_edn(edn)?.0,
     };
     Ok(LigandSymmetryAst {
@@ -1624,7 +1624,7 @@ fn render_edn_fluxionality(f: &FluxionalityAst) -> Edn<'static> {
         Edn::keyword("permutation"),
         render_edn_permutation(f.permutation.0),
     );
-    if f.active != BooleanAst::Lit(true) {
+    if f.active != BooleanForm::Lit(true) {
         m.insert(Edn::keyword("active"), BooleanDsl(f.active).to_edn());
     }
     Edn::Map(m)
@@ -1646,7 +1646,7 @@ fn read_edn_fluxionality(edn: &Edn, kind: StereoKind) -> Result<FluxionalityAst,
         })?;
     let permutation = LigandPermutation(read_edn_permutation(permutation_edn, kind.degree())?);
     let active = match m.get_keyword("active") {
-        None => BooleanAst::Lit(true),
+        None => BooleanForm::Lit(true),
         Some(edn) => BooleanDsl::from_edn(edn)?.0,
     };
     Ok(FluxionalityAst {
@@ -2176,17 +2176,17 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fluxionality("Th1#f(0,1,2)",
-        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanAst::Lit(true) }))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanForm::Lit(true) }))]
     #[case::ligand_symmetry("Th1#p(0,1,2)",
         StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
             permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
-            invariant: BooleanAst::Lit(true) }))]
+            invariant: BooleanForm::Lit(true) }))]
     #[case::ligand_symmetry_absent("Th1#p(0,1,2)!",
         StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
             permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
-            invariant: BooleanAst::Lit(false) }))]
+            invariant: BooleanForm::Lit(false) }))]
     #[case::fluxionality_absent("Th1#f(0,1,2)!",
-        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanAst::Lit(false) }))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanForm::Lit(false) }))]
     #[case::topicity_negated("Th1#o(0,1)!'",
         StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
     #[case::topicity_lit_set("Th1#o(0,1){=,'}",
@@ -2210,7 +2210,7 @@ mod tests {
                 permutation: LigandPermutation(StereoKind::Tetrahedral.involution()),
                 orientation: Orientation::Improper,
             },
-            invariant: BooleanAst::Lit(true),
+            invariant: BooleanForm::Lit(true),
         });
         assert_eq!(
             dsl.0.constraints.iter().cloned().collect::<Vec<_>>(),

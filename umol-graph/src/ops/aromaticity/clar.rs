@@ -11,8 +11,8 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet,
-    UnpairedElectronsAst,
+    AromaticSystemAst, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet,
+    UnpairedElectronsForm,
 };
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -36,7 +36,7 @@ impl ClarAromaticity {
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let has_non_benzenoid = ast.atoms().iter().any(|view| {
-            !matches!(view.ast.element, ElementAst::Lit(Element::C))
+            !matches!(view.ast.element, ElementForm::Lit(Element::C))
                 && electrons_at(&view).is_some()
         });
         if has_non_benzenoid {
@@ -55,7 +55,7 @@ impl ClarAromaticity {
                 cycle.len() == 6
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
-                        matches!(a.ast.element, ElementAst::Lit(Element::C))
+                        matches!(a.ast.element, ElementForm::Lit(Element::C))
                             && electrons_at(&a).is_some()
                     })
             })
@@ -89,7 +89,7 @@ impl ClarAromaticity {
             atoms,
             AromaticSystemAst::from_electrons(electrons)
                 .with_charge(0)
-                .with_unpaired_electrons(UnpairedElectronsAst::closed_shell()),
+                .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
         )])
     }
 }
@@ -136,7 +136,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
+        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementForm, MoleculeAst,
         MoleculeEntries, NumForm, RingConfig, RingId, RingModel, RingSetKind,
     };
 
@@ -203,7 +203,7 @@ mod tests {
                 ring_info.get(i).is_some_and(|cycle| {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
-                            matches!(ast.atom(atom).ast.element, ElementAst::Lit(Element::C))
+                            matches!(ast.atom(atom).ast.element, ElementForm::Lit(Element::C))
                         })
                 })
             })

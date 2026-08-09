@@ -412,7 +412,7 @@ boolean ::= '' | '+' | '!' | '*'
 - **`'!'`** — **`false`**.
 - **`'*'`** — **`Undetermined`** (no constraint); **vacuous** and **elided** from the canonical rendered string (**§7.1**), equivalent to omitting the predicate.
 
-It lowers to **`BooleanAst`** (**`Undetermined`** | **`Lit(bool)`**); its structured EDN form is **`bool ::= true | false | :undetermined`**.
+It lowers to **`BooleanForm`** (**`Undetermined`** | **`Lit(bool)`**); its structured EDN form is **`bool ::= true | false | :undetermined`**.
 
 ### 5.5 Ring membership
 
@@ -454,7 +454,7 @@ electron-counts ::= '*' | '[' int (',' int)* ']'
 - **`*`** — the whole vector **`Undetermined`** (per-atom electrons unspecified).
 - **`[n,n,…]`** — a vector of concrete integers, **one per member atom** (whitespace ignored); position **`i`** is the contribution of the atom at position **`i`** of the entry's **`:atoms`** vector (**§4**). A concrete vector **MUST** have the same length as **`:atoms`**.
 
-It lowers to **`ElectronCountsAst`**. The optional **`#e<n>`** total (aromatic / multicenter) is cross-checked against the **sum** of the electron-counts on ground inputs.
+It lowers to **`ElectronCountsForm`**. The optional **`#e<n>`** total (aromatic / multicenter) is cross-checked against the **sum** of the electron-counts on ground inputs.
 
 ### 5.7 Noncovalent kind
 

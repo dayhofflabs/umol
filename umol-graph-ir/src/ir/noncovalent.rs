@@ -213,7 +213,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ir::boolean::BooleanAst;
+    use crate::ir::boolean::BooleanForm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -288,7 +288,7 @@ mod tests {
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(false)))]
     #[case::constraint_remove(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
-        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Undetermined)), ..Default::default() },
+        NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() },
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_ast_update(
         #[case] bond: NoncovalentBondAst,
@@ -311,7 +311,7 @@ mod tests {
         NoncovalentBondAst::default(),
         NoncovalentBondUpdate {
             kind: Some(NoncovalentBondKindAst::Undetermined),
-            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Undetermined)),
+            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)),
         },
     )]
     fn test_noncovalent_bond_ast_difference_to(

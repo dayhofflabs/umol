@@ -9,19 +9,19 @@ use winnow::error::ErrMode;
 use winnow::Parser;
 
 use super::error::{PResult, ParseError};
-use crate::ir::electrons::ElectronCountsAst;
+use crate::ir::electrons::ElectronCountsForm;
 
 /// The mandatory per-atom electron counts at the head of an aromatic-system /
 /// multicenter-bond string: `*` (undetermined) or a non-empty `[n,n,…]` vector
 /// (whitespace ignored). Leading and unprefixed, before any `#` predicate.
-pub(crate) fn electron_counts(i: &mut &str) -> PResult<ElectronCountsAst> {
+pub(crate) fn electron_counts(i: &mut &str) -> PResult<ElectronCountsForm> {
     if opt('*').parse_next(i)?.is_some() {
-        return Ok(ElectronCountsAst::Undetermined);
+        return Ok(ElectronCountsForm::Undetermined);
     }
     if i.starts_with('[') {
         let start = *i;
         return electron_counts_vector(i)
-            .map(ElectronCountsAst::Lit)
+            .map(ElectronCountsForm::Lit)
             .map_err(|_| ErrMode::Cut(ParseError::MalformedElectronCounts(start.to_string())));
     }
     Err(ErrMode::Cut(ParseError::ExpectedElectronCounts))
@@ -46,11 +46,11 @@ fn electron_counts_vector(i: &mut &str) -> PResult<Vec<i64>> {
 
 pub(crate) fn fmt_electron_counts(
     f: &mut fmt::Formatter<'_>,
-    electrons: &ElectronCountsAst,
+    electrons: &ElectronCountsForm,
 ) -> fmt::Result {
     match electrons {
-        ElectronCountsAst::Undetermined => write!(f, "*"),
-        ElectronCountsAst::Lit(counts) => {
+        ElectronCountsForm::Undetermined => write!(f, "*"),
+        ElectronCountsForm::Lit(counts) => {
             write!(f, "[")?;
             for (idx, n) in counts.iter().enumerate() {
                 if idx > 0 {
@@ -71,13 +71,13 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::undetermined("*", ElectronCountsAst::Undetermined)]
-    #[case::single("[1]", ElectronCountsAst::Lit(vec![1]))]
-    #[case::triple("[1,1,1]", ElectronCountsAst::Lit(vec![1, 1, 1]))]
-    #[case::mixed("[2,0,2]", ElectronCountsAst::Lit(vec![2, 0, 2]))]
-    #[case::whitespace("[ 1 , 0 , 2 ]", ElectronCountsAst::Lit(vec![1, 0, 2]))]
-    #[case::negative("[-1,2]", ElectronCountsAst::Lit(vec![-1, 2]))]
-    fn test_electron_counts(#[case] input: &str, #[case] expected: ElectronCountsAst) {
+    #[case::undetermined("*", ElectronCountsForm::Undetermined)]
+    #[case::single("[1]", ElectronCountsForm::Lit(vec![1]))]
+    #[case::triple("[1,1,1]", ElectronCountsForm::Lit(vec![1, 1, 1]))]
+    #[case::mixed("[2,0,2]", ElectronCountsForm::Lit(vec![2, 0, 2]))]
+    #[case::whitespace("[ 1 , 0 , 2 ]", ElectronCountsForm::Lit(vec![1, 0, 2]))]
+    #[case::negative("[-1,2]", ElectronCountsForm::Lit(vec![-1, 2]))]
+    fn test_electron_counts(#[case] input: &str, #[case] expected: ElectronCountsForm) {
         assert_eq!(
             electron_counts.parse(input).map_err(|e| e.into_inner()),
             Ok(expected)

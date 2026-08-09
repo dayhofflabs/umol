@@ -11,8 +11,8 @@ use pyo3::types::PyDict;
 use umol_chem::element::Element as ChemElement;
 use umol_graph_ir::ir::{
     AsLit, AtomAst as GraphIrAtomAst, AtomId as GraphIrAtomId, AtomUpdate as GraphIrAtomUpdate,
-    ElementAst as GraphIrElementAst, IsotopeMass as GraphIrIsotopeMass,
-    IsotopeMassAst as GraphIrIsotopeMassAst, MoleculeAst as GraphIrMoleculeAst,
+    ElementForm as GraphIrElementForm, IsotopeMass as GraphIrIsotopeMass,
+    IsotopeMassForm as GraphIrIsotopeMassForm, MoleculeAst as GraphIrMoleculeAst,
 };
 
 use crate::constraint::atom::{
@@ -68,25 +68,25 @@ impl ElementAst {
 
 impl_py_lattice!(
     ElementAst,
-    GraphIrElementAst,
-    |value: &ElementAst, _py: Python<'_>| -> PyResult<GraphIrElementAst> { Ok(value.to_rust()) },
-    |_py: Python<'_>, value: GraphIrElementAst| -> PyResult<ElementAst> {
+    GraphIrElementForm,
+    |value: &ElementAst, _py: Python<'_>| -> PyResult<GraphIrElementForm> { Ok(value.to_rust()) },
+    |_py: Python<'_>, value: GraphIrElementForm| -> PyResult<ElementAst> {
         Ok(ElementAst::from_rust(&value))
     }
 );
 
 impl ElementAst {
-    pub(crate) fn from_rust(ast: &GraphIrElementAst) -> ElementAst {
+    pub(crate) fn from_rust(ast: &GraphIrElementForm) -> ElementAst {
         match ast {
-            GraphIrElementAst::Undetermined => ElementAst::Undetermined(),
-            GraphIrElementAst::Lit(e) => ElementAst::Lit(Element::from(*e)),
-            GraphIrElementAst::LitSet(members) => {
+            GraphIrElementForm::Undetermined => ElementAst::Undetermined(),
+            GraphIrElementForm::Lit(e) => ElementAst::Lit(Element::from(*e)),
+            GraphIrElementForm::LitSet(members) => {
                 ElementAst::LitSet(members.iter().copied().map(Element::from).collect())
             }
-            GraphIrElementAst::NotSet(members) => {
+            GraphIrElementForm::NotSet(members) => {
                 ElementAst::NotSet(members.iter().copied().map(Element::from).collect())
             }
-            GraphIrElementAst::Var(boxed) => {
+            GraphIrElementForm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
                 ElementAst::Var(
                     name.clone(),
@@ -101,17 +101,17 @@ impl ElementAst {
         }
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrElementAst {
+    pub(crate) fn to_rust(&self) -> GraphIrElementForm {
         match self {
-            ElementAst::Undetermined() => GraphIrElementAst::Undetermined,
-            ElementAst::Lit(e) => GraphIrElementAst::Lit(ChemElement::from(e)),
-            ElementAst::LitSet(members) => {
-                GraphIrElementAst::LitSet(Box::new(members.iter().map(ChemElement::from).collect()))
-            }
-            ElementAst::NotSet(members) => {
-                GraphIrElementAst::NotSet(Box::new(members.iter().map(ChemElement::from).collect()))
-            }
-            ElementAst::Var(name, restriction) => GraphIrElementAst::Var(Box::new((
+            ElementAst::Undetermined() => GraphIrElementForm::Undetermined,
+            ElementAst::Lit(e) => GraphIrElementForm::Lit(ChemElement::from(e)),
+            ElementAst::LitSet(members) => GraphIrElementForm::LitSet(Box::new(
+                members.iter().map(ChemElement::from).collect(),
+            )),
+            ElementAst::NotSet(members) => GraphIrElementForm::NotSet(Box::new(
+                members.iter().map(ChemElement::from).collect(),
+            )),
+            ElementAst::Var(name, restriction) => GraphIrElementForm::Var(Box::new((
                 name.clone(),
                 restriction.as_ref().map(|(op, members)| {
                     (
@@ -206,29 +206,29 @@ impl IsotopeMassAst {
 }
 
 impl IsotopeMassAst {
-    pub(crate) fn from_rust(ast: &GraphIrIsotopeMassAst) -> IsotopeMassAst {
+    pub(crate) fn from_rust(ast: &GraphIrIsotopeMassForm) -> IsotopeMassAst {
         match ast {
-            GraphIrIsotopeMassAst::Undetermined => IsotopeMassAst::Undetermined(),
-            GraphIrIsotopeMassAst::Natural => IsotopeMassAst::Natural(),
-            GraphIrIsotopeMassAst::Lit(mass) => IsotopeMassAst::Lit(*mass),
-            GraphIrIsotopeMassAst::LitSet(masses) => IsotopeMassAst::LitSet((**masses).clone()),
-            GraphIrIsotopeMassAst::Var(boxed) => {
+            GraphIrIsotopeMassForm::Undetermined => IsotopeMassAst::Undetermined(),
+            GraphIrIsotopeMassForm::Natural => IsotopeMassAst::Natural(),
+            GraphIrIsotopeMassForm::Lit(mass) => IsotopeMassAst::Lit(*mass),
+            GraphIrIsotopeMassForm::LitSet(masses) => IsotopeMassAst::LitSet((**masses).clone()),
+            GraphIrIsotopeMassForm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
                 IsotopeMassAst::Var(name.clone(), restriction.clone())
             }
         }
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrIsotopeMassAst {
+    pub(crate) fn to_rust(&self) -> GraphIrIsotopeMassForm {
         match self {
-            IsotopeMassAst::Undetermined() => GraphIrIsotopeMassAst::Undetermined,
-            IsotopeMassAst::Natural() => GraphIrIsotopeMassAst::Natural,
-            IsotopeMassAst::Lit(mass) => GraphIrIsotopeMassAst::Lit(*mass),
+            IsotopeMassAst::Undetermined() => GraphIrIsotopeMassForm::Undetermined,
+            IsotopeMassAst::Natural() => GraphIrIsotopeMassForm::Natural,
+            IsotopeMassAst::Lit(mass) => GraphIrIsotopeMassForm::Lit(*mass),
             IsotopeMassAst::LitSet(masses) => {
-                GraphIrIsotopeMassAst::LitSet(Box::new(masses.clone()))
+                GraphIrIsotopeMassForm::LitSet(Box::new(masses.clone()))
             }
             IsotopeMassAst::Var(name, restriction) => {
-                GraphIrIsotopeMassAst::Var(Box::new((name.clone(), restriction.clone())))
+                GraphIrIsotopeMassForm::Var(Box::new((name.clone(), restriction.clone())))
             }
         }
     }
@@ -236,11 +236,11 @@ impl IsotopeMassAst {
 
 impl_py_lattice!(
     IsotopeMassAst,
-    GraphIrIsotopeMassAst,
-    |value: &IsotopeMassAst, _py: Python<'_>| -> PyResult<GraphIrIsotopeMassAst> {
+    GraphIrIsotopeMassForm,
+    |value: &IsotopeMassAst, _py: Python<'_>| -> PyResult<GraphIrIsotopeMassForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrIsotopeMassAst| -> PyResult<IsotopeMassAst> {
+    |_py: Python<'_>, value: GraphIrIsotopeMassForm| -> PyResult<IsotopeMassAst> {
         Ok(IsotopeMassAst::from_rust(&value))
     }
 );
@@ -532,10 +532,10 @@ enum ElementLike {
 }
 
 impl ElementLike {
-    fn to_rust(&self, py: Python<'_>) -> GraphIrElementAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrElementForm {
         match self {
             ElementLike::Ast(expr) => expr.bind(py).borrow().to_rust(),
-            ElementLike::Lit(element) => GraphIrElementAst::Lit(ChemElement::from(element)),
+            ElementLike::Lit(element) => GraphIrElementForm::Lit(ChemElement::from(element)),
         }
     }
 }
@@ -548,10 +548,10 @@ enum IsotopeMassLike {
 }
 
 impl IsotopeMassLike {
-    fn to_rust(&self, py: Python<'_>) -> GraphIrIsotopeMassAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrIsotopeMassForm {
         match self {
             IsotopeMassLike::Ast(mass) => mass.bind(py).borrow().to_rust(),
-            IsotopeMassLike::Lit(number) => GraphIrIsotopeMassAst::Lit(*number),
+            IsotopeMassLike::Lit(number) => GraphIrIsotopeMassForm::Lit(*number),
         }
     }
 }
@@ -898,7 +898,7 @@ mod tests {
         MoleculeEntries as GraphIrMoleculeEntries, NumForm as GraphIrNumForm,
         RingScope as GraphIrRingScope, StereoCoset as GraphIrStereoCoset,
         TetrahedralStereoAst as GraphIrTetrahedralStereoAst,
-        UnpairedElectronsAst as GraphIrUnpairedElectronsAst,
+        UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
 
     use super::*;
@@ -910,25 +910,25 @@ mod tests {
     use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoAst};
 
     #[rstest]
-    #[case(GraphIrElementAst::Undetermined)]
-    #[case(GraphIrElementAst::Lit(ChemElement::C))]
-    #[case(GraphIrElementAst::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))))]
-    #[case(GraphIrElementAst::NotSet(Box::new(BTreeSet::from([ChemElement::O]))))]
-    #[case(GraphIrElementAst::Var(Box::new(("x".to_string(), None))))]
-    #[case(GraphIrElementAst::Var(Box::new((
+    #[case(GraphIrElementForm::Undetermined)]
+    #[case(GraphIrElementForm::Lit(ChemElement::C))]
+    #[case(GraphIrElementForm::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))))]
+    #[case(GraphIrElementForm::NotSet(Box::new(BTreeSet::from([ChemElement::O]))))]
+    #[case(GraphIrElementForm::Var(Box::new(("x".to_string(), None))))]
+    #[case(GraphIrElementForm::Var(Box::new((
         "y".to_string(),
         Some((GraphIrMemOp::In, BTreeSet::from([ChemElement::C, ChemElement::N]))),
     ))))]
-    fn test_element_ast_roundtrip(#[case] ast: GraphIrElementAst) {
+    fn test_element_ast_roundtrip(#[case] ast: GraphIrElementForm) {
         assert_eq!(ElementAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(GraphIrElementAst::Lit(ChemElement::C), Some(ChemElement::C))]
-    #[case(GraphIrElementAst::Undetermined, None)]
-    #[case(GraphIrElementAst::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))), None)]
+    #[case(GraphIrElementForm::Lit(ChemElement::C), Some(ChemElement::C))]
+    #[case(GraphIrElementForm::Undetermined, None)]
+    #[case(GraphIrElementForm::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))), None)]
     fn test_element_ast_as_lit(
-        #[case] ast: GraphIrElementAst,
+        #[case] ast: GraphIrElementForm,
         #[case] expected: Option<ChemElement>,
     ) {
         let got = ElementAst::from_rust(&ast)
@@ -938,28 +938,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrIsotopeMassAst::Undetermined)]
-    #[case(GraphIrIsotopeMassAst::Natural)]
-    #[case(GraphIrIsotopeMassAst::Lit(13))]
-    #[case(GraphIrIsotopeMassAst::LitSet(Box::new(BTreeSet::from([12, 13, 14]))))]
-    #[case(GraphIrIsotopeMassAst::Var(Box::new(("x".to_string(), None))))]
-    #[case(GraphIrIsotopeMassAst::Var(Box::new((
+    #[case(GraphIrIsotopeMassForm::Undetermined)]
+    #[case(GraphIrIsotopeMassForm::Natural)]
+    #[case(GraphIrIsotopeMassForm::Lit(13))]
+    #[case(GraphIrIsotopeMassForm::LitSet(Box::new(BTreeSet::from([12, 13, 14]))))]
+    #[case(GraphIrIsotopeMassForm::Var(Box::new(("x".to_string(), None))))]
+    #[case(GraphIrIsotopeMassForm::Var(Box::new((
         "y".to_string(),
         Some(BTreeSet::from([12, 13])),
     ))))]
-    fn test_isotope_mass_ast_roundtrip(#[case] ast: GraphIrIsotopeMassAst) {
+    fn test_isotope_mass_ast_roundtrip(#[case] ast: GraphIrIsotopeMassForm) {
         assert_eq!(IsotopeMassAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
     #[case(
-        GraphIrIsotopeMassAst::Lit(13),
+        GraphIrIsotopeMassForm::Lit(13),
         Some(GraphIrIsotopeMass::MassNumber(13))
     )]
-    #[case(GraphIrIsotopeMassAst::Natural, Some(GraphIrIsotopeMass::Natural))]
-    #[case(GraphIrIsotopeMassAst::Undetermined, None)]
+    #[case(GraphIrIsotopeMassForm::Natural, Some(GraphIrIsotopeMass::Natural))]
+    #[case(GraphIrIsotopeMassForm::Undetermined, None)]
     fn test_isotope_mass_ast_as_lit(
-        #[case] ast: GraphIrIsotopeMassAst,
+        #[case] ast: GraphIrIsotopeMassForm,
         #[case] expected: Option<GraphIrIsotopeMass>,
     ) {
         assert_eq!(
@@ -1068,7 +1068,7 @@ mod tests {
                 py,
                 UnpairedElectronsAst::from_rust(
                     py,
-                    &GraphIrUnpairedElectronsAst {
+                    &GraphIrUnpairedElectronsForm {
                         count: GraphIrNumForm::Lit(1),
                         multiplicity: GraphIrNumForm::Lit(2),
                     },
@@ -1083,7 +1083,7 @@ mod tests {
             };
             assert_eq!(
                 fresh.unpaired_electrons(py).unwrap().to_rust(py),
-                GraphIrUnpairedElectronsAst {
+                GraphIrUnpairedElectronsForm {
                     count: GraphIrNumForm::Lit(1),
                     multiplicity: GraphIrNumForm::Lit(2),
                 }

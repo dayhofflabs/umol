@@ -2318,7 +2318,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::super::aromatic::AromaticSystemAst;
-    use super::super::super::atom::{AtomAst, ElementAst};
+    use super::super::super::atom::{AtomAst, ElementForm};
     use super::super::super::bond::BondAst;
     use super::super::super::constraint::{
         AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
@@ -2341,7 +2341,7 @@ mod tests {
     use super::super::super::value::NumForm;
     use super::super::{MoleculeAst, MoleculeEntries};
     use super::*;
-    use crate::ir::BooleanAst;
+    use crate::ir::BooleanForm;
 
     #[fixture]
     fn empty() -> MoleculeEditor {
@@ -2379,7 +2379,7 @@ mod tests {
         assert_eq!(built.atoms().count(), 1);
         assert_eq!(
             built.atom(AtomId(0)).ast.element,
-            ElementAst::Lit(Element::C)
+            ElementForm::Lit(Element::C)
         );
     }
 
@@ -2401,11 +2401,11 @@ mod tests {
         assert_eq!(built.atoms().count(), 2);
         assert_eq!(
             built.atom(AtomId(0)).ast.element,
-            ElementAst::Lit(Element::C)
+            ElementForm::Lit(Element::C)
         );
         assert_eq!(
             built.atom(AtomId(1)).ast.element,
-            ElementAst::Lit(Element::N)
+            ElementForm::Lit(Element::N)
         );
     }
 
@@ -2593,15 +2593,15 @@ mod tests {
             Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(1)),
                 change: AtomFieldChange::Element {
-                    old: ElementAst::Lit(Element::N),
-                    new: ElementAst::Lit(Element::F),
+                    old: ElementForm::Lit(Element::N),
+                    new: ElementForm::Lit(Element::F),
                 },
             },
             Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(2)),
                 change: AtomFieldChange::Element {
-                    old: ElementAst::Lit(Element::O),
-                    new: ElementAst::Lit(Element::Cl),
+                    old: ElementForm::Lit(Element::O),
+                    new: ElementForm::Lit(Element::Cl),
                 },
             },
         ]);
@@ -2612,7 +2612,7 @@ mod tests {
             (0..editor.atom_count())
                 .map(|index| editor.atom(AtomId(index as u32)).ast.element.clone())
                 .collect::<Vec<_>>(),
-            vec![ElementAst::Lit(Element::F), ElementAst::Lit(Element::Cl)]
+            vec![ElementForm::Lit(Element::F), ElementForm::Lit(Element::Cl)]
         );
     }
 
@@ -2641,7 +2641,7 @@ mod tests {
                 editor.atom(AtomId(0)).ast.element.clone(),
                 editor.atom(AtomId(0)).ast.charge.clone(),
             ),
-            (ElementAst::Lit(Element::N), NumForm::Lit(1))
+            (ElementForm::Lit(Element::N), NumForm::Lit(1))
         );
     }
 
@@ -2668,7 +2668,7 @@ mod tests {
                 editor.atom(AtomId(0)).ast.element.clone(),
                 editor.atom(AtomId(0)).ast.charge.clone(),
             ),
-            (ElementAst::Lit(Element::N), NumForm::Lit(-1))
+            (ElementForm::Lit(Element::N), NumForm::Lit(-1))
         );
     }
 
@@ -2992,7 +2992,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                new: Some(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
             }]))
             .unwrap();
         assert!(diatomic
@@ -3000,7 +3000,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraintAst::Aromatic(BooleanAst::Lit(true))));
+            .any(|c| *c == BondConstraintAst::Aromatic(BooleanForm::Lit(true))));
     }
 
     #[rstest]
@@ -4568,7 +4568,7 @@ mod tests {
             .transact(Edits::from_iter([Edit::ModifyDativeBondConstraint {
                 id: DativeBondHandle::Id(DativeBondId(0)),
                 old: None,
-                new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                new: Some(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))),
             }]))
             .unwrap();
         assert!(diatomic_with_overlays
@@ -4576,7 +4576,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))));
+            .any(|c| *c == DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))));
     }
 
     #[rstest]
@@ -5101,7 +5101,7 @@ mod tests {
         assert_eq!(empty.atom_count(), 1);
         assert_eq!(
             empty.atom(AtomId(0)).ast.element,
-            ElementAst::Lit(Element::C)
+            ElementForm::Lit(Element::C)
         );
     }
 

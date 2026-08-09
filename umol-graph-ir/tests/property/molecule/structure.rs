@@ -114,7 +114,7 @@ proptest! {
             .enumerate()
             .filter_map(|(index, include)| include.then_some(AtomId::from(index)))
             .collect::<Vec<_>>();
-        let unpaired_electrons = UnpairedElectronsAst::from((0_u8, 1_u8));
+        let unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
 
         prop_assert_eq!(
             ast.constraint_atoms(&Constraint::Molecule(

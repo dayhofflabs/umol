@@ -4,7 +4,7 @@
 //! entity's participant order.
 
 use pyo3::prelude::*;
-use umol_graph_ir::ir::{AsLit, ElectronCountsAst as GraphIrElectronCountsAst};
+use umol_graph_ir::ir::{AsLit, ElectronCountsForm as GraphIrElectronCountsForm};
 
 use crate::convert::{hash_rust, variant_repr};
 use crate::lattice::impl_py_lattice;
@@ -42,28 +42,28 @@ impl ElectronCountsAst {
 }
 
 impl ElectronCountsAst {
-    pub(crate) fn from_rust(ast: &GraphIrElectronCountsAst) -> Self {
+    pub(crate) fn from_rust(ast: &GraphIrElectronCountsForm) -> Self {
         match ast {
-            GraphIrElectronCountsAst::Undetermined => Self::Undetermined(),
-            GraphIrElectronCountsAst::Lit(counts) => Self::Lit(counts.clone()),
+            GraphIrElectronCountsForm::Undetermined => Self::Undetermined(),
+            GraphIrElectronCountsForm::Lit(counts) => Self::Lit(counts.clone()),
         }
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrElectronCountsAst {
+    pub(crate) fn to_rust(&self) -> GraphIrElectronCountsForm {
         match self {
-            Self::Undetermined() => GraphIrElectronCountsAst::Undetermined,
-            Self::Lit(counts) => GraphIrElectronCountsAst::Lit(counts.clone()),
+            Self::Undetermined() => GraphIrElectronCountsForm::Undetermined,
+            Self::Lit(counts) => GraphIrElectronCountsForm::Lit(counts.clone()),
         }
     }
 }
 
 impl_py_lattice!(
     ElectronCountsAst,
-    GraphIrElectronCountsAst,
-    |value: &ElectronCountsAst, _py: Python<'_>| -> PyResult<GraphIrElectronCountsAst> {
+    GraphIrElectronCountsForm,
+    |value: &ElectronCountsAst, _py: Python<'_>| -> PyResult<GraphIrElectronCountsForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrElectronCountsAst| -> PyResult<ElectronCountsAst> {
+    |_py: Python<'_>, value: GraphIrElectronCountsForm| -> PyResult<ElectronCountsAst> {
         Ok(ElectronCountsAst::from_rust(&value))
     }
 );
@@ -77,9 +77,9 @@ pub(crate) enum ElectronCountsLike {
 }
 
 impl ElectronCountsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrElectronCountsAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrElectronCountsForm {
         match self {
-            ElectronCountsLike::Lit(counts) => GraphIrElectronCountsAst::Lit(counts.clone()),
+            ElectronCountsLike::Lit(counts) => GraphIrElectronCountsForm::Lit(counts.clone()),
             ElectronCountsLike::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
@@ -92,18 +92,18 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case(GraphIrElectronCountsAst::Undetermined)]
-    #[case(GraphIrElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1]))]
-    #[case(GraphIrElectronCountsAst::Lit(vec![]))]
-    fn test_electron_counts_ast_roundtrip(#[case] ast: GraphIrElectronCountsAst) {
+    #[case(GraphIrElectronCountsForm::Undetermined)]
+    #[case(GraphIrElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1]))]
+    #[case(GraphIrElectronCountsForm::Lit(vec![]))]
+    fn test_electron_counts_ast_roundtrip(#[case] ast: GraphIrElectronCountsForm) {
         assert_eq!(ElectronCountsAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
-    #[case(GraphIrElectronCountsAst::Undetermined, None)]
-    #[case(GraphIrElectronCountsAst::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
+    #[case(GraphIrElectronCountsForm::Undetermined, None)]
+    #[case(GraphIrElectronCountsForm::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
     fn test_electron_counts_ast_as_lit(
-        #[case] ast: GraphIrElectronCountsAst,
+        #[case] ast: GraphIrElectronCountsForm,
         #[case] expected: Option<Vec<i64>>,
     ) {
         assert_eq!(ElectronCountsAst::from_rust(&ast).as_lit(), expected);
@@ -115,13 +115,13 @@ mod tests {
             // a bare list coerces to Lit
             assert_eq!(
                 ElectronCountsLike::Lit(vec![1, 0, 1]).to_rust(py),
-                GraphIrElectronCountsAst::Lit(vec![1, 0, 1])
+                GraphIrElectronCountsForm::Lit(vec![1, 0, 1])
             );
             // an ElectronCountsAst passes through
             let ast = Py::new(py, ElectronCountsAst::Lit(vec![2, 2])).unwrap();
             assert_eq!(
                 ElectronCountsLike::Ast(ast).to_rust(py),
-                GraphIrElectronCountsAst::Lit(vec![2, 2])
+                GraphIrElectronCountsForm::Lit(vec![2, 2])
             );
         });
     }

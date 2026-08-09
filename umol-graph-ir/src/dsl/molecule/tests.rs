@@ -7,10 +7,10 @@ use umol_edn::read_string;
 
 use super::*;
 use crate::ir::atom::AtomAst;
-use crate::ir::boolean::BooleanAst;
+use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
-use crate::ir::electrons::ElectronCountsAst;
-use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::electrons::ElectronCountsForm;
+use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::value::NumForm;
 use crate::mol_dsl;
 
@@ -438,7 +438,7 @@ fn test_molecule_dsl_edn_parse_electrons_undetermined(#[case] source: &str) {
         )
         .next()
         .unwrap();
-    assert_eq!(electrons, ElectronCountsAst::Undetermined);
+    assert_eq!(electrons, ElectronCountsForm::Undetermined);
 }
 
 #[rstest]
@@ -458,7 +458,7 @@ fn test_molecule_dsl_edn_roundtrip_connected_constraint() {
 #[rstest]
 #[case::charge_sum_vacuous(vec![MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Undetermined }], vec![])]
 #[case::bond_order_sum_vacuous(vec![MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Undetermined }], vec![])]
-#[case::unpaired_electron_coupling_vacuous(vec![MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::default() }], vec![])]
+#[case::unpaired_electron_coupling_vacuous(vec![MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::default() }], vec![])]
 #[case::vacuous_dropped_concrete_kept(
     vec![
         MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Undetermined },
@@ -505,7 +505,7 @@ fn test_molecule_ast_from_edn_structural_bond_ref() {
         constraints,
         vec![Constraint::Bond(
             BondId(0),
-            BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
         )]
     );
 }

@@ -265,12 +265,12 @@ mod tests {
         AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AtomAst, AtomConstraintAst, AtomId, Constraint, DativeBondId, ElementAst, Entity,
+        AtomAst, AtomConstraintAst, AtomId, Constraint, DativeBondId, ElementForm, Entity,
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
         MoleculeConstraintContradiction, MoleculeEntries, NumForm, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
         StereoAtomConstraintAst, StereoAtomId, StereoBondConstraintAst, StereoBondId, StereoKind,
-        StereogenicityAst, UnpairedElectronsAst,
+        StereogenicityAst, UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
@@ -417,11 +417,11 @@ mod tests {
     #[case::invalid_spin(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(2),
                 lone_pairs: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)),
                 ..Default::default()
             }],
             ..Default::default()
@@ -440,7 +440,7 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
-                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((2_u8, 3_u8)),
             }).into(),
             ..Default::default()
         }),
@@ -450,7 +450,7 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
-                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)),
             }).into(),
             ..Default::default()
         }),
@@ -538,11 +538,11 @@ mod tests {
     #[case::partial_spin(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(4),
                 lone_pairs: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsAst {
+                unpaired_electrons: UnpairedElectronsForm {
                     count: NumForm::Lit(0),
                     multiplicity: NumForm::Undetermined,
                 },
@@ -555,11 +555,11 @@ mod tests {
     #[case::invalid_spin(
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(2),
                 lone_pairs: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)),
                 ..Default::default()
             }],
             ..Default::default()
@@ -578,7 +578,7 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
-                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((2_u8, 3_u8)),
             }).into(),
             ..Default::default()
         }),
@@ -588,7 +588,7 @@ mod tests {
         MoleculeAst::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
-                unpaired_electrons: UnpairedElectronsAst::from((2_u8, 2_u8)),
+                unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)),
             }).into(),
             ..Default::default()
         }),
@@ -661,18 +661,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::methane(4, None, UnpairedElectronsAst::from((0_u8, 1_u8)), Solution::Determined(()))]
-    #[case::with_valence_constraint(3, Some(1), UnpairedElectronsAst::from((0_u8, 1_u8)), Solution::Determined(()))]
+    #[case::methane(4, None, UnpairedElectronsForm::from((0_u8, 1_u8)), Solution::Determined(()))]
+    #[case::with_valence_constraint(3, Some(1), UnpairedElectronsForm::from((0_u8, 1_u8)), Solution::Determined(()))]
     #[case::partial_spin(
         4,
         None,
-        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Undetermined },
+        UnpairedElectronsForm { count: NumForm::Lit(0), multiplicity: NumForm::Undetermined },
         Solution::Underdetermined(()),
     )]
     #[case::invalid_spin(
         2,
         None,
-        UnpairedElectronsAst::from((2_u8, 2_u8)),
+        UnpairedElectronsForm::from((2_u8, 2_u8)),
         Solution::Contradictory(ValidatorContradiction::SpinInvariants(
             SpinInvariantsContradiction::Atom {
                 error: SpinStateError::Incompatible {
@@ -685,7 +685,7 @@ mod tests {
     fn test_validator_validate_atom(
         #[case] hydrogens: i64,
         #[case] valence: Option<i64>,
-        #[case] unpaired_electrons: UnpairedElectronsAst,
+        #[case] unpaired_electrons: UnpairedElectronsForm,
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
         let mut atom = AtomAst::from_element(Element::C);
@@ -711,11 +711,11 @@ mod tests {
             multiplicity in 0_u8..8,
         ) {
             let atom = AtomAst {
-                element: ElementAst::Lit(Element::C),
+                element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(4 - i64::from(count)),
                 lone_pairs: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsAst::from((count, multiplicity)),
+                unpaired_electrons: UnpairedElectronsForm::from((count, multiplicity)),
                 ..Default::default()
             };
             let expected = SpinInvariantsValidator
@@ -734,11 +734,11 @@ mod tests {
         ) {
             let molecule = MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![AtomAst {
-                    element: ElementAst::Lit(Element::C),
+                    element: ElementForm::Lit(Element::C),
                     charge: NumForm::Lit(0),
                     implicit_hydrogens: NumForm::Lit(4 - i64::from(count)),
                     lone_pairs: NumForm::Lit(0),
-                    unpaired_electrons: UnpairedElectronsAst::from((count, multiplicity)),
+                    unpaired_electrons: UnpairedElectronsForm::from((count, multiplicity)),
                     ..Default::default()
                 }],
                 ..Default::default()

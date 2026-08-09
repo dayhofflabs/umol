@@ -271,7 +271,7 @@ mod tests {
 
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceAst, AtomId, BooleanAst, Deltas, ElectronCountsAst,
+        AromaticSystemId, AromaticValenceAst, AtomId, BooleanForm, Deltas, ElectronCountsForm,
         NumForm, StereoCoset, TetrahedralStereoAst,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
@@ -904,7 +904,7 @@ mod tests {
         );
         assert_eq!(
             system.electrons(),
-            &ElectronCountsAst::Lit(expected_electrons)
+            &ElectronCountsForm::Lit(expected_electrons)
         );
         assert_eq!(
             ast.aromatic_systems().ids().collect::<Vec<_>>(),
@@ -953,7 +953,7 @@ mod tests {
                 .iter()
                 .map(|bond| bond.ast.constraints.aromatic())
                 .collect::<Vec<_>>(),
-            vec![BooleanAst::Lit(true); 5]
+            vec![BooleanForm::Lit(true); 5]
         );
         assert_eq!(
             ast.aromatic_systems().ids().collect::<Vec<_>>(),
@@ -1339,7 +1339,7 @@ mod tests {
         );
         assert_eq!(
             system.electrons(),
-            &ElectronCountsAst::Lit(expected_electrons)
+            &ElectronCountsForm::Lit(expected_electrons)
         );
         assert_eq!(
             reaction.lhs.aromatic_systems().ids().collect::<Vec<_>>(),
@@ -1393,7 +1393,7 @@ mod tests {
                 .iter()
                 .map(|bond| bond.ast.constraints.aromatic())
                 .collect::<Vec<_>>(),
-            vec![BooleanAst::Lit(true); 5]
+            vec![BooleanForm::Lit(true); 5]
         );
         assert_eq!(
             reaction.lhs.aromatic_systems().ids().collect::<Vec<_>>(),

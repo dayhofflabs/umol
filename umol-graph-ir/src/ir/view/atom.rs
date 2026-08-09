@@ -4,16 +4,16 @@
 use umol_chem::element::Element;
 use umol_graph_core::NodeId;
 
-use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
-use super::super::boolean::BooleanAst;
+use super::super::atom::{AtomAst, ElementForm, IsotopeMassForm};
+use super::super::boolean::BooleanForm;
 use super::super::constraint::AtomConstraintsAst;
-use super::super::electrons::ElectronCountsAst;
+use super::super::electrons::ElectronCountsForm;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId,
 };
 use super::super::molecule::MoleculeAst;
-use super::super::spin::UnpairedElectronsAst;
+use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{StereoKind, TetrahedralStereoAst};
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
@@ -88,12 +88,12 @@ pub struct AtomView<'a> {
 
 impl<'a> AtomView<'a> {
     #[inline]
-    pub fn element(&self) -> &'a ElementAst {
+    pub fn element(&self) -> &'a ElementForm {
         &self.ast.element
     }
 
     #[inline]
-    pub fn isotope_mass(&self) -> &'a IsotopeMassAst {
+    pub fn isotope_mass(&self) -> &'a IsotopeMassForm {
         &self.ast.isotope_mass
     }
 
@@ -113,7 +113,7 @@ impl<'a> AtomView<'a> {
     }
 
     #[inline]
-    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsAst {
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
         &self.ast.unpaired_electrons
     }
 
@@ -195,11 +195,11 @@ impl<'a> AtomView<'a> {
             return NumForm::Undetermined;
         };
         match &sys.ast.electrons {
-            ElectronCountsAst::Lit(counts) => counts
+            ElectronCountsForm::Lit(counts) => counts
                 .get(pos)
                 .map(|&n| NumForm::Lit(n))
                 .unwrap_or(NumForm::Undetermined),
-            ElectronCountsAst::Undetermined => NumForm::Undetermined,
+            ElectronCountsForm::Undetermined => NumForm::Undetermined,
         }
     }
 
@@ -233,11 +233,11 @@ impl<'a> AtomView<'a> {
                 return NumForm::Undetermined;
             };
             let term = match &view.ast.electrons {
-                ElectronCountsAst::Lit(counts) => counts
+                ElectronCountsForm::Lit(counts) => counts
                     .get(pos)
                     .map(|&n| NumForm::Lit(n))
                     .unwrap_or(NumForm::Undetermined),
-                ElectronCountsAst::Undetermined => NumForm::Undetermined,
+                ElectronCountsForm::Undetermined => NumForm::Undetermined,
             };
             sum = sum + term;
         }
@@ -261,7 +261,7 @@ impl<'a> AtomView<'a> {
     pub fn heavy_atom_degree(&self) -> NumForm {
         let count = self
             .neighbors()
-            .filter(|n| !matches!(n.atom().element(), ElementAst::Lit(Element::H)))
+            .filter(|n| !matches!(n.atom().element(), ElementForm::Lit(Element::H)))
             .count();
         NumForm::Lit(count as i64)
     }
@@ -271,7 +271,7 @@ impl<'a> AtomView<'a> {
     /// is non-`Lit`.
     pub fn heavy_atom_valence(&self) -> NumForm {
         self.neighbors()
-            .filter(|n| !matches!(n.atom().element(), ElementAst::Lit(Element::H)))
+            .filter(|n| !matches!(n.atom().element(), ElementForm::Lit(Element::H)))
             .map(|n| n.bond().order().clone())
             .fold(NumForm::Lit(0), |acc, order| acc + order)
     }
@@ -282,7 +282,7 @@ impl<'a> AtomView<'a> {
     pub fn total_hydrogens(&self) -> NumForm {
         let explicit = self
             .neighbors()
-            .filter(|n| matches!(n.atom().element(), ElementAst::Lit(Element::H)))
+            .filter(|n| matches!(n.atom().element(), ElementForm::Lit(Element::H)))
             .count() as i64;
         NumForm::Lit(explicit) + self.implicit_hydrogens()
     }
@@ -395,7 +395,7 @@ impl<'a> AtomView<'a> {
             ));
         } else if self
             .neighbors()
-            .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
+            .any(|n| matches!(n.bond().constraints().aromatic(), BooleanForm::Lit(true)))
         {
             constraints.set(AtomConstraintAst::aromatic_valence(
                 AromaticValenceAst::aromatic(NumForm::Undetermined),
@@ -476,7 +476,7 @@ mod tests {
         AromaticValenceAst, AtomConstraintAst, AtomConstraintsAst, MulticenterValenceAst,
     };
     use crate::ir::dative::DativeBondAst;
-    use crate::ir::electrons::ElectronCountsAst;
+    use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId,
@@ -1034,22 +1034,22 @@ mod tests {
 
     #[rstest]
     #[case::single_bond(
-        vec![(vec![AtomId(0), AtomId(1)], ElectronCountsAst::Lit(vec![2, 2]))],
+        vec![(vec![AtomId(0), AtomId(1)], ElectronCountsForm::Lit(vec![2, 2]))],
         NumForm::Lit(2),
     )]
     #[case::two_bonds(
         vec![
-            (vec![AtomId(0), AtomId(1)], ElectronCountsAst::Lit(vec![2, 2])),
-            (vec![AtomId(0), AtomId(2)], ElectronCountsAst::Lit(vec![1, 1])),
+            (vec![AtomId(0), AtomId(1)], ElectronCountsForm::Lit(vec![2, 2])),
+            (vec![AtomId(0), AtomId(2)], ElectronCountsForm::Lit(vec![1, 1])),
         ],
         NumForm::Lit(3),
     )]
     #[case::undetermined_aborts(
-        vec![(vec![AtomId(0), AtomId(1)], ElectronCountsAst::Undetermined)],
+        vec![(vec![AtomId(0), AtomId(1)], ElectronCountsForm::Undetermined)],
         NumForm::Undetermined,
     )]
     fn test_atom_view_multicenter_valence(
-        #[case] bonds: Vec<(Vec<AtomId>, ElectronCountsAst)>,
+        #[case] bonds: Vec<(Vec<AtomId>, ElectronCountsForm)>,
         #[case] expected: NumForm,
     ) {
         let multicenter: Vec<_> = bonds

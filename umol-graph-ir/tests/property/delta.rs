@@ -266,7 +266,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unpaired_electrons_ast_difference_to(
+    fn test_unpaired_electrons_form_difference_to(
         lhs in unpaired_electrons_strategy(),
         rhs in unpaired_electrons_strategy(),
     ) {

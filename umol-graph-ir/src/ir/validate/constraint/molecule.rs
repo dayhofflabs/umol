@@ -318,7 +318,7 @@ mod tests {
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
         StereoBondId,
     };
-    use crate::ir::spin::UnpairedElectronsAst;
+    use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::substructure::SubstructureMatchAlgorithm;
     use crate::mol_dsl;
 
@@ -394,7 +394,7 @@ mod tests {
     })]
     #[case::coupling_vacuous(MoleculeConstraint::UnpairedElectronCoupling {
         atoms: None,
-        unpaired_electrons: UnpairedElectronsAst::default(),
+        unpaired_electrons: UnpairedElectronsForm::default(),
     })]
     #[case::connected_subset(MoleculeConstraint::Connected {
         atoms: Some(vec![AtomId(0), AtomId(2)]),
@@ -454,14 +454,14 @@ mod tests {
         r#"{:atoms ["C#u0#s1"] :bonds []}"#,
         MoleculeConstraint::UnpairedElectronCoupling {
             atoms: None,
-            unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)),
+            unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         },
     )]
     #[case::coupling_partial(
         r#"{:atoms ["C#u0#s1"] :bonds []}"#,
         MoleculeConstraint::UnpairedElectronCoupling {
             atoms: None,
-            unpaired_electrons: UnpairedElectronsAst {
+            unpaired_electrons: UnpairedElectronsForm {
                 count: NumForm::Lit(0),
                 multiplicity: NumForm::Undetermined,
             },
@@ -523,7 +523,7 @@ mod tests {
     #[case::coupling(
         MoleculeConstraint::UnpairedElectronCoupling {
             atoms: Some(vec![AtomId(99)]),
-            unpaired_electrons: UnpairedElectronsAst::default(),
+            unpaired_electrons: UnpairedElectronsForm::default(),
         },
         Entity::Atom(AtomId(99)),
     )]

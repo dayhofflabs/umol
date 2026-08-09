@@ -8,8 +8,8 @@ use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
 use umol_geometric::molecule::Molecule;
 use umol_graph_ir::ir::{
-    AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoIr, MoleculeAst,
-    MoleculeConstraint, MoleculeEntries, NumForm, UnpairedElectronsAst,
+    AtomAst, AtomId, BondAst, Constraint, Constraints, ElementForm, IntoIr, MoleculeAst,
+    MoleculeConstraint, MoleculeEntries, NumForm, UnpairedElectronsForm,
 };
 
 use crate::bond_perception::{perceive_bonds, BondPerceptionConfig};
@@ -60,7 +60,7 @@ impl IntoIr<MoleculeAst> for PerceivedMolecule {
         let atoms: Vec<AtomAst> = self
             .elements
             .iter()
-            .map(|&element| AtomAst::new(ElementAst::Lit(element)))
+            .map(|&element| AtomAst::new(ElementForm::Lit(element)))
             .collect();
         let bonds: Vec<(AtomId, AtomId, BondAst)> = self
             .bonds
@@ -81,7 +81,7 @@ impl IntoIr<MoleculeAst> for PerceivedMolecule {
             }),
             Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
-                unpaired_electrons: UnpairedElectronsAst::from((multiplicity - 1, multiplicity)),
+                unpaired_electrons: UnpairedElectronsForm::from((multiplicity - 1, multiplicity)),
             }),
         ]);
         MoleculeAst::from_entries(MoleculeEntries {
@@ -133,11 +133,11 @@ mod tests {
             valence_residuals: vec![0, 0],
         },
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::new(ElementAst::Lit(C)), AtomAst::new(ElementAst::Lit(C))],
+            atoms: vec![AtomAst::new(ElementForm::Lit(C)), AtomAst::new(ElementForm::Lit(C))],
             bonds: vec![(AtomId(0), AtomId(1), BondAst::new(NumForm::Lit(2)))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
-                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((0u8, 1u8)) }),
+                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0u8, 1u8)) }),
             ]),
             ..Default::default()
         })
@@ -152,10 +152,10 @@ mod tests {
             valence_residuals: vec![0],
         },
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::new(ElementAst::Lit(O))],
+            atoms: vec![AtomAst::new(ElementForm::Lit(O))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(-1) }),
-                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsAst::from((1u8, 2u8)) }),
+                Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((1u8, 2u8)) }),
             ]),
             ..Default::default()
         })

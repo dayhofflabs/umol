@@ -37,9 +37,9 @@ pub(crate) mod value;
 pub(crate) mod view;
 
 pub use aromatic::{AromaticSystemAst, AromaticSystemUpdate};
-pub use atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMass, IsotopeMassAst};
+pub use atom::{AtomAst, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondAst, BondUpdate};
-pub use boolean::BooleanAst;
+pub use boolean::BooleanForm;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{
     aromatic_covalence, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
@@ -74,7 +74,7 @@ pub use edit::{
     RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval,
     StereoBondFieldChange, StereoBondHandle, StereoBondRemoval, Undo,
 };
-pub use electrons::ElectronCountsAst;
+pub use electrons::ElectronCountsForm;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, ApplyPreconditionError, Contradiction, NoJoin};
 pub use id::{
@@ -101,7 +101,7 @@ pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };
-pub use spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
+pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
     CisTransConfiguration, CisTransStereo, CisTransStereoAst, StereoAtomAst, StereoAtomUpdate,
     StereoBondAst, StereoBondUpdate, StereoConfiguration, StereoConfigurationAst,

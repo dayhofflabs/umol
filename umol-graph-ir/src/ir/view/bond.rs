@@ -9,7 +9,7 @@ use super::super::bond::BondAst;
 use super::super::constraint::{BondConstraintAst, BondConstraintsAst};
 use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
-use super::super::spin::UnpairedElectronsAst;
+use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{CisTransStereoAst, StereoKind};
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
@@ -139,7 +139,7 @@ impl<'a> BondView<'a> {
     }
 
     #[inline]
-    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsAst {
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
         &self.ast.unpaired_electrons
     }
 

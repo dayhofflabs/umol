@@ -5,7 +5,7 @@ use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
     Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, NumForm, TransactionError,
-    UnpairedElectronsAst,
+    UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -55,7 +55,7 @@ impl MulticenterBondsResolver {
                 update.charge = Some(NumForm::Lit(0));
             }
             if selected_unpaired_electrons.is_undetermined() {
-                selected_unpaired_electrons = UnpairedElectronsAst::closed_shell();
+                selected_unpaired_electrons = UnpairedElectronsForm::closed_shell();
             } else {
                 selected_unpaired_electrons.high_spin_complete();
             }
@@ -112,8 +112,8 @@ mod tests {
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 change: MulticenterBondFieldChange::UnpairedElectrons {
-                    old: UnpairedElectronsAst::default(),
-                    new: UnpairedElectronsAst::closed_shell(),
+                    old: UnpairedElectronsForm::default(),
+                    new: UnpairedElectronsForm::closed_shell(),
                 },
             },
         ])
@@ -124,11 +124,11 @@ mod tests {
         Edits::from_iter([Edit::ModifyMulticenterBondField {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             change: MulticenterBondFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsAst {
+                old: UnpairedElectronsForm {
                     count: NumForm::Undetermined,
                     multiplicity: NumForm::Lit(3),
                 },
-                new: UnpairedElectronsAst::from((2_u8, 3_u8)),
+                new: UnpairedElectronsForm::from((2_u8, 3_u8)),
             },
         }])
     )]

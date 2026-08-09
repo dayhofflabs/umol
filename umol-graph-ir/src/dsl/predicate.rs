@@ -11,7 +11,7 @@ use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
 use crate::ir::constraint::{RingMembershipAst, RingScope};
-use crate::ir::spin::UnpairedElectronsAst;
+use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::value::NumForm;
 
 pub(crate) fn charge(i: &mut &str) -> PResult<NumForm> {
@@ -67,7 +67,7 @@ pub enum UnpairedElectronsPredicate {
 }
 
 pub(crate) fn apply_unpaired_electrons_predicate(
-    unpaired_electrons: &mut UnpairedElectronsAst,
+    unpaired_electrons: &mut UnpairedElectronsForm,
     predicate: UnpairedElectronsPredicate,
     duplicate_error: fn(String) -> ParseError,
 ) -> Result<(), ParseError> {
@@ -105,7 +105,7 @@ pub(crate) fn fmt_charge(f: &mut fmt::Formatter<'_>, v: &NumForm) -> fmt::Result
 
 pub(crate) fn fmt_unpaired_electrons(
     f: &mut fmt::Formatter<'_>,
-    unpaired_electrons: &UnpairedElectronsAst,
+    unpaired_electrons: &UnpairedElectronsForm,
 ) -> fmt::Result {
     match &unpaired_electrons.count {
         NumForm::Undetermined => {}
@@ -167,11 +167,11 @@ pub(crate) fn fmt_ring_membership(
     }
 }
 
-/// Fill defaults on a `UnpairedElectronsAst` per the given modes. Shared across
+/// Fill defaults on a `UnpairedElectronsForm` per the given modes. Shared across
 /// atom/bond/aromatic-system/multicenter-bond DSL lowering (all entities that
 /// carry an unpaired-electron state except `NoncovalentBond`).
 pub(crate) fn raise_unpaired_electrons(
-    unpaired_electrons: &mut UnpairedElectronsAst,
+    unpaired_electrons: &mut UnpairedElectronsForm,
     count_default: UnpairedElectronsDefault,
     multiplicity_default: MultiplicityDefault,
 ) {
@@ -204,13 +204,13 @@ pub(crate) fn raise_unpaired_electrons(
     unpaired_electrons.multiplicity = resolved_multiplicity;
 }
 
-/// Strip defaults from a `UnpairedElectronsAst` per the given modes. Compute
+/// Strip defaults from a `UnpairedElectronsForm` per the given modes. Compute
 /// `strip_multiplicity`
 /// first so that under (Derived, Derived) the tie-break keeps `u` explicit:
 /// `strip_count` under `Derived` backs off when `strip_multiplicity` has already fired, so at
 /// most one of the two is stripped and re-raising recovers the original AST.
 pub(crate) fn lower_unpaired_electrons(
-    unpaired_electrons: &mut UnpairedElectronsAst,
+    unpaired_electrons: &mut UnpairedElectronsForm,
     count_default: UnpairedElectronsDefault,
     multiplicity_default: MultiplicityDefault,
 ) {
@@ -326,18 +326,18 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::count(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Count(NumForm::Lit(1)),
-        UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined })]
-    #[case::multiplicity(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Multiplicity(NumForm::Lit(2)),
-        UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) })]
-    #[case::count_with_multiplicity(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) }, UnpairedElectronsPredicate::Count(NumForm::Lit(1)),
-        UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) })]
-    #[case::multiplicity_with_count(UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Multiplicity(NumForm::Lit(1)),
-        UnpairedElectronsAst { count: NumForm::Lit(0), multiplicity: NumForm::Lit(1) })]
+    #[case::count(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Count(NumForm::Lit(1)),
+        UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined })]
+    #[case::multiplicity(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Multiplicity(NumForm::Lit(2)),
+        UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) })]
+    #[case::count_with_multiplicity(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) }, UnpairedElectronsPredicate::Count(NumForm::Lit(1)),
+        UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) })]
+    #[case::multiplicity_with_count(UnpairedElectronsForm { count: NumForm::Lit(0), multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Multiplicity(NumForm::Lit(1)),
+        UnpairedElectronsForm { count: NumForm::Lit(0), multiplicity: NumForm::Lit(1) })]
     fn test_apply_unpaired_electrons_predicate(
-        #[case] mut initial: UnpairedElectronsAst,
+        #[case] mut initial: UnpairedElectronsForm,
         #[case] predicate: UnpairedElectronsPredicate,
-        #[case] expected: UnpairedElectronsAst,
+        #[case] expected: UnpairedElectronsForm,
     ) {
         apply_unpaired_electrons_predicate(
             &mut initial,
@@ -350,12 +350,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::count(UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Count(NumForm::Lit(2)),
+    #[case::count(UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, UnpairedElectronsPredicate::Count(NumForm::Lit(2)),
         ParseError::DuplicateAtomPredicate("#u".to_string()))]
-    #[case::multiplicity(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) }, UnpairedElectronsPredicate::Multiplicity(NumForm::Lit(3)),
+    #[case::multiplicity(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) }, UnpairedElectronsPredicate::Multiplicity(NumForm::Lit(3)),
         ParseError::DuplicateAtomPredicate("#s".to_string()))]
     fn test_apply_unpaired_electrons_predicate_error(
-        #[case] mut initial: UnpairedElectronsAst,
+        #[case] mut initial: UnpairedElectronsForm,
         #[case] predicate: UnpairedElectronsPredicate,
         #[case] expected: ParseError,
     ) {
@@ -369,17 +369,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::undetermined(UnpairedElectronsAst::default(), "")]
-    #[case::count_one(UnpairedElectronsAst { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, "#u")]
-    #[case::count(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, "#u2")]
-    #[case::multiplicity_one(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) }, "#s")]
-    #[case::multiplicity(UnpairedElectronsAst { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, "#s3")]
-    #[case::complete(UnpairedElectronsAst { count: NumForm::Lit(2), multiplicity: NumForm::Lit(1) }, "#u2#s")]
+    #[case::undetermined(UnpairedElectronsForm::default(), "")]
+    #[case::count_one(UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, "#u")]
+    #[case::count(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, "#u2")]
+    #[case::multiplicity_one(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) }, "#s")]
+    #[case::multiplicity(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, "#s3")]
+    #[case::complete(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Lit(1) }, "#u2#s")]
     fn test_fmt_unpaired_electrons(
-        #[case] unpaired_electrons: UnpairedElectronsAst,
+        #[case] unpaired_electrons: UnpairedElectronsForm,
         #[case] expected: &str,
     ) {
-        struct DisplayUnpairedElectrons(UnpairedElectronsAst);
+        struct DisplayUnpairedElectrons(UnpairedElectronsForm);
 
         impl fmt::Display for DisplayUnpairedElectrons {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -453,7 +453,7 @@ mod tests {
         #[case] expected_count: NumForm,
         #[case] expected_multiplicity: NumForm,
     ) {
-        let mut unpaired_electrons = UnpairedElectronsAst {
+        let mut unpaired_electrons = UnpairedElectronsForm {
             count: initial_count,
             multiplicity: initial_multiplicity,
         };
@@ -511,7 +511,7 @@ mod tests {
         #[case] expected_count: NumForm,
         #[case] expected_multiplicity: NumForm,
     ) {
-        let mut unpaired_electrons = UnpairedElectronsAst {
+        let mut unpaired_electrons = UnpairedElectronsForm {
             count: initial_count,
             multiplicity: initial_multiplicity,
         };
@@ -575,7 +575,7 @@ mod tests {
         #[case] count_default: UnpairedElectronsDefault,
         #[case] multiplicity_default: MultiplicityDefault,
     ) {
-        let mut raised = UnpairedElectronsAst {
+        let mut raised = UnpairedElectronsForm {
             count: initial_count,
             multiplicity: initial_multiplicity,
         };

@@ -18,7 +18,7 @@ use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::predicate::{fmt_ring_membership, ring_membership};
 use super::value::{fmt_value, value};
-use crate::ir::boolean::BooleanAst;
+use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{DativeBondConstraintAst, RingMembershipAst, RingScope};
 use crate::ir::dative::{DativeBondAst, DativeBondUpdate};
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
@@ -374,9 +374,9 @@ fn fmt_order(f: &mut fmt::Formatter<'_>, order: &NumForm) -> fmt::Result {
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraintAst) -> fmt::Result {
     match c {
-        DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)) => write!(f, "#a"),
-        DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)) => write!(f, "#a!"),
-        DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined) => Ok(()),
+        DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)) => write!(f, "#a"),
+        DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false)) => write!(f, "#a!"),
+        DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined) => Ok(()),
         DativeBondConstraintAst::RingMembership(m) => fmt_ring_membership(f, m),
     }
 }
@@ -398,7 +398,7 @@ fn fmt_undetermined_constraint(
 /// `{:aromatic <bool>}` or `{:ring-membership {:size? <int> :count <value>}}`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DativeBondConstraintDsl {
-    Aromatic(BooleanAst),
+    Aromatic(BooleanForm),
     RingMembership(RingMembershipAst),
 }
 
@@ -484,11 +484,11 @@ mod tests {
     #[case::triple("3", DativeBondDsl(DativeBondAst::from_order(3)))]
     #[case::single_whitespace("  1  ", DativeBondDsl(DativeBondAst::from_order(1)))]
     #[case::undetermined_order("*", DativeBondDsl(DativeBondAst::default()))]
-    #[case::aromatic("1#a", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) }))]
-    #[case::aromatic_plus("1#a+", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) }))]
-    #[case::aromatic_false("1#a!", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))) }))]
-    #[case::aromatic_undetermined("1#a*", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)) }))]
-    #[case::aromatic_with_ring("1#a#R(6)", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)]) }))]
+    #[case::aromatic("1#a", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }))]
+    #[case::aromatic_plus("1#a+", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }))]
+    #[case::aromatic_false("1#a!", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false))) }))]
+    #[case::aromatic_undetermined("1#a*", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined)) }))]
+    #[case::aromatic_with_ring("1#a#R(6)", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)]) }))]
     #[case::ring_membership_all("1#R2", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(2))) }))]
     #[case::ring_membership_all_bare("1#R", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))) }))]
     #[case::ring_membership_all_plus("1#R+", DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::RangeFrom(1))) }))]
@@ -528,7 +528,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(
-        DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)) }),
+        DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined)) }),
         DativeBondDsl(DativeBondAst::from_order(1)),
     )]
     #[case::ring_membership_all(
@@ -548,7 +548,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::string(r##""1#a""##, DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) }))]
+    #[case::string(r##""1#a""##, DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }))]
     #[case::single_keyword(":single", DativeBondDsl(DativeBondAst::from_order(1)))]
     #[case::double_keyword(":double", DativeBondDsl(DativeBondAst::from_order(2)))]
     #[case::triple_keyword(":triple", DativeBondDsl(DativeBondAst::from_order(3)))]
@@ -589,7 +589,7 @@ mod tests {
     #[case::triple(DativeBondDsl(DativeBondAst::from_order(3)), ":triple")]
     #[case::quadruple(DativeBondDsl(DativeBondAst::from_order(4)), ":quadruple")]
     #[case::undetermined(DativeBondDsl(DativeBondAst::default()), r##""*""##)]
-    #[case::aromatic(DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) }), r##""1#a""##)]
+    #[case::aromatic(DativeBondDsl(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }), r##""1#a""##)]
     fn test_dative_bond_dsl_to_edn(#[case] input: DativeBondDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
@@ -612,8 +612,8 @@ mod tests {
     #[case::empty("", DativeBondUpdateDsl(DativeBondUpdate::default()))]
     #[case::order("2", DativeBondUpdateDsl(DativeBondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }))]
     #[case::order_undetermined("*", DativeBondUpdateDsl(DativeBondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }))]
-    #[case::aromatic("#a", DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() }))]
-    #[case::aromatic_undetermined("#a*", DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)), ..Default::default() }))]
+    #[case::aromatic("#a", DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))), ..Default::default() }))]
+    #[case::aromatic_undetermined("#a*", DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined)), ..Default::default() }))]
     #[case::ring_size_removal("#R(6)*", DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }))]
     #[case::order_and_constraint("2#R", DativeBondUpdateDsl(DativeBondUpdate { order: Some(NumForm::Lit(2)), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))) }))]
     fn test_parse_dative_bond_update(
@@ -662,7 +662,7 @@ mod tests {
     #[case::empty(DativeBondUpdateDsl(DativeBondUpdate::default()), r##""""##)]
     #[case::order(DativeBondUpdateDsl(DativeBondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }), r##""2""##)]
     #[case::order_undetermined(DativeBondUpdateDsl(DativeBondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }), r##""*""##)]
-    #[case::aromatic_removal(DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)), ..Default::default() }), r##""#a*""##)]
+    #[case::aromatic_removal(DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined)), ..Default::default() }), r##""#a*""##)]
     #[case::ring_size_removal(DativeBondUpdateDsl(DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }), r##""#R(6)*""##)]
     fn test_dative_bond_update_dsl_to_edn(
         #[case] update: DativeBondUpdateDsl,
@@ -675,8 +675,8 @@ mod tests {
     #[rstest]
     #[case::single("1", DativeBondAst::from_order(1))]
     #[case::triple("3", DativeBondAst::from_order(3))]
-    #[case::aromatic("1#a", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) })]
-    #[case::aromatic_false("1#a!", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))) })]
+    #[case::aromatic("1#a", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) })]
+    #[case::aromatic_false("1#a!", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false))) })]
     #[case::ring_membership_all("1#R2", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64)) })]
     #[case::ring_membership_size("1#R(6)", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)) })]
     fn test_dative_bond_ast_from_str(#[case] input: &str, #[case] expected: DativeBondAst) {
@@ -687,8 +687,8 @@ mod tests {
     #[rstest]
     #[case::single(DativeBondAst::from_order(1), "1")]
     #[case::triple(DativeBondAst::from_order(3), "3")]
-    #[case::aromatic(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) }, "1#a")]
-    #[case::aromatic_false(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))) }, "1#a!")]
+    #[case::aromatic(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }, "1#a")]
+    #[case::aromatic_false(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false))) }, "1#a!")]
     #[case::ring_membership_all(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64)) }, "1#R2")]
     #[case::ring_membership_size(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)) }, "1#R(6)")]
     fn test_dative_bond_ast_display(#[case] input: DativeBondAst, #[case] expected: &str) {
@@ -697,7 +697,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::string(r##""1#a""##, DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) })]
+    #[case::string(r##""1#a""##, DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) })]
     #[case::keyword(":double", DativeBondAst::from_order(2))]
     fn test_dative_bond_ast_from_edn(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(
@@ -709,16 +709,16 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single(DativeBondAst::from_order(1), ":single")]
-    #[case::aromatic(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) }, r##""1#a""##)]
+    #[case::aromatic(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }, r##""1#a""##)]
     fn test_dative_bond_ast_to_edn(#[case] input: DativeBondAst, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic("{:aromatic true}", DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(true)))]
-    #[case::aromatic_false("{:aromatic false}", DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(false)))]
-    #[case::aromatic_undetermined("{:aromatic :undetermined}", DativeBondConstraintDsl::Aromatic(BooleanAst::Undetermined))]
+    #[case::aromatic("{:aromatic true}", DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)))]
+    #[case::aromatic_false("{:aromatic false}", DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)))]
+    #[case::aromatic_undetermined("{:aromatic :undetermined}", DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined))]
     #[case::ring_membership_all("{:ring-membership {:count 2}}", DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::All, count: NumForm::Lit(2) }))]
     #[case::ring_membership_size("{:ring-membership {:size 6 :count 1}}", DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
     fn test_dative_bond_constraint_dsl_from_edn(
@@ -746,9 +746,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(true)), "{:aromatic true}")]
-    #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(false)), "{:aromatic false}")]
-    #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanAst::Undetermined), "{:aromatic :undetermined}")]
+    #[case::aromatic(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)), "{:aromatic true}")]
+    #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)), "{:aromatic false}")]
+    #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined), "{:aromatic :undetermined}")]
     #[case::ring_membership_all(DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::All, count: NumForm::Lit(2) }), "{:ring-membership {:count 2}}")]
     #[case::ring_membership_size(DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }), "{:ring-membership {:size 6 :count 1}}")]
     fn test_dative_bond_constraint_dsl_to_edn(
@@ -760,9 +760,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(true)))]
-    #[case::aromatic_false(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)), DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(false)))]
-    #[case::aromatic_undetermined(DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined), DativeBondConstraintDsl::Aromatic(BooleanAst::Undetermined))]
+    #[case::aromatic(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)))]
+    #[case::aromatic_false(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false)), DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)))]
+    #[case::aromatic_undetermined(DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined), DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined))]
     #[case::ring_membership(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64), DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
     fn test_dative_bond_constraint_dsl_from_ast(
         #[case] input: DativeBondConstraintAst,
@@ -773,9 +773,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)))]
-    #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanAst::Lit(false)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)))]
-    #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanAst::Undetermined), DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined))]
+    #[case::aromatic(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true)))]
+    #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)), DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false)))]
+    #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined), DativeBondConstraintAst::Aromatic(BooleanForm::Undetermined))]
     #[case::ring_membership(DativeBondConstraintDsl::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: NumForm::Lit(1) }), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64))]
     fn test_dative_bond_constraint_dsl_into_ast(
         #[case] input: DativeBondConstraintDsl,

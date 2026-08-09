@@ -587,7 +587,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomAst as GraphIrAtomAst, BooleanAst as GraphIrBooleanAst, MoleculeEntries,
+        AtomAst as GraphIrAtomAst, BooleanForm as GraphIrBooleanForm, MoleculeEntries,
         NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
         NoncovalentBondConstraintKey as GraphIrNoncovalentBondConstraintKey,
         NoncovalentBondConstraintsAst as GraphIrNoncovalentBondConstraintsAst,
@@ -687,7 +687,7 @@ mod tests {
     #[rstest]
     #[case(GraphIrNoncovalentBondConstraintAst::intramolecular(true))]
     #[case(GraphIrNoncovalentBondConstraintAst::intramolecular(false))]
-    #[case(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanAst::Undetermined))]
+    #[case(GraphIrNoncovalentBondConstraintAst::Intramolecular(GraphIrBooleanForm::Undetermined))]
     fn test_noncovalent_bond_constraint_ast_roundtrip(
         #[case] ast: GraphIrNoncovalentBondConstraintAst,
     ) {
@@ -709,7 +709,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -734,7 +734,7 @@ mod tests {
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -747,7 +747,7 @@ mod tests {
             let removed = constraints.pop(py, intramolecular_key(py)).unwrap();
             match removed {
                 Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
             }
@@ -771,7 +771,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -788,7 +788,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -811,7 +811,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 constraints.bind(py).borrow().intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -878,13 +878,13 @@ mod tests {
             let present = NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
             assert_eq!(
                 present.intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
             // absent → Undetermined (non-optional accessor)
             let empty = NoncovalentBondConstraintsAst::new(py, vec![]);
             assert_eq!(
                 empty.intramolecular().to_rust(),
-                GraphIrBooleanAst::Undetermined
+                GraphIrBooleanForm::Undetermined
             );
         });
     }
@@ -896,7 +896,7 @@ mod tests {
             constraints.set_intramolecular(py, BooleanLike::Lit(false));
             assert_eq!(
                 constraints.intramolecular().to_rust(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -971,7 +971,7 @@ mod tests {
             );
             assert_eq!(
                 bond.inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1033,7 +1033,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1060,7 +1060,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 dest.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1088,7 +1088,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1102,7 +1102,7 @@ mod tests {
             // the write hit the standalone bond, not a copy
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1142,7 +1142,7 @@ mod tests {
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.intramolecular(py).unwrap().to_rust(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1164,7 +1164,7 @@ mod tests {
             let removed = view.pop(py, intramolecular_key(py)).unwrap();
             match removed {
                 Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
             }
@@ -1189,7 +1189,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1221,7 +1221,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1236,7 +1236,7 @@ mod tests {
             view.set_intramolecular(py, BooleanLike::Lit(true));
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1320,7 +1320,7 @@ mod tests {
                     .ast
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1349,7 +1349,7 @@ mod tests {
                     .ast
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanAst::Lit(false)
+                GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1395,7 +1395,7 @@ mod tests {
                     .ast
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanAst::Lit(true)
+                GraphIrBooleanForm::Lit(true)
             );
         });
     }

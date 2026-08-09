@@ -6,8 +6,8 @@ use umol_graph::ops::invariant::{ValenceInvariants, ValenceMismatch};
 use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, Transformer};
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
-    ElementAst, IntoIr, NumForm, UnpairedElectronsAst,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
+    ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -16,8 +16,8 @@ struct KekulizationFixture {
     participants: Vec<AtomId>,
     electrons: Vec<i64>,
     charge: i64,
-    unpaired_electrons: UnpairedElectronsAst,
-    elements: Vec<ElementAst>,
+    unpaired_electrons: UnpairedElectronsForm,
+    elements: Vec<ElementForm>,
     nonzero_atom_charges: Vec<(AtomId, i64)>,
     nonzero_lone_pairs: Vec<(AtomId, i64)>,
 }
@@ -29,8 +29,8 @@ struct KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
-        elements: vec![ElementAst::Lit(Element::C); 6],
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
+        elements: vec![ElementForm::Lit(Element::C); 6],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
     }
@@ -41,14 +41,14 @@ struct KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::N),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::N),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![(AtomId(0), 1)],
@@ -60,13 +60,13 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::N),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::N),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![(AtomId(0), 1)],
@@ -78,13 +78,13 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::O),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::O),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![(AtomId(0), 2)],
@@ -96,13 +96,13 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::S),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::S),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![(AtomId(0), 2)],
@@ -114,15 +114,15 @@ struct KekulizationFixture {
         participants: (0..7).map(AtomId).collect(),
         electrons: vec![0, 1, 1, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::B),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::B),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
@@ -134,14 +134,14 @@ struct KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::B),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::B),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![(AtomId(0), -1)],
         nonzero_lone_pairs: vec![],
@@ -153,8 +153,8 @@ struct KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1],
         charge: -1,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
-        elements: vec![ElementAst::Lit(Element::C); 5],
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
+        elements: vec![ElementForm::Lit(Element::C); 5],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
     }
@@ -165,8 +165,8 @@ struct KekulizationFixture {
         participants: (0..7).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1, 1],
         charge: 1,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
-        elements: vec![ElementAst::Lit(Element::C); 7],
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
+        elements: vec![ElementForm::Lit(Element::C); 7],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
     }
@@ -177,8 +177,8 @@ struct KekulizationFixture {
         participants: (0..10).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
-        elements: vec![ElementAst::Lit(Element::C); 10],
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
+        elements: vec![ElementForm::Lit(Element::C); 10],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![],
     }
@@ -189,17 +189,17 @@ struct KekulizationFixture {
         participants: (0..9).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1, 1, 1, 1, 1],
         charge: 0,
-        unpaired_electrons: UnpairedElectronsAst::from((0, 1)),
+        unpaired_electrons: UnpairedElectronsForm::from((0, 1)),
         elements: vec![
-            ElementAst::Lit(Element::N),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
-            ElementAst::Lit(Element::C),
+            ElementForm::Lit(Element::N),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
+            ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
         nonzero_lone_pairs: vec![(AtomId(0), 1)],
@@ -213,7 +213,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
     assert_eq!(molecule.aromatic_systems().count(), 1);
 
     let system = molecule.aromatic_systems().iter().next().unwrap();
-    let ElectronCountsAst::Lit(electrons) = system.electrons() else {
+    let ElectronCountsForm::Lit(electrons) = system.electrons() else {
         panic!("fixture aromatic electron contributions are undetermined");
     };
     let NumForm::Lit(charge) = system.charge() else {
@@ -411,7 +411,10 @@ fn test_kekulization_fixture_output(
         assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
         assert_eq!(after.unpaired_electrons, before.unpaired_electrons);
         if system_charge != 0 {
-            assert_eq!(after.unpaired_electrons, UnpairedElectronsAst::from((0, 1)));
+            assert_eq!(
+                after.unpaired_electrons,
+                UnpairedElectronsForm::from((0, 1))
+            );
         }
     }
 }

@@ -9,25 +9,25 @@ use winnow::Parser;
 
 use super::edn_utils::eof_err;
 use super::error::{PResult, ParseError};
-use crate::ir::boolean::BooleanAst;
+use crate::ir::boolean::BooleanForm;
 use crate::ir::traits::{FromIr, IntoIr};
 
-/// Boundary type for [`BooleanAst`].
+/// Boundary type for [`BooleanForm`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct BooleanDsl(pub BooleanAst);
+pub struct BooleanDsl(pub BooleanForm);
 
-impl FromIr<BooleanAst> for BooleanDsl {
+impl FromIr<BooleanForm> for BooleanDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &BooleanAst, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(ast: &BooleanForm, _ctx: &Self::Ctx) -> Self {
         Self(*ast)
     }
 }
 
-impl IntoIr<BooleanAst> for BooleanDsl {
+impl IntoIr<BooleanForm> for BooleanDsl {
     type Ctx = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> BooleanAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> BooleanForm {
         self.0
     }
 }
@@ -35,11 +35,11 @@ impl IntoIr<BooleanAst> for BooleanDsl {
 /// Combinator: `!` → false, `*` → undetermined, `+`/(absent) → true.
 pub(crate) fn boolean(i: &mut &str) -> PResult<BooleanDsl> {
     opt(alt((
-        '!'.value(BooleanAst::Lit(false)),
-        '*'.value(BooleanAst::Undetermined),
-        '+'.value(BooleanAst::Lit(true)),
+        '!'.value(BooleanForm::Lit(false)),
+        '*'.value(BooleanForm::Undetermined),
+        '+'.value(BooleanForm::Lit(true)),
     )))
-    .map(|sign| BooleanDsl(sign.unwrap_or(BooleanAst::Lit(true))))
+    .map(|sign| BooleanDsl(sign.unwrap_or(BooleanForm::Lit(true))))
     .parse_next(i)
 }
 
@@ -53,7 +53,7 @@ pub(crate) fn read_boolean_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Boo
         b':' => {
             let name = de.read_keyword_name()?;
             if name.as_ref() == "undetermined" {
-                BooleanAst::Undetermined
+                BooleanForm::Undetermined
             } else {
                 return Err(DeError::Custom(format!("unknown boolean keyword :{name}")).into());
             }
@@ -64,19 +64,19 @@ pub(crate) fn read_boolean_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Boo
                 .0
         }
         _ => match de.read_value_slice()? {
-            "true" => BooleanAst::Lit(true),
-            "false" => BooleanAst::Lit(false),
+            "true" => BooleanForm::Lit(true),
+            "false" => BooleanForm::Lit(false),
             other => return Err(DeError::Custom(format!("expected boolean, got {other}")).into()),
         },
     };
     Ok(BooleanDsl(b))
 }
 
-pub(crate) fn fmt_boolean(f: &mut fmt::Formatter<'_>, b: &BooleanAst) -> fmt::Result {
+pub(crate) fn fmt_boolean(f: &mut fmt::Formatter<'_>, b: &BooleanForm) -> fmt::Result {
     match b {
-        BooleanAst::Lit(true) => Ok(()),
-        BooleanAst::Lit(false) => write!(f, "!"),
-        BooleanAst::Undetermined => write!(f, "*"),
+        BooleanForm::Lit(true) => Ok(()),
+        BooleanForm::Lit(false) => write!(f, "!"),
+        BooleanForm::Undetermined => write!(f, "*"),
     }
 }
 
@@ -97,8 +97,8 @@ impl FromStr for BooleanDsl {
 impl<'de> FromEdn<'de> for BooleanDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let b = match edn {
-            Edn::Bool(b) => BooleanAst::Lit(*b),
-            Edn::Keyword(k) if k.name() == "undetermined" => BooleanAst::Undetermined,
+            Edn::Bool(b) => BooleanForm::Lit(*b),
+            Edn::Keyword(k) if k.name() == "undetermined" => BooleanForm::Undetermined,
             Edn::Str(s) => {
                 parse_boolean(s)
                     .map_err(|e| DeError::subgrammar("boolean", e))?
@@ -119,8 +119,10 @@ impl<'de> FromEdn<'de> for BooleanDsl {
 impl ToEdn for BooleanDsl {
     fn to_edn(&self) -> Edn<'static> {
         match self.0 {
-            BooleanAst::Lit(b) => Edn::Bool(b),
-            BooleanAst::Undetermined => Edn::Keyword(EdnKeyword::owned("undetermined".to_string())),
+            BooleanForm::Lit(b) => Edn::Bool(b),
+            BooleanForm::Undetermined => {
+                Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
+            }
         }
     }
 }
@@ -134,10 +136,10 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::plus("+", BooleanDsl(BooleanAst::Lit(true)))]
-    #[case::empty("", BooleanDsl(BooleanAst::Lit(true)))]
-    #[case::bang("!", BooleanDsl(BooleanAst::Lit(false)))]
-    #[case::star("*", BooleanDsl(BooleanAst::Undetermined))]
+    #[case::plus("+", BooleanDsl(BooleanForm::Lit(true)))]
+    #[case::empty("", BooleanDsl(BooleanForm::Lit(true)))]
+    #[case::bang("!", BooleanDsl(BooleanForm::Lit(false)))]
+    #[case::star("*", BooleanDsl(BooleanForm::Undetermined))]
     fn test_parse_boolean(#[case] input: &str, #[case] expected: BooleanDsl) {
         assert_eq!(parse_boolean(input).unwrap(), expected);
     }
@@ -150,19 +152,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::truthy(BooleanDsl(BooleanAst::Lit(true)), "")]
-    #[case::falsy(BooleanDsl(BooleanAst::Lit(false)), "!")]
-    #[case::undetermined(BooleanDsl(BooleanAst::Undetermined), "*")]
+    #[case::truthy(BooleanDsl(BooleanForm::Lit(true)), "")]
+    #[case::falsy(BooleanDsl(BooleanForm::Lit(false)), "!")]
+    #[case::undetermined(BooleanDsl(BooleanForm::Undetermined), "*")]
     fn test_boolean_dsl_display(#[case] dsl: BooleanDsl, #[case] expected: &str) {
         assert_eq!(dsl.to_string(), expected);
     }
 
     #[rstest]
-    #[case::bool_true("true", BooleanDsl(BooleanAst::Lit(true)))]
-    #[case::bool_false("false", BooleanDsl(BooleanAst::Lit(false)))]
-    #[case::keyword(":undetermined", BooleanDsl(BooleanAst::Undetermined))]
-    #[case::string_bang(r##""!""##, BooleanDsl(BooleanAst::Lit(false)))]
-    #[case::string_star(r##""*""##, BooleanDsl(BooleanAst::Undetermined))]
+    #[case::bool_true("true", BooleanDsl(BooleanForm::Lit(true)))]
+    #[case::bool_false("false", BooleanDsl(BooleanForm::Lit(false)))]
+    #[case::keyword(":undetermined", BooleanDsl(BooleanForm::Undetermined))]
+    #[case::string_bang(r##""!""##, BooleanDsl(BooleanForm::Lit(false)))]
+    #[case::string_star(r##""*""##, BooleanDsl(BooleanForm::Undetermined))]
     fn test_boolean_dsl_from_edn(#[case] input: &str, #[case] expected: BooleanDsl) {
         assert_eq!(
             BooleanDsl::from_edn(&read_string(input).unwrap()).unwrap(),
@@ -171,9 +173,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::truthy(BooleanDsl(BooleanAst::Lit(true)), Edn::Bool(true))]
-    #[case::falsy(BooleanDsl(BooleanAst::Lit(false)), Edn::Bool(false))]
-    #[case::undetermined(BooleanDsl(BooleanAst::Undetermined), Edn::Keyword(EdnKeyword::owned("undetermined".to_string())))]
+    #[case::truthy(BooleanDsl(BooleanForm::Lit(true)), Edn::Bool(true))]
+    #[case::falsy(BooleanDsl(BooleanForm::Lit(false)), Edn::Bool(false))]
+    #[case::undetermined(BooleanDsl(BooleanForm::Undetermined), Edn::Keyword(EdnKeyword::owned("undetermined".to_string())))]
     fn test_boolean_dsl_to_edn(#[case] dsl: BooleanDsl, #[case] expected: Edn<'static>) {
         assert_eq!(dsl.to_edn(), expected);
     }
