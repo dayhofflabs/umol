@@ -4,7 +4,7 @@
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AsLit, AtomForm, AtomHandle, AtomId, Edits, Lattice, MoleculeAst, TransactionError,
+    AsLit, AtomForm, AtomHandle, AtomId, Edits, Lattice, Molecule, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -43,7 +43,7 @@ impl<'a> AtomTypingValence<'a> {
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Edits, AtomTypingError> {
+    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, AtomTypingError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
                 return Solution::Underdetermined(Edits::new());
@@ -67,7 +67,7 @@ impl<'a> AtomTypingValence<'a> {
     /// Plan and atomically apply atom-typing valence resolution.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), AtomTypingError>, TransactionError> {
         let edits = match self.plan(ast) {
             Solution::Determined(edits) => edits,
@@ -85,7 +85,7 @@ impl<'a> AtomTypingValence<'a> {
     /// Compute the selected atom without mutating the molecule.
     fn resolve_molecule_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         id: AtomId,
     ) -> Result<Option<AtomForm>, AtomTypingError> {
         let atom = ast.atom(id);
@@ -114,7 +114,7 @@ impl<'a> AtomTypingValence<'a> {
     /// if the atom is not ground.
     pub fn classify_molecule_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom_id: AtomId,
     ) -> Solution<(), AtomTypingMismatch> {
         let atom = ast.atom(atom_id);
@@ -205,7 +205,7 @@ mod tests {
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
     fn test_atom_typing_valence_plan_partial(
         atom_type_registry: AtomTypeRegistry,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
     ) {
         assert_eq!(
             AtomTypingValence::new(&atom_type_registry).plan(&molecule),
@@ -224,7 +224,7 @@ mod tests {
     )]
     fn test_atom_typing_valence_plan_error(
         atom_type_registry: AtomTypeRegistry,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: AtomTypingError,
     ) {
         assert_eq!(
@@ -248,7 +248,7 @@ mod tests {
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
     fn test_atom_typing_valence_resolve_partial(
         atom_type_registry: AtomTypeRegistry,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
     ) {
         let original = molecule.clone();
         assert_eq!(
@@ -269,7 +269,7 @@ mod tests {
     )]
     fn test_atom_typing_valence_resolve_error(
         atom_type_registry: AtomTypeRegistry,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: AtomTypingError,
     ) {
         let original = molecule.clone();
@@ -296,7 +296,7 @@ mod tests {
         #[case] expected: Solution<(), AtomTypingMismatch>,
     ) {
         let resolver = AtomTypingValence::new(&atom_type_registry);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!(input)],
             ..Default::default()
         });

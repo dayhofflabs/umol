@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm,
     AtomConstraintForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle, BondUpdate,
-    BooleanForm, Edits, MoleculeAst,
+    BooleanForm, Edits, Molecule,
 };
 use umol_utils::solution::Solution;
 
@@ -87,7 +87,7 @@ impl AromaticityResolver {
     /// Construct the complete aromaticity edit plan without mutating `ast`.
     pub fn plan(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<Edits, AromaticityContradiction>, AromaticityError> {
         let outcome = self.perception.derive(ast, self.config.perception)?;
 
@@ -243,7 +243,7 @@ impl AromaticityResolver {
     /// Plan and atomically apply aromaticity resolution.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityError> {
         let edits = match self.plan(ast)? {
             Solution::Determined(edits) => edits,
@@ -258,12 +258,7 @@ impl AromaticityResolver {
         Ok(Solution::Determined(()))
     }
 
-    fn plan_system(
-        &self,
-        ast: &MoleculeAst,
-        atoms: Vec<AtomId>,
-        system: AromaticSystemForm,
-    ) -> Edits {
+    fn plan_system(&self, ast: &Molecule, atoms: Vec<AtomId>, system: AromaticSystemForm) -> Edits {
         let mut atom_updates = Vec::new();
         if self.config.reset_aromatic_valence {
             for &atom_id in &atoms {
@@ -332,7 +327,7 @@ mod tests {
     }
 
     #[fixture]
-    fn benzene() -> MoleculeAst {
+    fn benzene() -> Molecule {
         mol_dsl!(
             r#"{
             :atoms ["C#i=#c0#h#n0#u0#s#v2#a" "C#i=#c0#h#n0#u0#s#v2#a"
@@ -344,7 +339,7 @@ mod tests {
     }
 
     #[fixture]
-    fn aromatic_valence_mismatch() -> MoleculeAst {
+    fn aromatic_valence_mismatch() -> Molecule {
         mol_dsl!(
             r#"{
             :atoms ["C#a2" "C#a0" "C#a" "C#a" "C#a" "C#a"]
@@ -356,7 +351,7 @@ mod tests {
     }
 
     #[fixture]
-    fn aromatic_bond_constraint_mismatch() -> MoleculeAst {
+    fn aromatic_bond_constraint_mismatch() -> Molecule {
         mol_dsl!(
             r#"{
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
@@ -383,7 +378,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_plan(aromaticity_model: AromaticityModel, benzene: MoleculeAst) {
+    fn test_aromaticity_resolver_plan(aromaticity_model: AromaticityModel, benzene: Molecule) {
         assert_eq!(
             AromaticityResolver::with_config(
                 &aromaticity_model,
@@ -509,7 +504,7 @@ mod tests {
     )]
     fn test_aromaticity_resolver_plan_aromatic_valence_mismatch(
         aromaticity_model: AromaticityModel,
-        aromatic_valence_mismatch: MoleculeAst,
+        aromatic_valence_mismatch: Molecule,
         #[case] policy: AromaticityMismatchPolicy,
         #[case] expected: Solution<Edits, AromaticityContradiction>,
     ) {
@@ -527,7 +522,7 @@ mod tests {
     #[rstest]
     fn test_aromaticity_resolver_resolve_aromatic_valence_mismatch_reset(
         aromaticity_model: AromaticityModel,
-        mut aromatic_valence_mismatch: MoleculeAst,
+        mut aromatic_valence_mismatch: Molecule,
     ) {
         let resolver = AromaticityResolver::with_config(
             &aromaticity_model,
@@ -580,7 +575,7 @@ mod tests {
     )]
     fn test_aromaticity_resolver_plan_aromatic_bond_constraint_mismatch(
         aromaticity_model: AromaticityModel,
-        aromatic_bond_constraint_mismatch: MoleculeAst,
+        aromatic_bond_constraint_mismatch: Molecule,
         #[case] policy: AromaticBondConstraintMismatchPolicy,
         #[case] expected: Solution<Edits, AromaticityContradiction>,
     ) {
@@ -638,7 +633,7 @@ mod tests {
     fn test_aromaticity_resolver_plan_identity(
         #[case] model: AromaticityModel,
         #[case] config: AromaticityResolveConfig,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
     ) {
         assert_eq!(
             AromaticityResolver::with_config(&model, config).plan(&molecule),
@@ -707,7 +702,7 @@ mod tests {
     fn test_aromaticity_resolver_resolve(
         aromaticity_model: AromaticityModel,
         #[case] config: AromaticityResolveConfig,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected_system_charge: NumForm,
         #[case] expected_atom_charges: Vec<NumForm>,
         #[case] expected_aromatic_valences: Vec<Option<AromaticValenceForm>>,
@@ -746,7 +741,7 @@ mod tests {
     #[rstest]
     fn test_aromaticity_resolver_resolve_identity(
         aromaticity_model: AromaticityModel,
-        mut benzene: MoleculeAst,
+        mut benzene: Molecule,
     ) {
         let resolver = AromaticityResolver::new(&aromaticity_model);
         assert_eq!(resolver.resolve(&mut benzene), Ok(Solution::Determined(())));
@@ -791,7 +786,7 @@ mod tests {
     )]
     fn test_aromaticity_resolver_resolve_contradiction(
         #[case] model: AromaticityModel,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: AromaticityContradiction,
     ) {
         let original = molecule.clone();

@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomHandle, AtomUpdate, BondConstraintForm, BondHandle, BondUpdate,
-    CisTransStereoForm, Edits, Lattice, MoleculeAst, StereoAtomHandle, StereoBondHandle,
+    CisTransStereoForm, Edits, Lattice, Molecule, StereoAtomHandle, StereoBondHandle,
     TetrahedralStereoForm, TransactionError,
 };
 use umol_utils::solution::Solution;
@@ -91,7 +91,7 @@ impl StereoResolver {
     /// Construct the complete stereo edit plan without mutating `ast`.
     pub fn plan(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<Edits, StereoContradiction>, StereoError> {
         let partial_atom_constraint = ast.atoms().iter().any(|atom| {
             atom.constraints()
@@ -345,7 +345,7 @@ impl StereoResolver {
     /// Plan and atomically apply structural stereo resolution.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoError> {
         let edits = match self.plan(ast)? {
             Solution::Determined(edits) => edits,
@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[fixture]
-    fn tetrahedral_entity_failure_molecule() -> MoleculeAst {
+    fn tetrahedral_entity_failure_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"]
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[fixture]
-    fn cis_trans_entity_failure_molecule() -> MoleculeAst {
+    fn cis_trans_entity_failure_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
@@ -400,7 +400,7 @@ mod tests {
     }
 
     #[fixture]
-    fn tetrahedral_mismatch_molecule() -> MoleculeAst {
+    fn tetrahedral_mismatch_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
@@ -411,7 +411,7 @@ mod tests {
     }
 
     #[fixture]
-    fn cis_trans_mismatch_molecule() -> MoleculeAst {
+    fn cis_trans_mismatch_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
@@ -468,7 +468,7 @@ mod tests {
     )]
     fn test_stereo_resolver_plan(
         stereo_model: StereoModel,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Edits,
     ) {
         assert_eq!(
@@ -486,7 +486,7 @@ mod tests {
         :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
         :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]
     }"#))]
-    fn test_stereo_resolver_plan_partial(stereo_model: StereoModel, #[case] molecule: MoleculeAst) {
+    fn test_stereo_resolver_plan_partial(stereo_model: StereoModel, #[case] molecule: Molecule) {
         assert_eq!(
             StereoResolver::new(&stereo_model).plan(&molecule),
             Ok(Solution::Underdetermined(Edits::new()))
@@ -501,10 +501,7 @@ mod tests {
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
     }"#))]
-    fn test_stereo_resolver_plan_identity(
-        stereo_model: StereoModel,
-        #[case] molecule: MoleculeAst,
-    ) {
+    fn test_stereo_resolver_plan_identity(stereo_model: StereoModel, #[case] molecule: Molecule) {
         assert_eq!(
             StereoResolver::new(&stereo_model).plan(&molecule),
             Ok(Solution::Determined(Edits::new()))
@@ -573,7 +570,7 @@ mod tests {
     fn test_stereo_resolver_plan_constraint_failure(
         stereo_model: StereoModel,
         #[case] policy: StereoFailurePolicy,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
         assert_eq!(
@@ -613,7 +610,7 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_stereo_atom_failure(
         stereo_model: StereoModel,
-        tetrahedral_entity_failure_molecule: MoleculeAst,
+        tetrahedral_entity_failure_molecule: Molecule,
         #[case] policy: StereoFailurePolicy,
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
@@ -653,7 +650,7 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_stereo_bond_failure(
         stereo_model: StereoModel,
-        cis_trans_entity_failure_molecule: MoleculeAst,
+        cis_trans_entity_failure_molecule: Molecule,
         #[case] policy: StereoFailurePolicy,
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
@@ -755,7 +752,7 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_tetrahedral_mismatch(
         stereo_model: StereoModel,
-        tetrahedral_mismatch_molecule: MoleculeAst,
+        tetrahedral_mismatch_molecule: Molecule,
         #[case] policy: StereoMismatchPolicy,
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
@@ -866,7 +863,7 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_cis_trans_mismatch(
         stereo_model: StereoModel,
-        cis_trans_mismatch_molecule: MoleculeAst,
+        cis_trans_mismatch_molecule: Molecule,
         #[case] policy: StereoMismatchPolicy,
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
@@ -935,7 +932,7 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_not_stereo_mismatch(
         stereo_model: StereoModel,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Edits,
     ) {
         assert_eq!(
@@ -973,8 +970,8 @@ mod tests {
     )]
     fn test_stereo_resolver_resolve(
         stereo_model: StereoModel,
-        #[case] mut molecule: MoleculeAst,
-        #[case] expected: MoleculeAst,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
     ) {
         let resolver = StereoResolver::with_config(
             &stereo_model,
@@ -1007,7 +1004,7 @@ mod tests {
     )]
     fn test_stereo_resolver_resolve_error(
         stereo_model: StereoModel,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: StereoContradiction,
     ) {
         let original = molecule.clone();

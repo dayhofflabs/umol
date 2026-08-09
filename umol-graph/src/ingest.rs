@@ -4,7 +4,7 @@ use std::any::Any;
 
 use thiserror::Error;
 use umol_graph_core::Correspondence;
-use umol_graph_ir::ir::{AtomId, MoleculeAst, ReactionAst, TryIntoIr};
+use umol_graph_ir::ir::{AtomId, Molecule, ReactionAst, TryIntoIr};
 use umol_io::smiles::{ParseError as SmilesParseError, ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::raise::RaiseError;
 use umol_io::table_ir::Molecule as TableMolecule;
@@ -125,8 +125,8 @@ fn interpret_molecule(
     molecule: &TableMolecule,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<MoleculeAst, MoleculeInterpretationError> {
-    let mut ast: MoleculeAst = molecule.try_into_ir(&())?;
+) -> Result<Molecule, MoleculeInterpretationError> {
+    let mut ast: Molecule = molecule.try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),
@@ -135,7 +135,7 @@ fn interpret_molecule(
 }
 
 impl Interpret for Smiles {
-    type Output = MoleculeAst;
+    type Output = Molecule;
     type Error = MoleculeInterpretationError;
 
     fn interpret(
@@ -189,12 +189,12 @@ impl Interpret for ReactionSmiles {
 }
 
 /// Ingest SMILES text with the OpenSMILES configuration and default model.
-pub fn ingest_smiles(input: &str) -> Result<MoleculeAst, SmilesInputError> {
+pub fn ingest_smiles(input: &str) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes(input.as_bytes())
 }
 
 /// Ingest SMILES bytes with the OpenSMILES configuration and default model.
-pub fn ingest_smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesInputError> {
+pub fn ingest_smiles_bytes(input: &[u8]) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes_with(
         input,
         &SmilesIoConfig::opensmiles(),
@@ -209,7 +209,7 @@ pub fn ingest_smiles_with(
     io_config: &SmilesIoConfig,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<MoleculeAst, SmilesInputError> {
+) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes_with(input.as_bytes(), io_config, model, resolve_config)
 }
 
@@ -219,7 +219,7 @@ pub fn ingest_smiles_bytes_with(
     io_config: &SmilesIoConfig,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<MoleculeAst, SmilesInputError> {
+) -> Result<Molecule, SmilesInputError> {
     let smiles = Smiles::parse_bytes_with(input, io_config)?;
     smiles
         .interpret(model, resolve_config)

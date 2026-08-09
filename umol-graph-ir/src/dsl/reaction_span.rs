@@ -1673,7 +1673,7 @@ mod tests {
     use crate::ir::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ir::edit::BondFieldChange;
     use crate::ir::ligand::StereoLigandKind;
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::reaction::ReactionAst;
     use crate::ir::value::NumForm;
     use crate::ir::MoleculeCorrespondence;
@@ -1759,7 +1759,7 @@ mod tests {
     // Modified bond + Unchanged atoms + Unchanged molecule-constraint.
     #[rstest]
     #[case::modify(ReactionAst::new(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
@@ -1772,7 +1772,7 @@ mod tests {
     ))]
     // Unchanged / Removed / Added atoms and bonds + an Added constraint.
     #[case::add_remove(ReactionAst::new(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
@@ -1803,7 +1803,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_span_dsl_from_ast_superimposed() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::O),
@@ -1811,7 +1811,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+        let rhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::N),

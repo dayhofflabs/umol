@@ -16,7 +16,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                         id: AtomId(id),
                         ast: AtomForm::default(),
@@ -30,7 +30,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::Bond(BondDelta::Remove {
                         id: BondId(id),
                         atoms: [AtomId(0), AtomId(1)],
@@ -45,7 +45,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Remove {
                         id: DativeBondId(id),
                         donors: vec![AtomId(0)],
@@ -61,7 +61,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Remove {
                         id: AromaticSystemId(id),
                         atoms: vec![AtomId(0), AtomId(1)],
@@ -76,7 +76,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::MulticenterBond(MulticenterBondDelta::Remove {
                         id: MulticenterBondId(id),
                         atoms: vec![AtomId(0), AtomId(1)],
@@ -91,7 +91,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id: NoncovalentBondId(id),
                         atoms: [AtomId(0), AtomId(1)],
@@ -106,7 +106,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
                         id: StereoAtomId(id),
                         site: AtomId(0),
@@ -122,7 +122,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
         (0u32..64).prop_map(|id| {
             (
                 ReactionAst::new(
-                    MoleculeAst::default(),
+                    Molecule::default(),
                     Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Remove {
                         id: StereoBondId(id),
                         site: BondId(0),
@@ -141,7 +141,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPre
 fn unavailable_participant_strategy() -> impl Strategy<Value = (ReactionAst, ApplyPreconditionError)>
 {
     (1u32..64).prop_flat_map(|missing| {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -277,7 +277,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
     prop_oneof![
         Just((
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default(),)],
                     ..Default::default()
@@ -295,7 +295,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default(),)],
                     ..Default::default()
@@ -312,7 +312,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     multicenter: vec![
                         (vec![AtomId(0), AtomId(1)], MulticenterBondForm::default(),)
@@ -331,7 +331,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default(),)],
                     ..Default::default()
@@ -348,7 +348,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 5],
                     stereo_atoms: vec![(
                         AtomId(0),
@@ -375,7 +375,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (ReactionAst, Appl
         )),
         Just((
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 6],
                     bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
                     stereo_bonds: vec![(
@@ -411,7 +411,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
             let discontinuous_old = first + gap;
             let new = discontinuous_old + second_step;
             ReactionAst::new(
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::default().with_charge(old)],
                     ..Default::default()
                 }),
@@ -439,7 +439,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); kind.degree() + 1],
                 stereo_atoms: vec![(AtomId(0), ligands, StereoAtomForm::new(kind, 0u32))],
                 ..Default::default()
@@ -456,7 +456,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = ReactionAst> {
     let stereo_bond = (0u32..16).prop_map(|offset| {
         let kind = StereoKind::CisTrans;
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); 6],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
                 stereo_bonds: vec![(
@@ -493,21 +493,21 @@ proptest! {
     fn test_reaction_ast_validate_application_entity_reference_error(
         (reaction, expected) in unavailable_entity_strategy(),
     ) {
-        prop_assert_eq!(reaction.validate_application(&MoleculeAst::default()), Err(expected));
+        prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
     }
 
     #[test]
     fn test_reaction_ast_validate_application_participant_reference_error(
         (reaction, expected) in unavailable_participant_strategy(),
     ) {
-        prop_assert_eq!(reaction.validate_application(&MoleculeAst::default()), Err(expected));
+        prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
     }
 
     #[test]
     fn test_reaction_ast_validate_application_incidence_error(
         (reaction, expected) in incompatible_incidence_strategy(),
     ) {
-        prop_assert_eq!(reaction.validate_application(&MoleculeAst::default()), Err(expected));
+        prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
     }
 
     #[test]
@@ -515,7 +515,7 @@ proptest! {
         reaction in malformed_update_strategy(),
     ) {
         prop_assert_eq!(
-            reaction.validate_application(&MoleculeAst::default()),
+            reaction.validate_application(&Molecule::default()),
             Err(ApplyPreconditionError::InconsistentReaction),
         );
     }
@@ -527,14 +527,14 @@ proptest! {
             sum: NumForm::Lit(0),
         });
         let reaction = ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 constraints: Constraints::from(constraint.clone()),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(constraint))]),
         );
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); host_atom_count],
             ..Default::default()
         });

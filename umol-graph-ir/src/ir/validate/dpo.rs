@@ -16,7 +16,7 @@ use super::super::delta::{
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 
 /// Checks the DPO dangling invariant: a deleted atom leaves no incident bond or overlay.
 #[derive(Clone, Copy, Debug, Default)]
@@ -54,7 +54,7 @@ impl DpoValidator {
     /// also be deleted.
     pub fn validate_reaction(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         deltas: &Deltas,
     ) -> Result<Solution<(), DpoContradiction>, DpoError> {
         let removed_atoms = removed(deltas, |d| match d {
@@ -142,7 +142,7 @@ mod tests {
     use super::super::super::bond::BondForm;
     use super::super::super::constraint::Constraints;
     use super::super::super::dative::DativeBondForm;
-    use super::super::super::molecule::{MoleculeAst, MoleculeEntries};
+    use super::super::super::molecule::{Molecule, MoleculeEntries};
     use super::super::super::multicenter::MulticenterBondForm;
     use super::super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use super::super::super::reaction::ReactionAst;
@@ -150,7 +150,7 @@ mod tests {
 
     #[rstest]
     #[case::co_deleted(ReactionAst::new(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
@@ -165,7 +165,7 @@ mod tests {
         ]),
     ))]
     #[case::no_deletion(ReactionAst::new(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
@@ -173,7 +173,7 @@ mod tests {
         Deltas::new(),
     ))]
     #[case::isolated_atom(ReactionAst::new(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             bonds: vec![],
             ..Default::default()
@@ -195,7 +195,7 @@ mod tests {
     #[rstest]
     #[case::bond(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
                 ..Default::default()
@@ -209,7 +209,7 @@ mod tests {
     )]
     #[case::dative(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::B)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
                 constraints: Constraints::new(),
@@ -224,7 +224,7 @@ mod tests {
     )]
     #[case::aromatic(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
                 aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::from_electrons(vec![1, 2]))],
                 constraints: Constraints::new(),
@@ -239,7 +239,7 @@ mod tests {
     )]
     #[case::multicenter(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::B),
                     AtomForm::from_element(Element::H),
@@ -258,7 +258,7 @@ mod tests {
     )]
     #[case::noncovalent(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
                 constraints: Constraints::new(),

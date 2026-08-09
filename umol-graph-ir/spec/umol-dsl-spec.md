@@ -439,7 +439,7 @@ It lowers to **`RingMembershipForm`** (a **`count`** value plus a **`RingScope`*
 | **`RingConfig.relevant_cycle_algorithm`** | **`RelevantCycleEnumerationAlgorithm::Vismara`** by default |
 | **`RingConfig.simple_cycle_algorithm`** | unused for this projection |
 
-The model fields define the observable projection: **`All`** counts relevant rings of at most 22 bonds, and **`Size(n)`** counts rings of exactly **n** bonds within that projection (therefore zero when **n > 22**). The algorithm field is operational and MUST NOT change the resulting ring set. The general **`MoleculeAst::rings`** API accepts an explicit **`RingModel`** and **`RingConfig`**, but those parameters are not part of molecule DSL syntax and do not alter the meaning of atom **`#R`**, atom **`#x`**, atom **`#y`**, or localized-bond **`#R`**.
+The model fields define the observable projection: **`All`** counts relevant rings of at most 22 bonds, and **`Size(n)`** counts rings of exactly **n** bonds within that projection (therefore zero when **n > 22**). The algorithm field is operational and MUST NOT change the resulting ring set. The general **`Molecule::rings`** API accepts an explicit **`RingModel`** and **`RingConfig`**, but those parameters are not part of molecule DSL syntax and do not alter the meaning of atom **`#R`**, atom **`#x`**, atom **`#y`**, or localized-bond **`#R`**.
 
 This projection is defined over the localized atom-bond graph. Dative-bond **`#R`** remains an asserted **`RingMembershipForm`** value: deriving it requires a ring model that includes dative overlays, whose semantics are not defined by this specification.
 
@@ -1136,7 +1136,7 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 
 **Combining the inline and `:constraints` forms.** An entity **MAY** carry per-entity constraints in **both** serializations at once. They apply **conjunctively** — an entity's effective constraints are its inline predicates **together with** every molecule-scope per-entity entry that references it; neither serialization overrides the other. A same-kind clash with **conflicting** values (e.g. inline **`#v4`** and **`{:atom [i {:valence 3}]}`** on the same atom) is an unsatisfiable conjunction — a **contradiction** — and **MUST** be rejected as an error.
 
-**Lift / inline.** The two storage scopes — inline on the entity (`AtomAst::constraints` etc.) and at molecule scope (`MoleculeAst::constraints` as `{:atom [ref form]}` peers) — are interchangeable for the inline-capable narrow leaves. Implementations **SHOULD** expose:
+**Lift / inline.** The two storage scopes — inline on the entity (`AtomAst::constraints` etc.) and at molecule scope (`Molecule::constraints` as `{:atom [ref form]}` peers) — are interchangeable for the inline-capable narrow leaves. Implementations **SHOULD** expose:
 
 - **`lift_constraints`** (entity → molecule): drains every inline store into the molecule list as `{:<entity> [ref form]}` peers.
 - **`inline_constraints`** (molecule → entity): drains top-level inline-capable narrow leaves from the molecule list into the targeted entity's inline store.

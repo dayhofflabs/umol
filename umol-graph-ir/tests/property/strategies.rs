@@ -37,7 +37,7 @@ pub(crate) use umol_graph_ir::ir::{
     DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator,
     Edit, Edits, ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind,
     FluxionalityForm, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
-    LigandSymmetryForm, MemOp, MoleculeAst, MoleculeConstraint, MoleculeCorrespondence,
+    LigandSymmetryForm, MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence,
     MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
     MulticenterBondConstraintsForm, MulticenterBondDelta, MulticenterBondFieldChange,
     MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
@@ -1616,11 +1616,11 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
         )
 }
 
-pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
-    molecule_entries_strategy().prop_map(MoleculeAst::from_entries)
+pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = Molecule> {
+    molecule_entries_strategy().prop_map(Molecule::from_entries)
 }
 
-/// Per-entity counts for a generated `MoleculeAst`. Carried into the
+/// Per-entity counts for a generated `Molecule`. Carried into the
 /// constraint generator so that ref-bearing variants (`Constraint::Atom`,
 /// relational constraints, anchors) only emit valid in-bounds indices.
 #[derive(Clone, Copy)]
@@ -1649,7 +1649,7 @@ impl ConstraintCounts {
         }
     }
 
-    fn from_ir(ast: &MoleculeAst) -> Self {
+    fn from_ir(ast: &Molecule) -> Self {
         Self {
             atom: ast.atoms().count(),
             bond: ast.bonds().count(),
@@ -2211,8 +2211,8 @@ pub(crate) fn constraint_strategy(counts: ConstraintCounts) -> BoxedStrategy<Con
         .boxed()
 }
 
-pub(crate) fn molecule_ast_with_constraints_strategy() -> impl Strategy<Value = MoleculeAst> {
-    molecule_entries_with_constraints_strategy().prop_map(MoleculeAst::from_entries)
+pub(crate) fn molecule_ast_with_constraints_strategy() -> impl Strategy<Value = Molecule> {
+    molecule_entries_with_constraints_strategy().prop_map(Molecule::from_entries)
 }
 
 pub(crate) fn molecule_entries_with_constraints_strategy() -> impl Strategy<Value = MoleculeEntries>
@@ -2236,7 +2236,7 @@ pub(crate) fn molecule_entries_with_constraints_strategy() -> impl Strategy<Valu
 }
 
 pub(crate) fn molecule_ast_with_atom_subset_strategy(
-) -> impl Strategy<Value = (MoleculeAst, Vec<AtomId>)> {
+) -> impl Strategy<Value = (Molecule, Vec<AtomId>)> {
     molecule_ast_structurally_unambiguous_strategy().prop_flat_map(|ast| {
         let atom_count = ast.atoms().count();
         (Just(ast), prop::collection::vec(any::<bool>(), atom_count)).prop_map(|(ast, keep)| {
@@ -2251,7 +2251,7 @@ pub(crate) fn molecule_ast_with_atom_subset_strategy(
 }
 
 pub(crate) fn molecule_ast_with_removals_strategy(
-) -> impl Strategy<Value = (MoleculeAst, Vec<AtomId>, Vec<BondId>)> {
+) -> impl Strategy<Value = (Molecule, Vec<AtomId>, Vec<BondId>)> {
     molecule_ast_strategy().prop_flat_map(|ast| {
         let atom_count = ast.atoms().count();
         let bond_count = ast.bonds().count();
@@ -2276,20 +2276,19 @@ pub(crate) fn molecule_ast_with_removals_strategy(
     })
 }
 
-pub(crate) fn molecule_ast_structurally_unambiguous_strategy() -> impl Strategy<Value = MoleculeAst>
-{
-    molecule_entries_structurally_unambiguous_strategy().prop_map(MoleculeAst::from_entries)
+pub(crate) fn molecule_ast_structurally_unambiguous_strategy() -> impl Strategy<Value = Molecule> {
+    molecule_entries_structurally_unambiguous_strategy().prop_map(Molecule::from_entries)
 }
 
 pub(crate) fn molecule_entries_structurally_unambiguous_strategy(
 ) -> impl Strategy<Value = MoleculeEntries> {
     molecule_entries_strategy().prop_filter(
         "entity incidence identifies at most one entity of each family",
-        |entries| molecule_entity_incidence_is_unique(&MoleculeAst::from_entries(entries.clone())),
+        |entries| molecule_entity_incidence_is_unique(&Molecule::from_entries(entries.clone())),
     )
 }
 
-fn molecule_entity_incidence_is_unique(ast: &MoleculeAst) -> bool {
+fn molecule_entity_incidence_is_unique(ast: &Molecule) -> bool {
     all_unique(ast.bonds().iter().map(|bond| sorted_pair(bond.atom_ids())))
         && all_unique(
             ast.dative_bonds()
@@ -2493,7 +2492,7 @@ pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
 }
 
 pub(crate) fn invalid_molecule_dsl_parts_strategy(
-) -> impl Strategy<Value = (MoleculeAst, MoleculeMetadata, Entity)> {
+) -> impl Strategy<Value = (Molecule, MoleculeMetadata, Entity)> {
     molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
         let counts = ConstraintCounts::from_ir(&ast);
         invalid_metadata_for(counts)
@@ -2502,7 +2501,7 @@ pub(crate) fn invalid_molecule_dsl_parts_strategy(
 }
 
 pub(crate) fn molecule_metadata_with_atom_subset_strategy(
-) -> impl Strategy<Value = (MoleculeAst, MoleculeMetadata, Vec<AtomId>)> {
+) -> impl Strategy<Value = (Molecule, MoleculeMetadata, Vec<AtomId>)> {
     molecule_ast_with_atom_subset_strategy().prop_flat_map(|(ast, atoms)| {
         metadata_for(ConstraintCounts::from_ir(&ast))
             .prop_map(move |metadata| (ast.clone(), metadata, atoms.clone()))
@@ -2651,7 +2650,7 @@ pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
         .collect()
 }
 
-pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
+pub(crate) fn transaction_path_molecule(count: usize) -> Molecule {
     let atoms = transaction_atoms(count);
     let bonds = (0..count.saturating_sub(1))
         .map(|id| {
@@ -2662,7 +2661,7 @@ pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_entries(MoleculeEntries {
+    Molecule::from_entries(MoleculeEntries {
         atoms,
         bonds,
         ..Default::default()
@@ -2696,8 +2695,8 @@ pub(crate) struct StableAtomHandleTrace {
 }
 
 impl StableAtomHandleTrace {
-    pub(crate) fn base(&self) -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    pub(crate) fn base(&self) -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: INITIAL_HANDLE_ELEMENTS[..self.initial_count]
                 .iter()
                 .copied()
@@ -2753,7 +2752,7 @@ impl StableAtomHandleTrace {
         edits
     }
 
-    pub(crate) fn expected(&self) -> MoleculeAst {
+    pub(crate) fn expected(&self) -> Molecule {
         let initial = INITIAL_HANDLE_ELEMENTS[..self.initial_count]
             .iter()
             .copied()
@@ -2778,7 +2777,7 @@ impl StableAtomHandleTrace {
                     AtomForm::from_element(element)
                 }
             });
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: initial
                 .chain(created)
                 .chain([AtomForm::from_element(SENTINEL_HANDLE_ELEMENT).with_charge(9_i64)])
@@ -2873,7 +2872,7 @@ pub(crate) struct InvalidTransactionBatch {
 }
 
 impl InvalidTransactionBatch {
-    pub(crate) fn base(&self) -> MoleculeAst {
+    pub(crate) fn base(&self) -> Molecule {
         let atoms = (0..self.count * 2)
             .map(|index| AtomForm::from_element(INITIAL_HANDLE_ELEMENTS[index % 4]))
             .collect();
@@ -2944,7 +2943,7 @@ impl InvalidTransactionBatch {
                 )
             })
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative,
@@ -3185,9 +3184,9 @@ pub(crate) enum TransactionCase {
 }
 
 impl TransactionCase {
-    pub(crate) fn base(&self) -> MoleculeAst {
+    pub(crate) fn base(&self) -> Molecule {
         match self {
-            Self::AddPath { .. } => MoleculeAst::default(),
+            Self::AddPath { .. } => Molecule::default(),
             Self::RemoveAtom { count, .. }
             | Self::RemoveBond { count, .. }
             | Self::SetAtomCharge { count, .. }
@@ -3286,11 +3285,11 @@ pub(crate) fn transaction_case_strategy() -> impl Strategy<Value = TransactionCa
     ]
 }
 
-fn transaction_all_entities_molecule() -> MoleculeAst {
+fn transaction_all_entities_molecule() -> Molecule {
     let ligands = (0..4)
         .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
         .collect::<Vec<_>>();
-    MoleculeAst::from_entries(MoleculeEntries {
+    Molecule::from_entries(MoleculeEntries {
         atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
         bonds: vec![
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -3324,7 +3323,7 @@ fn transaction_all_entities_molecule() -> MoleculeAst {
     })
 }
 
-fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
+fn transaction_field_cases() -> Vec<(Molecule, Edits)> {
     let base = transaction_all_entities_molecule();
     let value = |change| (base.clone(), Edits::from_iter([change]));
     vec![
@@ -3464,7 +3463,7 @@ fn transaction_field_cases() -> Vec<(MoleculeAst, Edits)> {
     ]
 }
 
-fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
+fn transaction_constraint_cases() -> Vec<(Molecule, Edits)> {
     let base = transaction_all_entities_molecule();
     vec![
         Edit::ModifyAtomConstraint {
@@ -3519,7 +3518,7 @@ fn transaction_constraint_cases() -> Vec<(MoleculeAst, Edits)> {
     .collect()
 }
 
-fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
+fn transaction_removal_cases() -> Vec<(Molecule, Edits)> {
     let base = transaction_all_entities_molecule();
     let atom_handles = |ids: &[u32]| {
         ids.iter()
@@ -3595,7 +3594,7 @@ fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
     .collect()
 }
 
-fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, Edits) {
+fn transaction_creation_case(include_created_constraint: bool) -> (Molecule, Edits) {
     let base = transaction_all_entities_molecule();
     let mut edits = Edits::new();
     let atom = edits.add_atom(AtomForm::from_element(Element::N));
@@ -3696,7 +3695,7 @@ fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, 
     (base, edits)
 }
 
-fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(MoleculeAst, Edits)> {
+fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(Molecule, Edits)> {
     let mut cases = transaction_field_cases();
     cases.extend(transaction_constraint_cases());
     cases.extend(transaction_removal_cases());
@@ -3720,11 +3719,11 @@ fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(Molecule
     cases
 }
 
-pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
+pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (Molecule, Edits)> {
     prop::sample::select(complete_transaction_cases(true))
 }
 
-fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
+fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
     let atoms = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
     let bonds = (0..3)
         .map(|index| {
@@ -3782,7 +3781,7 @@ fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_entries(MoleculeEntries {
+    Molecule::from_entries(MoleculeEntries {
         atoms,
         bonds,
         dative,
@@ -3842,12 +3841,12 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
 #[derive(Clone, Debug)]
 pub(crate) struct ConstraintCompactionCase {
     kind: EntityKind,
-    base: MoleculeAst,
+    base: Molecule,
     expected: Vec<Constraint>,
 }
 
 impl ConstraintCompactionCase {
-    pub(crate) fn base(&self) -> MoleculeAst {
+    pub(crate) fn base(&self) -> Molecule {
         self.base.clone()
     }
 
@@ -3954,14 +3953,14 @@ pub(crate) fn constraint_compaction_case_strategy(
     prop::sample::select(cases)
 }
 
-pub(crate) fn consecutive_transaction_strategy(
-) -> impl Strategy<Value = (MoleculeAst, Edits, Edits)> {
+pub(crate) fn consecutive_transaction_strategy() -> impl Strategy<Value = (Molecule, Edits, Edits)>
+{
     (-4_i64..=4, -4_i64..=4)
         .prop_filter("successive charges must differ", |(first, second)| {
             first != second
         })
         .prop_map(|(first, second)| {
-            let base = MoleculeAst::from_entries(MoleculeEntries {
+            let base = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 ..Default::default()
             });
@@ -3993,7 +3992,7 @@ const DATIVE_DONORS: [&[u32]; 2] = [&[0], &[4]];
 const DATIVE_ACCEPTORS: [u32; 2] = [1, 5];
 const NONCOVALENT_PAIRS: [[u32; 2]; 2] = [[0, 2], [3, 5]];
 
-pub(crate) fn overlay_transaction_base() -> MoleculeAst {
+pub(crate) fn overlay_transaction_base() -> Molecule {
     let atoms: Vec<AtomForm> = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
     let bonds = (0..5)
         .map(|i| (AtomId(i), AtomId(i + 1), BondForm::from_order(1)))
@@ -4038,7 +4037,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_entries(MoleculeEntries {
+    Molecule::from_entries(MoleculeEntries {
         atoms,
         bonds,
         dative,
@@ -4055,7 +4054,7 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
 /// removal), then a topology removal of a chosen atom subset (cascade-removes overlays not removed
 /// explicitly). Ordered adds → overlay removes → topology, mirroring `apply_at`; every id resolves
 /// against the pre-removal base state, so `transact` succeeds and the round-trip properties apply.
-pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
+pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (Molecule, Edits)> {
     (
         prop::collection::vec(any::<bool>(), 2),
         prop::collection::vec(any::<bool>(), 2),
@@ -4196,7 +4195,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
 
 /// `(base, edits)` pairs for the transact round-trip properties: the single-edit `TransactionCase`
 /// coverage plus the multi-edit overlay-removal sequences.
-pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst, Edits)> {
+pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (Molecule, Edits)> {
     prop_oneof![
         transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
         complete_transaction_strategy(),
@@ -4236,7 +4235,7 @@ pub(crate) fn edits_dsl_strategy() -> impl Strategy<Value = Edits> {
 }
 
 /// A small localized molecule: 1–4 element atoms over a simple edge set, bond orders 1–3.
-fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
+fn simple_molecule_strategy() -> impl Strategy<Value = Molecule> {
     (1usize..=4)
         .prop_flat_map(|atom_count| {
             (
@@ -4257,7 +4256,7 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 .zip(orders)
                 .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondForm::from_order(order)))
                 .collect();
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms,
                 bonds,
                 ..Default::default()
@@ -4290,7 +4289,7 @@ pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<ReactionAst> {
 /// A localized molecule with DAMN overlays (dative / aromatic / multicenter / noncovalent) plus
 /// stereo (tetrahedral atoms / cis-trans bonds) and no molecule constraints (orthogonal). 1–4 atoms;
 /// overlays generated as in `molecule_ast_strategy`, scoped.
-fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
+fn overlay_molecule_strategy() -> impl Strategy<Value = Molecule> {
     (1usize..=4)
         .prop_flat_map(|atom_count| {
             (
@@ -4399,7 +4398,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::from_entries(MoleculeEntries {
+                Molecule::from_entries(MoleculeEntries {
                     atoms,
                     bonds,
                     dative,
@@ -4641,9 +4640,7 @@ fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp
 /// incident bonds, overlays, and stereo entities), per-surviving-entity optional field / relative
 /// edits (the absolute `old` read from `lhs`, so apply's precondition holds), plus up to two new
 /// atoms bonded to the lowest survivor. No dangling by construction.
-fn reaction_over(
-    molecule: impl Strategy<Value = MoleculeAst>,
-) -> impl Strategy<Value = ReactionAst> {
+fn reaction_over(molecule: impl Strategy<Value = Molecule>) -> impl Strategy<Value = ReactionAst> {
     molecule
         .prop_flat_map(|lhs| {
             let atom_count = lhs.atoms().count();
@@ -4710,7 +4707,7 @@ type OverlayOps = (
 type StereoOps = (Vec<Option<StereoOp>>, Vec<Option<StereoOp>>);
 
 fn build_reaction(
-    lhs: MoleculeAst,
+    lhs: Molecule,
     removals: Vec<bool>,
     charges: Vec<Option<i64>>,
     orders: Vec<Option<i64>>,

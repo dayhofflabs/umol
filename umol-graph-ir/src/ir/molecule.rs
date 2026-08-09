@@ -54,9 +54,9 @@ pub(super) mod transact;
 /// Molecule AST: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
 /// Per-entity data are `Arc`-shared (copy-on-write). The AST itself only allows
-/// attribute mutation; structural edits go through `MoleculeEditor` via [`MoleculeAst::edit`].
+/// attribute mutation; structural edits go through `MoleculeEditor` via [`Molecule::edit`].
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct MoleculeAst {
+pub struct Molecule {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
@@ -71,7 +71,7 @@ pub struct MoleculeAst {
     constraints: Constraints,
 }
 
-/// Constructor input for [`MoleculeAst::from_entries`].
+/// Constructor input for [`Molecule::from_entries`].
 #[derive(Debug, Default, Clone)]
 pub struct MoleculeEntries {
     pub atoms: Vec<AtomForm>,
@@ -360,14 +360,14 @@ fn validate_molecule_constraint_references(
     }
 }
 
-impl MoleculeAst {
+impl Molecule {
     /// Empty molecule: zero atoms, zero bonds, zero overlays, zero constraints.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Start an empty `MoleculeEditor` for fluent / programmatic
-    /// construction. Use [`MoleculeAst::edit`] to start from an existing
+    /// construction. Use [`Molecule::edit`] to start from an existing
     /// molecule.
     pub fn builder() -> MoleculeBuilder {
         MoleculeBuilder::new()
@@ -1172,7 +1172,7 @@ impl MoleculeAst {
     /// Materialize an induced-subgraph correspondence `sub` (over `self` as host) as a standalone
     /// molecule: drop every host atom/bond absent from `sub`. Host order preserved, gaps compacted;
     /// overlay drops cascade through the builder.
-    pub fn extract(&self, sub: &MoleculeCorrespondence) -> MoleculeAst {
+    pub fn extract(&self, sub: &MoleculeCorrespondence) -> Molecule {
         let kept: HashSet<AtomId> = sub
             .atoms()
             .matched_pairs()
@@ -1608,7 +1608,7 @@ impl MoleculeAst {
 
     /// Apply a checked edit batch to an immutable molecule, returning the modified molecule while
     /// leaving `self` unchanged.
-    pub fn apply(&self, edits: Edits) -> Result<MoleculeAst, TransactionError> {
+    pub fn apply(&self, edits: Edits) -> Result<Molecule, TransactionError> {
         let mut editor = self.edit();
         editor.transact(edits)?;
         Ok(editor.build())
@@ -1618,9 +1618,9 @@ impl MoleculeAst {
     /// id ranges in the result. Returns one correspondence per input, in input order, mapping that
     /// molecule's ids into the combined molecule. Pure renumbering — no gluing, no chemistry.
     pub fn combine_all<'a>(
-        molecules: impl IntoIterator<Item = &'a MoleculeAst>,
-    ) -> (MoleculeAst, Vec<MoleculeCorrespondence>) {
-        let molecules: Vec<&MoleculeAst> = molecules.into_iter().collect();
+        molecules: impl IntoIterator<Item = &'a Molecule>,
+    ) -> (Molecule, Vec<MoleculeCorrespondence>) {
+        let molecules: Vec<&Molecule> = molecules.into_iter().collect();
         let atom_count = molecules.iter().map(|m| m.atoms().count()).sum();
         let bond_count = molecules.iter().map(|m| m.bonds().count()).sum();
         let dative_count = molecules.iter().map(|m| m.dative_bonds().count()).sum();
@@ -1785,12 +1785,12 @@ impl MoleculeAst {
             stereo_bond_offset += molecule_stereo_bond_count;
         }
 
-        (MoleculeAst::from_entries(entries), correspondences)
+        (Molecule::from_entries(entries), correspondences)
     }
 
     /// Combine `self` and `other` as a fresh molecule by disjoint concatenation. Returns the
     /// correspondence mapping `other` into the combined molecule.
-    pub fn combine(&self, other: &MoleculeAst) -> (MoleculeAst, MoleculeCorrespondence) {
+    pub fn combine(&self, other: &Molecule) -> (Molecule, MoleculeCorrespondence) {
         let (combined, mut correspondences) = Self::combine_all([self, other]);
         let correspondence = correspondences
             .pop()
@@ -1800,7 +1800,7 @@ impl MoleculeAst {
 
     /// Append `other` by disjoint concatenation. `self` keeps its ids as the prefix; `other`'s
     /// entities follow. Returns the correspondence mapping `other` into the combined molecule.
-    pub fn combine_from(&mut self, other: &MoleculeAst) -> MoleculeCorrespondence {
+    pub fn combine_from(&mut self, other: &Molecule) -> MoleculeCorrespondence {
         let atom_offset = self.atoms().count();
         let bond_offset = self.bonds().count();
         let dative_offset = self.dative_bonds().count();
@@ -1811,7 +1811,7 @@ impl MoleculeAst {
         let stereo_bond_offset = self.stereo_bonds().count();
         let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-        let MoleculeAst {
+        let Molecule {
             graph,
             atoms,
             bonds,
@@ -1959,10 +1959,10 @@ impl MoleculeAst {
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
     /// atoms in one component (a spanning overlay prevents the split rather than being dropped). Each
-    /// component is a fresh, compactly-renumbered `MoleculeAst` paired with the
+    /// component is a fresh, compactly-renumbered `Molecule` paired with the
     /// `MoleculeCorrespondence` mapping its ids back to `self`. Components are ordered by their lowest
     /// original atom.
-    pub fn split(&self) -> Vec<(MoleculeAst, MoleculeCorrespondence)> {
+    pub fn split(&self) -> Vec<(Molecule, MoleculeCorrespondence)> {
         let atom_count = self.atoms().count();
         let mut uf = UnionFind::new(atom_count);
         for bond in self.bonds().iter() {
@@ -2026,7 +2026,7 @@ impl MoleculeAst {
             .iter()
             .enumerate()
             .map(|(component, atoms)| {
-                let mut editor = MoleculeAst::new().edit();
+                let mut editor = Molecule::new().edit();
                 let mut atom_pairs = Vec::new();
                 for atom in atoms {
                     let added = editor.add_atom(self.atom(*atom).ast.clone());

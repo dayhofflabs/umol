@@ -2,7 +2,7 @@
 //! aromatic constraints and systems agree with the selected model.
 
 use thiserror::Error;
-use umol_graph_ir::ir::MoleculeAst;
+use umol_graph_ir::ir::Molecule;
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
@@ -39,7 +39,7 @@ impl AromaticityConformanceValidator {
 
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
         match self.perception.derive(ast, self.config)? {
             Solution::Determined(derivation) => {
@@ -251,7 +251,7 @@ mod tests {
     )]
     fn test_aromaticity_conformance_validator_validate(
         #[case] model: AromaticityModel,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<(), AromaticityValidatorContradiction>,
     ) {
         assert_eq!(

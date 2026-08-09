@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, AtomView, ElementForm, MoleculeAst, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AtomId, AtomView, ElementForm, Molecule, RingSet, UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
@@ -56,7 +56,7 @@ impl HmoAromaticity {
 
     pub fn find_from_rings<F>(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         rings: &RingSet,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
         electrons_at: &F,
@@ -137,7 +137,7 @@ impl HmoAromaticity {
 
     pub(crate) fn build_calculator<F>(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         pi_atoms: &[AtomId],
         electrons_at: &F,
     ) -> Result<HmoCalculator, HmoError>
@@ -305,7 +305,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, MoleculeAst,
+        AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, Molecule,
         MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
 
@@ -329,7 +329,7 @@ mod tests {
             .collect()
     }
 
-    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> MoleculeAst {
+    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> Molecule {
         let n = specs.len();
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = (0..n)
@@ -341,27 +341,27 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         })
     }
 
-    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> Molecule {
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondForm::from_order(1)))
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         })
     }
 
-    fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
+    fn solve_hmo(model: &HmoAromaticity, ast: &Molecule) -> HmoOutput {
         let atoms: Vec<AtomId> = ast.atoms().ids().collect();
         model
             .build_calculator(ast, &atoms, &|v| match v
@@ -386,13 +386,13 @@ mod tests {
     }
 
     #[fixture]
-    fn benzene() -> MoleculeAst {
+    fn benzene() -> Molecule {
         make_ring(vec![aromatic(Element::C, 1); 6])
     }
 
     #[rustfmt::skip]
     #[fixture]
-    fn naphthalene() -> MoleculeAst {
+    fn naphthalene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 10],
             &[
@@ -404,7 +404,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn azulene() -> MoleculeAst {
+    fn azulene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 10],
             &[
@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[fixture]
-    fn pyridine() -> MoleculeAst {
+    fn pyridine() -> Molecule {
         make_ring(vec![
             aromatic(Element::N, 1),
             aromatic(Element::C, 1),
@@ -427,7 +427,7 @@ mod tests {
     }
 
     #[fixture]
-    fn pyrrole() -> MoleculeAst {
+    fn pyrrole() -> Molecule {
         make_ring(vec![
             aromatic(Element::N, 2),
             aromatic(Element::C, 1),
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[fixture]
-    fn cyclobutadiene() -> MoleculeAst {
+    fn cyclobutadiene() -> Molecule {
         make_ring(vec![aromatic(Element::C, 1); 4])
     }
 
@@ -450,7 +450,7 @@ mod tests {
     #[case::pyrrole(pyrrole(), 2.200)]
     fn test_hmo_aromaticity_delocalization_energy(
         hmo_model: HmoAromaticity,
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected_de: f64,
     ) {
         let result = solve_hmo(&hmo_model, &ast);
@@ -467,7 +467,7 @@ mod tests {
     #[case::azulene(azulene(), 11, 0.401, 0.664)]
     fn test_hmo_aromaticity_bond_orders(
         hmo_model: HmoAromaticity,
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected_count: usize,
         #[case] expected_min: f64,
         #[case] expected_max: f64,
@@ -494,7 +494,7 @@ mod tests {
     #[case::cyclobutadiene(cyclobutadiene(), 0, None)]
     fn test_hmo_aromaticity_find_from_rings(
         hmo_model: HmoAromaticity,
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
@@ -528,7 +528,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hmo_aromaticity_output(hmo_model: HmoAromaticity, benzene: MoleculeAst) {
+    fn test_hmo_aromaticity_output(hmo_model: HmoAromaticity, benzene: Molecule) {
         let output = solve_hmo(&hmo_model, &benzene);
 
         assert_eq!(output.bond_orders.len(), 6);
@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
+    fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: Molecule) {
         let atoms: Vec<AtomId> = pyridine.atoms().ids().collect();
         let calc = hmo_model
             .build_calculator(&pyridine, &atoms, &|v| match v

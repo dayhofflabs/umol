@@ -117,12 +117,12 @@ fn test_molecule_dsl_new_parsed(populated_molecule_dsl: MoleculeDsl) {
 }
 
 #[rstest]
-#[case::empty("{:atoms [] :bonds []}", MoleculeAst::default())]
-#[case::two_atoms_one_bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }))]
-#[case::atom_with_keyword(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![], ..Default::default() }))]
-#[case::bond_with_id_field(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }))]
-#[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }))]
-fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
+#[case::empty("{:atoms [] :bonds []}", Molecule::default())]
+#[case::two_atoms_one_bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }))]
+#[case::atom_with_keyword(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![], ..Default::default() }))]
+#[case::bond_with_id_field(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }))]
+#[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C); 2], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }))]
+fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: Molecule) {
     let dsl = input.parse::<MoleculeDsl>().unwrap();
     assert_eq!(dsl.into_ir(&MoleculeDefaults::default()), expected);
 }
@@ -152,7 +152,7 @@ fn test_molecule_dsl_to_edn_omits_empty_optional_sections() {
 fn test_molecule_dsl_from_edn_empty() {
     let edn = read_string("{:atoms [] :bonds []}").unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
-    assert_eq!(*dsl.ast(), MoleculeAst::default());
+    assert_eq!(*dsl.ast(), Molecule::default());
 }
 
 #[rstest]
@@ -474,7 +474,7 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
         ast.constraints_mut().push(Constraint::Molecule(c));
     }
     let dsl = MoleculeDsl::new(ast, MoleculeMetadata::default()).unwrap();
-    let reparsed = MoleculeAst::from_edn(&dsl.to_edn()).unwrap();
+    let reparsed = Molecule::from_edn(&dsl.to_edn()).unwrap();
     let surviving: Vec<MoleculeConstraint> = reparsed
         .constraints()
         .iter()
@@ -499,7 +499,7 @@ fn test_molecule_ast_from_edn_structural_bond_ref() {
     // A structural bond ref ({:atoms [0 1]}) names the bond by its endpoints, resolved against the
     // namespace's participant lookup.
     let source = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#;
-    let ast = MoleculeAst::from_edn(&read_string(source).unwrap()).unwrap();
+    let ast = Molecule::from_edn(&read_string(source).unwrap()).unwrap();
     let constraints: Vec<Constraint> = ast.constraints().iter().cloned().collect();
     assert_eq!(
         constraints,
@@ -854,7 +854,7 @@ fn test_molecule_dsl_from_edn_error(#[case] source: &str) {
     assert!(matches!(err, DeError::Custom(_)), "expected Custom, got {:?}", err);
 }
 
-/// `MoleculeAst::to_edn` emits canonical EDN with positional refs only,
+/// `Molecule::to_edn` emits canonical EDN with positional refs only,
 /// regardless of any entity keywords on the input. Parsing the canonical
 /// output back yields the same AST.
 #[rstest]
@@ -878,22 +878,22 @@ fn test_molecule_ast_to_edn_canonical_positional_refs() {
 fn test_molecule_ast_from_edn_tree_roundtrip() {
     let source = r##"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"##;
     let edn = read_string(source).unwrap();
-    let ast = MoleculeAst::from_edn(&edn).unwrap();
+    let ast = Molecule::from_edn(&edn).unwrap();
     assert_eq!(ast.atoms().count(), 2);
     assert_eq!(ast.bonds().count(), 1);
     // Render → parse → equal AST.
     let rendered = ast.to_edn();
-    let reparsed = MoleculeAst::from_edn(&rendered).unwrap();
+    let reparsed = Molecule::from_edn(&rendered).unwrap();
     assert_eq!(ast, reparsed);
 }
 
 #[rstest]
 fn test_molecule_ast_from_edn_str_fast_path() {
     let source = r##"{:atoms ["C" "O" "H"] :bonds [[0 1 "1"] [1 2 "1"]]}"##;
-    let ast = MoleculeAst::from_edn_str(source).unwrap();
+    let ast = Molecule::from_edn_str(source).unwrap();
     assert_eq!(
         ast,
-        MoleculeAst::from_edn(&read_string(source).unwrap()).unwrap()
+        Molecule::from_edn(&read_string(source).unwrap()).unwrap()
     );
 }
 
@@ -903,32 +903,32 @@ fn test_molecule_ast_from_edn_keyword_metadata() {
     // form (which has no keywords) should match the AST from the original parse.
     let source = r##"{:atoms [[:carbon "C"] [:oxygen "O"]]
                       :bonds [{:id :myb :atoms [:carbon :oxygen] :type "1"}]}"##;
-    let ast = MoleculeAst::from_edn(&read_string(source).unwrap()).unwrap();
+    let ast = Molecule::from_edn(&read_string(source).unwrap()).unwrap();
     let rendered = ast.to_edn().to_string();
     // No user-defined entity keywords leaked through. (`:a` / `:b` / `:type`
     // are bond-entry field names, not entity keywords.)
     assert!(!rendered.contains(":carbon"));
     assert!(!rendered.contains(":oxygen"));
     assert!(!rendered.contains(":myb"));
-    let reparsed = MoleculeAst::from_edn_str(&rendered).unwrap();
+    let reparsed = Molecule::from_edn_str(&rendered).unwrap();
     assert_eq!(ast, reparsed);
 }
 
 #[rstest]
 fn test_molecule_ast_from_str_to_string_roundtrip() {
     let s = r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##;
-    let ast: MoleculeAst = s.parse().unwrap();
+    let ast: Molecule = s.parse().unwrap();
     let rendered = ast.to_string();
-    let back: MoleculeAst = rendered.parse().unwrap();
+    let back: Molecule = rendered.parse().unwrap();
     assert_eq!(back, ast);
 }
 
 #[rstest]
 fn test_molecule_ast_to_edn_roundtrip() {
     let s = r##"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"##;
-    let ast: MoleculeAst = s.parse().unwrap();
+    let ast: Molecule = s.parse().unwrap();
     let edn = ast.to_edn();
-    let back = MoleculeAst::from_edn(&edn).unwrap();
+    let back = Molecule::from_edn(&edn).unwrap();
     assert_eq!(back, ast);
 }
 

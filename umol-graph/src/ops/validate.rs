@@ -1,4 +1,4 @@
-//! Validators over a resolved `MoleculeAst`, grouped by tier:
+//! Validators over a resolved `Molecule`, grouped by tier:
 //! - tier 1 (integrity): entity-structure shape, constraint cross-checks (umol-graph-ir);
 //! - tier 2 (invariants): electron-count and spin physics;
 //! - tier 3 (conformance): valence table / atom-typing, aromaticity, stereo (model-carrying).
@@ -30,7 +30,7 @@ use umol_graph_core::{
 use umol_graph_ir::ir::{
     AtomForm, ConstraintContradiction, ConstraintError, ConstraintValidateConfig,
     ConstraintValidator, EntityStructureContradiction, EntityStructureError,
-    EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
+    EntityStructureValidator, Molecule, SubstructureMatchAlgorithm,
 };
 use umol_utils::solution::Solution;
 pub use valence::{
@@ -72,7 +72,7 @@ impl Default for ValidateConfig {
 
 #[derive(Clone, Debug)]
 pub struct Validator<'a> {
-    // Integrity validators: MoleculeAst internal data consistency.
+    // Integrity validators: Molecule internal data consistency.
     pub entity_structure: EntityStructureValidator,
     pub constraint: ConstraintValidator,
     // Invariants validators: physical, model-independent invariants.
@@ -143,7 +143,7 @@ impl<'a> Validator<'a> {
     /// Integrity: entity-structure shape and constraint cross-checks.
     pub fn validate_integrity(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
         match self.entity_structure.validate(ast)? {
@@ -162,7 +162,7 @@ impl<'a> Validator<'a> {
     /// Invariants: electron count and spin coupling.
     pub fn validate_invariants(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
         match self.valence_invariants.validate(ast)? {
@@ -182,7 +182,7 @@ impl<'a> Validator<'a> {
     /// aromaticity, and stereo.
     pub fn validate_conformance(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
         match self.valence_conformance.validate(ast)? {
@@ -206,7 +206,7 @@ impl<'a> Validator<'a> {
     /// All validators in order: integrity → invariants → conformance.
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
         match self.validate_integrity(ast)? {
@@ -266,7 +266,7 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomForm, AtomId, Constraint, DativeBondId, ElementForm, Entity,
-        IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
+        IncidenceConstraintContradiction, Molecule, MoleculeConstraint,
         MoleculeConstraintContradiction, MoleculeEntries, NumForm, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
         StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId, StereoKind,
@@ -306,7 +306,7 @@ mod tests {
     #[rstest]
     #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#))]
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))]
-    fn test_validator_new(#[case] molecule: MoleculeAst) {
+    fn test_validator_new(#[case] molecule: Molecule) {
         let model = ChemistryModel::default();
         assert_eq!(
             Validator::new(&model).validate(&molecule),
@@ -415,7 +415,7 @@ mod tests {
     #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
     #[case::invalid_spin(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
@@ -437,7 +437,7 @@ mod tests {
         )),
     )]
     #[case::valid_coupling_not_yet_evaluated(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsForm::from((2_u8, 3_u8)),
@@ -447,7 +447,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_coupling(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)),
@@ -471,7 +471,7 @@ mod tests {
         )),
     )]
     fn test_validator_validate(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
         let model = ChemistryModel::default();
@@ -483,7 +483,7 @@ mod tests {
 
     #[rstest]
     #[case::empty(
-        MoleculeAst::default(),
+        Molecule::default(),
         Ok(Solution::Determined(())),
     )]
     #[case::without_constraints(
@@ -491,7 +491,7 @@ mod tests {
         Ok(Solution::Determined(())),
     )]
     #[case::contradiction(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             constraints: Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)).into(),
             ..Default::default()
@@ -505,7 +505,7 @@ mod tests {
     )]
     #[case::error(
         {
-            let mut molecule = MoleculeAst::from_entries(MoleculeEntries {
+            let mut molecule = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 ..Default::default()
             });
@@ -519,7 +519,7 @@ mod tests {
         })),
     )]
     fn test_validator_validate_integrity(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Result<Solution<(), ValidatorContradiction>, ValidatorError>,
     ) {
         let model = ChemistryModel::default();
@@ -536,7 +536,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::partial_spin(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
@@ -553,7 +553,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_spin(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
@@ -575,7 +575,7 @@ mod tests {
         )),
     )]
     #[case::valid_coupling_not_yet_evaluated(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsForm::from((2_u8, 3_u8)),
@@ -585,7 +585,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::invalid_coupling(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             constraints: Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
                 atoms: None,
                 unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)),
@@ -603,7 +603,7 @@ mod tests {
         )),
     )]
     fn test_validator_validate_invariants(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
         let model = ChemistryModel::default();
@@ -645,7 +645,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     fn test_validator_validate_conformance(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
         let original = molecule.clone();
@@ -732,7 +732,7 @@ mod tests {
             count in 0_u8..5,
             multiplicity in 0_u8..8,
         ) {
-            let molecule = MoleculeAst::from_entries(MoleculeEntries {
+            let molecule = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm {
                     element: ElementForm::Lit(Element::C),
                     charge: NumForm::Lit(0),

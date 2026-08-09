@@ -9,7 +9,7 @@ use pyo3::types::PyDict;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondConstraintForm as GraphIrBondConstraintForm,
     BondForm as GraphIrBondForm, BondId as GraphIrBondId, BondUpdate as GraphIrBondUpdate,
-    MoleculeAst as GraphIrMoleculeAst,
+    Molecule as GraphIrMolecule,
 };
 
 use crate::constraint::bond::{
@@ -294,7 +294,7 @@ pub struct BondView {
 }
 
 impl BondView {
-    fn bond<'a>(&self, molecule: &'a GraphIrMoleculeAst) -> PyResult<&'a GraphIrBondForm> {
+    fn bond<'a>(&self, molecule: &'a GraphIrMolecule) -> PyResult<&'a GraphIrBondForm> {
         molecule
             .bonds()
             .get(self.id)
@@ -423,7 +423,7 @@ impl BondView {
 
 /// Resolve a possibly-negative Python index (negative counts from the end) into an
 /// existing bond id, or `IndexError`.
-fn resolve_bond_index(molecule: &GraphIrMoleculeAst, index: isize) -> PyResult<GraphIrBondId> {
+fn resolve_bond_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<GraphIrBondId> {
     let count = molecule.bonds().count();
     let resolved = if index < 0 {
         index + count as isize
@@ -554,7 +554,7 @@ mod tests {
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::C),
                 GraphIrAtomForm::from_element(ChemElement::C),
@@ -1471,7 +1471,7 @@ mod tests {
     fn test_bond_views_of() {
         Python::attach(|py| {
             // three carbons, one bond 0–1; atom 2 is isolated
-            let molecule = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+            let molecule = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),
                     GraphIrAtomForm::from_element(ChemElement::C),

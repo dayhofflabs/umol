@@ -1,6 +1,6 @@
 //! Resolved edit vocabulary: the `Delta` counterpart of the deferred `Edit`.
 //!
-//! A `Delta` is one resolved edit over a `MoleculeAst`, referencing entities by stable
+//! A `Delta` is one resolved edit over a `Molecule`, referencing entities by stable
 //! ids in the molecule's own id space (no positional `New`). The vocabulary is closed
 //! under inversion — every delta's inverse is another delta.
 

@@ -22,7 +22,7 @@ use umol_graph_core::{
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
     ElectronCountsForm, EntityStructureContradiction, EntityStructureError,
-    EntityStructureValidator, MoleculeAst, NumForm,
+    EntityStructureValidator, Molecule, NumForm,
 };
 use umol_utils::solution::Solution;
 
@@ -251,7 +251,7 @@ impl Kekulizer {
 impl Transformer for Kekulizer {
     type Error = KekulizerError;
 
-    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<(), KekulizerError> {
+    fn transform_into(&self, ast: &mut Molecule) -> Result<(), KekulizerError> {
         if ast.aromatic_systems().count() == 0 {
             return Ok(());
         }
@@ -319,15 +319,12 @@ impl Transformer for Kekulizer {
         Ok(())
     }
 
-    fn generate_all<'a>(
-        &'a self,
-        ast: &'a MoleculeAst,
-    ) -> Box<dyn Iterator<Item = MoleculeAst> + 'a> {
+    fn generate_all<'a>(&'a self, ast: &'a Molecule) -> Box<dyn Iterator<Item = Molecule> + 'a> {
         Box::new(self.transform(ast).ok().into_iter())
     }
 }
 
-fn validate_localized_candidate(candidate: &MoleculeAst) -> Result<(), KekulizerError> {
+fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizerError> {
     match EntityStructureValidator
         .validate(candidate)
         .map_err(KekulizerError::PostLocalizationEntityStructureError)?
@@ -374,7 +371,7 @@ struct SystemPlan {
 
 impl Kekulizer {
     /// Build the per-system matching plan against an immutable AST.
-    fn plan_systems(&self, ast: &MoleculeAst) -> Result<Vec<SystemPlan>, KekulizerError> {
+    fn plan_systems(&self, ast: &Molecule) -> Result<Vec<SystemPlan>, KekulizerError> {
         let mut plans = Vec::with_capacity(ast.aromatic_systems().count());
         for view in ast.aromatic_systems().iter() {
             let system_idx = view.id;
@@ -549,7 +546,7 @@ mod tests {
     use rstest::*;
     use umol_chem::error::SpinStateError;
     use umol_chem::spin::SpinMultiplicity;
-    use umol_graph_ir::ir::{AromaticSystemId, AtomId, MoleculeAst};
+    use umol_graph_ir::ir::{AromaticSystemId, AtomId, Molecule};
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
@@ -600,10 +597,7 @@ mod tests {
             mode: MatchingInputMode::OneMobileExposure,
         }
     )]
-    fn test_matching_input_from_system(
-        #[case] input: MoleculeAst,
-        #[case] expected: MatchingInput,
-    ) {
+    fn test_matching_input_from_system(#[case] input: Molecule, #[case] expected: MatchingInput) {
         let system = input.aromatic_systems().iter().next().unwrap();
         assert_eq!(MatchingInput::from_system(system), Ok(expected));
     }
@@ -660,7 +654,7 @@ mod tests {
         KekulizerError::MixedExposureDemand(AromaticSystemId(0))
     )]
     fn test_matching_input_from_system_error(
-        #[case] input: MoleculeAst,
+        #[case] input: Molecule,
         #[case] expected: KekulizerError,
     ) {
         let system = input.aromatic_systems().iter().next().unwrap();
@@ -714,9 +708,9 @@ mod tests {
         mol_dsl_ground!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
     )]
     fn test_kekulizer_transform_into(
-        #[case] input: MoleculeAst,
+        #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
-        #[case] expected: MoleculeAst,
+        #[case] expected: Molecule,
     ) {
         let mut ast = input;
         Kekulizer::new(KekulizationConfig::default(), node_order)
@@ -727,7 +721,7 @@ mod tests {
 
     #[rstest]
     #[case::kekule_benzene( mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
-    fn test_kekulizer_transform_into_identity(#[case] input: MoleculeAst) {
+    fn test_kekulizer_transform_into_identity(#[case] input: Molecule) {
         let mut ast = input.clone();
         Kekulizer::new(KekulizationConfig::default(), (0..6).map(AtomId).collect())
             .transform_into(&mut ast)
@@ -773,7 +767,7 @@ mod tests {
         )
     )]
     fn test_kekulizer_transform_into_error(
-        #[case] input: MoleculeAst,
+        #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizerError,
     ) {
@@ -796,7 +790,7 @@ mod tests {
         KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
     )]
     fn test_kekulizer_transform_into_matching_error(
-        #[case] input: MoleculeAst,
+        #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizerError,
     ) {
@@ -909,7 +903,7 @@ mod tests {
         }]
     )]
     fn test_kekulizer_plan_systems(
-        #[case] input: MoleculeAst,
+        #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
         #[case] expected: Vec<SystemPlan>,
     ) {
@@ -934,7 +928,7 @@ mod tests {
         }
     )]
     fn test_kekulizer_plan_systems_error(
-        #[case] input: MoleculeAst,
+        #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizerError,
     ) {

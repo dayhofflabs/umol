@@ -12,7 +12,7 @@ use umol_graph_core::Correspondence;
 
 use super::correspondence::MoleculeCorrespondence;
 use super::id::AtomId;
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
 use super::reaction::ReactionAst;
@@ -21,23 +21,23 @@ use super::reaction::ReactionAst;
 /// correspondence between them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionDerivation {
-    lhs: MoleculeAst,
-    rhs: MoleculeAst,
+    lhs: Molecule,
+    rhs: Molecule,
     comap: MoleculeCorrespondence,
 }
 
 impl ReactionDerivation {
-    pub(crate) fn new(lhs: MoleculeAst, rhs: MoleculeAst, comap: MoleculeCorrespondence) -> Self {
+    pub(crate) fn new(lhs: Molecule, rhs: Molecule, comap: MoleculeCorrespondence) -> Self {
         Self { lhs, rhs, comap }
     }
 
     /// The molecule the rule was matched into.
-    pub fn lhs(&self) -> &MoleculeAst {
+    pub fn lhs(&self) -> &Molecule {
         &self.lhs
     }
 
     /// The molecule produced by the firing.
-    pub fn rhs(&self) -> &MoleculeAst {
+    pub fn rhs(&self) -> &Molecule {
         &self.rhs
     }
 
@@ -98,8 +98,8 @@ mod tests {
 
     /// A `lhs ⇒ rhs` derivation over C-C, bond order 1 → 2, with total atom correspondence.
     #[fixture]
-    fn derivation_parts() -> (MoleculeAst, MoleculeAst, MoleculeCorrespondence) {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+    fn derivation_parts() -> (Molecule, Molecule, MoleculeCorrespondence) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -107,7 +107,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+        let rhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -127,7 +127,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_new(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let expected = ReactionDerivation {
@@ -140,7 +140,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_new_independence(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (mut lhs, rhs, comap) = derivation_parts;
         let expected = lhs.clone();
@@ -151,7 +151,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_lhs(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let expected = lhs.clone();
@@ -161,7 +161,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_rhs(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let expected = rhs.clone();
@@ -171,7 +171,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_comap(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let expected = comap.clone();
@@ -181,7 +181,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_atom_correspondence(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let derivation = ReactionDerivation::new(lhs, rhs, comap);
@@ -193,7 +193,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_to_reaction(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let expected_lhs = lhs.clone();
@@ -215,7 +215,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_reverse(
-        derivation_parts: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
     ) {
         let (lhs, rhs, comap) = derivation_parts;
         let expected = ReactionDerivation {
@@ -228,7 +228,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_derivation_chain() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -236,7 +236,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let mid = MoleculeAst::from_entries(MoleculeEntries {
+        let mid = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -244,7 +244,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+        let rhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),

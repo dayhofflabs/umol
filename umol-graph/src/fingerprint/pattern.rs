@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 
 use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 use umol_graph_ir::ir::{
-    AsLit, BondId, MoleculeAst, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+    AsLit, BondId, Molecule, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 use umol_graph_ir::mol_dsl;
 
@@ -60,7 +60,7 @@ impl PatternFingerprinter {
     }
 
     /// `mol` must be ground. Returns the folded pattern fingerprint.
-    pub fn fingerprint(&self, mol: &MoleculeAst) -> Result<BitFp, FingerprintError> {
+    pub fn fingerprint(&self, mol: &Molecule) -> Result<BitFp, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
         }
@@ -115,7 +115,7 @@ impl PatternFingerprinter {
 /// keying, so they are derived once at first use rather than per fingerprint.
 struct PatternTemplate {
     index: u32,
-    pattern: MoleculeAst,
+    pattern: Molecule,
     atom_count: u32,
     bond_count: u32,
 }

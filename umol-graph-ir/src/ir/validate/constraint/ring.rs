@@ -9,7 +9,7 @@ use super::super::super::constraint::{
 };
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId, DativeBondId};
-use super::super::super::molecule::MoleculeAst;
+use super::super::super::molecule::Molecule;
 use super::super::super::ring::{RingConfig, RingModel};
 use super::super::super::traits::Lattice;
 use super::super::super::value::NumForm;
@@ -24,7 +24,7 @@ impl RingConstraintValidator {
     /// Validate every inline ring constraint against the fixed Relevant ring projection.
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
         if !uses_ring_constraints(ast) {
@@ -83,7 +83,7 @@ impl RingConstraintValidator {
     /// Validate all inline ring constraints on one molecule atom.
     pub fn validate_molecule_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom_id: AtomId,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
@@ -111,7 +111,7 @@ impl RingConstraintValidator {
     /// Validate all inline ring constraints on one molecule bond.
     pub fn validate_molecule_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: BondId,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
@@ -139,7 +139,7 @@ impl RingConstraintValidator {
     /// Validate inline ring constraints on one molecule dative bond.
     pub fn validate_molecule_dative_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: DativeBondId,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
         let bond = ast
@@ -271,7 +271,7 @@ fn conjunction(
     }
 }
 
-fn uses_ring_constraints(ast: &MoleculeAst) -> bool {
+fn uses_ring_constraints(ast: &Molecule) -> bool {
     ast.atoms()
         .iter()
         .any(|atom| atom.constraints().iter().any(is_atom_ring_constraint))

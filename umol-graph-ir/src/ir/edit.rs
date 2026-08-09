@@ -1926,7 +1926,7 @@ mod tests {
         RingScope, StereoAtomConstraintsForm, StereoBondConstraintsForm, StereogenicityForm,
         SubPatternAnchor,
     };
-    use super::super::molecule::{MoleculeAst, MoleculeEntries};
+    use super::super::molecule::{Molecule, MoleculeEntries};
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::spin::UnpairedElectronsUpdate;
     use super::super::stereo::{
@@ -2676,7 +2676,7 @@ mod tests {
         );
 
         let expected = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![current.clone()],
             ..Default::default()
         });
@@ -2767,7 +2767,7 @@ mod tests {
         );
 
         let expected = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(), AtomForm::default()],
             bonds: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
@@ -2837,7 +2837,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(), AtomForm::default()],
             dative: vec![(vec![AtomId(0)], AtomId(1), current.clone())],
             ..Default::default()
@@ -2920,7 +2920,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::default(),
                 AtomForm::default(),
@@ -3010,7 +3010,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::default(),
                 AtomForm::default(),
@@ -3090,7 +3090,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(), AtomForm::default()],
             noncovalent: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
@@ -3167,7 +3167,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 5],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -3247,7 +3247,7 @@ mod tests {
         assert_eq!(edits.as_slice(), expected);
 
         let expected_ast = current.update(&update);
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 6],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             stereo_bonds: vec![(
@@ -3490,12 +3490,12 @@ mod tests {
     #[rstest]
     #[case::unanchored(
         Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()),
+            anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()),
         }),
         vec![],
         ConstraintEdit {
             constraint: Constraint::Molecule(MoleculeConstraint::SubPattern {
-                anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()),
+                anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()),
             }),
             atoms: vec![], bonds: vec![], dative_bonds: vec![], aromatic_systems: vec![],
             multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],
@@ -3506,7 +3506,7 @@ mod tests {
         anchor.push_atom(AtomId(7), AtomId(2));
         anchor.push_bond(BondId(4), BondId(3));
         Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor, pattern: Box::new(MoleculeAst::default()),
+            anchor, pattern: Box::new(Molecule::default()),
         })
     }, vec![
         (Entity::Atom(AtomId(7)), EntityHandle::Atom(AtomHandle::New(0))),
@@ -3517,7 +3517,7 @@ mod tests {
             anchor.push_atom(AtomId(0), AtomId(2));
             anchor.push_bond(BondId(0), BondId(3));
             Constraint::Molecule(MoleculeConstraint::SubPattern {
-                anchor, pattern: Box::new(MoleculeAst::default()),
+                anchor, pattern: Box::new(Molecule::default()),
             })
         },
         atoms: vec![AtomHandle::New(0)], bonds: vec![BondHandle::New(1)], dative_bonds: vec![], aromatic_systems: vec![],

@@ -37,7 +37,7 @@ pub trait Metadata {
     fn entity(&self, keyword: &str) -> Option<Entity>;
 }
 
-/// Persistent surface-form metadata paired with a `MoleculeAst`.
+/// Persistent surface-form metadata paired with a `Molecule`.
 ///
 /// Records entity keywords and atom aliases. `MoleculeDsl` keeps both fields
 /// private and validates their coherence during checked construction.

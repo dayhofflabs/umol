@@ -10,7 +10,7 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondId, EntitySpan, MoleculeAst, MoleculeCorrespondence, MoleculeEntries,
+    AtomForm, AtomId, BondId, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries,
     ReactionAst, ReactionSpanAst, ReactionSpanEntries, StereoLigand,
 };
 
@@ -60,8 +60,8 @@ fn lhs_anchored<T>(entries: impl IntoIterator<Item = (T, SpanPresence)>) -> Vec<
 
 #[derive(Debug)]
 struct ReactionSides {
-    lhs: MoleculeAst,
-    rhs: MoleculeAst,
+    lhs: Molecule,
+    rhs: Molecule,
     atom_correspondence: Correspondence<AtomId>,
     projected_rhs_atoms: Correspondence<AtomId>,
 }
@@ -78,7 +78,7 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
         ]);
         let atom_count = lhs_entries.atoms.len();
         let reverse_atom = |id: AtomId| AtomId((atom_count - 1 - id.0 as usize) as u32);
-        let lhs = MoleculeAst::from_entries(lhs_entries.clone());
+        let lhs = Molecule::from_entries(lhs_entries.clone());
 
         let MoleculeEntries {
             atoms,
@@ -92,7 +92,7 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
             constraints,
         } = lhs_entries;
         debug_assert!(constraints.is_empty());
-        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+        let rhs = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.into_iter().rev().collect(),
             bonds: bonds
                 .into_iter()

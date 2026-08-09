@@ -7,7 +7,7 @@ use thiserror::Error;
 use umol_chem::error::SpinStateError;
 use umol_chem::spin::SpinState;
 use umol_graph_ir::ir::{
-    AromaticSystemId, AsLit, AtomForm, AtomId, BondId, Constraint, Lattice, MoleculeAst,
+    AromaticSystemId, AsLit, AtomForm, AtomId, BondId, Constraint, Lattice, Molecule,
     MoleculeConstraint, MulticenterBondId, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -46,7 +46,7 @@ pub enum SpinInvariantsError {}
 impl SpinInvariantsValidator {
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
         let mut any_undetermined = false;
 
@@ -377,7 +377,7 @@ mod tests {
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate(&MoleculeAst::from_entries(entries))
+                .validate(&Molecule::from_entries(entries))
                 .unwrap(),
             expected,
         );
@@ -529,7 +529,7 @@ mod tests {
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate(&MoleculeAst::from_entries(entries))
+                .validate(&Molecule::from_entries(entries))
                 .unwrap(),
             expected,
         );
@@ -552,7 +552,7 @@ mod tests {
                 2 => UnpairedElectronsForm::from((2_u8, 2_u8)),
                 _ => unreachable!("strategy only generates states 0..3"),
             };
-            let molecule = MoleculeAst::from_entries(MoleculeEntries {
+            let molecule = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm { unpaired_electrons: state_pair(atom_state), ..Default::default() },
                     AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },

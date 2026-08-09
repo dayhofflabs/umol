@@ -11,13 +11,13 @@ use super::entity::{Entity, EntityKind};
 use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
 use super::stereo::{coset_apply_permutation, StereoCoset, StereoKind, Stereogenicity, Topicity};
 use super::traits::AsLit;
 
-/// Configuration for [`MoleculeAst::graph_symmetry`].
+/// Configuration for [`Molecule::graph_symmetry`].
 pub struct GraphSymmetryConfig<C: MoleculeColoring> {
     pub coloring: C,
     pub iterate_to_fixpoint: bool,
@@ -37,7 +37,7 @@ pub struct GraphSymmetry {
     automorphism_algorithm: AutomorphismAlgorithm,
 }
 
-impl MoleculeAst {
+impl Molecule {
     /// Build the molecule's graded graph-automorphism symmetry under `cfg.coloring`.
     pub fn graph_symmetry<C: MoleculeColoring>(
         &self,
@@ -315,7 +315,7 @@ pub struct StereoSymmetry {
     coset: StereoCoset,
 }
 
-impl MoleculeAst {
+impl Molecule {
     /// Project the molecule symmetry onto a stereo atom's ligand positions.
     pub fn stereo_atom_symmetry(&self, gs: &GraphSymmetry, id: StereoAtomId) -> StereoSymmetry {
         let site = self
@@ -592,12 +592,12 @@ mod tests {
     }
 
     #[fixture]
-    fn benzene_ring() -> MoleculeAst {
+    fn benzene_ring() -> Molecule {
         let atoms = vec![AtomForm::from_element(Element::C); 6];
         let bonds = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -605,13 +605,13 @@ mod tests {
     }
 
     // A tetrahedral center on atom 0 with the four given peripheral elements.
-    fn tetrahedral(peripherals: [Element; 4]) -> MoleculeAst {
+    fn tetrahedral(peripherals: [Element; 4]) -> Molecule {
         let mut atoms = vec![AtomForm::from_element(Element::C)];
         atoms.extend(peripherals.into_iter().map(AtomForm::from_element));
         let bonds = (1..=4)
             .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_atoms: vec![(
@@ -629,7 +629,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_graph_symmetry_constitutional(benzene_ring: MoleculeAst) {
+    fn test_molecule_ast_graph_symmetry_constitutional(benzene_ring: Molecule) {
         let symmetry = benzene_ring.graph_symmetry(&config());
         assert_eq!(
             symmetry.automorphism_algorithm,
@@ -669,7 +669,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_symmetry_site_stabilizer(benzene_ring: MoleculeAst) {
+    fn test_graph_symmetry_site_stabilizer(benzene_ring: Molecule) {
         let symmetry = benzene_ring.graph_symmetry(&config());
         // Every stabilizer generator fixes the distinguished site.
         let generators = symmetry.site_stabilizer(NodeId(0));
@@ -677,7 +677,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_graph_symmetry_is_chiral_no_stereo(benzene_ring: MoleculeAst) {
+    fn test_graph_symmetry_is_chiral_no_stereo(benzene_ring: Molecule) {
         // No stereocenters ⇒ trivially achiral despite no improper generators.
         assert!(!benzene_ring.graph_symmetry(&config()).is_chiral());
     }
@@ -741,7 +741,7 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_stereo_bond_symmetry() {
         // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
-        let mol = MoleculeAst::from_entries(MoleculeEntries {
+        let mol = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),

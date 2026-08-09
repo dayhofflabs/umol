@@ -1221,8 +1221,7 @@ mod tests {
         AromaticSystemConstraintForm as GraphIrAromaticSystemConstraintForm,
         AtomConstraintForm as GraphIrAtomConstraintForm,
         BondConstraintForm as GraphIrBondConstraintForm,
-        DativeBondConstraintForm as GraphIrDativeBondConstraintForm,
-        MoleculeAst as GraphIrMoleculeAst,
+        DativeBondConstraintForm as GraphIrDativeBondConstraintForm, Molecule as GraphIrMolecule,
         MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
         NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
         NumForm as GraphIrNumForm, StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
@@ -1433,7 +1432,7 @@ mod tests {
             anchor.push_atom(GraphIrAtomId(7), GraphIrAtomId(0));
             anchor
         },
-        pattern: Box::new(GraphIrMoleculeAst::new()),
+        pattern: Box::new(GraphIrMolecule::new()),
     })]
     fn test_molecule_constraint_roundtrip(#[case] constraint: GraphIrMoleculeConstraint) {
         Python::attach(|py| {
@@ -1660,7 +1659,7 @@ match node:
             GraphIrConstraint::Or(Vec::new()),
             GraphIrConstraint::Or(Vec::new()),
         ]);
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         *molecule.constraints_mut() = expected.clone();
 
         Python::attach(|py| {
@@ -1779,7 +1778,7 @@ match node:
                 Constraints::from_inner(GraphIrConstraints::from(vec![from_container.clone()])),
             )
             .unwrap();
-            let mut molecule = GraphIrMoleculeAst::new();
+            let mut molecule = GraphIrMolecule::new();
             molecule.constraints_mut().push(from_view.clone());
             let view = Py::new(
                 py,
@@ -1929,7 +1928,7 @@ match node:
 
     #[rstest]
     fn test_constraints_view_repr() {
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule
             .constraints_mut()
             .push(GraphIrConstraint::And(Vec::new()));
@@ -1949,7 +1948,7 @@ match node:
     fn test_constraints_view_append() {
         let constraint =
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule.constraints_mut().push(constraint.clone());
 
         Python::attach(|py| {
@@ -1969,7 +1968,7 @@ match node:
 
     #[rstest]
     fn test_constraints_view_clear() {
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule
             .constraints_mut()
             .push(GraphIrConstraint::And(Vec::new()));
@@ -1994,7 +1993,7 @@ match node:
         let from_view = GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(Vec::new())));
         let from_entries =
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-        let mut target_molecule = GraphIrMoleculeAst::new();
+        let mut target_molecule = GraphIrMolecule::new();
         target_molecule.constraints_mut().push(initial.clone());
 
         Python::attach(|py| {
@@ -2005,7 +2004,7 @@ match node:
                 Constraints::from_inner(GraphIrConstraints::from(vec![from_container.clone()])),
             )
             .unwrap();
-            let mut source_molecule = GraphIrMoleculeAst::new();
+            let mut source_molecule = GraphIrMolecule::new();
             source_molecule.constraints_mut().push(from_view.clone());
             let source_view = Py::new(
                 py,
@@ -2040,7 +2039,7 @@ match node:
     #[rstest]
     fn test_constraints_view_update_self() {
         let entry = GraphIrConstraint::Or(Vec::new());
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule.constraints_mut().push(entry.clone());
 
         Python::attach(|py| {
@@ -2062,7 +2061,7 @@ match node:
     #[rstest]
     fn test_constraints_view_len() {
         Python::attach(|py| {
-            let owner = Py::new(py, MoleculeAst::from_rust(GraphIrMoleculeAst::new())).unwrap();
+            let owner = Py::new(py, MoleculeAst::from_rust(GraphIrMolecule::new())).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
             assert_eq!(view.__len__(py).unwrap(), 0);
 
@@ -2085,7 +2084,7 @@ match node:
         GraphIrMoleculeConstraint::Connected { atoms: None },
     ))]
     fn test_constraints_view_getitem(#[case] index: isize, #[case] expected: GraphIrConstraint) {
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule.constraints_mut().push(GraphIrConstraint::Atom(
             GraphIrAtomId(1),
             GraphIrAtomConstraintForm::degree(2),
@@ -2106,7 +2105,7 @@ match node:
     #[case::positive(1)]
     #[case::negative(-2)]
     fn test_constraints_view_getitem_error(#[case] index: isize) {
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule
             .constraints_mut()
             .push(GraphIrConstraint::And(Vec::new()));
@@ -2126,7 +2125,7 @@ match node:
     fn test_constraints_view_iter() {
         let first = GraphIrConstraint::And(Vec::new());
         let second = GraphIrConstraint::Or(Vec::new());
-        let mut molecule = GraphIrMoleculeAst::new();
+        let mut molecule = GraphIrMolecule::new();
         molecule.constraints_mut().push(first.clone());
         molecule.constraints_mut().push(second.clone());
 

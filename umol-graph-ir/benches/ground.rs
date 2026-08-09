@@ -1,4 +1,4 @@
-//! `MoleculeAst::is_ground()` benchmarks.
+//! `Molecule::is_ground()` benchmarks.
 //!
 //! Exercises the groundness check — a hot path during Molecule construction
 //! and in matcher inner loops — across three representative shapes:
@@ -18,8 +18,8 @@ use umol_chem::element::Element;
 use umol_edn::FromEdn;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    ArithExpr, AtomForm, AtomId, BondForm, ElementForm, IntoIr, IsotopeMassForm, MemOp,
-    MoleculeAst, MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsForm,
+    ArithExpr, AtomForm, AtomId, BondForm, ElementForm, IntoIr, IsotopeMassForm, MemOp, Molecule,
+    MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsForm,
 };
 
 #[path = "fixtures.rs"]
@@ -27,13 +27,13 @@ use umol_graph_ir::ir::{
 mod fixtures;
 use fixtures::MOL_INDOLE;
 
-fn indole_ground() -> MoleculeAst {
+fn indole_ground() -> Molecule {
     let dsl = MoleculeDsl::from_edn_str(MOL_INDOLE).unwrap();
     let cfg = MoleculeDefaults::zeroed();
     dsl.into_ir(&cfg)
 }
 
-fn indole_with_bool_expr_fields() -> MoleculeAst {
+fn indole_with_bool_expr_fields() -> Molecule {
     // Realistic pattern: take the ground indole, then splat a few atom
     // fields with boolean-domain ValueExpr patterns (which short-circuit via
     // is_arithmetic()).
@@ -53,7 +53,7 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
     ast
 }
 
-fn arith_expr_heavy() -> MoleculeAst {
+fn arith_expr_heavy() -> Molecule {
     // Every numeric field is an arithmetic `ArithExpr` of depth 3 — a
     // non-ground symbolic value, so `is_ground` (literal-only) returns false.
     let arith = || {
@@ -95,7 +95,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)
         })
         .collect();
-    MoleculeAst::from_entries(MoleculeEntries {
+    Molecule::from_entries(MoleculeEntries {
         atoms,
         bonds,
         ..Default::default()

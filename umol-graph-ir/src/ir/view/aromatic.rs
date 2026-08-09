@@ -9,23 +9,23 @@ use super::super::constraint::AromaticSystemConstraintsForm;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
 use super::atom::AtomView;
 use super::bond::BondView;
 
-/// Namespace accessor for aromatic-system views on a `MoleculeAst`.
+/// Namespace accessor for aromatic-system views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
     aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemForm>,
 }
 
 impl<'a> AromaticSystemViews<'a> {
     pub(crate) fn new(
-        molecule: &'a MoleculeAst,
+        molecule: &'a Molecule,
         aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemForm>,
     ) -> Self {
         Self {
@@ -173,7 +173,7 @@ pub struct AromaticSystemView<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
     pub ast: &'a AromaticSystemForm,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> AromaticSystemView<'a> {
@@ -355,14 +355,14 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::value::NumForm;
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -393,17 +393,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_views_count(molecule: MoleculeAst) {
+    fn test_aromatic_system_views_count(molecule: Molecule) {
         assert_eq!(molecule.aromatic_systems().count(), 1);
     }
 
     #[rstest]
-    fn test_aromatic_system_views_ids(molecule: MoleculeAst) {
-        assert_exact_size_by(
-            MoleculeAst::default().aromatic_systems().ids(),
-            vec![],
-            |id| id,
-        );
+    fn test_aromatic_system_views_ids(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().aromatic_systems().ids(), vec![], |id| {
+            id
+        });
         assert_exact_size_by(
             molecule.aromatic_systems().ids(),
             vec![AromaticSystemId(0)],
@@ -412,9 +410,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_views_iter(molecule: MoleculeAst) {
+    fn test_aromatic_system_views_iter(molecule: Molecule) {
         assert_exact_size_by(
-            MoleculeAst::default().aromatic_systems().iter(),
+            Molecule::default().aromatic_systems().iter(),
             vec![],
             |view| (view.id, view.atom_ids().collect::<Vec<_>>()),
         );
@@ -429,7 +427,7 @@ mod tests {
     #[case::participant(AtomId(0), vec![AromaticSystemId(0)])]
     #[case::uninvolved(AtomId(3), vec![])]
     fn test_aromatic_system_views_incident(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<AromaticSystemId>,
     ) {
@@ -449,7 +447,7 @@ mod tests {
     #[case::present(AromaticSystemId(0), true)]
     #[case::absent(AromaticSystemId(99), false)]
     fn test_aromatic_system_views_contains(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] id: AromaticSystemId,
         #[case] expected: bool,
     ) {
@@ -457,7 +455,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_views_get(molecule: MoleculeAst) {
+    fn test_aromatic_system_views_get(molecule: Molecule) {
         let res = molecule.aromatic_systems().get(AromaticSystemId(0));
         assert!(res.is_some());
         let view = res.unwrap();
@@ -469,13 +467,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_views_get_none(molecule: MoleculeAst) {
+    fn test_aromatic_system_views_get_none(molecule: Molecule) {
         let res = molecule.aromatic_systems().get(AromaticSystemId(99));
         assert!(res.is_none());
     }
 
     #[rstest]
-    fn test_aromatic_system_view_atom_ids(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_atom_ids(molecule: Molecule) {
         assert_exact_size_by(
             molecule.aromatic_system(AromaticSystemId(0)).atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -484,7 +482,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_atoms(molecule: Molecule) {
         assert_exact_size_by(
             molecule.aromatic_system(AromaticSystemId(0)).atoms(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -493,7 +491,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_bond_ids(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_bond_ids(molecule: Molecule) {
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
@@ -504,7 +502,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_bonds(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_bonds(molecule: Molecule) {
         let ids: Vec<BondId> = molecule
             .aromatic_system(AromaticSystemId(0))
             .bonds()
@@ -514,7 +512,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_induced_subgraph(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_induced_subgraph(molecule: Molecule) {
         let correspondence = molecule
             .aromatic_system(AromaticSystemId(0))
             .induced_subgraph();
@@ -533,7 +531,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_electron_count(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_electron_count(molecule: Molecule) {
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
@@ -543,7 +541,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_atom_count(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_atom_count(molecule: Molecule) {
         assert_eq!(
             molecule.aromatic_system(AromaticSystemId(0)).atom_count(),
             3
@@ -551,7 +549,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_bond_count(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_bond_count(molecule: Molecule) {
         assert_eq!(
             molecule.aromatic_system(AromaticSystemId(0)).bond_count(),
             2
@@ -563,7 +561,7 @@ mod tests {
     #[case::all_in(vec![AtomId(0), AtomId(1), AtomId(2)], vec![AtomId(0), AtomId(1), AtomId(2)])]
     #[case::disjoint(vec![AtomId(3)], vec![])]
     fn test_aromatic_system_view_overlapping_atoms(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] subset: Vec<AtomId>,
         #[case] expected: Vec<AtomId>,
     ) {
@@ -580,7 +578,7 @@ mod tests {
     #[case::both(vec![BondId(0), BondId(1)], vec![BondId(0), BondId(1)])]
     #[case::other(vec![BondId(2)], vec![])]
     fn test_aromatic_system_view_overlapping_bonds(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] subset: Vec<BondId>,
         #[case] expected: Vec<BondId>,
     ) {

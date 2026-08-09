@@ -12,7 +12,7 @@ use umol_chem::element::Element as ChemElement;
 use umol_graph_ir::ir::{
     AsLit, AtomForm as GraphIrAtomForm, AtomId as GraphIrAtomId, AtomUpdate as GraphIrAtomUpdate,
     ElementForm as GraphIrElementForm, IsotopeMass as GraphIrIsotopeMass,
-    IsotopeMassForm as GraphIrIsotopeMassForm, MoleculeAst as GraphIrMoleculeAst,
+    IsotopeMassForm as GraphIrIsotopeMassForm, Molecule as GraphIrMolecule,
 };
 
 use crate::constraint::atom::{
@@ -616,7 +616,7 @@ pub struct AtomView {
 }
 
 impl AtomView {
-    fn atom<'a>(&self, molecule: &'a GraphIrMoleculeAst) -> PyResult<&'a GraphIrAtomForm> {
+    fn atom<'a>(&self, molecule: &'a GraphIrMolecule) -> PyResult<&'a GraphIrAtomForm> {
         molecule
             .atoms()
             .get(self.id)
@@ -790,7 +790,7 @@ impl AtomView {
 
 /// Resolve a possibly-negative Python index (negative counts from the end) into an
 /// existing atom id, or `IndexError`.
-fn resolve_atom_index(molecule: &GraphIrMoleculeAst, index: isize) -> PyResult<GraphIrAtomId> {
+fn resolve_atom_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<GraphIrAtomId> {
     let count = molecule.atoms().count();
     let resolved = if index < 0 {
         index + count as isize
@@ -971,7 +971,7 @@ mod tests {
     }
 
     fn carbon_oxygen(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::C),
                 GraphIrAtomForm::from_element(ChemElement::O),
@@ -1525,7 +1525,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1572,7 +1572,7 @@ mod tests {
                 .with_constraint(GraphIrAtomConstraintForm::valence(4));
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![atom],
                     ..Default::default()
                 })),
@@ -1611,7 +1611,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1825,7 +1825,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1874,7 +1874,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),

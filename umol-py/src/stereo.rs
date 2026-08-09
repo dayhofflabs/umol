@@ -16,8 +16,7 @@ use umol_graph_ir::ir::{
     AsLit, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
     CisTransConfiguration as GraphIrCisTransConfiguration, CisTransStereo as GraphIrCisTransStereo,
     CisTransStereoForm as GraphIrCisTransStereoForm, LigandPermutation as GraphIrLigandPermutation,
-    MoleculeAst as GraphIrMoleculeAst,
-    OrientedLigandPermutation as GraphIrOrientedLigandPermutation,
+    Molecule as GraphIrMolecule, OrientedLigandPermutation as GraphIrOrientedLigandPermutation,
     StereoAtomForm as GraphIrStereoAtomForm, StereoAtomId as GraphIrStereoAtomId,
     StereoAtomUpdate as GraphIrStereoAtomUpdate, StereoAtomView as GraphIrStereoAtomView,
     StereoBondForm as GraphIrStereoBondForm, StereoBondId as GraphIrStereoBondId,
@@ -1328,7 +1327,7 @@ macro_rules! stereo_view {
         impl $view {
             /// Rebuild the transient AST view for this entity, or `IndexError` if the id is
             /// no longer present.
-            fn view<'a>(&self, molecule: &'a GraphIrMoleculeAst) -> PyResult<$ast_view<'a>> {
+            fn view<'a>(&self, molecule: &'a GraphIrMolecule) -> PyResult<$ast_view<'a>> {
                 molecule
                     .$namespace()
                     .get(self.id)
@@ -1469,7 +1468,7 @@ macro_rules! stereo_views {
     ) => {
         /// Resolve a possibly-negative Python index (negative counts from the end) into an
         /// existing stereo entity id, or `IndexError`.
-        fn $resolve_index(molecule: &GraphIrMoleculeAst, index: isize) -> PyResult<$ast_id> {
+        fn $resolve_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<$ast_id> {
             let count = molecule.$namespace().count();
             let resolved = if index < 0 {
                 index + count as isize
@@ -3191,7 +3190,7 @@ mod tests {
     }
 
     fn stereo_atom_molecule(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 5],
             stereo_atoms: vec![(
                 GraphIrAtomId(0),
@@ -3212,7 +3211,7 @@ mod tests {
     }
 
     fn stereo_bond_molecule(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 4],
             bonds: vec![
                 (

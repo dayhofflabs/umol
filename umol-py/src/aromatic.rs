@@ -10,7 +10,7 @@ use umol_graph_ir::ir::{
     AromaticSystemForm as GraphIrAromaticSystemForm, AromaticSystemId as GraphIrAromaticSystemId,
     AromaticSystemUpdate as GraphIrAromaticSystemUpdate,
     AromaticSystemView as GraphIrAromaticSystemView, AtomId as GraphIrAtomId,
-    MoleculeAst as GraphIrMoleculeAst,
+    Molecule as GraphIrMolecule,
 };
 
 use crate::convert::hash_rust;
@@ -267,7 +267,7 @@ pub struct AromaticSystemView {
 impl AromaticSystemView {
     fn aromatic_system<'a>(
         &self,
-        molecule: &'a GraphIrMoleculeAst,
+        molecule: &'a GraphIrMolecule,
     ) -> PyResult<GraphIrAromaticSystemView<'a>> {
         molecule
             .aromatic_systems()
@@ -410,7 +410,7 @@ impl AromaticSystemView {
 /// existing aromatic system id, or `IndexError`. `AromaticSystemId` is `RelationId`-
 /// backed but contiguous for fresh molecules, so integer positions address it directly.
 fn resolve_aromatic_system_index(
-    molecule: &GraphIrMoleculeAst,
+    molecule: &GraphIrMolecule,
     index: isize,
 ) -> PyResult<GraphIrAromaticSystemId> {
     let count = molecule.aromatic_systems().count();
@@ -579,7 +579,7 @@ mod tests {
     /// Benzene: six aromatic carbons (atom ids 0–5), one aromatic system over all six
     /// (electrons `[1,1,1,1,1,1]`), aromatic system id 0.
     fn benzene(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 6],
             aromatic: vec![(
                 (0u32..6).map(GraphIrAtomId).collect(),
@@ -1010,7 +1010,7 @@ mod tests {
     fn test_aromatic_system_views_incident() {
         Python::attach(|py| {
             // benzene's six carbons plus one isolated carbon (atom id 6)
-            let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+            let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
                 atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 7],
                 aromatic: vec![(
                     (0u32..6).map(GraphIrAtomId).collect(),

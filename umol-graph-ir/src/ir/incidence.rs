@@ -5,10 +5,10 @@ use strum::EnumCount;
 use umol_graph_core::{Graph, NodeId};
 
 use super::entity::{Entity, EntityKind};
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 
 bitflags! {
-    /// Which relation kinds become pseudonodes in [`MoleculeAst::incidence_graph`].
+    /// Which relation kinds become pseudonodes in [`Molecule::incidence_graph`].
     /// Atoms and localized bonds are always present (the base topology); these
     /// toggle the rest.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,7 +85,7 @@ impl IncidenceGraph {
     }
 }
 
-impl MoleculeAst {
+impl Molecule {
     /// Build the incidence (Levi) graph over the selected relation kinds. Localized
     /// bonds and overlays become pseudonodes wired to their participant atoms;
     /// stereo elements attach to their site only (an atom, or the site bond's
@@ -217,8 +217,8 @@ mod tests {
     // system {0,1,2}; a multicenter {3,4,5}; a noncovalent 0···5; a stereo atom on
     // site 1; a stereo bond on site BondId(1).
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -290,7 +290,7 @@ mod tests {
         ],
     )]
     fn test_molecule_ast_incidence_graph(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] selection: IncidenceNodeSelection,
         #[case] expected: Vec<Entity>,
     ) {
@@ -318,7 +318,7 @@ mod tests {
     #[case::stereo_atom(13, vec![1])]
     #[case::stereo_bond(14, vec![7])]
     fn test_molecule_ast_incidence_graph_neighbors(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] node: u32,
         #[case] expected: Vec<u32>,
     ) {

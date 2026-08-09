@@ -1,4 +1,4 @@
-//! Structural editing for `MoleculeAst`. The AST itself only allows attribute
+//! Structural editing for `Molecule`. The AST itself only allows attribute
 //! mutation; structural change (add atoms/bonds/relations, remove anything)
 //! goes through `MoleculeEditor`.
 //!
@@ -44,7 +44,7 @@ use super::super::view::{
     NoncovalentBondEditorViewMut, StereoAtomEditorView, StereoAtomEditorViewMut,
     StereoBondEditorView, StereoBondEditorViewMut,
 };
-use super::MoleculeAst;
+use super::Molecule;
 
 #[derive(Clone)]
 enum FixedSetStorage<P, O, D, const N: usize> {
@@ -624,9 +624,9 @@ fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
     parts.map(|p| p.uncompact(remapping))
 }
 
-/// Mutable editor for a `MoleculeAst`. Accumulates atoms, bonds, and
+/// Mutable editor for a `Molecule`. Accumulates atoms, bonds, and
 /// relations (dative, aromatic, multicenter, noncovalent), then finalizes
-/// into an immutable `MoleculeAst`. Supports incremental removal with
+/// into an immutable `Molecule`. Supports incremental removal with
 /// index remapping via `remove`.
 #[derive(Clone)]
 pub struct MoleculeEditor {
@@ -1545,12 +1545,12 @@ impl MoleculeEditor {
     /// Materialize the editor's current state without consuming it.
     ///
     /// Subsequent editor changes are independent of the returned immutable snapshot.
-    pub fn snapshot(&self) -> MoleculeAst {
+    pub fn snapshot(&self) -> Molecule {
         self.clone().build()
     }
 
-    pub fn build(self) -> MoleculeAst {
-        MoleculeAst::from_arcs(
+    pub fn build(self) -> Molecule {
+        Molecule::from_arcs(
             self.graph,
             self.atoms,
             self.bonds,
@@ -1667,7 +1667,7 @@ mod tests {
 
     #[fixture]
     fn triatomic() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
         b.add_atom(AtomForm::from_element(Element::O));
@@ -1727,7 +1727,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_restore_dative_bond() {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
         b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1));

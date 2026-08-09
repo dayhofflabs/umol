@@ -26,7 +26,7 @@ use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomId, AtomView,
-    BondConstraintForm, BondId, BooleanForm, ElectronCountsForm, MoleculeAst, NumForm, RingConfig,
+    BondConstraintForm, BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig,
     RingModel, RingSetKind, TransactionError,
 };
 use umol_utils::solution::Solution;
@@ -131,7 +131,7 @@ impl AromaticityPerception {
     #[allow(clippy::complexity)]
     pub fn find_systems<F>(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         config: AromaticityConfig,
         electrons_at: F,
     ) -> Result<
@@ -189,7 +189,7 @@ impl AromaticityPerception {
     /// systems from their electron contributions, and classify their relationship.
     pub fn derive(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         config: AromaticityConfig,
     ) -> Result<Solution<AromaticityDerivation, AromaticityContradiction>, AromaticityError> {
         if ast.atoms().iter().any(|atom| {
@@ -367,11 +367,7 @@ impl AromaticityPerception {
     }
 
     /// Add perceived systems to the AST.
-    pub fn add_systems(
-        &self,
-        ast: &mut MoleculeAst,
-        systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
-    ) {
+    pub fn add_systems(&self, ast: &mut Molecule, systems: Vec<(Vec<AtomId>, AromaticSystemForm)>) {
         if systems.is_empty() {
             return;
         }
@@ -414,7 +410,7 @@ mod tests {
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomForm,
-        AtomId, BondConstraintKey, BondForm, ElectronCountsForm, MoleculeAst, MoleculeEntries,
+        AtomId, BondConstraintKey, BondForm, ElectronCountsForm, Molecule, MoleculeEntries,
         NumForm, UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
@@ -444,7 +440,7 @@ mod tests {
         })
     }
 
-    fn aromatic_valence_lit(ast: &MoleculeAst, idx: AtomId) -> Option<i64> {
+    fn aromatic_valence_lit(ast: &Molecule, idx: AtomId) -> Option<i64> {
         match ast
             .atom(idx)
             .ast
@@ -468,19 +464,19 @@ mod tests {
         atom
     }
 
-    fn benzene() -> MoleculeAst {
+    fn benzene() -> Molecule {
         let atoms: Vec<AtomForm> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         })
     }
 
-    fn pyrrole() -> MoleculeAst {
+    fn pyrrole() -> Molecule {
         let atoms = vec![
             aromatic(Element::N, 2),
             aromatic(Element::C, 1),
@@ -491,7 +487,7 @@ mod tests {
         let bonds: Vec<_> = (0..5)
             .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondForm::from_order(1)))
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -500,7 +496,7 @@ mod tests {
 
     fn run_full(
         perception: &AromaticityPerception,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
             .find_systems(ast, AromaticityConfig::default(), |v| {
@@ -721,7 +717,7 @@ mod tests {
     )]
     fn test_aromaticity_perception_derive(
         #[case] model: AromaticityModel,
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected: Solution<AromaticityDerivation, AromaticityContradiction>,
     ) {
         assert_eq!(
@@ -822,7 +818,7 @@ mod tests {
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     fn test_aromaticity_perception_add_systems(
-        #[case] mut ast: MoleculeAst,
+        #[case] mut ast: Molecule,
         #[case] system_charge: i64,
         #[case] electrons: Vec<i64>,
         #[case] atom_charges: Vec<i64>,
@@ -870,7 +866,7 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
-        let mut ast = MoleculeAst::from_entries(MoleculeEntries {
+        let mut ast = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()

@@ -1,4 +1,4 @@
-//! Construction builder — build a fresh `MoleculeAst` with a bare-verb-adds convention:
+//! Construction builder — build a fresh `Molecule` with a bare-verb-adds convention:
 //! every method *adds/declares* (there is no lookup — that is `MoleculeEditor`). Wraps a
 //! `MoleculeEditor` and lowers each call onto it.
 
@@ -15,7 +15,7 @@ use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
 use super::super::stereo::{StereoAtomForm, StereoBondForm};
-use super::{MoleculeAst, MoleculeEditor};
+use super::{Molecule, MoleculeEditor};
 
 /// Build a molecule from scratch. `atom` adds an atom and hands back its handle; the
 /// per-family verbs (`single`/`double`/`triple`, `dative`) add bonds between handles;
@@ -32,7 +32,7 @@ impl MoleculeBuilder {
     /// A fresh, empty builder. Atom fields left unspecified stay open for resolution.
     pub fn new() -> Self {
         Self {
-            editor: MoleculeAst::new().edit(),
+            editor: Molecule::new().edit(),
             ground: false,
         }
     }
@@ -43,7 +43,7 @@ impl MoleculeBuilder {
     /// open — will be the L2 `+`-spec's `charge(0)`/`spin(…)` terms.)
     pub fn ground() -> Self {
         Self {
-            editor: MoleculeAst::new().edit(),
+            editor: Molecule::new().edit(),
             ground: true,
         }
     }
@@ -183,8 +183,8 @@ impl MoleculeBuilder {
             .add_stereo_bond(site, ligands.into_iter().collect(), ast.into())
     }
 
-    /// Finalize into a `MoleculeAst`. Unspecified atom fields stay open for resolution.
-    pub fn build(self) -> MoleculeAst {
+    /// Finalize into a `Molecule`. Unspecified atom fields stay open for resolution.
+    pub fn build(self) -> Molecule {
         self.editor.build()
     }
 }

@@ -1,4 +1,4 @@
-//! Pure transformations over a fully resolved `MoleculeAst`. Distinct from
+//! Pure transformations over a fully resolved `Molecule`. Distinct from
 //! the resolvers in `ops/resolver`: a transformer rewrites a determined AST
 //! into another determined AST without filling in undetermined values. Each
 //! concrete transformer carries its own `Error` type via the trait's
@@ -11,14 +11,14 @@ pub mod kekulizer;
 pub use aromatizer::{Aromatizer, AromatizerError};
 pub use delocalize_charge::DelocalizeCharge;
 pub use kekulizer::{KekulizationConfig, Kekulizer, KekulizerError, MaximumMatchingAlgorithm};
-use umol_graph_ir::ir::MoleculeAst;
+use umol_graph_ir::ir::Molecule;
 
 pub trait Transformer {
     type Error;
 
-    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<(), Self::Error>;
+    fn transform_into(&self, ast: &mut Molecule) -> Result<(), Self::Error>;
 
-    fn transform(&self, ast: &MoleculeAst) -> Result<MoleculeAst, Self::Error> {
+    fn transform(&self, ast: &Molecule) -> Result<Molecule, Self::Error> {
         let mut out = ast.clone();
         self.transform_into(&mut out)?;
         Ok(out)
@@ -28,8 +28,5 @@ pub trait Transformer {
     /// transformers this is a single-element iterator; for non-deterministic
     /// ones this enumerates the alternatives. On error the iterator is
     /// empty.
-    fn generate_all<'a>(
-        &'a self,
-        ast: &'a MoleculeAst,
-    ) -> Box<dyn Iterator<Item = MoleculeAst> + 'a>;
+    fn generate_all<'a>(&'a self, ast: &'a Molecule) -> Box<dyn Iterator<Item = Molecule> + 'a>;
 }

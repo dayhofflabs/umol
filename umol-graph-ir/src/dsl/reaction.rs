@@ -2840,7 +2840,7 @@ mod tests {
     };
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::ligand::StereoLigandKind;
-    use crate::ir::molecule::MoleculeAst;
+    use crate::ir::molecule::Molecule;
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
@@ -4038,7 +4038,7 @@ mod tests {
     #[case::atom_modify(
         r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##,
         ReactionAst {
-            lhs: MoleculeAst::from_edn_str(r##"{:atoms [[:br "Br#c0"]]}"##).unwrap(),
+            lhs: Molecule::from_edn_str(r##"{:atoms [[:br "Br#c0"]]}"##).unwrap(),
             deltas: Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(-1) },
@@ -4048,7 +4048,7 @@ mod tests {
     #[case::atom_add_bond_add(
         r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##,
         ReactionAst {
-            lhs: MoleculeAst::from_edn_str(r##"{:atoms ["C"]}"##).unwrap(),
+            lhs: Molecule::from_edn_str(r##"{:atoms ["C"]}"##).unwrap(),
             deltas: Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),

@@ -1,12 +1,12 @@
 use rstest::rstest;
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomForm, AtomId, BondForm, BondId, MoleculeAst, StereoAtomId, StereoBondId,
+    AromaticSystemId, AtomForm, AtomId, BondForm, BondId, Molecule, StereoAtomId, StereoBondId,
 };
 use umol_graph_ir::mol;
 
 #[test]
 fn test_mol_builds_molecule() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c1: C) - (c2: C) = (o: O),
         (c1) - (n: N),
     };
@@ -23,7 +23,7 @@ fn test_mol_builds_molecule() {
 #[test]
 fn test_mol_quoted_spec() {
     // a rich DSL spec rides a string literal
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c: "C#h3") - (n: N),
     };
 
@@ -34,7 +34,7 @@ fn test_mol_quoted_spec() {
 #[test]
 fn test_mol_bond_spec() {
     // a rich bond via the DSL spec: order 1 + aromatic flag
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c1: C) -[ "1#a" ]- (c2: C),
     };
 
@@ -48,7 +48,7 @@ fn test_mol_bond_spec() {
 #[rstest]
 fn test_mol_named_bond() {
     // a `-[name: "spec"]-` bond binds a label (inert until referenced) and carries the spec
-    let molecule: MoleculeAst = mol!((c: C) -[ b: "2" ]- (o: O));
+    let molecule: Molecule = mol!((c: C) -[ b: "2" ]- (o: O));
 
     assert_eq!(molecule.bonds().count(), 1);
     assert_eq!(
@@ -60,7 +60,7 @@ fn test_mol_named_bond() {
 #[rstest]
 fn test_mol_anonymous_atoms() {
     // bare element idents introduce anonymous, unreferenceable atoms
-    let molecule: MoleculeAst = mol!(C - O);
+    let molecule: Molecule = mol!(C - O);
 
     assert_eq!(molecule.atoms().count(), 2);
     assert_eq!(molecule.bonds().count(), 1);
@@ -78,7 +78,7 @@ fn test_mol_anonymous_atoms() {
 #[rstest]
 fn test_mol_anonymous_spec() {
     // the intended use: anonymous atoms carrying rich DSL specs
-    let molecule: MoleculeAst = mol!("C#h3" - "O#h");
+    let molecule: Molecule = mol!("C#h3" - "O#h");
 
     assert_eq!(
         molecule.atom(AtomId(0)).ast,
@@ -94,7 +94,7 @@ fn test_mol_anonymous_spec() {
 #[rstest]
 fn test_mol_anonymous_mixed() {
     // a named atom referenced across paths, wired to anonymous terminals by position
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c: C) = O,
         (c) - N,
     };
@@ -110,7 +110,7 @@ fn test_mol_anonymous_mixed() {
 
 #[rstest]
 fn test_mol_aromatic() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c1: C) - (c2: C),
         aromatic [(c1) (c2)],
     };
@@ -128,7 +128,7 @@ fn test_mol_aromatic() {
 
 #[rstest]
 fn test_mol_dative() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (n: N), (b: B),
         dative [(n)] (b),
     };
@@ -138,7 +138,7 @@ fn test_mol_dative() {
 
 #[rstest]
 fn test_mol_multicenter() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (b1: B), (b2: B), (h: H),
         multicenter [(b1) (b2) (h)],
     };
@@ -148,7 +148,7 @@ fn test_mol_multicenter() {
 
 #[rstest]
 fn test_mol_noncovalent() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (o: O), (h: H),
         noncovalent [(o) (h)],
     };
@@ -158,7 +158,7 @@ fn test_mol_noncovalent() {
 
 #[rstest]
 fn test_mol_stereo_atom() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c: C), (f: F), (cl: Cl), (br: Br), (i: I),
         stereo atom (c) [(f) (cl) (br) (i)] : "Th0",
     };
@@ -169,7 +169,7 @@ fn test_mol_stereo_atom() {
 
 #[rstest]
 fn test_mol_stereo_bond() {
-    let molecule: MoleculeAst = mol! {
+    let molecule: Molecule = mol! {
         (c1: C) -[db: "2"]- (c2: C), (f: F), (h: H),
         stereo bond (db) [(f) (h)] : "Ct1",
     };

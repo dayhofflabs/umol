@@ -1,6 +1,6 @@
 //! Construction macros for the AST and DSL objects.
 
-/// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
+/// Parse a molecule-EDN string into a `Molecule`. MoleculeMetadata (atom IDs,
 /// aliases, etc.) in the input is dropped. Use `MoleculeDsl::from_str` to keep metadata.
 ///
 /// ```ignore
@@ -9,11 +9,11 @@
 #[macro_export]
 macro_rules! mol_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::MoleculeAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::Molecule as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse molecule-EDN string into a `MoleculeAst` with `MoleculeDefaults::ground()` applied.
+/// Parse molecule-EDN string into a `Molecule` with `MoleculeDefaults::ground()` applied.
 /// Mirrors `AtomForm::into_ground()` at the molecule scope.
 #[macro_export]
 macro_rules! mol_dsl_ground {
@@ -21,7 +21,7 @@ macro_rules! mol_dsl_ground {
         let dsl: $crate::dsl::MoleculeDsl =
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
         let (ast, _meta) = dsl.into_parts();
-        <$crate::dsl::MoleculeDsl as $crate::ir::IntoIr<$crate::ir::MoleculeAst>>::into_ir(
+        <$crate::dsl::MoleculeDsl as $crate::ir::IntoIr<$crate::ir::Molecule>>::into_ir(
             $crate::dsl::MoleculeDsl::new(ast, $crate::dsl::MoleculeMetadata::default())
                 .expect("empty metadata is coherent"),
             &$crate::dsl::MoleculeDefaults::ground(),
@@ -236,8 +236,8 @@ mod tests {
         AromaticSystemConstraintForm, AromaticSystemForm, AtomConstraintForm, AtomConstraintsForm,
         AtomForm, AtomId, AtomUpdate, BondConstraintForm, BondConstraintsForm, BondForm,
         BondUpdate, BooleanForm, DativeBondConstraintForm, DativeBondForm, ElementForm, Entity,
-        MoleculeAst, MoleculeEntries, MulticenterBondForm, NoncovalentBondForm,
-        NoncovalentBondKind, NumForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
+        Molecule, MoleculeEntries, MulticenterBondForm, NoncovalentBondForm, NoncovalentBondKind,
+        NumForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
     };
 
     #[rustfmt::skip]
@@ -246,7 +246,7 @@ mod tests {
     #[case::with_alias(
         r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#,
         MoleculeDsl::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); 2],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
                 ..Default::default()
@@ -263,7 +263,7 @@ mod tests {
     #[case::with_atom_ids(
         r#"{:atoms [[:a "C"] [:b "C"]] :bonds []}"#,
         MoleculeDsl::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); 2],
                 bonds: vec![],
                 ..Default::default()
@@ -288,35 +288,35 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("{}", MoleculeAst::default())]
+    #[case::empty("{}", Molecule::default())]
     #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomForm::from_element(Element::O)],
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomForm::from_element(Element::O)],
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() }))]
     #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#e3"}]}"##,
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1)), (AtomId(1), AtomId(2), BondForm::from_order(1)), (AtomId(2), AtomId(0), BondForm::from_order(1))],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemForm::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintForm::electron_count(3)))],
             ..Default::default()
         }))]
-    fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
+    fn test_mol_macro(#[case] input: &str, #[case] expected: Molecule) {
         assert_eq!(mol_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_mol_macro_error() {
-        let _: MoleculeAst = mol_dsl!("invalid");
+        let _: Molecule = mol_dsl!("invalid");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], bonds: vec![], ..Default::default() }))]
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], bonds: vec![], ..Default::default() }))]
     #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64).into_ground()], bonds: vec![], ..Default::default() }))]
-    fn test_mol_ground_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64).into_ground()], bonds: vec![], ..Default::default() }))]
+    fn test_mol_ground_macro(#[case] input: &str, #[case] expected: Molecule) {
         assert_eq!(mol_dsl_ground!(input), expected);
     }
 

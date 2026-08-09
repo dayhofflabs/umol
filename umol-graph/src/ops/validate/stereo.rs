@@ -4,7 +4,7 @@ use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AsLit, AtomId, BondId, BooleanForm, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig,
-    Lattice, LigandSymmetryForm, MoleculeAst, StereoAtomId, StereoBondId, StereoKind,
+    Lattice, LigandSymmetryForm, Molecule, StereoAtomId, StereoBondId, StereoKind,
     StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
     TopicityRelationForm,
 };
@@ -110,7 +110,7 @@ impl StereoConformanceValidator {
     /// open contributes `Underdetermined`.
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), StereoValidatorContradiction>, StereoValidatorError> {
         let derivation = StereoPerception::new(&self.model).derive(ast);
         for &inconsistency in &derivation.inconsistencies {
@@ -195,7 +195,7 @@ impl StereoConformanceValidator {
 
     fn validate_stereo_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         id: StereoAtomId,
         symmetry: &GraphSymmetry,
     ) -> Solution<(), StereoValidatorContradiction> {
@@ -222,7 +222,7 @@ impl StereoConformanceValidator {
 
     fn validate_stereo_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         id: StereoBondId,
         symmetry: &GraphSymmetry,
     ) -> Solution<(), StereoValidatorContradiction> {
@@ -422,18 +422,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::bare(CFCLBRI, (|_: &mut MoleculeAst| {}) as fn(&mut MoleculeAst))]
+    #[case::bare(CFCLBRI, (|_: &mut Molecule| {}) as fn(&mut Molecule))]
     #[case::matching_stereogenicity(
         CFCLBRI,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_atom_mut(StereoAtomId(0)).ast
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)));
-        }) as fn(&mut MoleculeAst)
+        }) as fn(&mut Molecule)
     )]
     fn test_stereo_conformance_validator_validate(
         #[case] dsl: &str,
-        #[case] mutate: fn(&mut MoleculeAst),
+        #[case] mutate: fn(&mut Molecule),
     ) {
         let mut ast = mol_dsl_ground!(dsl);
         mutate(&mut ast);
@@ -574,7 +574,7 @@ mod tests {
         Solution::Determined(()),
     )]
     fn test_stereo_conformance_validator_validate_constraint(
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected: Solution<(), StereoValidatorContradiction>,
     ) {
         assert_eq!(
@@ -588,9 +588,9 @@ mod tests {
     #[rstest]
     #[case::coset_out_of_range(
         CFCLBRI,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
-        }) as fn(&mut MoleculeAst),
+        }) as fn(&mut Molecule),
         StereoValidatorContradiction::CosetOutOfRange {
             kind: StereoKind::Tetrahedral,
             coset: 9,
@@ -599,9 +599,9 @@ mod tests {
     )]
     #[case::arity(
         CFCLBRI,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0);
-        }) as fn(&mut MoleculeAst),
+        }) as fn(&mut Molecule),
         StereoValidatorContradiction::LigandArity {
             kind: StereoKind::TrigonalBipyramidal,
             ligands: 4,
@@ -610,22 +610,22 @@ mod tests {
     )]
     #[case::improper_on_achiral(
         BUTENE,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_bond_mut(StereoBondId(0)).ast
                 .constraints
                 .set(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)));
-        }) as fn(&mut MoleculeAst),
+        }) as fn(&mut Molecule),
         StereoValidatorContradiction::ImproperOnAchiral {
             kind: StereoKind::CisTrans,
         }
     )]
     #[case::stereogenicity_mismatch(
         CFCLBRI,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_atom_mut(StereoAtomId(0)).ast
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric)));
-        }) as fn(&mut MoleculeAst),
+        }) as fn(&mut Molecule),
         StereoValidatorContradiction::StereogenicityMismatch {
             asserted: StereogenicityForm::Lit(Stereogenicity::Symmetric),
             derived: Stereogenicity::Stereogenic,
@@ -633,14 +633,14 @@ mod tests {
     )]
     #[case::topicity_mismatch(
         CFCLBRI,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_atom_mut(StereoAtomId(0)).ast
                 .constraints
                 .set(StereoAtomConstraintForm::Topicity(TopicityForm {
                     pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
                     relation: TopicityRelationForm::Lit(Topicity::Homotopic),
                 }));
-        }) as fn(&mut MoleculeAst),
+        }) as fn(&mut Molecule),
         StereoValidatorContradiction::TopicityMismatch {
             pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
             asserted: TopicityRelationForm::Lit(Topicity::Homotopic),
@@ -649,7 +649,7 @@ mod tests {
     )]
     #[case::ligand_symmetry_violation(
         CFCLBRI,
-        (|ast: &mut MoleculeAst| {
+        (|ast: &mut Molecule| {
             ast.stereo_atom_mut(StereoAtomId(0)).ast
                 .constraints
                 .set(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
@@ -659,7 +659,7 @@ mod tests {
                     },
                     invariant: BooleanForm::Lit(true),
                 }));
-        }) as fn(&mut MoleculeAst),
+        }) as fn(&mut Molecule),
         StereoValidatorContradiction::LigandSymmetryViolation {
             asserted: LigandSymmetryForm {
                 permutation: OrientedLigandPermutation {
@@ -672,7 +672,7 @@ mod tests {
     )]
     fn test_stereo_conformance_validator_validate_error(
         #[case] dsl: &str,
-        #[case] mutate: fn(&mut MoleculeAst),
+        #[case] mutate: fn(&mut Molecule),
         #[case] expected: StereoValidatorContradiction,
     ) {
         let mut ast = mol_dsl_ground!(dsl);

@@ -41,11 +41,11 @@ mod tests {
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
 
     #[fixture]
     fn chain_4_matching() -> BondMatching {
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -63,7 +63,7 @@ mod tests {
 
     #[fixture]
     fn ring_6_matching() -> BondMatching {
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -91,7 +91,7 @@ mod tests {
 
     #[fixture]
     fn singleton_matching() -> BondMatching {
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         })

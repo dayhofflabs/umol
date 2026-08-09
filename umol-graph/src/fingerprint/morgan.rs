@@ -12,7 +12,7 @@
 use umol_chem::isotope::Isotope;
 use umol_graph_core::CircularRefinementAlgorithm;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, IsotopeMassForm, MoleculeAst, RingConfig, RingModel, RingSet,
+    AsLit, AtomId, BondId, IsotopeMassForm, Molecule, RingConfig, RingModel, RingSet,
 };
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
@@ -35,7 +35,7 @@ impl MorganFeaturizer {
     }
 
     /// Returns the deduplicated set of identifiers.
-    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+    pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
         }
@@ -45,7 +45,7 @@ impl MorganFeaturizer {
     /// Compute per-identifier occurrences.
     pub fn featurize_counted(
         &self,
-        mol: &MoleculeAst,
+        mol: &Molecule,
     ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
@@ -55,7 +55,7 @@ impl MorganFeaturizer {
 
     /// The circular-refinement identifier multiset (one per surviving environment);
     /// dedup yields the binary set, counting yields the counted set.
-    fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
+    fn identifiers(&self, mol: &Molecule) -> Vec<u64> {
         let rings = mol
             .rings(RingModel::default(), self.ring_config)
             .into_ring_set();
@@ -73,7 +73,7 @@ impl MorganFeaturizer {
 /// RDKit `getConnectivityInvariants` component vector: atomic number, total degree
 /// (heavy + H), attached H count, formal charge, deltaMass, and a trailing `1` if
 /// the atom is in a ring.
-fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
+fn atom_components(mol: &Molecule, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let atom = mol.atom(id);
     let element = atom.element().as_lit().expect("ground atom");
     let heavy_degree = atom.heavy_atom_degree().as_lit().expect("ground atom");
@@ -102,7 +102,7 @@ fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
 }
 
 /// RDKit `Bond::BondType` integer: aromatic bonds are `12`, otherwise the order.
-fn bond_type(mol: &MoleculeAst, id: BondId) -> u32 {
+fn bond_type(mol: &Molecule, id: BondId) -> u32 {
     let bond = mol.bond(id);
     if bond.is_in_aromatic_system() {
         12

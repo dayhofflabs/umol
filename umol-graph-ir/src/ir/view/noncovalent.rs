@@ -6,21 +6,21 @@ use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 
 use super::super::constraint::NoncovalentBondConstraintsForm;
 use super::super::id::{AtomId, NoncovalentBondId};
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 
-/// Namespace accessor for noncovalent-bond views on a `MoleculeAst`.
+/// Namespace accessor for noncovalent-bond views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct NoncovalentBondViews<'a> {
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
     noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>,
 }
 
 impl<'a> NoncovalentBondViews<'a> {
     pub(crate) fn new(
-        molecule: &'a MoleculeAst,
+        molecule: &'a Molecule,
         noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>,
     ) -> Self {
         Self {
@@ -166,7 +166,7 @@ pub struct NoncovalentBondView<'a> {
     pub id: NoncovalentBondId,
     atoms: [NodeId; 2],
     pub ast: &'a NoncovalentBondForm,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> NoncovalentBondView<'a> {
@@ -237,13 +237,13 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AtomId, NoncovalentBondId};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -274,14 +274,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_views_count(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_views_count(molecule: Molecule) {
         assert_eq!(molecule.noncovalent_bonds().count(), 1);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_views_ids(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_views_ids(molecule: Molecule) {
         assert_exact_size_by(
-            MoleculeAst::default().noncovalent_bonds().ids(),
+            Molecule::default().noncovalent_bonds().ids(),
             vec![],
             |id| id,
         );
@@ -293,9 +293,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_views_iter(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_views_iter(molecule: Molecule) {
         assert_exact_size_by(
-            MoleculeAst::default().noncovalent_bonds().iter(),
+            Molecule::default().noncovalent_bonds().iter(),
             vec![],
             |view| (view.id, view.atom_ids(), view.ast.clone()),
         );
@@ -314,7 +314,7 @@ mod tests {
     #[case::participant(AtomId(0), vec![NoncovalentBondId(0)])]
     #[case::uninvolved(AtomId(1), vec![])]
     fn test_noncovalent_bond_views_incident(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<NoncovalentBondId>,
     ) {
@@ -334,7 +334,7 @@ mod tests {
     #[case::present(NoncovalentBondId(0), true)]
     #[case::absent(NoncovalentBondId(99), false)]
     fn test_noncovalent_bond_views_contains(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] id: NoncovalentBondId,
         #[case] expected: bool,
     ) {
@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_views_get(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_views_get(molecule: Molecule) {
         let res = molecule.noncovalent_bonds().get(NoncovalentBondId(0));
         assert!(res.is_some());
         let view = res.unwrap();
@@ -351,13 +351,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_views_get_none(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_views_get_none(molecule: Molecule) {
         let res = molecule.noncovalent_bonds().get(NoncovalentBondId(99));
         assert!(res.is_none());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_view_atom_ids(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_view_atom_ids(molecule: Molecule) {
         assert_eq!(
             molecule.noncovalent_bond(NoncovalentBondId(0)).atom_ids(),
             [AtomId(0), AtomId(3)],
@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_view_atoms(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_view_atoms(molecule: Molecule) {
         let ids = molecule
             .noncovalent_bond(NoncovalentBondId(0))
             .atoms()

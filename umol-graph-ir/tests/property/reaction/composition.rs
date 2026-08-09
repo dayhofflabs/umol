@@ -61,7 +61,7 @@ proptest! {
     ) {
         let host = a.lhs.clone();
         let composites = a.compose(&b, COMPOSITION_ALGORITHM);
-        let composed: Vec<MoleculeAst> = composites
+        let composed: Vec<Molecule> = composites
             .iter()
             .flat_map(|composite| {
                 composite
@@ -76,7 +76,7 @@ proptest! {
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
-        let intermediates: Vec<MoleculeAst> = a
+        let intermediates: Vec<Molecule> = a
             .apply(
                 &host,
                 MATCH_CONFIG,
@@ -85,7 +85,7 @@ proptest! {
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
-        let mut sequential: Vec<MoleculeAst> = Vec::new();
+        let mut sequential: Vec<Molecule> = Vec::new();
         for intermediate in &intermediates {
             sequential.extend(
                 b.apply(
@@ -134,7 +134,7 @@ proptest! {
         b in overlay_reaction_strategy(),
     ) {
         let host = a.lhs.clone();
-        let composed: Vec<MoleculeAst> = a
+        let composed: Vec<Molecule> = a
             .compose(&b, COMPOSITION_ALGORITHM)
             .iter()
             .flat_map(|composite| {
@@ -150,7 +150,7 @@ proptest! {
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
-        let intermediates: Vec<MoleculeAst> = a
+        let intermediates: Vec<Molecule> = a
             .apply(
                 &host,
                 MATCH_CONFIG,
@@ -159,7 +159,7 @@ proptest! {
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
-        let mut sequential: Vec<MoleculeAst> = Vec::new();
+        let mut sequential: Vec<Molecule> = Vec::new();
         for intermediate in &intermediates {
             sequential.extend(
                 b.apply(
@@ -187,7 +187,7 @@ proptest! {
         b in overlay_reaction_strategy(),
     ) {
         let host = a.lhs.clone();
-        let composed: Vec<MoleculeAst> = a
+        let composed: Vec<Molecule> = a
             .compose(&b, COMPOSITION_ALGORITHM)
             .iter()
             .flat_map(|composite| {
@@ -203,7 +203,7 @@ proptest! {
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
-        let intermediates: Vec<MoleculeAst> = a
+        let intermediates: Vec<Molecule> = a
             .apply(
                 &host,
                 MATCH_CONFIG,
@@ -212,7 +212,7 @@ proptest! {
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
-        let mut sequential: Vec<MoleculeAst> = Vec::new();
+        let mut sequential: Vec<Molecule> = Vec::new();
         for intermediate in &intermediates {
             sequential.extend(
                 b.apply(

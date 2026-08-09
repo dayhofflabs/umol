@@ -7,8 +7,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
-    AtomId, EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig,
+    AtomId, EntityStructureValidator, Molecule, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 use umol_utils::solution::Solution;
 
@@ -29,7 +28,7 @@ const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence
 /// Cross-strategy / cross-algorithm agreement is asserted only for structurally
 /// well-formed molecules; the generator may emit tier-1-invalid ones (e.g. parallel
 /// relations) on which the strategies legitimately differ.
-fn is_well_formed(molecule: &MoleculeAst) -> bool {
+fn is_well_formed(molecule: &Molecule) -> bool {
     !matches!(
         EntityStructureValidator.validate(molecule).unwrap(),
         Solution::Contradictory(_)
@@ -37,8 +36,8 @@ fn is_well_formed(molecule: &MoleculeAst) -> bool {
 }
 
 fn sorted_matches(
-    pattern: &MoleculeAst,
-    host: &MoleculeAst,
+    pattern: &Molecule,
+    host: &Molecule,
     strategy: SubstructureMatchAlgorithm,
     subiso: SubgraphIsomorphismAlgorithm,
 ) -> Vec<Vec<AtomId>> {

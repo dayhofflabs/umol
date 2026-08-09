@@ -12,7 +12,7 @@
 use std::ops::ControlFlow;
 
 use umol_graph_core::{AutomorphismAlgorithm, GraphCorrespondence, SubgraphEnumerationAlgorithm};
-use umol_graph_ir::ir::{AsLit, AtomId, BondId, MoleculeAst};
+use umol_graph_ir::ir::{AsLit, AtomId, BondId, Molecule};
 
 use super::feature_set::FeatureSet;
 use super::featurizer::FingerprintError;
@@ -38,7 +38,7 @@ impl SubstructureFeaturizer {
 
     /// `mol` must be ground. Returns the set of canonical structural keys for
     /// every atom and every connected subgraph up to `max_bonds` bonds.
-    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<Vec<u8>>, FingerprintError> {
+    pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<Vec<u8>>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
         }
@@ -71,7 +71,7 @@ impl SubstructureFeaturizer {
 /// carried as label-colored vertices. Two subgraphs collide iff they are
 /// isomorphic as element/charge/bond-order-labeled graphs.
 fn canonical_key(
-    mol: &MoleculeAst,
+    mol: &Molecule,
     sub: &GraphCorrespondence,
     automorphism_algorithm: AutomorphismAlgorithm,
 ) -> Vec<u8> {

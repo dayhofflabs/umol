@@ -33,13 +33,13 @@ proptest! {
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
         let left_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_atoms: vec![(AtomId(0), left_frame.clone(), left_ast.clone())],
             ..Default::default()
         });
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_atoms: vec![(
@@ -80,7 +80,7 @@ proptest! {
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
         let left_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_atoms: vec![(AtomId(0), left_frame.clone(), left_ast.clone())],
@@ -88,7 +88,7 @@ proptest! {
         });
         let mut right_frame = permutation.act(&left_frame);
         right_frame[0] = StereoLigand::new(AtomId(5), StereoLigandKind::Atom);
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_atoms: vec![(AtomId(0), right_frame, left_ast.apply(permutation))],
@@ -126,13 +126,13 @@ proptest! {
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
         let left_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(BondId(0), left_frame.clone(), left_ast.clone())],
             ..Default::default()
         });
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_bonds: vec![(
@@ -178,7 +178,7 @@ proptest! {
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
         let left_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(BondId(0), left_frame.clone(), left_ast.clone())],
@@ -186,7 +186,7 @@ proptest! {
         });
         let mut right_frame = permutation.act(&left_frame);
         right_frame[0] = StereoLigand::new(AtomId(6), StereoLigandKind::Atom);
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_bonds: vec![(BondId(0), right_frame, left_ast.apply(permutation))],

@@ -4,7 +4,7 @@
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    MoleculeAst, TransactionError,
+    Molecule, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -47,7 +47,7 @@ impl<'a> ValenceResolver<'a> {
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Edits, ValenceContradiction> {
+    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, ValenceContradiction> {
         for atom in ast.atoms().ids() {
             for key in [
                 AtomConstraintKey::Valence,
@@ -81,7 +81,7 @@ impl<'a> ValenceResolver<'a> {
     /// Plan and atomically apply the selected valence model.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), ValenceContradiction>, ValenceError> {
         let edits = match self.plan(ast) {
             Solution::Determined(edits) => edits,
@@ -237,7 +237,7 @@ mod tests {
     )]
     fn test_valence_resolver_plan_constraints(
         #[case] model: ValenceModel,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, ValenceContradiction>,
     ) {
         assert_eq!(ValenceResolver::new(&model).plan(&molecule), expected);
@@ -279,7 +279,7 @@ mod tests {
     )]
     fn test_valence_resolver_plan_error(
         #[case] model: ValenceModel,
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: ValenceContradiction,
     ) {
         assert_eq!(
@@ -347,7 +347,7 @@ mod tests {
     )]
     fn test_valence_resolver_resolve_error(
         #[case] model: ValenceModel,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: ValenceContradiction,
     ) {
         let original = molecule.clone();

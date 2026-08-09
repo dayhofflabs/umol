@@ -1,7 +1,7 @@
 //! End-to-end substructure matching over the OpenSMILES corpus
 //! (`umol-io/tests/smiles_parsing/data/opensmiles`, ~9k molecules).
 //!
-//! Sweeps both `MoleculeAst::substructure_matches` strategies against all six
+//! Sweeps both `Molecule::substructure_matches` strategies against all six
 //! subgraph-isomorphism algorithms, over three patterns of increasing cost. The
 //! corpus, patterns, and matching semantics (element-only atoms, any-bonds,
 //! all-embeddings enumeration) mirror `scripts/rdkit_substructure_baseline.py`
@@ -21,7 +21,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, MoleculeAst, MoleculeEntries, NumForm, SubstructureMatchAlgorithm,
+    AtomForm, AtomId, BondForm, Molecule, MoleculeEntries, NumForm, SubstructureMatchAlgorithm,
     SubstructureMatchConfig,
 };
 use walkdir::WalkDir;
@@ -56,7 +56,7 @@ fn strategy_name(strategy: SubstructureMatchAlgorithm) -> &'static str {
     }
 }
 
-fn load_corpus() -> Vec<MoleculeAst> {
+fn load_corpus() -> Vec<Molecule> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../umol-io/tests/smiles_parsing/data/opensmiles"
@@ -89,12 +89,12 @@ fn any_bond() -> BondForm {
     BondForm::new(NumForm::Undetermined)
 }
 
-fn pattern(atoms: Vec<AtomForm>, bonds: Vec<(u32, u32, BondForm)>) -> MoleculeAst {
+fn pattern(atoms: Vec<AtomForm>, bonds: Vec<(u32, u32, BondForm)>) -> Molecule {
     let bond_list = bonds
         .into_iter()
         .map(|(s, t, b)| (AtomId(s), AtomId(t), b))
         .collect();
-    MoleculeAst::from_entries(MoleculeEntries {
+    Molecule::from_entries(MoleculeEntries {
         atoms,
         bonds: bond_list,
         ..Default::default()
@@ -102,7 +102,7 @@ fn pattern(atoms: Vec<AtomForm>, bonds: Vec<(u32, u32, BondForm)>) -> MoleculeAs
 }
 
 /// `C(C)C(C)N` — 5 atoms, all any-bonds.
-fn pattern_branched() -> MoleculeAst {
+fn pattern_branched() -> Molecule {
     pattern(
         vec![
             carbon(),
@@ -121,7 +121,7 @@ fn pattern_branched() -> MoleculeAst {
 }
 
 /// `c1ccccc1O` — 6-ring + hydroxyl, all any-bonds.
-fn pattern_phenol() -> MoleculeAst {
+fn pattern_phenol() -> Molecule {
     pattern(
         vec![
             carbon(),
@@ -146,7 +146,7 @@ fn pattern_phenol() -> MoleculeAst {
 
 /// Fused 5-6 bicyclic carbon skeleton (ring A 0-1-5-6-7-8, ring B 1-2-3-4-5,
 /// fused edge 1-5), all any-bonds.
-fn pattern_bicyclic() -> MoleculeAst {
+fn pattern_bicyclic() -> Molecule {
     pattern(
         (0..9).map(|_| carbon()).collect(),
         vec![
@@ -166,7 +166,7 @@ fn pattern_bicyclic() -> MoleculeAst {
 
 fn substructure_benchmark(c: &mut Criterion) {
     let corpus = load_corpus();
-    let patterns: [(&str, MoleculeAst); 3] = [
+    let patterns: [(&str, Molecule); 3] = [
         ("branched", pattern_branched()),
         ("phenol", pattern_phenol()),
         ("bicyclic", pattern_bicyclic()),

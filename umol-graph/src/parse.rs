@@ -1,8 +1,8 @@
-//! MOL parsing into a resolved [`MoleculeAst`] — parse + raise + resolve.
+//! MOL parsing into a resolved [`Molecule`] — parse + raise + resolve.
 //!
 //! SMILES ingestion lives in [`crate::ingest`].
 
-use umol_graph_ir::ir::{MoleculeAst, TryIntoIr};
+use umol_graph_ir::ir::{Molecule, TryIntoIr};
 use umol_io::ctfile::config::CtfileIoConfig;
 use umol_io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
 use umol_utils::error::UmolError;
@@ -11,13 +11,13 @@ use umol_utils::solution::Solution;
 use crate::ops::model::ChemistryModel;
 use crate::ops::resolve::{ResolveConfig, ResolveUnderdetermined, Resolver};
 
-/// Parse MOL to a resolved [`MoleculeAst`] using default IO config and model.
-pub fn parse_mol(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
+/// Parse MOL to a resolved [`Molecule`] using default IO config and model.
+pub fn parse_mol(input: &str) -> Result<Molecule, Box<dyn UmolError>> {
     parse_mol_bytes(input.as_bytes())
 }
 
-/// Parse MOL bytes to a resolved [`MoleculeAst`] using default IO config and model.
-pub fn parse_mol_bytes(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> {
+/// Parse MOL bytes to a resolved [`Molecule`] using default IO config and model.
+pub fn parse_mol_bytes(input: &[u8]) -> Result<Molecule, Box<dyn UmolError>> {
     parse_mol_bytes_with(
         input,
         &CtfileIoConfig::basic(),
@@ -26,25 +26,25 @@ pub fn parse_mol_bytes(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> 
     )
 }
 
-/// Parse MOL to a resolved [`MoleculeAst`] with explicit IO, model, and resolve config.
+/// Parse MOL to a resolved [`Molecule`] with explicit IO, model, and resolve config.
 pub fn parse_mol_with(
     input: &str,
     io_config: &CtfileIoConfig,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<MoleculeAst, Box<dyn UmolError>> {
+) -> Result<Molecule, Box<dyn UmolError>> {
     parse_mol_bytes_with(input.as_bytes(), io_config, model, resolve_config)
 }
 
-/// Parse MOL bytes to a resolved [`MoleculeAst`] with explicit IO, model, and resolve config.
+/// Parse MOL bytes to a resolved [`Molecule`] with explicit IO, model, and resolve config.
 pub fn parse_mol_bytes_with(
     input: &[u8],
     io_config: &CtfileIoConfig,
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
-) -> Result<MoleculeAst, Box<dyn UmolError>> {
+) -> Result<Molecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: MoleculeAst = (&table_mol).try_into_ir(&())?;
+    let mut ast: Molecule = (&table_mol).try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),

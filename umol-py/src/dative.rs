@@ -9,7 +9,7 @@ use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, DativeBondForm as GraphIrDativeBondForm,
     DativeBondId as GraphIrDativeBondId, DativeBondUpdate as GraphIrDativeBondUpdate,
-    DativeBondView as GraphIrDativeBondView, MoleculeAst as GraphIrMoleculeAst,
+    DativeBondView as GraphIrDativeBondView, Molecule as GraphIrMolecule,
 };
 
 use crate::constraint::dative::{
@@ -222,7 +222,7 @@ pub struct DativeBondView {
 impl DativeBondView {
     fn dative_bond<'a>(
         &self,
-        molecule: &'a GraphIrMoleculeAst,
+        molecule: &'a GraphIrMolecule,
     ) -> PyResult<GraphIrDativeBondView<'a>> {
         molecule
             .dative_bonds()
@@ -334,7 +334,7 @@ impl DativeBondView {
 /// existing dative bond id, or `IndexError`. `DativeBondId` is `RelationId`-backed
 /// but contiguous for fresh molecules, so integer positions address it directly.
 fn resolve_dative_bond_index(
-    molecule: &GraphIrMoleculeAst,
+    molecule: &GraphIrMolecule,
     index: isize,
 ) -> PyResult<GraphIrDativeBondId> {
     let count = molecule.dative_bonds().count();
@@ -486,7 +486,7 @@ mod tests {
     /// An ammonia-borane adduct: borane B (id 0) accepts from ammonia N (id 1),
     /// dative bond id 0 (acceptor B, donor N, order 1).
     fn ammonia_borane(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::B),
                 GraphIrAtomForm::from_element(ChemElement::N),
@@ -686,7 +686,7 @@ mod tests {
     fn test_dative_bond_views_incident() {
         Python::attach(|py| {
             // B(0) accepts from N(1); C(2) isolated
-            let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+            let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::B),
                     GraphIrAtomForm::from_element(ChemElement::N),

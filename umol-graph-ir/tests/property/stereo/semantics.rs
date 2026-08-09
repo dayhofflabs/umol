@@ -48,7 +48,7 @@ proptest! {
         elements in prop::collection::vec(element_strategy(), 4),
         coset in 0u32..2,
     ) {
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: iter::once(AtomForm::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomForm::from_element))
                 .collect(),
@@ -88,7 +88,7 @@ proptest! {
         elements in prop::collection::vec(element_strategy(), 4),
         coset in 2u32..=32,
     ) {
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: iter::once(AtomForm::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomForm::from_element))
                 .collect(),

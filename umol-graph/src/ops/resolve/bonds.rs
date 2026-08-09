@@ -4,7 +4,7 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    BondHandle, BondUpdate, Edits, Lattice, MoleculeAst, NumForm, TransactionError,
+    BondHandle, BondUpdate, Edits, Lattice, Molecule, NumForm, TransactionError,
     UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -27,7 +27,7 @@ impl BondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `ast`.
-    pub fn plan(&self, ast: &MoleculeAst) -> Edits {
+    pub fn plan(&self, ast: &Molecule) -> Edits {
         let mut edits = Edits::new();
         for bond_id in ast.bonds().ids() {
             let bond = ast.bond(bond_id).ast;
@@ -52,7 +52,7 @@ impl BondsResolver {
     /// Plan and atomically apply localized-bond defaults.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
         let edits = self.plan(ast);
         let mut editor = ast.edit();
@@ -103,13 +103,13 @@ mod tests {
             },
         }])
     )]
-    fn test_bonds_resolver_plan(#[case] molecule: MoleculeAst, #[case] expected: Edits) {
+    fn test_bonds_resolver_plan(#[case] molecule: Molecule, #[case] expected: Edits) {
         assert_eq!(BondsResolver::new().plan(&molecule), expected);
     }
 
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c+#u2#s1"]]}"#))]
-    fn test_bonds_resolver_plan_identity(#[case] molecule: MoleculeAst) {
+    fn test_bonds_resolver_plan_identity(#[case] molecule: Molecule) {
         assert_eq!(BondsResolver::new().plan(&molecule), Edits::new());
     }
 
@@ -118,10 +118,7 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#s3"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c0#u2#s3"]]}"#)
     )]
-    fn test_bonds_resolver_resolve(
-        #[case] mut molecule: MoleculeAst,
-        #[case] expected: MoleculeAst,
-    ) {
+    fn test_bonds_resolver_resolve(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         assert_eq!(
             BondsResolver::new().resolve(&mut molecule),
             Ok(Solution::Determined(()))

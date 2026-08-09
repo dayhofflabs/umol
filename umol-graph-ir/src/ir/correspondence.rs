@@ -1,4 +1,4 @@
-//! A partial bijection between two `MoleculeAst` id spaces, per entity family.
+//! A partial bijection between two `Molecule` id spaces, per entity family.
 //!
 //! The atom part is a `Correspondence<AtomId>`; the seven other families each carry a
 //! `Correspondence` over their entity id. Valueless — pairing only; adding values and a direction
@@ -14,7 +14,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
 use super::remap::IdRemapping;
@@ -66,11 +66,7 @@ impl MoleculeCorrespondence {
     /// Returns `None` when the atom correspondence is not compatible with the supplied molecule
     /// pair, or
     /// when entity incidence does not induce a unique right partner.
-    pub fn induce(
-        lhs: &MoleculeAst,
-        rhs: &MoleculeAst,
-        atoms: Correspondence<AtomId>,
-    ) -> Option<Self> {
+    pub fn induce(lhs: &Molecule, rhs: &Molecule, atoms: Correspondence<AtomId>) -> Option<Self> {
         if atoms.left_count() != lhs.atoms().count() || atoms.right_count() != rhs.atoms().count() {
             return None;
         }
@@ -319,8 +315,8 @@ impl MoleculeCorrespondence {
 /// The bond correspondence induced by an atom correspondence: the two molecular graphs' edge
 /// correspondence under `atoms`.
 pub(crate) fn induced_bonds(
-    left: &MoleculeAst,
-    right: &MoleculeAst,
+    left: &Molecule,
+    right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<BondId>> {
     induce_family(
@@ -343,8 +339,8 @@ pub(crate) fn induced_bonds(
 /// The dative-bond correspondence induced by an atom correspondence: each left dative bond whose
 /// acceptor and donors are all matched with the right dative bond over the same roles.
 pub(crate) fn induced_dative_bonds(
-    left: &MoleculeAst,
-    right: &MoleculeAst,
+    left: &Molecule,
+    right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<DativeBondId>> {
     induce_family(
@@ -371,8 +367,8 @@ pub(crate) fn induced_dative_bonds(
 /// The aromatic-system correspondence induced by an atom correspondence: each left system whose
 /// atoms are all matched with the right system over the same atom set.
 pub(crate) fn induced_aromatic_systems(
-    left: &MoleculeAst,
-    right: &MoleculeAst,
+    left: &Molecule,
+    right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<AromaticSystemId>> {
     induce_family(
@@ -394,8 +390,8 @@ pub(crate) fn induced_aromatic_systems(
 /// The multicenter-bond correspondence induced by an atom correspondence: each left bond whose
 /// atoms are all matched with the right bond over the same atom set.
 pub(crate) fn induced_multicenter_bonds(
-    left: &MoleculeAst,
-    right: &MoleculeAst,
+    left: &Molecule,
+    right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<MulticenterBondId>> {
     induce_family(
@@ -417,8 +413,8 @@ pub(crate) fn induced_multicenter_bonds(
 /// The noncovalent-bond correspondence induced by an atom correspondence: each left bond whose two
 /// atoms are both matched with the right bond over the same atom pair.
 pub(crate) fn induced_noncovalent_bonds(
-    left: &MoleculeAst,
-    right: &MoleculeAst,
+    left: &Molecule,
+    right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<NoncovalentBondId>> {
     induce_family(
@@ -657,7 +653,7 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_induce() {
         // lhs C-C-C with a dative (donor 2 → acceptor 1); rhs adds a fourth atom + bond.
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -666,7 +662,7 @@ mod tests {
             dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+        let rhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -718,11 +714,11 @@ mod tests {
         #[case] declared_left_count: usize,
         #[case] declared_right_count: usize,
     ) {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); left_atom_count],
             ..Default::default()
         });
-        let rhs = MoleculeAst::from_entries(MoleculeEntries {
+        let rhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); right_atom_count],
             ..Default::default()
         });
@@ -849,8 +845,8 @@ mod tests {
             for (lhs, rhs) in [(unique.clone(), duplicate.clone()), (duplicate, unique)] {
                 assert_eq!(
                     MoleculeCorrespondence::induce(
-                        &MoleculeAst::from_entries(lhs),
-                        &MoleculeAst::from_entries(rhs),
+                        &Molecule::from_entries(lhs),
+                        &Molecule::from_entries(rhs),
                         Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
                     ),
                     None,

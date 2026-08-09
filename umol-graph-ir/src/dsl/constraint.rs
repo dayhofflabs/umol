@@ -45,7 +45,7 @@ use crate::ir::constraint::{
     SubPatternAnchor, TopicityForm,
 };
 use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
-use crate::ir::molecule::MoleculeAst;
+use crate::ir::molecule::Molecule;
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::stereo::{CisTransStereoForm, StereoCoset, StereoKind, TetrahedralStereoForm};
 use crate::ir::traits::{FromIr, IntoIr};
@@ -1204,7 +1204,7 @@ pub(super) fn read_constraints_dsl(
 /// molecule's atoms (or bonds). Empty subset must be expressed explicitly as
 /// `Some(vec![])`.
 ///
-/// `SubPattern` carries a `Box<MoleculeAst>` directly: defaults are a
+/// `SubPattern` carries a `Box<Molecule>` directly: defaults are a
 /// ground-input convenience that has no meaning for patterns, where
 /// `Undetermined` is a wildcard. The AST↔DSL bridge for the pattern is
 /// the identity; the EDN bridge wraps with empty `MoleculeMetadata` so refs render
@@ -1228,7 +1228,7 @@ pub enum MoleculeConstraintDsl {
     },
     SubPattern {
         anchor: SubPatternAnchorDsl,
-        pattern: Box<MoleculeAst>,
+        pattern: Box<Molecule>,
     },
 }
 
@@ -2210,7 +2210,7 @@ mod tests {
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
         StereoBondId,
     };
-    use crate::ir::molecule::MoleculeAst;
+    use crate::ir::molecule::Molecule;
     use crate::ir::stereo::{
         CisTransStereoForm, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoForm,
         Topicity,
@@ -2530,7 +2530,7 @@ mod tests {
         "{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}")]
     #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: NumForm::Lit(4) }),
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
-    #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
+    #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) }),
         "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
     #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(4))), Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))]),

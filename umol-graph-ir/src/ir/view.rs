@@ -1,9 +1,9 @@
-//! Read-only views over `MoleculeAst` topology and relations.
+//! Read-only views over `Molecule` topology and relations.
 //!
 //! View records bundle an index with the underlying data so consumers
 //! never assemble (id, data, participants) tuples by hand. Namespace
 //! types group per-relation accessors (`count`, `ids`, `iter`, `get`,
-//! and `Index`) without burying them on `MoleculeAst` itself.
+//! and `Index`) without burying them on `Molecule` itself.
 
 #[cfg(test)]
 use std::fmt::Debug;

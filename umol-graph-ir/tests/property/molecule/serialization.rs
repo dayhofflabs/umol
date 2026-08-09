@@ -50,7 +50,7 @@ proptest! {
         prop_assert_eq!(via_stream, via_tree);
     }
 
-    /// Direct `MoleculeAst::ToEdn` / `FromEdn` round-trips are the identity.
+    /// Direct `Molecule::ToEdn` / `FromEdn` round-trips are the identity.
     /// Refs render as positional integers (no id keywords); the AST carries
     /// no metadata, so canonical EDN parses back to an equal AST.
     #[test]
@@ -58,7 +58,7 @@ proptest! {
         ast in molecule_ast_with_constraints_strategy(),
     ) {
         let edn = ast.to_edn();
-        let parsed = MoleculeAst::from_edn(&edn)
+        let parsed = Molecule::from_edn(&edn)
             .map_err(|e| TestCaseError::fail(format!("tree parse failed: {e}")))?;
         prop_assert_eq!(ast, parsed);
     }
@@ -68,7 +68,7 @@ proptest! {
         ast in molecule_ast_with_constraints_strategy(),
     ) {
         let rendered = ast.to_edn().to_string();
-        let parsed = MoleculeAst::from_edn_str(&rendered)
+        let parsed = Molecule::from_edn_str(&rendered)
             .map_err(|e| TestCaseError::fail(format!("streaming parse failed: {e}\nrendered: {rendered}")))?;
         prop_assert_eq!(ast, parsed);
     }
@@ -115,7 +115,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_binding_present() {
         AtomId(0),
         AtomConstraintForm::Valence(NumForm::Lit(4)),
     ));
-    let ast = MoleculeAst::from_entries(MoleculeEntries {
+    let ast = Molecule::from_entries(MoleculeEntries {
         atoms,
         constraints: cs,
         ..Default::default()

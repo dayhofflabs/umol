@@ -87,7 +87,7 @@ pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
-    spec, AtomArg, Fragment, MoleculeAst, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
+    spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
     MoleculeEntriesError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};

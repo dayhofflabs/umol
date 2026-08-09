@@ -5,7 +5,7 @@ use std::iter::once;
 
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticValenceForm, AtomConstraintForm, AtomId, ElectronCountsForm,
-    ElementForm, MoleculeAst, NumForm,
+    ElementForm, Molecule, NumForm,
 };
 
 use crate::ops::transform::Transformer;
@@ -22,7 +22,7 @@ struct DelocalizationPlan {
 }
 
 impl DelocalizationPlan {
-    fn derive(ast: &MoleculeAst, system: AromaticSystemId) -> Option<Self> {
+    fn derive(ast: &Molecule, system: AromaticSystemId) -> Option<Self> {
         let view = ast.aromatic_system(system);
         let atom_ids: Vec<AtomId> = view.atom_ids().collect();
         let (&first, rest) = atom_ids.split_first()?;
@@ -79,7 +79,7 @@ impl DelocalizationPlan {
         })
     }
 
-    fn apply(self, ast: &mut MoleculeAst) {
+    fn apply(self, ast: &mut Molecule) {
         for (atom_id, contribution) in self.atoms {
             let atom = &mut ast.atom_mut(atom_id).ast;
             atom.charge = NumForm::Lit(0);
@@ -96,7 +96,7 @@ impl DelocalizationPlan {
 impl Transformer for DelocalizeCharge {
     type Error = Infallible;
 
-    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<(), Self::Error> {
+    fn transform_into(&self, ast: &mut Molecule) -> Result<(), Self::Error> {
         let plans: Vec<DelocalizationPlan> = ast
             .aromatic_systems()
             .ids()
@@ -108,10 +108,7 @@ impl Transformer for DelocalizeCharge {
         Ok(())
     }
 
-    fn generate_all<'a>(
-        &'a self,
-        ast: &'a MoleculeAst,
-    ) -> Box<dyn Iterator<Item = MoleculeAst> + 'a> {
+    fn generate_all<'a>(&'a self, ast: &'a Molecule) -> Box<dyn Iterator<Item = Molecule> + 'a> {
         let transformed = match self.transform(ast) {
             Ok(transformed) => transformed,
             Err(never) => match never {},
@@ -183,7 +180,7 @@ mod tests {
                 {:atoms [3 4 5] :type "[1,1,1]#c+"}]
         }"#)
     )]
-    fn test_delocalize_charge_transform(#[case] input: MoleculeAst, #[case] expected: MoleculeAst) {
+    fn test_delocalize_charge_transform(#[case] input: Molecule, #[case] expected: Molecule) {
         assert_eq!(DelocalizeCharge.transform(&input), Ok(expected));
     }
 
@@ -205,7 +202,7 @@ mod tests {
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
         :aromatic-systems [{:atoms [0 1 2] :type "*"}]
     }"#))]
-    fn test_delocalize_charge_transform_identity(#[case] input: MoleculeAst) {
+    fn test_delocalize_charge_transform_identity(#[case] input: Molecule) {
         assert_eq!(DelocalizeCharge.transform(&input), Ok(input));
     }
 
@@ -222,10 +219,7 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#c+"}]
         }"#)
     )]
-    fn test_delocalize_charge_generate_all(
-        #[case] input: MoleculeAst,
-        #[case] expected: MoleculeAst,
-    ) {
+    fn test_delocalize_charge_generate_all(#[case] input: Molecule, #[case] expected: Molecule) {
         assert_eq!(
             DelocalizeCharge.generate_all(&input).collect::<Vec<_>>(),
             vec![expected]

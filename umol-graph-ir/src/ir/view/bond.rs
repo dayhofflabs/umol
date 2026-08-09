@@ -8,7 +8,7 @@ use umol_graph_core::{EdgeId, NodeId};
 use super::super::bond::BondForm;
 use super::super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::super::id::{AtomId, BondId, StereoBondId};
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{CisTransStereoForm, StereoKind};
 use super::super::traits::Lattice;
@@ -17,15 +17,15 @@ use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 use super::stereo::StereoBondView;
 
-/// Namespace accessor for bond views on a `MoleculeAst`.
+/// Namespace accessor for bond views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct BondViews<'a> {
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
     bonds: &'a [BondForm],
 }
 
 impl<'a> BondViews<'a> {
-    pub(crate) fn new(molecule: &'a MoleculeAst, bonds: &'a [BondForm]) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, bonds: &'a [BondForm]) -> Self {
         Self { molecule, bonds }
     }
 
@@ -124,7 +124,7 @@ pub struct BondView<'a> {
     pub id: BondId,
     atoms: [NodeId; 2],
     pub ast: &'a BondForm,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> BondView<'a> {
@@ -252,14 +252,14 @@ mod tests {
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::stereo::{CisTransStereoForm, StereoBondForm, StereoCoset, StereoKind};
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -290,13 +290,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_views_count(molecule: MoleculeAst) {
+    fn test_bond_views_count(molecule: Molecule) {
         assert_eq!(molecule.bonds().count(), 3);
     }
 
     #[rstest]
-    fn test_bond_views_ids(molecule: MoleculeAst) {
-        assert_exact_size_by(MoleculeAst::default().bonds().ids(), vec![], |id| id);
+    fn test_bond_views_ids(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().bonds().ids(), vec![], |id| id);
         assert_exact_size_by(
             molecule.bonds().ids(),
             vec![BondId(0), BondId(1), BondId(2)],
@@ -305,8 +305,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_views_iter(molecule: MoleculeAst) {
-        assert_exact_size_by(MoleculeAst::default().bonds().iter(), vec![], |view| {
+    fn test_bond_views_iter(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().bonds().iter(), vec![], |view| {
             (view.id, view.atom_ids(), view.ast.clone())
         });
         assert_exact_size_by(
@@ -323,12 +323,12 @@ mod tests {
     #[rstest]
     #[case::present(BondId(1), true)]
     #[case::absent(BondId(99), false)]
-    fn test_bond_views_contains(molecule: MoleculeAst, #[case] id: BondId, #[case] expected: bool) {
+    fn test_bond_views_contains(molecule: Molecule, #[case] id: BondId, #[case] expected: bool) {
         assert_eq!(molecule.bonds().contains(id), expected);
     }
 
     #[rstest]
-    fn test_bond_views_get(molecule: MoleculeAst) {
+    fn test_bond_views_get(molecule: Molecule) {
         let res = molecule.bonds().get(BondId(1));
         assert!(res.is_some());
         let view = res.unwrap();
@@ -338,18 +338,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_views_get_none(molecule: MoleculeAst) {
+    fn test_bond_views_get_none(molecule: Molecule) {
         let res = molecule.bonds().get(BondId(99));
         assert!(res.is_none());
     }
 
     #[rstest]
-    fn test_bond_view_atom_ids(molecule: MoleculeAst) {
+    fn test_bond_view_atom_ids(molecule: Molecule) {
         assert_eq!(molecule.bond(BondId(1)).atom_ids(), [AtomId(1), AtomId(2)]);
     }
 
     #[rstest]
-    fn test_bond_view_atoms(molecule: MoleculeAst) {
+    fn test_bond_view_atoms(molecule: Molecule) {
         assert_exact_size_by(
             molecule.bond(BondId(1)).atoms(),
             vec![AtomId(1), AtomId(2)],
@@ -362,7 +362,7 @@ mod tests {
     #[case::both_endpoints_aromatic_alt(BondId(1), Some(AromaticSystemId(0)))]
     #[case::one_endpoint_outside(BondId(2), None)]
     fn test_bond_view_aromatic_system(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] bond: BondId,
         #[case] expected: Option<AromaticSystemId>,
     ) {
@@ -375,7 +375,7 @@ mod tests {
     #[case::both_endpoints_aromatic_alt(BondId(1), true)]
     #[case::one_endpoint_outside(BondId(2), false)]
     fn test_bond_view_is_in_aromatic_system(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] bond: BondId,
         #[case] expected: bool,
     ) {
@@ -383,8 +383,8 @@ mod tests {
     }
 
     #[fixture]
-    fn stereo_molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn stereo_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -407,7 +407,7 @@ mod tests {
     #[case::site(BondId(1), true)]
     #[case::non_site(BondId(0), false)]
     fn test_bond_view_is_stereo_bond(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] bond: BondId,
         #[case] expected: bool,
     ) {
@@ -418,7 +418,7 @@ mod tests {
     #[case::site(BondId(1), Some(StereoBondId(0)))]
     #[case::non_site(BondId(0), None)]
     fn test_bond_view_stereo_bond_id(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] bond: BondId,
         #[case] expected: Option<StereoBondId>,
     ) {
@@ -426,7 +426,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_view_stereo_bond(stereo_molecule: MoleculeAst) {
+    fn test_bond_view_stereo_bond(stereo_molecule: Molecule) {
         let view = stereo_molecule.bond(BondId(1)).stereo_bond().unwrap();
         assert_eq!(view.id, StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
@@ -442,7 +442,7 @@ mod tests {
         BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo),
     ]))]
     fn test_bond_view_derive_constraints(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] bond: BondId,
         #[case] expected: BondConstraintsForm,
     ) {

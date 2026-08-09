@@ -7,11 +7,11 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use bitflags::bitflags;
 
 use super::entity::Entity;
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 
 /// Round-0 color of any graph-participating molecule entity.
 pub trait MoleculeColoring {
-    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64;
+    fn color(&self, mol: &Molecule, entity: Entity) -> u64;
 }
 
 bitflags! {
@@ -71,7 +71,7 @@ impl ConstitutionColoring {
 }
 
 impl MoleculeColoring for ConstitutionColoring {
-    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64 {
+    fn color(&self, mol: &Molecule, entity: Entity) -> u64 {
         // The leading `EntityKind` tag keeps kinds in disjoint color ranges; then
         // the entity's inherent fields, each gated by `features`.
         let mut hasher = DefaultHasher::new();
@@ -219,15 +219,15 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
     use crate::ir::value::NumForm;
 
     #[fixture]
-    fn ethanol_fragment() -> MoleculeAst {
+    fn ethanol_fragment() -> Molecule {
         // C-C-O: the two carbons share an element; oxygen differs.
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -248,7 +248,7 @@ mod tests {
     #[case::kind_tag_disjoint( ConstitutionFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
     #[case::element_not_selected( ConstitutionFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), true)]
     fn test_constitution_coloring_color(
-        ethanol_fragment: MoleculeAst,
+        ethanol_fragment: Molecule,
         #[case] features: ConstitutionFeatures,
         #[case] left: Entity,
         #[case] right: Entity,
@@ -261,10 +261,10 @@ mod tests {
     }
 
     #[fixture]
-    fn stereo_molecule() -> MoleculeAst {
+    fn stereo_molecule() -> Molecule {
         // Two stereo atoms of different kinds (Tetrahedral, SquarePlanar) and a
         // stereo bond, on a C₆ chain — enough to exercise kind + tag distinction.
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -308,7 +308,7 @@ mod tests {
     #[case::kind_blind(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), ConstitutionFeatures::empty(), true)]
     #[case::atom_bond_tag_disjoint(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoBond(StereoBondId(0)), ConstitutionFeatures::empty(), false)]
     fn test_constitution_coloring_color_stereo(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] left: Entity,
         #[case] right: Entity,
         #[case] features: ConstitutionFeatures,
@@ -340,7 +340,7 @@ mod tests {
     ) {
         // Two same-element atoms differing only in unpaired electrons; the color matches iff
         // the unpaired-electron components are indistinguishable under `features`.
-        let mol = MoleculeAst::from_entries(MoleculeEntries {
+        let mol = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C)
                     .with_unpaired_electrons(unpaired_electrons_a),

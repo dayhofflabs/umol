@@ -13,7 +13,7 @@ use super::super::super::entity::Entity;
 use super::super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
-use super::super::super::molecule::MoleculeAst;
+use super::super::super::molecule::Molecule;
 use super::super::super::stereo::{CisTransStereoForm, StereoKind, TetrahedralStereoForm};
 use super::super::super::traits::Lattice;
 use super::ConstraintError;
@@ -27,7 +27,7 @@ impl IncidenceConstraintValidator {
     /// Validate every inline incidence constraint in entity order.
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let mut bond_components = None;
@@ -106,7 +106,7 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule atom.
     pub fn validate_molecule_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom_id: AtomId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let atom = ast
@@ -123,7 +123,7 @@ impl IncidenceConstraintValidator {
     /// Validate one inline atom constraint selected by its container key.
     pub fn validate_molecule_atom_constraint(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom_id: AtomId,
         key: AtomConstraintKey,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
@@ -144,7 +144,7 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule bond.
     pub fn validate_molecule_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: BondId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let bond = ast
@@ -161,7 +161,7 @@ impl IncidenceConstraintValidator {
     /// Validate one inline localized-bond constraint selected by its container key.
     pub fn validate_molecule_bond_constraint(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: BondId,
         key: BondConstraintKey,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
@@ -181,7 +181,7 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule dative bond.
     pub fn validate_molecule_dative_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: DativeBondId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let bond = ast
@@ -198,7 +198,7 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule aromatic system.
     pub fn validate_molecule_aromatic_system(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         system_id: AromaticSystemId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let system =
@@ -215,7 +215,7 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule multicenter bond.
     pub fn validate_molecule_multicenter_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: MulticenterBondId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let bond =
@@ -232,7 +232,7 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule noncovalent bond.
     pub fn validate_molecule_noncovalent_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond_id: NoncovalentBondId,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
@@ -260,7 +260,7 @@ impl IncidenceConstraintValidator {
 /// Validate one non-ring atom constraint against its incidence-derived value.
 /// Ring constraints are determined identities here.
 pub fn validate_atom_constraint(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     atom_id: AtomId,
     constraint: &AtomConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
@@ -408,7 +408,7 @@ pub enum IncidenceConstraintContradiction {
 }
 
 pub fn validate_bond_constraint(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     bond_id: BondId,
     constraint: &BondConstraintForm,
 ) -> Option<Solution<(), IncidenceConstraintContradiction>> {
@@ -444,7 +444,7 @@ pub fn validate_bond_constraint(
 }
 
 pub fn validate_dative_bond_constraint(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     bond_id: DativeBondId,
     constraint: &DativeBondConstraintForm,
 ) -> Option<Solution<(), IncidenceConstraintContradiction>> {
@@ -480,7 +480,7 @@ pub fn validate_dative_bond_constraint(
 }
 
 pub fn validate_aromatic_system_constraint(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     system_id: AromaticSystemId,
     constraint: &AromaticSystemConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
@@ -498,7 +498,7 @@ pub fn validate_aromatic_system_constraint(
 }
 
 pub fn validate_multicenter_bond_constraint(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     bond_id: MulticenterBondId,
     constraint: &MulticenterBondConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
@@ -532,7 +532,7 @@ pub fn validate_noncovalent_bond_constraint(
 }
 
 fn validate_noncovalent_bond(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     bond_id: NoncovalentBondId,
     intramolecular: bool,
 ) -> Solution<(), IncidenceConstraintContradiction> {
@@ -618,7 +618,7 @@ fn conjunction<C>(outcomes: impl IntoIterator<Item = Solution<(), C>>) -> Soluti
 }
 
 pub fn bond_components_by_atom(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     algorithm: ConnectedComponentsAlgorithm,
 ) -> Vec<usize> {
     let atom_count = ast.atoms().count();
@@ -678,7 +678,7 @@ mod tests {
         Err(ConstraintError::InvalidReference { entity: Entity::Atom(AtomId(1)) }),
     )]
     fn test_incidence_constraint_validator_validate_molecule_atom_constraint(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] atom: AtomId,
         #[case] key: AtomConstraintKey,
         #[case] expected: Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError>,
@@ -718,7 +718,7 @@ mod tests {
         Err(ConstraintError::InvalidReference { entity: Entity::Bond(BondId(0)) }),
     )]
     fn test_incidence_constraint_validator_validate_molecule_bond_constraint(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] bond: BondId,
         #[case] key: BondConstraintKey,
         #[case] expected: Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError>,

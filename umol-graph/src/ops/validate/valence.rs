@@ -3,7 +3,7 @@
 //! over the atoms, surfacing the first mismatch as `Contradictory`.
 
 use thiserror::Error;
-use umol_graph_ir::ir::MoleculeAst;
+use umol_graph_ir::ir::Molecule;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
@@ -38,7 +38,7 @@ impl<'a> ValenceConformanceValidator<'a> {
 
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ValenceConformanceContradiction>, ValenceConformanceError> {
         let mut any_undetermined = false;
         for id in ast.atoms().ids() {

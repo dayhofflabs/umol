@@ -210,7 +210,7 @@ proptest! {
         let molecule = Smiles::parse_bytes(&input)
             .expect("generated wildcard chain should parse")
             .into_table_ir();
-        let molecule_ast = (&molecule)
+        let molecule = (&molecule)
             .try_into_ir(&())
             .expect("generated wildcard chain should raise");
         let expected: Vec<_> = input
@@ -223,7 +223,7 @@ proptest! {
                 }
             })
             .collect();
-        let actual: Vec<_> = molecule_ast
+        let actual: Vec<_> = molecule
             .atoms()
             .iter()
             .map(|atom| atom.element().clone())

@@ -9,7 +9,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomForm, AtomId, Constraint, ConstraintValidateConfig,
-    ConstraintValidator, Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
+    ConstraintValidator, Constraints, Molecule, MoleculeEntries, SubstructureMatchAlgorithm,
 };
 
 use super::REGRESSION_FILE;
@@ -21,8 +21,8 @@ const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
 };
 
-fn molecule_with(constraint: Constraint) -> MoleculeAst {
-    MoleculeAst::from_entries(MoleculeEntries {
+fn molecule_with(constraint: Constraint) -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
         constraints: Constraints::from(constraint),
         ..MoleculeEntries::default()
@@ -87,7 +87,7 @@ proptest! {
     #[test]
     fn test_constraint_inline_top_level_leaf_agreement(value in 0i64..=3) {
         let constraint = AtomConstraintForm::valence(value);
-        let inline = MoleculeAst::from_entries(MoleculeEntries {
+        let inline = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C).with_constraint(constraint.clone())],
             ..MoleculeEntries::default()
         });

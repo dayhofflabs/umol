@@ -12,7 +12,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId,
 };
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{StereoKind, TetrahedralStereoForm};
 use super::super::traits::Lattice;
@@ -25,15 +25,15 @@ use super::noncovalent::NoncovalentBondView;
 use super::stereo::StereoAtomView;
 use crate::ir::{AromaticValenceForm, AtomConstraintForm, MulticenterValenceForm};
 
-/// Namespace accessor for atom views on a `MoleculeAst`.
+/// Namespace accessor for atom views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct AtomViews<'a> {
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
     atoms: &'a [AtomForm],
 }
 
 impl<'a> AtomViews<'a> {
-    pub(crate) fn new(molecule: &'a MoleculeAst, atoms: &'a [AtomForm]) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, atoms: &'a [AtomForm]) -> Self {
         Self { molecule, atoms }
     }
 
@@ -73,7 +73,7 @@ impl<'a> AtomViews<'a> {
 }
 
 /// Borrowed view of an atom: index, underlying `AtomForm`, and the parent
-/// `MoleculeAst` for cross-relation chemistry methods.
+/// `Molecule` for cross-relation chemistry methods.
 ///
 /// Chemistry methods come in pairs: the topology-derived value (summed from
 /// incident bonds / dative bonds / aromatic system / multicenter bonds) and
@@ -83,7 +83,7 @@ impl<'a> AtomViews<'a> {
 pub struct AtomView<'a> {
     pub id: AtomId,
     pub ast: &'a AtomForm,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> AtomView<'a> {
@@ -482,7 +482,7 @@ mod tests {
         StereoAtomId,
     };
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind, TetrahedralStereoForm};
@@ -490,8 +490,8 @@ mod tests {
     use crate::mol_dsl;
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -522,13 +522,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_views_count(molecule: MoleculeAst) {
+    fn test_atom_views_count(molecule: Molecule) {
         assert_eq!(molecule.atoms().count(), 4);
     }
 
     #[rstest]
-    fn test_atom_views_ids(molecule: MoleculeAst) {
-        assert_exact_size_by(MoleculeAst::default().atoms().ids(), vec![], |id| id);
+    fn test_atom_views_ids(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().atoms().ids(), vec![], |id| id);
         assert_exact_size_by(
             molecule.atoms().ids(),
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
@@ -537,8 +537,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_views_iter(molecule: MoleculeAst) {
-        assert_exact_size_by(MoleculeAst::default().atoms().iter(), vec![], |view| {
+    fn test_atom_views_iter(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().atoms().iter(), vec![], |view| {
             (view.id, view.ast.clone())
         });
         assert_exact_size_by(
@@ -556,12 +556,12 @@ mod tests {
     #[rstest]
     #[case::present(AtomId(2), true)]
     #[case::absent(AtomId(999), false)]
-    fn test_atom_views_contains(molecule: MoleculeAst, #[case] id: AtomId, #[case] expected: bool) {
+    fn test_atom_views_contains(molecule: Molecule, #[case] id: AtomId, #[case] expected: bool) {
         assert_eq!(molecule.atoms().contains(id), expected);
     }
 
     #[rstest]
-    fn test_atom_views_get(molecule: MoleculeAst) {
+    fn test_atom_views_get(molecule: Molecule) {
         let res = molecule.atoms().get(AtomId(2));
         assert!(res.is_some());
         let atom = res.unwrap();
@@ -570,14 +570,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_views_get_none(molecule: MoleculeAst) {
+    fn test_atom_views_get_none(molecule: Molecule) {
         let res = molecule.atoms().get(AtomId(999));
         assert!(res.is_none());
     }
 
     #[rstest]
-    fn test_atom_view_neighbors(molecule: MoleculeAst) {
-        let isolated = MoleculeAst::from_entries(MoleculeEntries {
+    fn test_atom_view_neighbors(molecule: Molecule) {
+        let isolated = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -603,8 +603,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_bond_ids(molecule: MoleculeAst) {
-        let isolated = MoleculeAst::from_entries(MoleculeEntries {
+    fn test_atom_view_bond_ids(molecule: Molecule) {
+        let isolated = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -643,7 +643,7 @@ mod tests {
         NumForm::Undetermined,
     )]
     fn test_atom_view_valence(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] center: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -661,7 +661,7 @@ mod tests {
         if let Some(c) = constraint {
             atom.constraints.set(c);
         }
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -675,7 +675,7 @@ mod tests {
     #[case::donor(AtomId(0), NumForm::Lit(1))]
     #[case::acceptor(AtomId(1), NumForm::Lit(0))]
     fn test_atom_view_donated_pairs(#[case] atom: AtomId, #[case] expected: NumForm) {
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::C),
@@ -690,7 +690,7 @@ mod tests {
     fn test_atom_view_donated_pairs_constraint() {
         let mut atom = AtomForm::from_element(Element::N);
         atom.constraints.set(AtomConstraintForm::donated_pairs(1));
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -704,7 +704,7 @@ mod tests {
     #[case::donor(AtomId(0), NumForm::Lit(0))]
     #[case::acceptor(AtomId(1), NumForm::Lit(1))]
     fn test_atom_view_accepted_pairs(#[case] atom: AtomId, #[case] expected: NumForm) {
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::C),
@@ -719,7 +719,7 @@ mod tests {
     fn test_atom_view_accepted_pairs_constraint() {
         let mut atom = AtomForm::from_element(Element::C);
         atom.constraints.set(AtomConstraintForm::accepted_pairs(2));
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -737,14 +737,14 @@ mod tests {
 
     #[rstest]
     #[case::not_in_system(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         }),
         NumForm::Lit(0),
     )]
     #[case::aromatic_one(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
@@ -755,7 +755,7 @@ mod tests {
         NumForm::Lit(1),
     )]
     #[case::aromatic_zero(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
@@ -766,7 +766,7 @@ mod tests {
         NumForm::Lit(0),
     )]
     #[case::aromatic_two(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(
                 vec![AtomId(0)],
@@ -777,14 +777,14 @@ mod tests {
         NumForm::Lit(0),
     )]
     #[case::undetermined(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
             ..Default::default()
         }),
         NumForm::Undetermined,
     )]
-    fn test_atom_view_aromatic_covalence(#[case] molecule: MoleculeAst, #[case] expected: NumForm) {
+    fn test_atom_view_aromatic_covalence(#[case] molecule: Molecule, #[case] expected: NumForm) {
         assert_eq!(molecule.atom(AtomId(0)).aromatic_covalence(), expected);
     }
 
@@ -792,7 +792,7 @@ mod tests {
     #[case::in_system(AtomId(0), true)]
     #[case::not_in_system(AtomId(3), false)]
     fn test_atom_view_is_in_aromatic_system(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: bool,
     ) {
@@ -803,7 +803,7 @@ mod tests {
     #[case::participant(AtomId(0), Some(AromaticSystemId(0)))]
     #[case::not_participant(AtomId(3), None)]
     fn test_atom_view_aromatic_system(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Option<AromaticSystemId>,
     ) {
@@ -816,7 +816,7 @@ mod tests {
     #[case::acceptor(AtomId(3), vec![DativeBondId(0)])]
     #[case::uninvolved(AtomId(0), vec![])]
     fn test_atom_view_dative_bonds(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<DativeBondId>,
     ) {
@@ -832,7 +832,7 @@ mod tests {
     #[case::participant(AtomId(0), vec![MulticenterBondId(0)])]
     #[case::uninvolved(AtomId(3), vec![])]
     fn test_atom_view_multicenter_bonds(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<MulticenterBondId>,
     ) {
@@ -851,7 +851,7 @@ mod tests {
     #[case::endpoint_3(AtomId(3), vec![NoncovalentBondId(0)])]
     #[case::uninvolved(AtomId(1), vec![])]
     fn test_atom_view_noncovalent_bonds(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<NoncovalentBondId>,
     ) {
@@ -866,8 +866,8 @@ mod tests {
     }
 
     #[fixture]
-    fn stereo_molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn stereo_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 10],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -910,7 +910,7 @@ mod tests {
     #[case::square_planar_site(AtomId(5), true)]
     #[case::ligand(AtomId(1), false)]
     fn test_atom_view_is_stereo_atom(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: bool,
     ) {
@@ -922,7 +922,7 @@ mod tests {
     #[case::square_planar_site(AtomId(5), Some(StereoAtomId(1)))]
     #[case::ligand(AtomId(1), None)]
     fn test_atom_view_stereo_atom_id(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Option<StereoAtomId>,
     ) {
@@ -930,7 +930,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_stereo_atom(stereo_molecule: MoleculeAst) {
+    fn test_atom_view_stereo_atom(stereo_molecule: Molecule) {
         // kind-generic: returns the sited stereo atom of any coordination geometry
         let tetrahedral = stereo_molecule.atom(AtomId(0)).stereo_atom().unwrap();
         assert_eq!(tetrahedral.id, StereoAtomId(0));
@@ -968,7 +968,7 @@ mod tests {
         AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::NotStereo),
     ]))]
     fn test_atom_view_derive_constraints(
-        stereo_molecule: MoleculeAst,
+        stereo_molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: AtomConstraintsForm,
     ) {
@@ -977,7 +977,7 @@ mod tests {
 
     #[rstest]
     #[case::aromatic(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
             ..Default::default()
@@ -990,7 +990,7 @@ mod tests {
         ]),
     )]
     #[case::multicenter(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -1010,7 +1010,7 @@ mod tests {
         ]),
     )]
     fn test_atom_view_derive_constraints_partial(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: AtomConstraintsForm,
     ) {
         assert_eq!(molecule.atom(AtomId(0)).derive_constraints(false), expected);
@@ -1022,7 +1022,7 @@ mod tests {
         atom.constraints.set(AtomConstraintForm::aromatic_valence(
             AromaticValenceForm::Aromatic(NumForm::Lit(1)),
         ));
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -1056,7 +1056,7 @@ mod tests {
             .into_iter()
             .map(|(parts, electrons)| (parts, MulticenterBondForm::new(electrons)))
             .collect();
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -1075,7 +1075,7 @@ mod tests {
             .set(AtomConstraintForm::multicenter_valence(
                 MulticenterValenceForm::Multicenter(NumForm::Lit(2)),
             ));
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
@@ -1090,7 +1090,7 @@ mod tests {
     #[case::ethene_carbon(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#), AtomId(0), NumForm::Lit(1))]
     #[case::three_bonds(mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#), AtomId(0), NumForm::Lit(3))]
     fn test_atom_view_degree(
-        #[case] mol: MoleculeAst,
+        #[case] mol: Molecule,
         #[case] atom: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -1100,7 +1100,7 @@ mod tests {
     #[rstest]
     #[case::lit(mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#), NumForm::Lit(4))]
     #[case::undetermined(mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#), NumForm::Undetermined)]
-    fn test_atom_view_total_degree(#[case] molecule: MoleculeAst, #[case] expected: NumForm) {
+    fn test_atom_view_total_degree(#[case] molecule: Molecule, #[case] expected: NumForm) {
         assert_eq!(molecule.atom(AtomId(0)).total_degree(), expected);
     }
 
@@ -1116,7 +1116,7 @@ mod tests {
         NumForm::Lit(1),
     )]
     fn test_atom_view_heavy_atom_degree(
-        #[case] mol: MoleculeAst,
+        #[case] mol: Molecule,
         #[case] atom: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -1135,7 +1135,7 @@ mod tests {
         NumForm::Lit(2),
     )]
     fn test_atom_view_heavy_atom_valence(
-        #[case] mol: MoleculeAst,
+        #[case] mol: Molecule,
         #[case] atom: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -1159,7 +1159,7 @@ mod tests {
         NumForm::Undetermined,
     )]
     fn test_atom_view_total_hydrogens(
-        #[case] mol: MoleculeAst,
+        #[case] mol: Molecule,
         #[case] atom: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -1170,7 +1170,7 @@ mod tests {
     #[case::lit(mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#), NumForm::Lit(4))]
     #[case::undetemined(mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#), NumForm::Undetermined)]
     fn test_atom_view_total_valence_sum_of_terms(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: NumForm,
     ) {
         assert_eq!(molecule.atom(AtomId(0)).total_valence(), expected);
@@ -1180,18 +1180,18 @@ mod tests {
     #[case::ch4(mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#), NumForm::Lit(4))]
     #[case::undetermined_h(mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#), NumForm::Undetermined)]
     fn test_atom_view_covalence_non_aromatic(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: NumForm,
     ) {
         assert_eq!(molecule.atom(AtomId(0)).covalence(), expected);
     }
 
     #[fixture]
-    fn aromatic_ring() -> MoleculeAst {
+    fn aromatic_ring() -> Molecule {
         // 3-membered C ring, each with 0 implicit H (valence 2 from two ring
         // bonds), aromatic system electrons [1, 2, 0].
         let carbon = AtomForm::from_element(Element::C).with_implicit_hydrogens(0_i64);
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![carbon.clone(), carbon.clone(), carbon],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -1211,7 +1211,7 @@ mod tests {
     #[case::donor(AtomId(1), NumForm::Lit(2))] // av=2 (donated pair) → +0
     #[case::acceptor(AtomId(2), NumForm::Lit(2))] // av=0 → +0
     fn test_atom_view_covalence_aromatic(
-        aromatic_ring: MoleculeAst,
+        aromatic_ring: Molecule,
         #[case] atom: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -1219,11 +1219,11 @@ mod tests {
     }
 
     #[fixture]
-    fn dative_pair() -> MoleculeAst {
+    fn dative_pair() -> Molecule {
         // H₃N→BH₃: N (3 H) donates a pair to B (3 H). Localized valence plus
         // implicit hydrogens plus aromatic covalence is 3 for both; the dative
         // bond (donated on N, accepted on B) is excluded.
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N).with_implicit_hydrogens(3_i64),
                 AtomForm::from_element(Element::B).with_implicit_hydrogens(3_i64),
@@ -1237,7 +1237,7 @@ mod tests {
     #[case::donor(AtomId(0), NumForm::Lit(3))] // donated pair excluded → v+h = 3
     #[case::acceptor(AtomId(1), NumForm::Lit(3))] // accepted pair excluded → v+h = 3
     fn test_atom_view_covalence_dative(
-        dative_pair: MoleculeAst,
+        dative_pair: Molecule,
         #[case] atom: AtomId,
         #[case] expected: NumForm,
     ) {
@@ -1246,7 +1246,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_multicenter_degree() {
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),

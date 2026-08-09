@@ -17,9 +17,9 @@ proptest! {
     fn test_molecule_ast_try_from_entries(
         entries in molecule_entries_with_constraints_strategy(),
     ) {
-        let expected = MoleculeAst::from_entries(entries.clone());
+        let expected = Molecule::from_entries(entries.clone());
 
-        prop_assert_eq!(MoleculeAst::try_from_entries(entries), Ok(expected));
+        prop_assert_eq!(Molecule::try_from_entries(entries), Ok(expected));
     }
 
     #[test]
@@ -45,7 +45,7 @@ proptest! {
             0..5,
         ),
     ) {
-        let (combined, correspondences) = MoleculeAst::combine_all(&molecules);
+        let (combined, correspondences) = Molecule::combine_all(&molecules);
         prop_assert_eq!(correspondences.len(), molecules.len());
         for (molecule, correspondence) in molecules.iter().zip(&correspondences) {
             prop_assert_eq!(&combined.extract(correspondence), molecule);
@@ -104,7 +104,7 @@ proptest! {
             prop::collection::vec(any::<bool>(), atom_count),
         )),
     ) {
-        let ast = MoleculeAst::from_entries(MoleculeEntries {
+        let ast = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); atom_count],
             ..Default::default()
         });

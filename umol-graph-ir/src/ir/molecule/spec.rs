@@ -1,4 +1,4 @@
-//! Declarative `+`-spec construction — build a `MoleculeAst` by summing free-function
+//! Declarative `+`-spec construction — build a `Molecule` by summing free-function
 //! *terms* into a `MoleculeSpec`, then materializing. Each term lowers onto the L1
 //! `MoleculeBuilder`; every atom position is an [`AtomArg`] that either creates a fresh atom
 //! (optionally named) or references one already introduced (by position or by name).
@@ -18,7 +18,7 @@ use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
 use super::super::stereo::{StereoAtomForm, StereoBondForm};
-use super::{MoleculeAst, MoleculeBuilder};
+use super::{Molecule, MoleculeBuilder};
 
 /// An atom argument to a spec term: create a fresh atom (optionally named) or reference
 /// one already introduced — by creation `position` or by `name`. What you write picks the
@@ -357,7 +357,7 @@ impl MoleculeSpec {
     /// Materialize the spec. Atoms are created in `+`-order (fixing their positions),
     /// relations are wired against the created atoms, and — if any `ground` term is
     /// present — every unspecified atom field is filled with its ground default.
-    pub fn build(self) -> MoleculeAst {
+    pub fn build(self) -> Molecule {
         let grounded = self
             .terms
             .iter()

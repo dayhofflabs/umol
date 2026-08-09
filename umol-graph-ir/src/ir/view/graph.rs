@@ -17,7 +17,7 @@ use super::super::matching::BondMatching;
 /// AtomId/BondId-typed adapter over the underlying `Graph`. Holds the
 /// pure-graph algorithms (connectivity, cycles, matchings, isomorphisms)
 /// without exposing graph-core's `NodeId` / `EdgeId` types in the public
-/// API. Construct via `MoleculeAst::graph()`.
+/// API. Construct via `Molecule::graph()`.
 #[derive(Clone, Copy)]
 pub struct GraphView<'a> {
     graph: &'a Graph,
@@ -394,11 +394,11 @@ mod tests {
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::id::AtomId;
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
 
     #[fixture]
     fn hexagon() -> AtomAutomorphism {
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -416,7 +416,7 @@ mod tests {
 
     #[fixture]
     fn chain_3() -> AtomAutomorphism {
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),

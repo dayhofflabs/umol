@@ -2339,25 +2339,25 @@ mod tests {
         StereoKind,
     };
     use super::super::super::value::NumForm;
-    use super::super::{MoleculeAst, MoleculeEntries};
+    use super::super::{Molecule, MoleculeEntries};
     use super::*;
     use crate::ir::BooleanForm;
 
     #[fixture]
     fn empty() -> MoleculeEditor {
-        MoleculeAst::default().edit()
+        Molecule::default().edit()
     }
 
     #[fixture]
     fn one_atom() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b
     }
 
     #[fixture]
     fn diatomic() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
@@ -2563,7 +2563,7 @@ mod tests {
         #[case] initial_atom_count: usize,
         #[case] edits: Edits,
     ) {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         for _ in 0..initial_atom_count {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
@@ -2581,7 +2581,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_transact_handles_initial() {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         editor.add_atom(AtomForm::from_element(Element::C));
         editor.add_atom(AtomForm::from_element(Element::N));
         editor.add_atom(AtomForm::from_element(Element::O));
@@ -2618,7 +2618,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_transact_handles_created() {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         let mut edits = Edits::new();
         let atoms = edits.add_atoms([
             AtomForm::from_element(Element::C),
@@ -2647,7 +2647,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_transact_handles_reuse() {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         let mut edits = Edits::new();
         let removed = edits.add_atom(AtomForm::from_element(Element::C));
         edits.remove_atom(removed);
@@ -2674,7 +2674,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_transact_handles_per_kind() {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         let before = editor.clone().build();
         let mut edits = Edits::new();
         let atoms = edits.add_atoms([
@@ -3292,7 +3292,7 @@ mod tests {
         #[case] edits: Edits,
         #[case] expected: TransactionError,
     ) {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         for _ in 0..initial_atom_count {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
@@ -3304,7 +3304,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_transact_molecule_constraint_subpattern(mut one_atom: MoleculeEditor) {
-        let pattern = MoleculeAst::from_entries(MoleculeEntries {
+        let pattern = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             ..Default::default()
         });
@@ -3417,7 +3417,7 @@ mod tests {
 
     #[fixture]
     fn stereo_atom_skeleton() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         for el in [Element::C, Element::F, Element::Cl, Element::Br, Element::I] {
             b.add_atom(AtomForm::from_element(el));
         }
@@ -3524,7 +3524,7 @@ mod tests {
 
     #[fixture]
     fn stereo_bond_skeleton() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         for _ in 0..4 {
             b.add_atom(AtomForm::from_element(Element::C));
         }
@@ -3735,7 +3735,7 @@ mod tests {
 
     #[fixture]
     fn diatomic_with_overlays() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
         b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
@@ -3751,7 +3751,7 @@ mod tests {
 
     #[fixture]
     fn batched_overlays() -> MoleculeEditor {
-        let mut editor = MoleculeAst::default().edit();
+        let mut editor = Molecule::default().edit();
         for _ in 0..6 {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
@@ -4366,7 +4366,7 @@ mod tests {
     // sequence would stale id 2 after removing id 0.
     #[rstest]
     fn test_molecule_editor_transact_remove_aromatic_systems() {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         for _ in 0..6 {
             b.add_atom(AtomForm::from_element(Element::C));
         }
@@ -4406,7 +4406,7 @@ mod tests {
         #[case] constrained: AromaticSystemId,
         #[case] forward_constraint_count: usize,
     ) {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         for _ in 0..6 {
             b.add_atom(AtomForm::from_element(Element::C));
         }
@@ -4631,7 +4631,7 @@ mod tests {
 
     #[fixture]
     fn triatomic_with_overlays() -> MoleculeEditor {
-        let mut b = MoleculeAst::default().edit();
+        let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
         b.add_atom(AtomForm::from_element(Element::O));
@@ -4764,21 +4764,21 @@ mod tests {
     #[case::cascade(RollbackCase::CascadedConstraints)]
     fn test_transaction_rollback(#[case] case: RollbackCase) {
         let mut editor = match case {
-            RollbackCase::AddTopology => MoleculeAst::default().edit(),
+            RollbackCase::AddTopology => Molecule::default().edit(),
             RollbackCase::Field | RollbackCase::Constraint => {
-                let mut b = MoleculeAst::default().edit();
+                let mut b = Molecule::default().edit();
                 b.add_atom(AtomForm::from_element(Element::C));
                 b
             }
             RollbackCase::AddOverlay => {
-                let mut b = MoleculeAst::default().edit();
+                let mut b = Molecule::default().edit();
                 b.add_atom(AtomForm::from_element(Element::C));
                 b.add_atom(AtomForm::from_element(Element::C));
                 b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
                 b
             }
             RollbackCase::RemoveBond => {
-                let mut b = MoleculeAst::default().edit();
+                let mut b = Molecule::default().edit();
                 b.add_atom(AtomForm::from_element(Element::C));
                 b.add_atom(AtomForm::from_element(Element::N));
                 b.add_atom(AtomForm::from_element(Element::O));
@@ -4787,7 +4787,7 @@ mod tests {
                 b
             }
             RollbackCase::CascadedConstraints => {
-                let mut b = MoleculeAst::default().edit();
+                let mut b = Molecule::default().edit();
                 b.add_atom(AtomForm::from_element(Element::C));
                 b.add_atom(AtomForm::from_element(Element::N));
                 b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintForm::degree(3)));

@@ -1,5 +1,5 @@
-//! Substructure matching: occurrences of a pattern `MoleculeAst` within a host
-//! `MoleculeAst`, each an injective pattern→host [`MoleculeCorrespondence`]. The receiver is the
+//! Substructure matching: occurrences of a pattern `Molecule` within a host
+//! `Molecule`, each an injective pattern→host [`MoleculeCorrespondence`]. The receiver is the
 //! pattern, so it parallels `pattern.matches(target)`: `pattern.substructure_matches(host, ...)`.
 //!
 //! Two strategies compose over the chosen subgraph-isomorphism algorithm:
@@ -25,7 +25,7 @@ use super::correspondence::{
 use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::IncidenceNodeSelection;
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 use super::ring::{RingConfig, RingModel, RingSetKind};
 use super::stereo::coset_matches;
 use super::traits::Lattice;
@@ -56,7 +56,7 @@ pub struct SubstructureMatchConfig {
     pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
 }
 
-impl MoleculeAst {
+impl Molecule {
     /// Visits each occurrence of `self` (the pattern) within `host` as an injective
     /// pattern→host [`MoleculeCorrespondence`] until traversal completes or the
     /// visitor returns [`ControlFlow::Break`]. Pattern predicates are evaluated as
@@ -65,7 +65,7 @@ impl MoleculeAst {
     /// representation, but its order is not a canonical ordering contract.
     pub fn visit_substructure_matches<B, F>(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         config: SubstructureMatchConfig,
         mut visitor: F,
     ) -> ControlFlow<B>
@@ -90,10 +90,10 @@ impl MoleculeAst {
     }
 
     /// Occurrences of `self` (the pattern) within `host`, collected from
-    /// [`MoleculeAst::visit_substructure_matches`].
+    /// [`Molecule::visit_substructure_matches`].
     pub fn substructure_matches(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         config: SubstructureMatchConfig,
     ) -> Vec<MoleculeCorrespondence> {
         let mut occurrences = Vec::new();
@@ -110,7 +110,7 @@ impl MoleculeAst {
     /// element/bond patterns over SMILES-raised hosts skip the work.
     fn host_match_targets<'h>(
         &self,
-        host: &'h MoleculeAst,
+        host: &'h Molecule,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> (Vec<Cow<'h, AtomForm>>, Vec<Cow<'h, BondForm>>) {
         let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
@@ -217,7 +217,7 @@ impl MoleculeAst {
 
     fn visit_substructure_matches_graph_and_overlays<B>(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         subiso: SubgraphIsomorphismAlgorithm,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
         visitor: &mut impl FnMut(MoleculeCorrespondence) -> ControlFlow<B>,
@@ -272,7 +272,7 @@ impl MoleculeAst {
     /// the identical match set as `GraphAndOverlays`.
     fn visit_substructure_matches_incidence<B>(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         subiso: SubgraphIsomorphismAlgorithm,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
         visitor: &mut impl FnMut(MoleculeCorrespondence) -> ControlFlow<B>,
@@ -332,7 +332,7 @@ impl MoleculeAst {
     /// overlay must be matched. Stereo overlays are matched by the bespoke coset filter.
     fn verify_overlays(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         atoms: Correspondence<AtomId>,
     ) -> Option<MoleculeCorrespondence> {
         let pattern = self;
@@ -511,7 +511,7 @@ mod tests {
     };
 
     use super::super::id::AtomId;
-    use super::super::molecule::MoleculeAst;
+    use super::super::molecule::Molecule;
     use super::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
     use super::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use crate::mol_dsl;
@@ -546,8 +546,8 @@ mod tests {
         vec![]
     )]
     fn test_molecule_ast_visit_substructure_matches(
-        #[case] host: MoleculeAst,
-        #[case] pattern: MoleculeAst,
+        #[case] host: Molecule,
+        #[case] pattern: Molecule,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
         for strategy in STRATEGIES {
@@ -584,8 +584,8 @@ mod tests {
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
     fn test_molecule_ast_visit_substructure_matches_termination(
-        #[case] host: MoleculeAst,
-        #[case] pattern: MoleculeAst,
+        #[case] host: Molecule,
+        #[case] pattern: Molecule,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
         for strategy in STRATEGIES {
@@ -726,8 +726,8 @@ mod tests {
         vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)]]
     )]
     fn test_molecule_ast_substructure_matches(
-        #[case] host: MoleculeAst,
-        #[case] pattern: MoleculeAst,
+        #[case] host: Molecule,
+        #[case] pattern: Molecule,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
         for strategy in STRATEGIES {

@@ -6,7 +6,7 @@
 //! predicate over a role position.
 //!
 //! Relational constraints live **only** at molecule scope — as entries in
-//! `MoleculeAst::constraints` (via `Constraint::Relational(...)`) or inside
+//! `Molecule::constraints` (via `Constraint::Relational(...)`) or inside
 //! `And`/`Or`/`Not` combinators. They cannot be inline on the entity AST:
 //! the per-entity constraint containers are narrowed to value-only
 //! variants so ref-bearing constraints are unrepresentable inline.

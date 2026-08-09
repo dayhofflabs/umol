@@ -7,21 +7,21 @@ use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unorde
 use super::super::constraint::DativeBondConstraintsForm;
 use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, DativeBondId};
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
 use super::atom::AtomView;
 
-/// Namespace accessor for dative-bond views on a `MoleculeAst`.
+/// Namespace accessor for dative-bond views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
     dative_bonds: &'a FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
 }
 
 impl<'a> DativeBondViews<'a> {
     pub(crate) fn new(
-        molecule: &'a MoleculeAst,
+        molecule: &'a Molecule,
         dative_bonds: &'a FixedVarBirelationSet<
             NodeId,
             Ordered,
@@ -183,7 +183,7 @@ pub struct DativeBondView<'a> {
     acceptor_id: NodeId,
     donors: &'a [NodeId],
     pub ast: &'a DativeBondForm,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> DativeBondView<'a> {
@@ -353,13 +353,13 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AtomId, DativeBondId};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -390,25 +390,23 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_views_count(molecule: MoleculeAst) {
+    fn test_dative_bond_views_count(molecule: Molecule) {
         assert_eq!(molecule.dative_bonds().count(), 1);
     }
 
     #[rstest]
-    fn test_dative_bond_views_ids(molecule: MoleculeAst) {
-        assert_exact_size_by(MoleculeAst::default().dative_bonds().ids(), vec![], |id| id);
+    fn test_dative_bond_views_ids(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().dative_bonds().ids(), vec![], |id| id);
         assert_exact_size_by(molecule.dative_bonds().ids(), vec![DativeBondId(0)], |id| {
             id
         });
     }
 
     #[rstest]
-    fn test_dative_bond_views_iter(molecule: MoleculeAst) {
-        assert_exact_size_by(
-            MoleculeAst::default().dative_bonds().iter(),
-            vec![],
-            |view| (view.id, view.acceptor_id(), view.ast.clone()),
-        );
+    fn test_dative_bond_views_iter(molecule: Molecule) {
+        assert_exact_size_by(Molecule::default().dative_bonds().iter(), vec![], |view| {
+            (view.id, view.acceptor_id(), view.ast.clone())
+        });
         assert_exact_size_by(
             molecule.dative_bonds().iter(),
             vec![(DativeBondId(0), AtomId(3), DativeBondForm::from_order(1))],
@@ -420,7 +418,7 @@ mod tests {
     #[case::participant(AtomId(2), vec![DativeBondId(0)])]
     #[case::uninvolved(AtomId(0), vec![])]
     fn test_dative_bond_views_incident(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<DativeBondId>,
     ) {
@@ -438,7 +436,7 @@ mod tests {
     #[case::present(DativeBondId(0), true)]
     #[case::absent(DativeBondId(99), false)]
     fn test_dative_bond_views_contains(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] id: DativeBondId,
         #[case] expected: bool,
     ) {
@@ -446,7 +444,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_views_get(molecule: MoleculeAst) {
+    fn test_dative_bond_views_get(molecule: Molecule) {
         let res = molecule.dative_bonds().get(DativeBondId(0));
         assert!(res.is_some());
         let view = res.unwrap();
@@ -455,13 +453,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_views_get_none(molecule: MoleculeAst) {
+    fn test_dative_bond_views_get_none(molecule: Molecule) {
         let res = molecule.dative_bonds().get(DativeBondId(99));
         assert!(res.is_none());
     }
 
     #[rstest]
-    fn test_dative_bond_view_atom_ids(molecule: MoleculeAst) {
+    fn test_dative_bond_view_atom_ids(molecule: Molecule) {
         assert_exact_size_by(
             molecule.dative_bond(DativeBondId(0)).atom_ids(),
             vec![AtomId(2), AtomId(3)],
@@ -470,7 +468,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_view_donor_ids(molecule: MoleculeAst) {
+    fn test_dative_bond_view_donor_ids(molecule: Molecule) {
         assert_exact_size_by(
             molecule.dative_bond(DativeBondId(0)).donor_ids(),
             vec![AtomId(2)],
@@ -479,7 +477,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_view_acceptor_id(molecule: MoleculeAst) {
+    fn test_dative_bond_view_acceptor_id(molecule: Molecule) {
         assert_eq!(
             molecule.dative_bond(DativeBondId(0)).acceptor_id(),
             AtomId(3)
@@ -487,7 +485,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_view_atoms(molecule: MoleculeAst) {
+    fn test_dative_bond_view_atoms(molecule: Molecule) {
         assert_exact_size_by(
             molecule.dative_bond(DativeBondId(0)).atoms(),
             vec![AtomId(2), AtomId(3)],
@@ -496,7 +494,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_view_donors(molecule: MoleculeAst) {
+    fn test_dative_bond_view_donors(molecule: Molecule) {
         assert_exact_size_by(
             molecule.dative_bond(DativeBondId(0)).donors(),
             vec![AtomId(2)],
@@ -505,7 +503,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_view_acceptor(molecule: MoleculeAst) {
+    fn test_dative_bond_view_acceptor(molecule: Molecule) {
         assert_eq!(
             molecule.dative_bond(DativeBondId(0)).acceptor().id,
             AtomId(3),
@@ -513,7 +511,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_view_atom_count(molecule: MoleculeAst) {
+    fn test_dative_bond_view_atom_count(molecule: Molecule) {
         assert_eq!(molecule.dative_bond(DativeBondId(0)).atom_count(), 2);
     }
 

@@ -11,8 +11,8 @@ use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
-    AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr,
-    MoleculeAst as GraphIrMoleculeAst, MoleculeEntries as GraphIrMoleculeEntries,
+    AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr, Molecule as GraphIrMolecule,
+    MoleculeEntries as GraphIrMoleculeEntries,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
@@ -46,14 +46,14 @@ use crate::transaction::MoleculeEditor;
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
-pub struct MoleculeAst(GraphIrMoleculeAst);
+pub struct MoleculeAst(GraphIrMolecule);
 
 #[pymethods]
 impl MoleculeAst {
     /// An empty molecule: zero atoms, zero bonds.
     #[new]
     fn new() -> Self {
-        Self(GraphIrMoleculeAst::new())
+        Self(GraphIrMolecule::new())
     }
 
     /// Parse a molecule from its EDN representation under explicit construction defaults.
@@ -213,7 +213,7 @@ impl MoleculeAst {
             .iter()
             .map(|constraint| constraint.bind(py).borrow().to_rust(py))
             .collect::<Vec<_>>();
-        GraphIrMoleculeAst::try_from_entries(GraphIrMoleculeEntries {
+        GraphIrMolecule::try_from_entries(GraphIrMoleculeEntries {
             atoms: ast_atoms,
             bonds: ast_bonds,
             dative: ast_dative,
@@ -299,7 +299,7 @@ impl MoleculeAst {
             .map(|molecule| molecule.bind(py).borrow())
             .collect::<Vec<_>>();
         let (combined, correspondences) =
-            GraphIrMoleculeAst::combine_all(borrowed.iter().map(|molecule| molecule.inner()));
+            GraphIrMolecule::combine_all(borrowed.iter().map(|molecule| molecule.inner()));
         Ok((
             Self::from_rust(combined),
             correspondences
@@ -476,18 +476,18 @@ impl MoleculeAst {
 
 impl MoleculeAst {
     /// The wrapped AST molecule — read access for atom views.
-    pub(crate) fn inner(&self) -> &GraphIrMoleculeAst {
+    pub(crate) fn inner(&self) -> &GraphIrMolecule {
         &self.0
     }
 
     /// Mutable access to the wrapped AST molecule — write access for the live
     /// atom and constraint views (copy-on-write through `atom_mut`).
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrMoleculeAst {
+    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrMolecule {
         &mut self.0
     }
 
     /// Wrap a Rust molecule as a Python molecule value.
-    pub(crate) fn from_rust(molecule: GraphIrMoleculeAst) -> Self {
+    pub(crate) fn from_rust(molecule: GraphIrMolecule) -> Self {
         MoleculeAst(molecule)
     }
 }
@@ -570,7 +570,7 @@ mod tests {
     fn test_molecule_ast_parse(
         #[case] text: &str,
         #[case] defaults: Option<MoleculeDefaults>,
-        #[case] expected: GraphIrMoleculeAst,
+        #[case] expected: GraphIrMolecule,
     ) {
         assert_eq!(
             MoleculeAst::parse(text, defaults).unwrap().inner(),
@@ -643,7 +643,7 @@ mod tests {
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}"#
     )]
     fn test_molecule_ast_render(
-        #[case] molecule: GraphIrMoleculeAst,
+        #[case] molecule: GraphIrMolecule,
         #[case] defaults: Option<MoleculeDefaults>,
         #[case] expected: &str,
     ) {
@@ -1418,7 +1418,7 @@ mod tests {
             .into_iter()
             .map(GraphIrAtomForm::from_element)
             .collect();
-        let molecule = MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+        let molecule = MoleculeAst(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms,
             ..Default::default()
         }));
@@ -1475,7 +1475,7 @@ mod tests {
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
             let molecule = Py::new(
                 py,
-                MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+                MoleculeAst(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     constraints: GraphIrConstraints::from(vec![constraint.clone()]),
                     ..Default::default()
                 })),
@@ -1500,7 +1500,7 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_eq() {
         assert_eq!(MoleculeAst::new(), MoleculeAst::new());
-        let carbon = MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+        let carbon = MoleculeAst(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }));
@@ -1510,7 +1510,7 @@ mod tests {
     #[rstest]
     #[case::empty(MoleculeAst::new(), "MoleculeAst(atoms=0, bonds=0)")]
     #[case::noncovalent(
-        MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+        MoleculeAst(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),

@@ -7,7 +7,7 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
-    AtomId as GraphIrAtomId, MoleculeAst as GraphIrMoleculeAst,
+    AtomId as GraphIrAtomId, Molecule as GraphIrMolecule,
     MulticenterBondForm as GraphIrMulticenterBondForm,
     MulticenterBondId as GraphIrMulticenterBondId,
     MulticenterBondUpdate as GraphIrMulticenterBondUpdate,
@@ -277,7 +277,7 @@ pub struct MulticenterBondView {
 impl MulticenterBondView {
     fn multicenter_bond<'a>(
         &self,
-        molecule: &'a GraphIrMoleculeAst,
+        molecule: &'a GraphIrMolecule,
     ) -> PyResult<GraphIrMulticenterBondView<'a>> {
         molecule
             .multicenter_bonds()
@@ -420,7 +420,7 @@ impl MulticenterBondView {
 /// existing multicenter bond id, or `IndexError`. `MulticenterBondId` is `RelationId`-
 /// backed but contiguous for fresh molecules, so integer positions address it directly.
 fn resolve_multicenter_bond_index(
-    molecule: &GraphIrMoleculeAst,
+    molecule: &GraphIrMolecule,
     index: isize,
 ) -> PyResult<GraphIrMulticenterBondId> {
     let count = molecule.multicenter_bonds().count();
@@ -580,7 +580,7 @@ mod tests {
     /// Three borons (atom ids 0–2) joined by one 3-center multicenter bond over all
     /// three (electrons `[1,1,1]`), multicenter bond id 0.
     fn three_center_bond(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::B); 3],
             multicenter: vec![(
                 (0u32..3).map(GraphIrAtomId).collect(),
@@ -1019,7 +1019,7 @@ mod tests {
     fn test_multicenter_bond_views_incident() {
         Python::attach(|py| {
             // three borons bonded plus one isolated boron (atom id 3)
-            let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+            let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
                 atoms: vec![GraphIrAtomForm::from_element(ChemElement::B); 4],
                 multicenter: vec![(
                     (0u32..3).map(GraphIrAtomId).collect(),

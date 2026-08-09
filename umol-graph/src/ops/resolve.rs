@@ -1,5 +1,5 @@
 //! Composite resolver: chains the per-entity resolvers (valence,
-//! aromaticity, stereo, bonds, multicenter bonds) on a single `MoleculeAst`.
+//! aromaticity, stereo, bonds, multicenter bonds) on a single `Molecule`.
 //!
 //! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
 //! systems, multicenter bonds, noncovalent bonds) to be ground.
@@ -25,7 +25,7 @@ pub use stereo::{
     StereoResolveConfig, StereoResolver,
 };
 use thiserror::Error;
-use umol_graph_ir::ir::{MoleculeAst, Transaction, TransactionError};
+use umol_graph_ir::ir::{Molecule, Transaction, TransactionError};
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
@@ -132,7 +132,7 @@ impl<'a> Resolver<'a> {
 
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), ResolverContradiction>, ResolverError> {
         let mut editor = ast.edit();
         let mut journal = Transaction::default();
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[fixture]
-    fn aromatic_molecule() -> MoleculeAst {
+    fn aromatic_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                 :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[fixture]
-    fn stereo_molecule() -> MoleculeAst {
+    fn stereo_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
                 :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
@@ -455,8 +455,8 @@ mod tests {
     #[rstest]
     fn test_resolver_new(
         chemistry_model: ChemistryModel,
-        aromatic_molecule: MoleculeAst,
-        stereo_molecule: MoleculeAst,
+        aromatic_molecule: Molecule,
+        stereo_molecule: Molecule,
     ) {
         let resolver = Resolver::new(&chemistry_model);
         let explicit = Resolver::with_config(&chemistry_model, ResolveConfig::default());
@@ -488,8 +488,8 @@ mod tests {
     })]
     fn test_resolver_with_config(
         chemistry_model: ChemistryModel,
-        aromatic_molecule: MoleculeAst,
-        stereo_molecule: MoleculeAst,
+        aromatic_molecule: Molecule,
+        stereo_molecule: Molecule,
         #[case] config: ResolveConfig,
     ) {
         let resolver = Resolver::with_config(&chemistry_model, config);
@@ -578,8 +578,8 @@ mod tests {
     )]
     fn test_resolver_resolve_stages(
         chemistry_model: ChemistryModel,
-        #[case] mut molecule: MoleculeAst,
-        #[case] expected: MoleculeAst,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
     ) {
         assert_eq!(
             Resolver::new(&chemistry_model).resolve(&mut molecule),
@@ -677,7 +677,7 @@ mod tests {
     )]
     fn test_resolver_resolve_error(
         #[case] model: ChemistryModel,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: ResolverError,
     ) {
         let original = molecule.clone();
@@ -720,7 +720,7 @@ mod tests {
         ))
     )]
     fn test_resolver_resolve_multicenter_constraint_precondition(
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: Solution<(), ResolverContradiction>,
     ) {
         let model = ChemistryModel {
@@ -787,7 +787,7 @@ mod tests {
     fn test_resolver_resolve_contradiction(
         mut chemistry_model: ChemistryModel,
         #[case] aromaticity: AromaticityModel,
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: ResolverContradiction,
     ) {
         chemistry_model.aromaticity = aromaticity;

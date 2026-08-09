@@ -31,7 +31,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::ring::{RingConfig, RingModel};
 use super::super::stereo::StereoKind;
 use super::super::substructure::SubstructureMatchAlgorithm;
@@ -100,7 +100,7 @@ impl ConstraintValidator {
 
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         let mut evaluation = ConstraintEvaluation::new(ast, self.config);
         let mut any_underdetermined = false;
@@ -182,14 +182,14 @@ impl ConstraintValidator {
 }
 
 struct ConstraintEvaluation<'a> {
-    ast: &'a MoleculeAst,
+    ast: &'a Molecule,
     config: ConstraintValidateConfig,
     rings: Option<RingViews<'a>>,
     component_by_atom: Option<Vec<usize>>,
 }
 
 impl<'a> ConstraintEvaluation<'a> {
-    fn new(ast: &'a MoleculeAst, config: ConstraintValidateConfig) -> Self {
+    fn new(ast: &'a Molecule, config: ConstraintValidateConfig) -> Self {
         Self {
             ast,
             config,
@@ -615,7 +615,7 @@ mod tests {
     };
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
+    fn molecule() -> Molecule {
         mol_dsl!(r#"{:atoms ["C"] :bonds []}"#)
     }
 
@@ -713,7 +713,7 @@ mod tests {
         Constraint::Atom(AtomId(0), AtomConstraintForm::valence(1)),
     )), Solution::Determined(()))]
     fn test_constraint_validator_logical_outcomes(
-        mut molecule: MoleculeAst,
+        mut molecule: Molecule,
         #[case] constraint: Constraint,
         #[case] expected: Solution<(), ConstraintContradiction>,
     ) {
@@ -735,7 +735,7 @@ mod tests {
         AtomConstraintForm::valence(0)
     ),)))]
     fn test_constraint_validator_logical_contradiction(
-        mut molecule: MoleculeAst,
+        mut molecule: Molecule,
         #[case] constraint: Constraint,
     ) {
         molecule.constraints_mut().push(constraint.clone());
@@ -753,7 +753,7 @@ mod tests {
     #[case::underdetermined(AtomConstraintForm::total_hydrogens(1))]
     #[case::contradictory(AtomConstraintForm::valence(1))]
     fn test_constraint_validator_inline_top_level_agreement(
-        molecule: MoleculeAst,
+        molecule: Molecule,
         #[case] constraint: AtomConstraintForm,
     ) {
         let mut inline = molecule.clone().edit();

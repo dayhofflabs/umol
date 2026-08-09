@@ -1,14 +1,14 @@
 //! The perceived-molecule boundary type. Bond perception over a geometric
 //! `Molecule` yields per-atom elements, perceived bond orders, and the geometry's
-//! total charge and multiplicity; the type lifts into a `MoleculeAst` via [`IntoIr`].
+//! total charge and multiplicity; the type lifts into a `Molecule` via [`IntoIr`].
 //! Resolution of the lifted AST (hydrogens, per-atom valence, aromaticity) is the
 //! caller's job.
 
 use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
-use umol_geometric::molecule::Molecule;
+use umol_geometric::molecule::Molecule as GeometricMolecule;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, Constraint, Constraints, ElementForm, IntoIr, MoleculeAst,
+    AtomForm, AtomId, BondForm, Constraint, Constraints, ElementForm, IntoIr, Molecule,
     MoleculeConstraint, MoleculeEntries, NumForm, UnpairedElectronsForm,
 };
 
@@ -16,7 +16,7 @@ use crate::bond_perception::{perceive_bonds, BondPerceptionConfig};
 
 /// A molecule perceived from 3D geometry: the per-atom elements, the perceived
 /// bonds, and the geometry's total charge and multiplicity. This is the boundary between
-/// the geometric model and the AST — it lifts into a `MoleculeAst` via [`IntoIr`].
+/// the geometric model and the AST — it lifts into a `Molecule` via [`IntoIr`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct PerceivedMolecule {
     /// Element per atom, in geometric-atom order.
@@ -36,7 +36,7 @@ pub struct PerceivedMolecule {
 impl PerceivedMolecule {
     /// Perceive bonds over `mol` and bundle the result with the geometry's
     /// elements, charge, and multiplicity into the boundary type.
-    pub fn perceive(mol: &Molecule, config: &BondPerceptionConfig) -> Self {
+    pub fn perceive(mol: &GeometricMolecule, config: &BondPerceptionConfig) -> Self {
         let result = perceive_bonds(mol, config);
         Self {
             elements: (0..mol.atom_count()).map(|i| mol.element(i)).collect(),
@@ -49,14 +49,14 @@ impl PerceivedMolecule {
     }
 }
 
-impl IntoIr<MoleculeAst> for PerceivedMolecule {
+impl IntoIr<Molecule> for PerceivedMolecule {
     type Ctx = ();
 
     /// Each atom carries only its element; hydrogens, per-atom charge, and per-atom
     /// spin are left undetermined for the caller's resolver. The total charge and
     /// spin become molecule-scope `ChargeSum` / `UnpairedElectronCoupling`
     /// constraints over the whole molecule.
-    fn into_ir(self, _ctx: &Self::Ctx) -> MoleculeAst {
+    fn into_ir(self, _ctx: &Self::Ctx) -> Molecule {
         let atoms: Vec<AtomForm> = self
             .elements
             .iter()
@@ -84,7 +84,7 @@ impl IntoIr<MoleculeAst> for PerceivedMolecule {
                 unpaired_electrons: UnpairedElectronsForm::from((multiplicity - 1, multiplicity)),
             }),
         ]);
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             constraints,
@@ -99,14 +99,14 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element::{C, H, O};
     use umol_chem::spin::SpinMultiplicity;
-    use umol_geometric::molecule::Molecule;
+    use umol_geometric::molecule::Molecule as GeometricMolecule;
 
     use super::*;
 
     #[rstest]
     fn test_perceived_molecule_perceive() {
         // Water: O-H 0.96 Å, H-O-H 104.5°; both O-H bonds single.
-        let water = Molecule::from_cartesian_angstrom(
+        let water = GeometricMolecule::from_cartesian_angstrom(
             vec![O, H, H],
             &[
                 0.000, 0.000, 0.000, 0.960, 0.000, 0.000, -0.240, 0.930, 0.000,
@@ -132,7 +132,7 @@ mod tests {
             feasible: true,
             valence_residuals: vec![0, 0],
         },
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::new(ElementForm::Lit(C)), AtomForm::new(ElementForm::Lit(C))],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::new(NumForm::Lit(2)))],
             constraints: Constraints::from_iter([
@@ -151,7 +151,7 @@ mod tests {
             feasible: true,
             valence_residuals: vec![0],
         },
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::new(ElementForm::Lit(O))],
             constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(-1) }),
@@ -162,7 +162,7 @@ mod tests {
     )]
     fn test_perceived_molecule_into_ast(
         #[case] perceived: PerceivedMolecule,
-        #[case] expected: MoleculeAst,
+        #[case] expected: Molecule,
     ) {
         assert_eq!(perceived.into_ir(&()), expected);
     }

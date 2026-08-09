@@ -1,5 +1,5 @@
 //! The `frag!` function-like macro: the shared path grammar (see [`crate::parse`]) extended with
-//! `^name` port markers, desugaring to an L3 `Fragment` — a `MoleculeAst` body built via L2, wrapped
+//! `^name` port markers, desugaring to an L3 `Fragment` — a `Molecule` body built via L2, wrapped
 //! with one port per marker. A bond incident to a `^name` marker declares a port on the real endpoint
 //! (name `name`, colour = the bond's `BondForm`); a bond between two markers is a `compile_error!`.
 

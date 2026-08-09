@@ -303,7 +303,7 @@ mod tests {
         AromaticSystemForm as GraphIrAromaticSystemForm, AtomForm as GraphIrAtomForm,
         BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
         DativeBondForm as GraphIrDativeBondForm, Entity as GraphIrEntity,
-        MoleculeAst as GraphIrMoleculeAst, MoleculeConstraint as GraphIrMoleculeConstraint,
+        Molecule as GraphIrMolecule, MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
         MoleculeEntries as GraphIrMoleculeEntries,
         MulticenterBondForm as GraphIrMulticenterBondForm,
@@ -899,7 +899,7 @@ mod tests {
 
         assert_eq!(
             span.lhs().inner(),
-            &GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+            &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),
                     GraphIrAtomForm::from_element(ChemElement::O),
@@ -924,7 +924,7 @@ mod tests {
 
         assert_eq!(
             span.rhs().inner(),
-            &GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
+            &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),
                     GraphIrAtomForm::from_element(ChemElement::N),

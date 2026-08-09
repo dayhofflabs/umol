@@ -21,7 +21,7 @@ use crate::ir::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ir::ligand::StereoLigand;
-use crate::ir::molecule::MoleculeAst;
+use crate::ir::molecule::Molecule;
 
 /// The metadata, counters, and participant indexes built while parsing a molecule or applying
 /// reaction deltas. Atoms need only a counter; the seven non-atom kinds add participant lookup.
@@ -116,7 +116,7 @@ impl MoleculeContext {
     /// The context of an already-resolved molecule: every entity registered anonymously (no
     /// keyword) with its participants, so a sub-pattern's index and structural refs resolve against
     /// it. The ids are anonymous, so registration cannot collide.
-    pub fn from_ir(ast: &MoleculeAst) -> Self {
+    pub fn from_ir(ast: &Molecule) -> Self {
         let free = "anonymous entity registration never collides";
         let mut context = Self::default();
         for _ in ast.atoms().ids() {

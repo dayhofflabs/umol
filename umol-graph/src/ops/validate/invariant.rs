@@ -5,7 +5,7 @@
 //! the molecule — shared bonding electrons are counted on each endpoint.
 
 use thiserror::Error;
-use umol_graph_ir::ir::{AtomForm, MoleculeAst};
+use umol_graph_ir::ir::{AtomForm, Molecule};
 use umol_utils::solution::Solution;
 
 use crate::ops::invariant::{ValenceInvariants, ValenceMismatch};
@@ -19,7 +19,7 @@ pub enum ValenceInvariantsError {}
 impl ValenceInvariantsValidator {
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ValenceMismatch>, ValenceInvariantsError> {
         Ok(ValenceInvariants::check(ast))
     }

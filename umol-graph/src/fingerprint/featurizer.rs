@@ -1,6 +1,6 @@
 //! The featurizer enum: dispatches to a concrete featurizer struct.
 
-use umol_graph_ir::ir::MoleculeAst;
+use umol_graph_ir::ir::Molecule;
 
 use super::ecfp::EcfpFeaturizer;
 use super::feature_set::{CountedFeatureSet, FeatureSet};
@@ -30,7 +30,7 @@ pub enum FingerprintError {
 
 impl Featurizer {
     /// Featurize `mol`, yielding an unfolded [`FeatureSet`].
-    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+    pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<u64>, FingerprintError> {
         match self {
             Featurizer::Wl(featurizer) => featurizer.featurize(mol),
             Featurizer::Ecfp(featurizer) => featurizer.featurize(mol),
@@ -41,7 +41,7 @@ impl Featurizer {
     /// Featurize `mol`, keeping per-identifier counts.
     pub fn featurize_counted(
         &self,
-        mol: &MoleculeAst,
+        mol: &Molecule,
     ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
         match self {
             Featurizer::Wl(featurizer) => featurizer.featurize_counted(mol),

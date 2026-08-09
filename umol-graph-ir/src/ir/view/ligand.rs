@@ -2,7 +2,7 @@
 
 use super::super::id::AtomId;
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::atom::AtomView;
 
 /// Borrowed view of a stereo ligand: its kind, bearing atom, and parent
@@ -10,11 +10,11 @@ use super::atom::AtomView;
 #[derive(Clone, Copy, Debug)]
 pub struct StereoLigandView<'a> {
     ligand: StereoLigand,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> StereoLigandView<'a> {
-    pub(crate) fn new(ligand: StereoLigand, molecule: &'a MoleculeAst) -> Self {
+    pub(crate) fn new(ligand: StereoLigand, molecule: &'a Molecule) -> Self {
         Self { ligand, molecule }
     }
 

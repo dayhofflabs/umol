@@ -34,7 +34,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::molecule::MoleculeAst;
+use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
@@ -51,11 +51,11 @@ use super::validate::{
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionAst {
-    pub lhs: MoleculeAst,
+    pub lhs: Molecule,
     pub deltas: Deltas,
 }
 
-fn stereo_delta_domains_are_valid(lhs: &MoleculeAst, deltas: &Deltas) -> bool {
+fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
     fn permutation_is_valid(kind: StereoKind, permutation: Permutation) -> bool {
         permutation.degree() == kind.degree()
             && (0..kind.count() as u32).all(|coset| {
@@ -205,7 +205,7 @@ fn stereo_delta_domains_are_valid(lhs: &MoleculeAst, deltas: &Deltas) -> bool {
 }
 
 impl ReactionAst {
-    pub fn new(lhs: MoleculeAst, deltas: Deltas) -> Self {
+    pub fn new(lhs: Molecule, deltas: Deltas) -> Self {
         Self { lhs, deltas }
     }
 
@@ -223,8 +223,8 @@ impl ReactionAst {
     /// induced total correspondence, but need not be structurally equal when matched pairs cross
     /// entity order.
     pub fn from_sides(
-        lhs: MoleculeAst,
-        rhs: MoleculeAst,
+        lhs: Molecule,
+        rhs: Molecule,
         atom_correspondence: Correspondence<AtomId>,
     ) -> Option<Self> {
         let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom_correspondence)?;
@@ -245,7 +245,7 @@ impl ReactionAst {
     /// sites; incompatible stereo ligand frames are reported separately.
     pub fn apply_at(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         correspondence: &MoleculeCorrespondence,
     ) -> Result<ReactionDerivation, ApplyError> {
         if correspondence.atoms().left_count() != self.lhs.atoms().count()
@@ -360,7 +360,7 @@ impl ReactionAst {
 
     fn apply_at_canonical(
         &self,
-        host: &MoleculeAst,
+        host: &Molecule,
         correspondence: &MoleculeCorrespondence,
         mut deltas: Deltas,
     ) -> Result<ReactionDerivation, ApplyError> {
@@ -1349,11 +1349,11 @@ impl ReactionAst {
     }
 
     /// Validate the structural preconditions shared by every match against `host`.
-    pub fn validate_application(&self, host: &MoleculeAst) -> Result<(), ApplyPreconditionError> {
+    pub fn validate_application(&self, host: &Molecule) -> Result<(), ApplyPreconditionError> {
         self.application_deltas(host).map(drop)
     }
 
-    fn application_deltas(&self, host: &MoleculeAst) -> Result<Deltas, ApplyPreconditionError> {
+    fn application_deltas(&self, host: &Molecule) -> Result<Deltas, ApplyPreconditionError> {
         if !stereo_delta_domains_are_valid(&self.lhs, &self.deltas) {
             return Err(ApplyPreconditionError::InconsistentReaction);
         }
@@ -1411,7 +1411,7 @@ impl ReactionAst {
     /// skipped; an internal application failure is yielded once and terminates the iterator.
     pub fn apply<'h>(
         &'h self,
-        host: &'h MoleculeAst,
+        host: &'h Molecule,
         match_config: SubstructureMatchConfig,
     ) -> Result<
         impl Iterator<Item = Result<ReactionDerivation, ApplyError>> + 'h,
@@ -1450,8 +1450,8 @@ impl ReactionAst {
 /// constraints are positionless — none are reframed; a delta with no host correspondent is skipped.
 fn reframe_stereo(
     deltas: &mut Deltas,
-    lhs: &MoleculeAst,
-    host: &MoleculeAst,
+    lhs: &Molecule,
+    host: &Molecule,
     correspondence: &MoleculeCorrespondence,
 ) -> Result<(), ApplyError> {
     let into_host = |l: &StereoLigand| {
@@ -1554,7 +1554,7 @@ fn reframe_stereo(
 
 impl Canonicalize for ReactionAst {
     /// Value-level in a fixed atom id space: `deltas` are canonicalized;
-    /// `lhs` is passed through (`MoleculeAst` has no whole-molecule canonical form — its
+    /// `lhs` is passed through (`Molecule` has no whole-molecule canonical form — its
     /// equality is structural). Equality up to atom renumbering is a separate `umol-graph`
     /// operation.
     fn canonicalize(self) -> Result<Self, Contradiction> {
@@ -1607,7 +1607,7 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_from_sides() {
         // C-C (order 1) → C-C (order 2) under the total atom correspondence: one bond-order modify.
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -1615,7 +1615,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -1644,13 +1644,13 @@ mod tests {
     fn test_reaction_ast_canonicalize() {
         // The delta chain fuses; the lhs is passed through unchanged.
         let reaction = ReactionAst::new(
-            MoleculeAst::default(),
+            Molecule::default(),
             Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 1, 2)]),
         );
         assert_eq!(
             reaction.canonicalize().unwrap(),
             ReactionAst::new(
-                MoleculeAst::default(),
+                Molecule::default(),
                 Deltas::from_iter([charge_set(0, 0, 2)])
             ),
         );
@@ -1659,19 +1659,19 @@ mod tests {
     #[rstest]
     #[case::bond_order(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
         vec![AtomId(0), AtomId(1)],
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() }),
     )]
     #[case::overlay_removed(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::O) }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
@@ -1681,15 +1681,15 @@ mod tests {
                 }),
             ]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0), AtomId(1)],
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
     )]
     fn test_reaction_ast_apply_at(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
         #[case] atom_map: Vec<AtomId>,
-        #[case] expected: MoleculeAst,
+        #[case] expected: Molecule,
     ) {
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
@@ -1709,44 +1709,44 @@ mod tests {
     #[rstest]
     #[case::dangling_bond(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], bonds: vec![], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], bonds: vec![], ..Default::default() }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 ast: AtomForm::from_element(Element::C),
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
         vec![AtomId(0)],
         ApplyError::Dangling { host_atom: AtomId(0) },
     )]
     #[case::dangling_noncovalent(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 ast: AtomForm::from_element(Element::O),
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0)],
         ApplyError::Dangling { host_atom: AtomId(0) },
     )]
     #[case::structural_conflict(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::Add {
                 id: BondId(1),
                 atoms: [AtomId(0), AtomId(1)],
                 ast: BondForm::from_order(1),
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
         vec![AtomId(0), AtomId(1)],
         ApplyError::StructuralConflict,
     )]
     fn test_reaction_ast_apply_at_error(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
         #[case] atom_map: Vec<AtomId>,
         #[case] expected: ApplyError,
     ) {
@@ -1765,8 +1765,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::missing_atom(
-        ReactionAst::new(MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }), Deltas::new()),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+        ReactionAst::new(Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }), Deltas::new()),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
@@ -1778,10 +1778,10 @@ mod tests {
     )]
     #[case::bond_incidence(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
             Deltas::new(),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
             Correspondence::new(vec![], 1, 1).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
@@ -1793,10 +1793,10 @@ mod tests {
     )]
     #[case::noncovalent_incidence(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::new(),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2)], 3),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
@@ -1808,7 +1808,7 @@ mod tests {
     )]
     fn test_reaction_ast_apply_at_correspondence_error(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
         #[case] correspondence: MoleculeCorrespondence,
         #[case] expected: ApplyError,
     ) {
@@ -1835,7 +1835,7 @@ mod tests {
         ast: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
     }))]
     fn test_reaction_ast_apply_at_stereo_atom_error(#[case] delta: Delta) {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -1849,7 +1849,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -1911,7 +1911,7 @@ mod tests {
         ast: StereoBondForm::new(StereoKind::CisTrans, 0u32),
     }))]
     fn test_reaction_ast_apply_at_stereo_bond_error(#[case] delta: Delta) {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             stereo_bonds: vec![(
@@ -1926,7 +1926,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             stereo_bonds: vec![(
@@ -1974,7 +1974,7 @@ mod tests {
         // A reaction adding a molecule-level `ChargeSum` over its lhs atoms; applied at a match
         // that maps lhs atoms 0,1 → host atoms 1,2, the constraint's refs re-anchor to the host.
         let reaction = ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
                     AtomForm::from_element(Element::O),
@@ -1989,7 +1989,7 @@ mod tests {
                 }),
             ))]),
         );
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::C),
@@ -2051,7 +2051,7 @@ mod tests {
             }),
         ]);
         let reaction = ReactionAst::new(
-            MoleculeAst::default(),
+            Molecule::default(),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(0),
@@ -2106,7 +2106,7 @@ mod tests {
             ]),
         );
 
-        let host = MoleculeAst::default();
+        let host = Molecule::default();
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
@@ -2122,24 +2122,24 @@ mod tests {
     #[rstest]
     #[case::valid(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
             Deltas::new(),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
     )]
     #[case::canonical_add_remove_cancellation(
         ReactionAst::new(
-            MoleculeAst::default(),
+            Molecule::default(),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomForm::from_element(Element::C) }),
                 Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) }),
             ]),
         ),
-        MoleculeAst::default(),
+        Molecule::default(),
     )]
     #[case::unordered_bond_incidence(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
                 ..Default::default()
@@ -2150,7 +2150,7 @@ mod tests {
                 ast: BondForm::from_order(1),
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
@@ -2158,7 +2158,7 @@ mod tests {
     )]
     fn test_reaction_ast_validate_application(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
     ) {
         assert_eq!(reaction.validate_application(&host), Ok(()));
     }
@@ -2166,18 +2166,18 @@ mod tests {
     #[rstest]
     #[case::inconsistent_reaction(
         ReactionAst::new(
-            MoleculeAst::default(),
+            Molecule::default(),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomForm::from_element(Element::C) }),
                 Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomForm::from_element(Element::O) }),
             ]),
         ),
-        MoleculeAst::default(),
+        Molecule::default(),
         ApplyPreconditionError::InconsistentReaction,
     )]
     #[case::reaction_structure(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![
                     (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -2187,24 +2187,24 @@ mod tests {
             }),
             Deltas::new(),
         ),
-        MoleculeAst::default(),
+        Molecule::default(),
         ApplyPreconditionError::ReactionStructure(EntityStructureContradiction::BondsParallel { atoms: [AtomId(0), AtomId(1)] }),
     )]
     #[case::reaction_dpo(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) })]),
         ),
-        MoleculeAst::default(),
+        Molecule::default(),
         ApplyPreconditionError::ReactionDpo(DpoContradiction::DanglingBond { atom: AtomId(0), bond: BondId(0) }),
     )]
     #[case::host_structure(
-        ReactionAst::new(MoleculeAst::default(), Deltas::new()),
-        MoleculeAst::from_entries(MoleculeEntries {
+        ReactionAst::new(Molecule::default(), Deltas::new()),
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -2216,7 +2216,7 @@ mod tests {
     )]
     fn test_reaction_ast_validate_application_error(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
         #[case] expected: ApplyPreconditionError,
     ) {
         assert_eq!(reaction.validate_application(&host).unwrap_err(), expected);
@@ -2259,16 +2259,16 @@ mod tests {
         #[case] delta: Delta,
         #[case] entity: Entity,
     ) {
-        let reaction = ReactionAst::new(MoleculeAst::default(), Deltas::from_iter([delta]));
+        let reaction = ReactionAst::new(Molecule::default(), Deltas::from_iter([delta]));
         assert_eq!(
-            reaction.validate_application(&MoleculeAst::default()),
+            reaction.validate_application(&Molecule::default()),
             Err(ApplyPreconditionError::InvalidReactionReference { entity }),
         );
     }
 
     #[rstest]
     fn test_reaction_ast_validate_application_rejects_created_id_collision() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -2329,7 +2329,7 @@ mod tests {
     fn test_reaction_ast_validate_application_rejects_missing_structural_reference(
         #[case] delta: Delta,
     ) {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -2344,7 +2344,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_ast_validate_application_rejects_missing_stereo_bond_site() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -2367,7 +2367,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_ast_validate_application_rejects_bond_incidence_mismatch() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -2394,7 +2394,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_ast_validate_application_rejects_dative_incidence_mismatch() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::B),
@@ -2428,7 +2428,7 @@ mod tests {
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
         ];
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::F),
@@ -2464,7 +2464,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_ast_validate_application_rejects_recursive_constraint_reference() {
-        let lhs = MoleculeAst::from_entries(MoleculeEntries {
+        let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
@@ -2489,37 +2489,37 @@ mod tests {
     #[rstest]
     #[case::bond_order(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) } })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
-        vec![MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() })],
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+        vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() })],
     )]
     #[case::match_rejection(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))], ..Default::default() }),
-        vec![MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() })],
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))], ..Default::default() }),
+        vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() })],
     )]
     #[case::host_relative_update(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(1) },
             })]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)], ..Default::default() }),
-        vec![MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64)], ..Default::default() })],
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)], ..Default::default() }),
+        vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64)], ..Default::default() })],
     )]
     fn test_reaction_ast_apply(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
-        #[case] expected: Vec<MoleculeAst>,
+        #[case] host: Molecule,
+        #[case] expected: Vec<Molecule>,
     ) {
-        let products: Vec<MoleculeAst> = reaction
+        let products: Vec<Molecule> = reaction
             .apply(
                 &host,
                 MATCH_CONFIG,
@@ -2538,12 +2538,12 @@ mod tests {
     fn test_reaction_ast_apply_match_algorithm(
         #[case] match_algorithm: SubstructureMatchAlgorithm,
     ) {
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
         let reaction = ReactionAst::new(host.clone(), Deltas::new());
-        let products: Vec<MoleculeAst> = reaction
+        let products: Vec<Molecule> = reaction
             .apply(
                 &host,
                 SubstructureMatchConfig {
@@ -2562,7 +2562,7 @@ mod tests {
     #[rstest]
     #[case::transaction(
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::ChargeSum {
                     atoms: Some(vec![AtomId(0)]),
@@ -2577,12 +2577,12 @@ mod tests {
                 }),
             ))]),
         ),
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
         ApplyError::Transaction(TransactionError::MissingEntry),
     )]
     fn test_reaction_ast_apply_error(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
         #[case] expected: ApplyError,
     ) {
         let mut applications = reaction.apply(&host, MATCH_CONFIG).unwrap();
@@ -2593,8 +2593,8 @@ mod tests {
 
     #[rstest]
     #[case::host_structure(
-        ReactionAst::new(MoleculeAst::default(), Deltas::new()),
-        MoleculeAst::from_entries(MoleculeEntries {
+        ReactionAst::new(Molecule::default(), Deltas::new()),
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -2606,7 +2606,7 @@ mod tests {
     )]
     fn test_reaction_ast_apply_precondition_error(
         #[case] reaction: ReactionAst,
-        #[case] host: MoleculeAst,
+        #[case] host: Molecule,
         #[case] expected: ApplyPreconditionError,
     ) {
         match reaction.apply(&host, MATCH_CONFIG) {
@@ -2619,7 +2619,7 @@ mod tests {
     fn tetrahedral_inversion() -> ReactionAst {
         // Invert a tetrahedral C(0) whose ligands F,Cl,Br,I are stated in ascending order: coset 0 → 1.
         ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
                     AtomForm::from_element(Element::F),
@@ -2676,7 +2676,7 @@ mod tests {
         #[case] host_coset: u32,
         #[case] product_coset: u32,
     ) {
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::F),
@@ -2701,7 +2701,7 @@ mod tests {
             constraints: Constraints::new(),
             ..Default::default()
         });
-        let expected = MoleculeAst::from_entries(MoleculeEntries {
+        let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::F),
@@ -2743,7 +2743,7 @@ mod tests {
     #[case::coset_0(0u32)]
     fn test_reaction_ast_apply_stereo_bond_created_site(#[case] coset: u32) {
         let reaction = ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 bonds: vec![],
                 ..Default::default()
@@ -2771,12 +2771,12 @@ mod tests {
                 }),
             ]),
         );
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             bonds: vec![],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_entries(MoleculeEntries {
+        let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -2813,7 +2813,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(StereoCoset::Undetermined)]
     fn test_reaction_ast_apply_two_stereo_centers(#[case] coset: StereoCoset) {
-        let center = MoleculeAst::from_entries(MoleculeEntries {
+        let center = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -2859,7 +2859,7 @@ mod tests {
         // Remove atom O (id 1) and its bond: host C-O ⇒ product C. Atom 0 is preserved (matched),
         // atom 1 is deleted (left-unmatched), so the comap's atom map records exactly that.
         let reaction = ReactionAst::new(
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
                     AtomForm::from_element(Element::O),
@@ -2879,7 +2879,7 @@ mod tests {
                 }),
             ]),
         );
-        let host = MoleculeAst::from_entries(MoleculeEntries {
+        let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::O),
@@ -2896,7 +2896,7 @@ mod tests {
         let derivation = reaction.apply_at(&host, &correspondence).unwrap();
         assert_eq!(
             derivation.rhs(),
-            &MoleculeAst::from_entries(MoleculeEntries {
+            &Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 bonds: vec![],
                 ..Default::default()

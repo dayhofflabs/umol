@@ -9,23 +9,23 @@ use umol_graph_core::{
     RefinementRounds, RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
 };
 use umol_graph_ir::ir::{
-    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, NumForm,
+    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, Molecule, NumForm,
     ReactionAst, RingConfig,
 };
 use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
 #[fixture]
-fn ethanol() -> MoleculeAst {
+fn ethanol() -> Molecule {
     ingest_smiles("CCO").unwrap()
 }
 
 #[fixture]
-fn benzene() -> MoleculeAst {
+fn benzene() -> Molecule {
     ingest_smiles("c1ccccc1").unwrap()
 }
 
 #[fixture]
-fn ethanol_deoxygenation(ethanol: MoleculeAst) -> ReactionAst {
+fn ethanol_deoxygenation(ethanol: Molecule) -> ReactionAst {
     let oxygen = ethanol.atom(AtomId(2)).ast.clone();
     let bond = ethanol.bond(BondId(1)).ast.clone();
     ReactionAst::new(
@@ -45,7 +45,7 @@ fn ethanol_deoxygenation(ethanol: MoleculeAst) -> ReactionAst {
 }
 
 #[rstest]
-fn test_wl_featurizer_featurize(ethanol: MoleculeAst) {
+fn test_wl_featurizer_featurize(ethanol: Molecule) {
     let fingerprint = WlFeaturizer::new(RefinementRounds::Fixed(3))
         .featurize(&ethanol)
         .unwrap();
@@ -89,7 +89,7 @@ fn test_wl_featurizer_featurize_counted_error() {
 }
 
 #[rstest]
-fn test_ecfp_featurizer_featurize(benzene: MoleculeAst) {
+fn test_ecfp_featurizer_featurize(benzene: Molecule) {
     assert_eq!(
         EcfpFeaturizer {
             radius: 2,
@@ -131,7 +131,7 @@ fn test_ecfp_featurizer_featurize_counted_error() {
 }
 
 #[rstest]
-fn test_morgan_featurizer_featurize(benzene: MoleculeAst) {
+fn test_morgan_featurizer_featurize(benzene: Molecule) {
     assert_eq!(
         MorganFeaturizer {
             radius: 2,
@@ -184,7 +184,7 @@ fn test_featurizer_featurize_error(#[case] featurizer: Featurizer) {
 #[case::wl(Featurizer::Wl(WlFeaturizer::new(RefinementRounds::Fixed(3))))]
 #[case::ecfp(Featurizer::Ecfp(EcfpFeaturizer::new(2)))]
 #[case::morgan(Featurizer::Morgan(MorganFeaturizer::new(2)))]
-fn test_featurizer_featurize_counted(ethanol: MoleculeAst, #[case] featurizer: Featurizer) {
+fn test_featurizer_featurize_counted(ethanol: Molecule, #[case] featurizer: Featurizer) {
     let binary = featurizer.featurize(&ethanol).unwrap();
     let counted = featurizer.featurize_counted(&ethanol).unwrap();
     assert_eq!(
@@ -211,7 +211,7 @@ fn test_featurizer_featurize_counted_error(#[case] featurizer: Featurizer) {
 }
 
 #[rstest]
-fn test_pattern_fingerprinter_fingerprint(ethanol: MoleculeAst) {
+fn test_pattern_fingerprinter_fingerprint(ethanol: Molecule) {
     let fingerprint = PatternFingerprinter::new().fingerprint(&ethanol).unwrap();
     assert_eq!(
         (0..fingerprint.width())
@@ -232,7 +232,7 @@ fn test_pattern_fingerprinter_fingerprint_error() {
 }
 
 #[rstest]
-fn test_substructure_featurizer_featurize(ethanol: MoleculeAst) {
+fn test_substructure_featurizer_featurize(ethanol: Molecule) {
     assert_eq!(
         SubstructureFeaturizer::new(2)
             .featurize(&ethanol)

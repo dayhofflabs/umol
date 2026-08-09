@@ -11,7 +11,7 @@ mod mol;
 mod parse;
 
 /// The `mol!` visual-literal macro: a compile-checked molecular graph literal that desugars to an L2
-/// `MoleculeSpec` and builds a `MoleculeAst`.
+/// `MoleculeSpec` and builds a `Molecule`.
 #[proc_macro]
 pub fn mol(input: TokenStream) -> TokenStream {
     mol::expand(input.into()).into()

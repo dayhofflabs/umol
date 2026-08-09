@@ -1,4 +1,4 @@
-//! Conversion benchmarks for `MoleculeDsl` ↔ `MoleculeAst`.
+//! Conversion benchmarks for `MoleculeDsl` ↔ `Molecule`.
 //!
 //! Measures the `FromIr` and `IntoIr` paths on `MoleculeDsl` — separate
 //! from `FromEdn`/`ToEdn`, which bypass these traits via `MoleculeInput`.

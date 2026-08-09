@@ -1,7 +1,7 @@
-//! Neighbor view: yielded by `MoleculeAst::neighbors`.
+//! Neighbor view: yielded by `Molecule::neighbors`.
 
 use super::super::id::{AtomId, BondId};
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::atom::AtomView;
 use super::bond::BondView;
 
@@ -12,11 +12,11 @@ use super::bond::BondView;
 pub struct NeighborView<'a> {
     atom_id: AtomId,
     bond_id: BondId,
-    molecule: &'a MoleculeAst,
+    molecule: &'a Molecule,
 }
 
 impl<'a> NeighborView<'a> {
-    pub(crate) fn new(atom_id: AtomId, bond_id: BondId, molecule: &'a MoleculeAst) -> Self {
+    pub(crate) fn new(atom_id: AtomId, bond_id: BondId, molecule: &'a Molecule) -> Self {
         Self {
             atom_id,
             bond_id,
@@ -52,13 +52,13 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AtomId, BondId};
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 
     #[fixture]
-    fn molecule() -> MoleculeAst {
-        MoleculeAst::from_entries(MoleculeEntries {
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_neighbor_view_fields(molecule: MoleculeAst) {
+    fn test_neighbor_view_fields(molecule: Molecule) {
         let collected: Vec<(BondId, AtomId, BondForm)> = molecule
             .neighbors(AtomId(2))
             .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))

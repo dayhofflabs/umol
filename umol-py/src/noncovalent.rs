@@ -8,7 +8,7 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_graph_ir::ir::{
-    AsLit, AtomId as GraphIrAtomId, MoleculeAst as GraphIrMoleculeAst,
+    AsLit, AtomId as GraphIrAtomId, Molecule as GraphIrMolecule,
     NoncovalentBondForm as GraphIrNoncovalentBondForm,
     NoncovalentBondId as GraphIrNoncovalentBondId,
     NoncovalentBondKind as GraphIrNoncovalentBondKind,
@@ -346,7 +346,7 @@ pub struct NoncovalentBondView {
 impl NoncovalentBondView {
     fn noncovalent_bond<'a>(
         &self,
-        molecule: &'a GraphIrMoleculeAst,
+        molecule: &'a GraphIrMolecule,
     ) -> PyResult<GraphIrNoncovalentBondView<'a>> {
         molecule
             .noncovalent_bonds()
@@ -442,7 +442,7 @@ impl NoncovalentBondView {
 /// existing noncovalent bond id, or `IndexError`. `NoncovalentBondId` is `RelationId`-
 /// backed but contiguous for fresh molecules, so integer positions address it directly.
 fn resolve_noncovalent_bond_index(
-    molecule: &GraphIrMoleculeAst,
+    molecule: &GraphIrMolecule,
     index: isize,
 ) -> PyResult<GraphIrNoncovalentBondId> {
     let count = molecule.noncovalent_bonds().count();
@@ -1252,7 +1252,7 @@ mod tests {
 
     /// A molecule of two oxygens with one hydrogen bond over atoms (0, 1), noncovalent id 0.
     fn molecule_with_hbond(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),
@@ -1438,7 +1438,7 @@ mod tests {
     /// Three atoms, one hydrogen bond over (0, 1), atom 2 isolated. For the collection
     /// negative cases (`of` / `incident` with no bond).
     fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
+        let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),

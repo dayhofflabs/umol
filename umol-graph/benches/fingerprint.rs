@@ -21,7 +21,7 @@ use umol_graph::fingerprint::{
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
 use umol_graph_ir::ir::{
-    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
+    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, Molecule, ReactionAst,
 };
 use walkdir::WalkDir;
 
@@ -37,7 +37,7 @@ const STRUCTURAL_PREFIX: usize = 300;
 /// Reduced sample count for the structural group (each iteration is expensive).
 const STRUCTURAL_SAMPLES: usize = 10;
 
-fn load_corpus() -> Vec<MoleculeAst> {
+fn load_corpus() -> Vec<Molecule> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../umol-io/tests/smiles_parsing/data/opensmiles"
@@ -62,7 +62,7 @@ fn load_corpus() -> Vec<MoleculeAst> {
     molecules
 }
 
-fn ethanol_deoxygenation(molecule: &MoleculeAst) -> ReactionAst {
+fn ethanol_deoxygenation(molecule: &Molecule) -> ReactionAst {
     ReactionAst::new(
         molecule.clone(),
         Deltas::from_iter([

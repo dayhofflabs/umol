@@ -5,7 +5,7 @@ Non-permanent dev oracle (not a build dependency). Mirrors the Rust harness in
 `umol-graph/benches/substructure.rs`: same corpus, same three patterns, and the
 same matching semantics so the timings are directly comparable.
 
-Semantics alignment with `MoleculeAst::substructure_matches`:
+Semantics alignment with `Molecule::substructure_matches`:
   - Atoms are element-only (`[#6]`/`[#7]`/`[#8]`), matching aromatic and aliphatic
     alike, like an element-only `AtomAst`.
   - All bonds are "any" (`~`), like a `BondAst(Undetermined)`.

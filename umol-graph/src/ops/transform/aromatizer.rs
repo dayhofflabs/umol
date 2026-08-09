@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{AtomView, ElementForm, MoleculeAst, NumForm};
+use umol_graph_ir::ir::{AtomView, ElementForm, Molecule, NumForm};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
@@ -49,7 +49,7 @@ impl Aromatizer {
 impl Transformer for Aromatizer {
     type Error = AromatizerError;
 
-    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<(), AromatizerError> {
+    fn transform_into(&self, ast: &mut Molecule) -> Result<(), AromatizerError> {
         if ast.aromatic_systems().count() > 0 {
             return Ok(());
         }
@@ -61,10 +61,7 @@ impl Transformer for Aromatizer {
         Ok(())
     }
 
-    fn generate_all<'a>(
-        &'a self,
-        ast: &'a MoleculeAst,
-    ) -> Box<dyn Iterator<Item = MoleculeAst> + 'a> {
+    fn generate_all<'a>(&'a self, ast: &'a Molecule) -> Box<dyn Iterator<Item = Molecule> + 'a> {
         Box::new(self.transform(ast).ok().into_iter())
     }
 }
@@ -109,8 +106,8 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, AtomForm, AtomId, BondConstraintKey, BondForm, MoleculeAst,
-        MoleculeEntries, RingConfig, UnpairedElectronsForm,
+        AromaticSystemId, AtomForm, AtomId, BondConstraintKey, BondForm, Molecule, MoleculeEntries,
+        RingConfig, UnpairedElectronsForm,
     };
     use umol_graph_ir::mol_dsl_ground;
 
@@ -123,7 +120,7 @@ mod tests {
         atom
     }
 
-    fn benzene_kekule() -> MoleculeAst {
+    fn benzene_kekule() -> Molecule {
         let atoms: Vec<AtomForm> = (0..6).map(|_| kekule_carbon()).collect();
         let bonds: Vec<_> = (0..6)
             .map(|i| {
@@ -131,7 +128,7 @@ mod tests {
                 (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(order))
             })
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -214,7 +211,7 @@ mod tests {
     fn test_aromatizer_generate_all_yields_one() {
         let ast = benzene_kekule();
         let transformer = Aromatizer::new(&AromaticityModel::daylight());
-        let results: Vec<MoleculeAst> = transformer.generate_all(&ast).collect();
+        let results: Vec<Molecule> = transformer.generate_all(&ast).collect();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].aromatic_systems().count(), 1);
     }

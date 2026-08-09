@@ -1,5 +1,5 @@
 //! The `mol!` function-like macro: a compile-checked visual literal over the shared path grammar
-//! (see [`crate::parse`]) that desugars to an L2 `MoleculeSpec` and builds a `MoleculeAst`. Every atom
+//! (see [`crate::parse`]) that desugars to an L2 `MoleculeSpec` and builds a `Molecule`. Every atom
 //! resolves to a creation position; the molecule is emitted as one nameless `atoms([spec, …])` term
 //! wired by position. Port markers (`^name`) belong to `frag!` and are rejected here.
 

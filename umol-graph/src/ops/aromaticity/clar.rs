@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet,
+    AromaticSystemForm, AtomId, AtomView, ElementForm, Molecule, RingId, RingSet,
     UnpairedElectronsForm,
 };
 
@@ -27,7 +27,7 @@ pub struct ClarAromaticity;
 impl ClarAromaticity {
     pub fn find_from_rings<F>(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         rings: &RingSet,
         maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
         electrons_at: &F,
@@ -136,8 +136,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, ElementForm,
-        MoleculeAst, MoleculeEntries, NumForm, RingConfig, RingId, RingModel, RingSetKind,
+        AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, ElementForm, Molecule,
+        MoleculeEntries, NumForm, RingConfig, RingId, RingModel, RingSetKind,
     };
 
     use super::*;
@@ -164,7 +164,7 @@ mod tests {
             .collect()
     }
 
-    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> MoleculeAst {
+    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> Molecule {
         let n = specs.len();
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = (0..n)
@@ -176,27 +176,27 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         })
     }
 
-    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> Molecule {
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondForm::from_order(1)))
             .collect();
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         })
     }
 
-    fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingId> {
+    fn hex_ring_indices(ast: &Molecule, ring_info: &RingSet) -> Vec<RingId> {
         ring_info
             .ids()
             .filter(|&i| {
@@ -212,7 +212,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn naphthalene() -> MoleculeAst {
+    fn naphthalene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 10],
             &[
@@ -224,7 +224,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn phenanthrene() -> MoleculeAst {
+    fn phenanthrene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 14],
             &[
@@ -239,10 +239,7 @@ mod tests {
     #[case::benzene(make_ring(vec![aromatic(Element::C, 1); 6]), 1)]
     #[case::naphthalene(naphthalene(), 1)]
     #[case::phenanthrene(phenanthrene(), 2)]
-    fn test_clar_aromaticity_sextet_count(
-        #[case] ast: MoleculeAst,
-        #[case] expected_sextets: usize,
-    ) {
+    fn test_clar_aromaticity_sextet_count(#[case] ast: Molecule, #[case] expected_sextets: usize) {
         let ring_info = ast
             .rings(
                 RingModel {
@@ -267,7 +264,7 @@ mod tests {
     #[case::phenanthrene(phenanthrene(), 1, Some(12))]
     #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
     fn test_clar_aromaticity_find_from_rings(
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
@@ -337,7 +334,7 @@ mod tests {
         aromatic(Element::C, 1),
         aromatic(Element::C, 1),
     ]))]
-    fn test_clar_aromaticity_find_from_rings_error(#[case] ast: MoleculeAst) {
+    fn test_clar_aromaticity_find_from_rings_error(#[case] ast: Molecule) {
         let rings = ast
             .rings(
                 RingModel {
@@ -369,7 +366,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_clar_aromaticity_solver(phenanthrene: MoleculeAst) {
+    fn test_clar_aromaticity_solver(phenanthrene: Molecule) {
         let ring_info = phenanthrene
             .rings(
                 RingModel {

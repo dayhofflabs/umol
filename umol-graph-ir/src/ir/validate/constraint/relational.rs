@@ -9,7 +9,7 @@ use umol_utils::solution::Solution;
 use super::super::super::constraint::{AtomConstraintForm, RelationalConstraint};
 use super::super::super::entity::Entity;
 use super::super::super::id::AtomId;
-use super::super::super::molecule::MoleculeAst;
+use super::super::super::molecule::Molecule;
 use super::super::super::ring::{RingConfig, RingModel};
 use super::super::super::traits::Lattice;
 use super::super::super::view::RingViews;
@@ -29,7 +29,7 @@ pub struct RelationalConstraintContradiction {
 impl RelationalConstraintValidator {
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         constraint: &RelationalConstraint,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RelationalConstraintContradiction>, ConstraintError> {
@@ -343,7 +343,7 @@ impl Truth {
 }
 
 fn evaluate_atom(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     atom_id: AtomId,
     predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'_>>,
@@ -385,7 +385,7 @@ fn truth_from_solution<C>(outcome: Solution<(), C>) -> Truth {
 }
 
 fn all_atoms<'a>(
-    ast: &'a MoleculeAst,
+    ast: &'a Molecule,
     atoms: impl IntoIterator<Item = AtomId>,
     predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'a>>,
@@ -398,7 +398,7 @@ fn all_atoms<'a>(
 }
 
 fn any_atom<'a>(
-    ast: &'a MoleculeAst,
+    ast: &'a Molecule,
     atoms: impl IntoIterator<Item = AtomId>,
     predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'a>>,
@@ -468,7 +468,7 @@ fn is_ring_predicate(predicate: &AtomConstraintForm) -> bool {
     )
 }
 
-fn require_entity(ast: &MoleculeAst, entity: Entity) -> Result<(), ConstraintError> {
+fn require_entity(ast: &Molecule, entity: Entity) -> Result<(), ConstraintError> {
     let present = match entity {
         Entity::Atom(id) => ast.atoms().contains(id),
         Entity::Bond(id) => ast.bonds().contains(id),
@@ -487,7 +487,7 @@ fn require_entity(ast: &MoleculeAst, entity: Entity) -> Result<(), ConstraintErr
 }
 
 fn require_atoms(
-    ast: &MoleculeAst,
+    ast: &Molecule,
     atoms: impl IntoIterator<Item = AtomId>,
 ) -> Result<(), ConstraintError> {
     for atom in atoms {
@@ -523,7 +523,7 @@ mod tests {
     use crate::mol_dsl;
 
     #[fixture]
-    fn relational_molecule() -> MoleculeAst {
+    fn relational_molecule() -> Molecule {
         mol_dsl!(
             r#"{:atoms ["C" "N" "O" "F" "Cl" "Br" "I" "H"]
                 :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"] [3 4 "2"] [6 7 "*"]]
@@ -669,7 +669,7 @@ mod tests {
         predicate: Box::new(AtomConstraintForm::valence(NumForm::Undetermined)),
     })]
     fn test_relational_constraint_validator_validate(
-        relational_molecule: MoleculeAst,
+        relational_molecule: Molecule,
         #[case] constraint: RelationalConstraint,
     ) {
         assert_eq!(
@@ -692,7 +692,7 @@ mod tests {
         predicate: Box::new(AtomConstraintForm::valence(3)),
     })]
     fn test_relational_constraint_validator_validate_partial(
-        relational_molecule: MoleculeAst,
+        relational_molecule: Molecule,
         #[case] constraint: RelationalConstraint,
     ) {
         assert_eq!(
@@ -766,7 +766,7 @@ mod tests {
         atoms: vec![AtomId(0)],
     })]
     fn test_relational_constraint_validator_validate_contradiction(
-        relational_molecule: MoleculeAst,
+        relational_molecule: Molecule,
         #[case] constraint: RelationalConstraint,
     ) {
         assert_eq!(
@@ -839,7 +839,7 @@ mod tests {
         Entity::StereoBond(StereoBondId(99)),
     )]
     fn test_relational_constraint_validator_validate_error(
-        relational_molecule: MoleculeAst,
+        relational_molecule: Molecule,
         #[case] constraint: RelationalConstraint,
         #[case] entity: Entity,
     ) {

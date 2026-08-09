@@ -19,19 +19,19 @@ use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::IdRemapping;
 use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::super::traits::Lattice;
-use super::{MoleculeAst, MoleculeEntries};
+use super::{Molecule, MoleculeEntries};
 
 /// The attributed pushout of two molecules over a graph `overlap`: `self` and `other` glued on their
 /// shared subgraph, with atom / bond data `meet`-combined where they coincide. `object` keeps `self`'s
 /// ids; `left` / `right` embed each side into it.
 #[allow(dead_code)]
 pub struct MoleculePushout {
-    pub object: MoleculeAst,
+    pub object: Molecule,
     pub left: MoleculeCorrespondence,
     pub right: MoleculeCorrespondence,
 }
 
-impl MoleculeAst {
+impl Molecule {
     /// Glue `self` (left) and `other` (right) over `overlap` (a common subgraph — its edges the
     /// coincident bonds), meeting atom / bond / overlay data at coincident entities and combining the
     /// two molecule-constraint sets; `None` when any coincident `meet` is `⊥` (the overlap is
@@ -40,7 +40,7 @@ impl MoleculeAst {
     #[allow(dead_code)]
     pub fn meet_pushout(
         &self,
-        other: &MoleculeAst,
+        other: &Molecule,
         overlap: &GraphCorrespondence,
     ) -> Option<MoleculePushout> {
         let po = self.raw_graph().pushout(other.raw_graph(), overlap);
@@ -203,7 +203,7 @@ impl MoleculeAst {
             })
             .collect();
 
-        let mut object = MoleculeAst::from_entries(MoleculeEntries {
+        let mut object = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative,
@@ -402,17 +402,17 @@ mod tests {
         #[case] right_shared: AtomForm,
         #[case] shared_element: Element,
     ) {
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![left_shared, AtomForm::from_element(Element::N)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms: vec![right_shared, AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let expected = MoleculeAst::from_entries(MoleculeEntries {
+        let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(shared_element),
                 AtomForm::from_element(Element::N),
@@ -439,38 +439,38 @@ mod tests {
     // `has_conflict` gate rejects.
     #[rstest]
     #[case::carbon_nitrogen(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
     )]
     #[case::oxygen_nitrogen(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::N)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
     )]
     #[case::aromatic_overlap(
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default())],
             constraints: Constraints::new(),
             ..Default::default()
         }),
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default())],
@@ -480,8 +480,8 @@ mod tests {
     )]
     fn test_molecule_ast_meet_pushout_inadmissible(
         overlap: GraphCorrespondence,
-        #[case] left: MoleculeAst,
-        #[case] right: MoleculeAst,
+        #[case] left: Molecule,
+        #[case] right: Molecule,
     ) {
         assert!(left.meet_pushout(&right, &overlap).is_none());
     }
@@ -506,7 +506,7 @@ mod tests {
             Correspondence::new(vec![], 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(1)],
@@ -519,7 +519,7 @@ mod tests {
             constraints: Constraints::new(),
             ..Default::default()
         });
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             aromatic: vec![
                 (
@@ -544,7 +544,7 @@ mod tests {
             constraints: Constraints::new(),
             ..Default::default()
         });
-        let expected = MoleculeAst::from_entries(MoleculeEntries {
+        let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             aromatic: vec![
                 (
@@ -586,7 +586,7 @@ mod tests {
         #[case] left_valence: i64,
         #[case] right_valence: i64,
     ) {
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::N),
@@ -598,7 +598,7 @@ mod tests {
             )]),
             ..Default::default()
         });
-        let right = MoleculeAst::from_entries(MoleculeEntries {
+        let right = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::O),
@@ -610,7 +610,7 @@ mod tests {
             )]),
             ..Default::default()
         });
-        let expected = MoleculeAst::from_entries(MoleculeEntries {
+        let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::N),
@@ -656,7 +656,7 @@ mod tests {
             AtomForm::from_element(Element::I),
             AtomForm::from_element(Element::N),
         ];
-        let self_mol = MoleculeAst::from_entries(MoleculeEntries {
+        let self_mol = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             stereo_atoms: vec![(
                 AtomId(0),
@@ -671,7 +671,7 @@ mod tests {
             constraints: Constraints::new(),
             ..Default::default()
         });
-        let other_mol = MoleculeAst::from_entries(MoleculeEntries {
+        let other_mol = Molecule::from_entries(MoleculeEntries {
             atoms,
             stereo_atoms: vec![(
                 AtomId(0),
@@ -742,7 +742,7 @@ mod tests {
             AtomForm::from_element(Element::Cl),
         ];
         let bonds = vec![(AtomId(0), AtomId(1), BondForm::from_order(2))];
-        let self_mol = MoleculeAst::from_entries(MoleculeEntries {
+        let self_mol = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(
@@ -758,7 +758,7 @@ mod tests {
             constraints: Constraints::new(),
             ..Default::default()
         });
-        let other_mol = MoleculeAst::from_entries(MoleculeEntries {
+        let other_mol = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             stereo_bonds: vec![(

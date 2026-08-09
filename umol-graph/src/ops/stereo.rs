@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, MoleculeAst, StereoAtomForm, StereoAtomId,
+    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, Molecule, StereoAtomForm, StereoAtomId,
     StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     TetrahedralStereoForm,
 };
@@ -67,7 +67,7 @@ impl StereoPerception {
     }
 
     /// Derive stereo relations and compare them with every existing relation.
-    pub fn derive(&self, ast: &MoleculeAst) -> StereoDerivation {
+    pub fn derive(&self, ast: &Molecule) -> StereoDerivation {
         let mut atoms = Vec::new();
         let mut bonds = Vec::new();
         let mut inconsistencies = BTreeSet::new();
@@ -238,7 +238,7 @@ impl StereoPerception {
     /// Derive a tetrahedral stereo atom in the canonical neighbor frame.
     pub fn derive_stereo_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom: AtomId,
         coset: &StereoCoset,
     ) -> Option<(Vec<StereoLigand>, StereoAtomForm)> {
@@ -277,7 +277,7 @@ impl StereoPerception {
     /// Derive a cis-trans stereo bond in the canonical endpoint and side frames.
     pub fn derive_stereo_bond(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         bond: BondId,
         coset: &StereoCoset,
     ) -> Option<(Vec<StereoLigand>, StereoBondForm)> {
@@ -299,7 +299,7 @@ impl StereoPerception {
 
     fn bond_side_ligands(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom: AtomId,
         partner: AtomId,
     ) -> Option<[StereoLigand; 2]> {
@@ -520,7 +520,7 @@ mod tests {
             ],
         },
     )]
-    fn test_stereo_perception_derive(#[case] ast: MoleculeAst, #[case] expected: StereoDerivation) {
+    fn test_stereo_perception_derive(#[case] ast: Molecule, #[case] expected: StereoDerivation) {
         assert_eq!(
             StereoPerception::new(&StereoModel::default()).derive(&ast),
             expected
@@ -590,7 +590,7 @@ mod tests {
     )]
     fn test_stereo_perception_derive_stereo_atom(
         #[case] model: StereoModel,
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected: Option<(Vec<StereoLigand>, StereoAtomForm)>,
     ) {
         assert_eq!(
@@ -654,7 +654,7 @@ mod tests {
     )]
     fn test_stereo_perception_derive_stereo_bond(
         #[case] model: StereoModel,
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected: Option<(Vec<StereoLigand>, StereoBondForm)>,
     ) {
         assert_eq!(

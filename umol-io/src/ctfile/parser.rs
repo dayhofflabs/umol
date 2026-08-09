@@ -9,7 +9,7 @@ use nom::character::complete::multispace0;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
 use umol_geometric_core::Point3D;
-use umol_graph_ir::ir::{MoleculeAst, TryIntoIr};
+use umol_graph_ir::ir::{Molecule as GraphIrMolecule, TryIntoIr};
 use umol_utils::error::UmolError;
 
 use self::accumulator::PropertyAccumulator;
@@ -260,16 +260,16 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL to [`MoleculeAst`] without running the solver.
-pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
+/// Parse MOL to [`Molecule`] without running the solver.
+pub fn parse_mol_to_ast(input: &str) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
     parse_mol_bytes_to_ast(input.as_bytes())
 }
 
-/// Parse MOL bytes to [`MoleculeAst`] without running the solver. Spans the parse (`ParseError`)
+/// Parse MOL bytes to [`Molecule`] without running the solver. Spans the parse (`ParseError`)
 /// and raise (`RaiseError`) concerns, so per doc 065 it returns the boxed boundary error.
-pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> {
+pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
-    let ast: MoleculeAst = (&table_mol).try_into_ir(&())?;
+    let ast: GraphIrMolecule = (&table_mol).try_into_ir(&())?;
     Ok(ast)
 }
 

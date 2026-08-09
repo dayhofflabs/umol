@@ -19,7 +19,7 @@ use std::path::Path;
 use std::{env, fs, process};
 
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_graph_ir::ir::{FromIr, MoleculeAst, TryIntoIr};
+use umol_graph_ir::ir::{FromIr, Molecule, TryIntoIr};
 use umol_io::ctfile::parse_mol_bytes_to_ast;
 use umol_io::smiles::Smiles;
 
@@ -159,14 +159,14 @@ fn read_input(arg: &str) -> Vec<u8> {
 
 /// Lower an AST to DSL with **zeroed** defaults — fully explicit (nothing elided),
 /// matching how the resolution harness lowers its output.
-fn lower(ast: &MoleculeAst) -> String {
+fn lower(ast: &Molecule) -> String {
     MoleculeDsl::from_ir(ast, &MoleculeDefaults::zeroed()).to_string()
 }
 
 /// Parse the SMILES to an AST, then lower the AST to DSL.
 fn parse_and_lower(smiles: &str) -> Result<String, String> {
     let smiles = Smiles::parse(smiles.trim()).map_err(|error| error.to_string())?;
-    let ast: MoleculeAst = smiles
+    let ast: Molecule = smiles
         .as_table_ir()
         .try_into_ir(&())
         .map_err(|error| error.to_string())?;

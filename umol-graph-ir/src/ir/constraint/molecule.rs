@@ -12,7 +12,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
@@ -364,7 +364,7 @@ pub enum MoleculeConstraint {
     },
     SubPattern {
         anchor: SubPatternAnchor,
-        pattern: Box<MoleculeAst>,
+        pattern: Box<Molecule>,
     },
 }
 
@@ -495,7 +495,7 @@ impl PartialOrd for MoleculeConstraint {
 
 impl Ord for MoleculeConstraint {
     /// Variant declaration order, then payload. `SubPattern` orders by `anchor`
-    /// only — the inner `MoleculeAst` has no total order (graph), so same-anchor
+    /// only — the inner `Molecule` has no total order (graph), so same-anchor
     /// patterns compare `Equal` here. This is intentionally weaker than `Eq`,
     /// which does compare the pattern; canonicalization only needs the order for
     /// a stable sort, and dedup falls back to `PartialEq`.
@@ -792,7 +792,7 @@ mod tests {
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
-    use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::value::{ArithExpr, NumForm};
     use crate::ir::BooleanForm;
@@ -1258,12 +1258,12 @@ mod tests {
     #[case::subpattern_shifts_anchor_atoms(
         vec![Constraint::Molecule(MoleculeConstraint::SubPattern {
             anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(3), AtomId(0)); a },
-            pattern: Box::new(MoleculeAst::default()),
+            pattern: Box::new(Molecule::default()),
         })],
         id_compaction(vec![1], vec![]),
         vec![Constraint::Molecule(MoleculeConstraint::SubPattern {
             anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(2), AtomId(0)); a },
-            pattern: Box::new(MoleculeAst::default()),
+            pattern: Box::new(Molecule::default()),
         })],
     )]
     fn test_constraints_compact(
@@ -1380,7 +1380,7 @@ mod tests {
     #[case::bond_order_sum_lit(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Lit(4) }, false)]
     #[case::bond_order_sum_undetermined(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Undetermined }, true)]
     #[case::connected(MoleculeConstraint::Connected { atoms: None }, false)]
-    #[case::sub_pattern(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }, false)]
+    #[case::sub_pattern(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) }, false)]
     fn test_molecule_constraint_is_vacuous(
         #[case] c: MoleculeConstraint,
         #[case] expected: bool,
@@ -1420,7 +1420,7 @@ mod tests {
 
     #[rstest]
     #[case::connected_none(MoleculeConstraint::Connected { atoms: None })]
-    #[case::sub_pattern_noop(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) })]
+    #[case::sub_pattern_noop(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) })]
     fn test_molecule_constraint_canonicalize_identity(#[case] input: MoleculeConstraint) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
@@ -1434,19 +1434,19 @@ mod tests {
     )]
     #[case::connected_before_sub_pattern(
         MoleculeConstraint::Connected { atoms: None },
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) },
         Ordering::Less,
     )]
     #[case::sub_pattern_ignores_pattern(
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::default()], bonds: vec![], ..Default::default() })) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::default()], bonds: vec![], ..Default::default() })) },
         Ordering::Equal,
     )]
     #[case::sub_pattern_orders_by_anchor(
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) },
         MoleculeConstraint::SubPattern {
             anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(0), AtomId(0)); a },
-            pattern: Box::new(MoleculeAst::default()),
+            pattern: Box::new(Molecule::default()),
         },
         Ordering::Less,
     )]

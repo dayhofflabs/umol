@@ -7,7 +7,7 @@
 
 use umol_graph_core::CircularRefinementAlgorithm;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, IsotopeMass, MoleculeAst, RingConfig, RingModel, RingSet,
+    AsLit, AtomId, BondId, IsotopeMass, Molecule, RingConfig, RingModel, RingSet,
 };
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
@@ -32,7 +32,7 @@ impl EcfpFeaturizer {
     }
 
     /// Returns the deduplicated set of feature identifiers.
-    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+    pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
         }
@@ -42,7 +42,7 @@ impl EcfpFeaturizer {
     /// Like [`Self::featurize`] but keeps per-identifier counts.
     pub fn featurize_counted(
         &self,
-        mol: &MoleculeAst,
+        mol: &Molecule,
     ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
@@ -51,7 +51,7 @@ impl EcfpFeaturizer {
     }
 
     /// The circular-refinement identifier multiset (one per surviving environment).
-    fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
+    fn identifiers(&self, mol: &Molecule) -> Vec<u64> {
         let rings = mol
             .rings(RingModel::default(), self.ring_config)
             .into_ring_set();
@@ -69,7 +69,7 @@ impl EcfpFeaturizer {
 /// Daylight initial invariant (Rogers & Hahn 2010): heavy-atom degree, heavy
 /// valence, atomic number, isotope mass (natural → 0), formal charge, attached
 /// hydrogens, and ring membership.
-fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
+fn atom_components(mol: &Molecule, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let atom = mol.atom(id);
     let element = atom.element().as_lit().expect("ground atom");
     let isotope_mass = match atom.isotope_mass().as_lit().expect("ground atom") {
@@ -88,7 +88,7 @@ fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
 }
 
 /// Bond label: bond order with the aromatic-system flag.
-fn bond_label(mol: &MoleculeAst, id: BondId) -> u32 {
+fn bond_label(mol: &Molecule, id: BondId) -> u32 {
     let bond = mol.bond(id);
     let order = bond.order().as_lit().expect("ground bond") as u32;
     order | ((bond.is_in_aromatic_system() as u32) << 16)

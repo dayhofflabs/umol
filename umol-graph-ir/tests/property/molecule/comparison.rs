@@ -13,7 +13,7 @@ use umol_graph_ir::ir::MoleculeCorrespondence;
 
 use crate::strategies::*;
 
-fn identity_correspondence(ast: &MoleculeAst) -> MoleculeCorrespondence {
+fn identity_correspondence(ast: &Molecule) -> MoleculeCorrespondence {
     fn identity<Id>(count: usize) -> Correspondence<Id>
     where
         Id: Copy + Ord + From<usize>,
@@ -85,7 +85,7 @@ proptest! {
             third_order.rotate_left(1);
         }
         let molecule = |order: &[usize]| {
-            MoleculeAst::from_entries(MoleculeEntries {
+            Molecule::from_entries(MoleculeEntries {
                 atoms: order.iter().map(|&index| atoms[index].clone()).collect(),
                 ..Default::default()
             })
@@ -146,11 +146,11 @@ proptest! {
         change_mapped_atom in any::<bool>(),
     ) {
         let count = atoms.len();
-        let left = MoleculeAst::from_entries(MoleculeEntries {
+        let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             ..Default::default()
         });
-        let mut right = MoleculeAst::from_entries(MoleculeEntries {
+        let mut right = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.into_iter().rev().collect(),
             ..Default::default()
         });

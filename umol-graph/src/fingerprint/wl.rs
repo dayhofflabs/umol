@@ -1,7 +1,7 @@
 //! Weisfeiler–Lehman featurizer: frozen color refinement over the atom graph.
 
 use umol_graph_core::{EdgeId, Refinement, RefinementAlgorithm, RefinementRounds};
-use umol_graph_ir::ir::{AsLit, AtomId, BondId, MoleculeAst};
+use umol_graph_ir::ir::{AsLit, AtomId, BondId, Molecule};
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::featurizer::FingerprintError;
@@ -24,7 +24,7 @@ impl WlFeaturizer {
     }
 
     /// Returns the deduplicated set of feature identifiers.
-    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+    pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
         }
@@ -36,7 +36,7 @@ impl WlFeaturizer {
     /// Like [`Self::featurize`] but keeps per-identifier counts.
     pub fn featurize_counted(
         &self,
-        mol: &MoleculeAst,
+        mol: &Molecule,
     ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
@@ -46,7 +46,7 @@ impl WlFeaturizer {
         ))
     }
 
-    fn refinement(&self, mol: &MoleculeAst) -> Refinement<u64> {
+    fn refinement(&self, mol: &Molecule) -> Refinement<u64> {
         // Pre-extract seeds so the refine closures stay simple index lookups.
         let atom_seeds: Vec<u64> = (0..mol.atoms().count())
             .map(|i| atom_seed(mol, AtomId(i as u32)))
@@ -68,7 +68,7 @@ impl WlFeaturizer {
 
 /// Seed an atom from (atomic number, formal charge, implicit hydrogens), each in
 /// its own byte range so distinct tuples stay distinct before the scheme rehashes.
-fn atom_seed(mol: &MoleculeAst, id: AtomId) -> u64 {
+fn atom_seed(mol: &Molecule, id: AtomId) -> u64 {
     let atom = mol.atom(id);
     let atomic_number = atom
         .element()
@@ -83,7 +83,7 @@ fn atom_seed(mol: &MoleculeAst, id: AtomId) -> u64 {
 }
 
 /// Seed a bond from (bond order, aromatic-system membership).
-fn bond_seed(mol: &MoleculeAst, id: BondId) -> u64 {
+fn bond_seed(mol: &Molecule, id: BondId) -> u64 {
     let bond = mol.bond(id);
     let order = bond.order().as_lit().expect("ground bond");
     (order as u16 as u64) | ((bond.is_in_aromatic_system() as u64) << 16)

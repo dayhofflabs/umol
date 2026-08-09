@@ -11,7 +11,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
     StereoBondId,
 };
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 #[cfg(test)]
 use super::super::molecule::MoleculeEntries;
 
@@ -83,7 +83,7 @@ impl<'a> ConnectivityValidator<'a> {
 
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
     ) -> Result<Solution<(), ConnectivityContradiction>, ConnectivityError> {
         let atom_count = ast.atoms().count();
         let mut union = UnionFind::new(atom_count);
@@ -221,7 +221,7 @@ mod tests {
 
     #[rstest]
     fn test_connectivity_validator_validate_disconnected_allowed() {
-        let mol = MoleculeAst::from_entries(MoleculeEntries {
+        let mol = Molecule::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -239,7 +239,7 @@ mod tests {
 
     #[rstest]
     fn test_connectivity_validator_validate_disconnected_forbidden() {
-        let mol = MoleculeAst::from_entries(MoleculeEntries {
+        let mol = Molecule::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -263,7 +263,7 @@ mod tests {
     #[rstest]
     fn test_connectivity_validator_validate_aromatic_spanning() {
         // an aromatic system over atoms in the two separate bond components — disallowed by default
-        let mol = MoleculeAst::from_entries(MoleculeEntries {
+        let mol = Molecule::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -291,7 +291,7 @@ mod tests {
     #[rstest]
     fn test_connectivity_validator_validate_noncovalent_spanning_allowed() {
         // a noncovalent bond bridging the two components — permitted by default
-        let mol = MoleculeAst::from_entries(MoleculeEntries {
+        let mol = Molecule::from_entries(MoleculeEntries {
             atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),

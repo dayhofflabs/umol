@@ -11,7 +11,7 @@ use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
     AtomConstraintsForm, AtomForm, AtomHandle, AtomId, AtomView, BooleanForm, Edits,
-    IsotopeMassForm, Lattice, MoleculeAst, NumForm, TransactionError, UnpairedElectronsForm,
+    IsotopeMassForm, Lattice, Molecule, NumForm, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -95,7 +95,7 @@ impl<'a> CountsValence<'a> {
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Edits, CountsError> {
+    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, CountsError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
                 return Solution::Underdetermined(Edits::new());
@@ -119,7 +119,7 @@ impl<'a> CountsValence<'a> {
     /// Plan and atomically apply counts-valence resolution.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), CountsError>, TransactionError> {
         let edits = match self.plan(ast) {
             Solution::Determined(edits) => edits,
@@ -136,7 +136,7 @@ impl<'a> CountsValence<'a> {
 
     fn resolve_molecule_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom_id: AtomId,
     ) -> Result<Option<AtomForm>, CountsError> {
         let atom = ast.atom(atom_id);
@@ -183,7 +183,7 @@ impl<'a> CountsValence<'a> {
     /// - `Underdetermined` if atom is not ground.
     pub fn classify_molecule_atom(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         atom_id: AtomId,
     ) -> Solution<(), CountsMismatch> {
         let atom = ast.atom(atom_id);
@@ -555,7 +555,7 @@ mod tests {
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
-    fn test_counts_valence_plan_partial(#[case] molecule: MoleculeAst) {
+    fn test_counts_valence_plan_partial(#[case] molecule: Molecule) {
         assert_eq!(
             CountsValence::new(ValenceTable::default_table()).plan(&molecule),
             Solution::Underdetermined(Edits::new())
@@ -564,10 +564,7 @@ mod tests {
 
     #[rstest]
     #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
-    fn test_counts_valence_plan_error(
-        #[case] molecule: MoleculeAst,
-        #[case] expected: CountsError,
-    ) {
+    fn test_counts_valence_plan_error(#[case] molecule: Molecule, #[case] expected: CountsError) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.plan(&molecule), Solution::Contradictory(expected));
     }
@@ -577,7 +574,7 @@ mod tests {
     #[case::water_oxygen(mol_dsl!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#), 0, "O#i=#c0#h0#n2#u0#s#v2#a!")]
     #[case::benzene_ring(mol_dsl!( r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#), 0, "C#i=#c0#h#n0#u0#s#v2#a")]
     fn test_counts_valence_resolve(
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] atom_id: u32,
         #[case] expected: &str,
     ) {
@@ -591,7 +588,7 @@ mod tests {
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
-    fn test_counts_valence_resolve_partial(#[case] mut molecule: MoleculeAst) {
+    fn test_counts_valence_resolve_partial(#[case] mut molecule: Molecule) {
         let original = molecule.clone();
         assert_eq!(
             CountsValence::new(ValenceTable::default_table()).resolve(&mut molecule),
@@ -603,7 +600,7 @@ mod tests {
     #[rstest]
     #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
     fn test_counts_valence_resolve_error(
-        #[case] mut molecule: MoleculeAst,
+        #[case] mut molecule: Molecule,
         #[case] expected: CountsError,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
@@ -670,7 +667,7 @@ mod tests {
         #[case] expected: Solution<(), CountsMismatch>,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
-        let molecule = MoleculeAst::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!(input)],
             ..Default::default()
         });

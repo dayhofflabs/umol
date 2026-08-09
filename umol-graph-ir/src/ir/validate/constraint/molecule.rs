@@ -11,7 +11,7 @@ use super::super::super::constraint::{MoleculeConstraint, SubPatternAnchor};
 use super::super::super::correspondence::MoleculeCorrespondence;
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId};
-use super::super::super::molecule::MoleculeAst;
+use super::super::super::molecule::Molecule;
 use super::super::super::substructure::SubstructureMatchConfig;
 use super::super::super::traits::Lattice;
 use super::super::super::value::NumForm;
@@ -30,7 +30,7 @@ pub struct MoleculeConstraintContradiction {
 impl MoleculeConstraintValidator {
     pub fn validate(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         constraint: &MoleculeConstraint,
         config: ConstraintValidateConfig,
     ) -> Result<Solution<(), MoleculeConstraintContradiction>, ConstraintError> {
@@ -99,8 +99,8 @@ impl MoleculeConstraintValidator {
 }
 
 fn validate_anchor(
-    host: &MoleculeAst,
-    pattern: &MoleculeAst,
+    host: &Molecule,
+    pattern: &Molecule,
     anchor: &SubPatternAnchor,
 ) -> Result<(), ConstraintError> {
     for &(target, pattern_id) in anchor.atoms() {
@@ -171,8 +171,8 @@ fn validate_anchor(
 }
 
 fn require_anchor_pair(
-    host: &MoleculeAst,
-    pattern: &MoleculeAst,
+    host: &Molecule,
+    pattern: &Molecule,
     target: Entity,
     pattern_entity: Entity,
 ) -> Result<(), ConstraintError> {
@@ -187,7 +187,7 @@ fn require_anchor_pair(
     Ok(())
 }
 
-fn contains_entity(molecule: &MoleculeAst, entity: Entity) -> bool {
+fn contains_entity(molecule: &Molecule, entity: Entity) -> bool {
     match entity {
         Entity::Atom(id) => molecule.atoms().contains(id),
         Entity::Bond(id) => molecule.bonds().contains(id),
@@ -241,10 +241,7 @@ fn evaluate(
     }
 }
 
-fn atom_subset(
-    ast: &MoleculeAst,
-    atoms: Option<&[AtomId]>,
-) -> Result<Vec<AtomId>, ConstraintError> {
+fn atom_subset(ast: &Molecule, atoms: Option<&[AtomId]>) -> Result<Vec<AtomId>, ConstraintError> {
     match atoms {
         Some(atoms) => {
             let mut selected = BTreeSet::new();
@@ -262,10 +259,7 @@ fn atom_subset(
     }
 }
 
-fn bond_subset(
-    ast: &MoleculeAst,
-    bonds: Option<&[BondId]>,
-) -> Result<Vec<BondId>, ConstraintError> {
+fn bond_subset(ast: &Molecule, bonds: Option<&[BondId]>) -> Result<Vec<BondId>, ConstraintError> {
     match bonds {
         Some(bonds) => {
             let mut selected = BTreeSet::new();
@@ -285,7 +279,7 @@ fn bond_subset(
 
 /// Whether every selected atom belongs to one localized-bond component. Paths may pass through
 /// atoms outside the selected subset; empty and singleton subsets are connected.
-fn connected(ast: &MoleculeAst, atoms: &[AtomId], algorithm: ConnectedComponentsAlgorithm) -> bool {
+fn connected(ast: &Molecule, atoms: &[AtomId], algorithm: ConnectedComponentsAlgorithm) -> bool {
     if atoms.len() < 2 {
         return true;
     }
@@ -344,7 +338,7 @@ mod tests {
     ];
 
     #[fixture]
-    fn aggregate_molecule() -> MoleculeAst {
+    fn aggregate_molecule() -> Molecule {
         mol_dsl!(
             r#"{:atoms ["C#c+" "N#c-" "O#c2" "F#c0" "Cl#c0"]
                 :bonds [[0 1 "1"] [1 2 "2"] [3 4 "1"]]}"#
@@ -352,7 +346,7 @@ mod tests {
     }
 
     #[fixture]
-    fn anchored_molecule() -> MoleculeAst {
+    fn anchored_molecule() -> Molecule {
         mol_dsl!(
             r#"{
                 :atoms ["C" "F" "Cl" "Br" "I"]
@@ -406,7 +400,7 @@ mod tests {
         atoms: Some(vec![AtomId(3)]),
     })]
     fn test_molecule_constraint_validator_validate(
-        aggregate_molecule: MoleculeAst,
+        aggregate_molecule: Molecule,
         #[case] constraint: MoleculeConstraint,
     ) {
         assert_eq!(
@@ -430,7 +424,7 @@ mod tests {
     })]
     fn test_molecule_constraint_validator_validate_empty(#[case] constraint: MoleculeConstraint) {
         assert_eq!(
-            MoleculeConstraintValidator.validate(&MoleculeAst::default(), &constraint, CONFIG,),
+            MoleculeConstraintValidator.validate(&Molecule::default(), &constraint, CONFIG,),
             Ok(Solution::Determined(())),
         );
     }
@@ -501,7 +495,7 @@ mod tests {
     })]
     #[case::connected_all(MoleculeConstraint::Connected { atoms: None })]
     fn test_molecule_constraint_validator_validate_contradiction(
-        aggregate_molecule: MoleculeAst,
+        aggregate_molecule: Molecule,
         #[case] constraint: MoleculeConstraint,
     ) {
         assert_eq!(
@@ -541,7 +535,7 @@ mod tests {
         Entity::Atom(AtomId(99)),
     )]
     fn test_molecule_constraint_validator_validate_error(
-        aggregate_molecule: MoleculeAst,
+        aggregate_molecule: Molecule,
         #[case] constraint: MoleculeConstraint,
         #[case] entity: Entity,
     ) {
@@ -618,7 +612,7 @@ mod tests {
     #[case::stereo_atom(mol_dsl!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_atom(StereoAtomId(0), StereoAtomId(0)); anchor })]
     #[case::stereo_bond(mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :type "Ct1"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_bond(StereoBondId(0), StereoBondId(0)); anchor })]
     fn test_molecule_constraint_validator_validate_subpattern_anchor(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] anchor: SubPatternAnchor,
     ) {
         let constraint = MoleculeConstraint::SubPattern {
@@ -719,7 +713,7 @@ mod tests {
     #[case::target_stereo_bond({ let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_bond(StereoBondId(99), StereoBondId(0)); anchor }, Entity::StereoBond(StereoBondId(99)))]
     #[case::pattern_atom({ let mut anchor = SubPatternAnchor::new(); anchor.push_atom(AtomId(0), AtomId(99)); anchor }, Entity::Atom(AtomId(99)))]
     fn test_molecule_constraint_validator_validate_subpattern_anchor_error(
-        anchored_molecule: MoleculeAst,
+        anchored_molecule: Molecule,
         #[case] anchor: SubPatternAnchor,
         #[case] entity: Entity,
     ) {

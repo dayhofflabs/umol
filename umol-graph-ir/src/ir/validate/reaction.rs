@@ -14,7 +14,7 @@ use super::super::delta::{
 use super::super::entity::Entity;
 use super::super::id::AtomId;
 use super::super::ligand::StereoLigand;
-use super::super::molecule::MoleculeAst;
+use super::super::molecule::Molecule;
 
 /// Tier-1 integrity validator for reaction delta references and structural incidence.
 #[derive(Clone, Copy, Debug, Default)]
@@ -34,7 +34,7 @@ pub enum ReactionIntegrityError {}
 impl ReactionIntegrityValidator {
     pub fn validate(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         deltas: &Deltas,
     ) -> Result<Solution<(), ReactionIntegrityContradiction>, ReactionIntegrityError> {
         match self.validate_inner(lhs, deltas) {
@@ -45,7 +45,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_inner(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         deltas: &Deltas,
     ) -> Result<(), ReactionIntegrityContradiction> {
         let mut created = HashSet::new();
@@ -94,7 +94,7 @@ impl ReactionIntegrityValidator {
 
     fn require_lhs(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         entity: Entity,
     ) -> Result<(), ReactionIntegrityContradiction> {
         if contains_entity(lhs, entity) {
@@ -106,7 +106,7 @@ impl ReactionIntegrityValidator {
 
     fn require_available(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         entity: Entity,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -119,7 +119,7 @@ impl ReactionIntegrityValidator {
 
     fn require_atoms(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -135,7 +135,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_atom(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         delta: &AtomDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
         match delta {
@@ -148,7 +148,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_bond(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &BondDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -177,7 +177,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_dative(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &DativeBondDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -215,7 +215,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_aromatic(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &AromaticSystemDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -246,7 +246,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_multicenter(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &MulticenterBondDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -277,7 +277,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_noncovalent(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &NoncovalentBondDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -307,7 +307,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_stereo_atom(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &StereoAtomDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -351,7 +351,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_stereo_bond(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &StereoBondDelta,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -391,7 +391,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_constraint(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         constraint: &Constraint,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -434,7 +434,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_relational_constraint(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         constraint: &RelationalConstraint,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -529,7 +529,7 @@ impl ReactionIntegrityValidator {
 
     fn validate_molecule_constraint(
         &self,
-        lhs: &MoleculeAst,
+        lhs: &Molecule,
         created: &HashSet<Entity>,
         constraint: &MoleculeConstraint,
     ) -> Result<(), ReactionIntegrityContradiction> {
@@ -588,7 +588,7 @@ impl ReactionIntegrityValidator {
     }
 }
 
-fn contains_entity(molecule: &MoleculeAst, entity: Entity) -> bool {
+fn contains_entity(molecule: &Molecule, entity: Entity) -> bool {
     match entity {
         Entity::Atom(id) => molecule.atoms().contains(id),
         Entity::Bond(id) => molecule.bonds().contains(id),

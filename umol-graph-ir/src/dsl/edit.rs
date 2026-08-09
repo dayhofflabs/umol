@@ -55,7 +55,7 @@ use crate::ir::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ir::ligand::StereoLigandKind;
-use crate::ir::molecule::MoleculeAst;
+use crate::ir::molecule::Molecule;
 use crate::ir::multicenter::MulticenterBondUpdate;
 use crate::ir::noncovalent::NoncovalentBondUpdate;
 use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
@@ -3606,7 +3606,7 @@ fn parse_sub_pattern(
 
 fn render_sub_pattern(
     anchor: &SubPatternAnchor,
-    pattern: &MoleculeAst,
+    pattern: &Molecule,
     handles: &ConstraintHandles,
 ) -> Edn<'static> {
     let mut anchor_map = EdnMap::with_capacity(8);
@@ -4388,7 +4388,7 @@ mod tests {
     use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::AddBond;
     use crate::ir::electrons::ElectronCountsForm;
-    use crate::ir::molecule::MoleculeAst;
+    use crate::ir::molecule::Molecule;
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
@@ -5440,9 +5440,9 @@ mod tests {
         mol_dsl!(r#"{:atoms ["N"]}"#),
     )]
     fn test_edit_input_append_to_topology(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] input: &str,
-        #[case] expected: MoleculeAst,
+        #[case] expected: Molecule,
     ) {
         let mut edits = Edits::new();
         EditInput::from_edn_str(input)

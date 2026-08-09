@@ -3,13 +3,13 @@
 //! Filters candidate atoms by element scope and the per-atom aromatic-valence
 //! constraint, enumerates rings within configured bounds, checks the Hueckel
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
-//! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `MoleculeAst::edit`.
+//! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `Molecule::edit`.
 
 use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, AtomView, ElementForm, MoleculeAst, RingId, RingSet, RingView,
+    AromaticSystemForm, AtomId, AtomView, ElementForm, Molecule, RingId, RingSet, RingView,
     UnpairedElectronsForm,
 };
 
@@ -31,7 +31,7 @@ impl HueckelRuleAromaticity {
 
     pub fn find_from_rings<F>(
         &self,
-        ast: &MoleculeAst,
+        ast: &Molecule,
         rings: &RingSet,
         electrons_at: &F,
     ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
@@ -105,7 +105,7 @@ impl HueckelRuleAromaticity {
         candidates
     }
 
-    fn is_atom_eligible<F>(&self, ast: &MoleculeAst, atom: AtomId, electrons_at: &F) -> bool
+    fn is_atom_eligible<F>(&self, ast: &Molecule, atom: AtomId, electrons_at: &F) -> bool
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
@@ -120,7 +120,7 @@ impl HueckelRuleAromaticity {
         electrons_at(&view).is_some()
     }
 
-    fn filter_ring<F>(&self, ast: &MoleculeAst, ring: RingView<'_>, electrons_at: &F) -> bool
+    fn filter_ring<F>(&self, ast: &Molecule, ring: RingView<'_>, electrons_at: &F) -> bool
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
@@ -201,7 +201,7 @@ fn check_4n_plus_2(electron_count: u32) -> bool {
     (electron_count - 2).is_multiple_of(4)
 }
 
-fn ring_electron_count<F>(ast: &MoleculeAst, atoms: &[AtomId], electrons_at: &F) -> Option<u32>
+fn ring_electron_count<F>(ast: &Molecule, atoms: &[AtomId], electrons_at: &F) -> Option<u32>
 where
     F: Fn(&AtomView<'_>) -> Option<u8>,
 {
@@ -251,7 +251,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, ElectronCountsForm,
-        ElementForm, MoleculeAst, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
+        ElementForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
 
     use super::*;
@@ -289,7 +289,7 @@ mod tests {
             .collect()
     }
 
-    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> MoleculeAst {
+    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> Molecule {
         let n = specs.len();
         let bonds: Vec<_> = (0..n)
             .map(|i| {
@@ -301,20 +301,20 @@ mod tests {
             })
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         })
     }
 
-    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> Molecule {
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondForm::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_entries(MoleculeEntries {
+        Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
@@ -350,12 +350,12 @@ mod tests {
     }
 
     #[fixture]
-    fn benzene() -> MoleculeAst {
+    fn benzene() -> Molecule {
         make_ring(vec![aromatic(Element::C, 1); 6])
     }
 
     #[fixture]
-    fn pyridine() -> MoleculeAst {
+    fn pyridine() -> Molecule {
         make_ring(vec![
             aromatic(Element::N, 1),
             aromatic(Element::C, 1),
@@ -367,7 +367,7 @@ mod tests {
     }
 
     #[fixture]
-    fn pyrrole() -> MoleculeAst {
+    fn pyrrole() -> Molecule {
         make_ring(vec![
             aromatic(Element::N, 2),
             aromatic(Element::C, 1),
@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[fixture]
-    fn furan() -> MoleculeAst {
+    fn furan() -> Molecule {
         make_ring(vec![
             aromatic(Element::O, 2),
             aromatic(Element::C, 1),
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[fixture]
-    fn thiophene() -> MoleculeAst {
+    fn thiophene() -> Molecule {
         make_ring(vec![
             aromatic(Element::S, 2),
             aromatic(Element::C, 1),
@@ -400,7 +400,7 @@ mod tests {
     }
 
     #[fixture]
-    fn imidazole() -> MoleculeAst {
+    fn imidazole() -> Molecule {
         make_ring(vec![
             aromatic(Element::N, 1),
             aromatic(Element::C, 1),
@@ -411,7 +411,7 @@ mod tests {
     }
 
     #[fixture]
-    fn tropylium() -> MoleculeAst {
+    fn tropylium() -> Molecule {
         make_ring(vec![
             aromatic(Element::C, 1),
             aromatic(Element::C, 1),
@@ -424,7 +424,7 @@ mod tests {
     }
 
     #[fixture]
-    fn cyclopentadienyl_anion() -> MoleculeAst {
+    fn cyclopentadienyl_anion() -> Molecule {
         make_ring(vec![
             aromatic_charged(Element::C, -1, 2),
             aromatic(Element::C, 1),
@@ -436,7 +436,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn naphthalene() -> MoleculeAst {
+    fn naphthalene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 10],
             &[
@@ -448,7 +448,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn azulene() -> MoleculeAst {
+    fn azulene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 10],
             &[
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[rustfmt::skip]
-    fn phenanthrene() -> MoleculeAst {
+    fn phenanthrene() -> Molecule {
         make_fused(
             vec![aromatic(Element::C, 1); 14],
             &[
@@ -470,18 +470,18 @@ mod tests {
     }
 
     #[fixture]
-    fn cyclobutadiene() -> MoleculeAst {
+    fn cyclobutadiene() -> Molecule {
         make_ring(vec![aromatic(Element::C, 1); 4])
     }
 
     #[fixture]
-    fn cyclohexane() -> MoleculeAst {
+    fn cyclohexane() -> Molecule {
         make_ring(vec![plain(Element::C); 6])
     }
 
     #[rustfmt::skip]
     #[fixture]
-    fn cubane() -> MoleculeAst {
+    fn cubane() -> Molecule {
         make_fused(
             vec![plain(Element::C); 8],
             &[
@@ -492,7 +492,7 @@ mod tests {
     }
 
     #[fixture]
-    fn borazine() -> MoleculeAst {
+    fn borazine() -> Molecule {
         make_ring(vec![
             aromatic(Element::B, 0),
             aromatic(Element::N, 2),
@@ -523,7 +523,7 @@ mod tests {
     #[case::tropylium(tropylium(), 7, 6)]
     #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 6)]
     fn test_hueckel_rule_find_from_rings_aromatic(
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] expected_atoms: usize,
         #[case] expected_electrons: i64,
     ) {
@@ -558,7 +558,7 @@ mod tests {
     #[case::borazine_daylight(borazine(), daylight_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
     fn test_hueckel_rule_find_from_rings_non_aromatic(
-        #[case] ast: MoleculeAst,
+        #[case] ast: Molecule,
         #[case] model: HueckelRuleAromaticity,
     ) {
         let rings = ast
@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hueckel_rule_find_from_rings_borazine_permissive(borazine: MoleculeAst) {
+    fn test_hueckel_rule_find_from_rings_borazine_permissive(borazine: Molecule) {
         let rings = borazine
             .rings(
                 RingModel {

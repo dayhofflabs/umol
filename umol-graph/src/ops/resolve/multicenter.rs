@@ -4,7 +4,7 @@
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    Lattice, MoleculeAst, MulticenterBondHandle, MulticenterBondUpdate, NumForm, TransactionError,
+    Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate, NumForm, TransactionError,
     UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -30,7 +30,7 @@ impl MulticenterBondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `ast`.
-    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Edits, MulticenterBondsContradiction> {
+    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, MulticenterBondsContradiction> {
         for atom in ast.atoms().ids() {
             match IncidenceConstraintValidator
                 .validate_molecule_atom_constraint(ast, atom, AtomConstraintKey::MulticenterValence)
@@ -70,7 +70,7 @@ impl MulticenterBondsResolver {
     /// Plan and atomically apply multicenter-bond defaults.
     pub fn resolve(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &mut Molecule,
     ) -> Result<Solution<(), MulticenterBondsContradiction>, MulticenterBondsError> {
         let edits = match self.plan(ast) {
             Solution::Determined(edits) => edits,
@@ -132,10 +132,7 @@ mod tests {
             },
         }])
     )]
-    fn test_multicenter_bonds_resolver_plan(
-        #[case] molecule: MoleculeAst,
-        #[case] expected: Edits,
-    ) {
+    fn test_multicenter_bonds_resolver_plan(#[case] molecule: Molecule, #[case] expected: Edits) {
         assert_eq!(
             MulticenterBondsResolver::new().plan(&molecule),
             Solution::Determined(expected)
@@ -145,7 +142,7 @@ mod tests {
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["B" "H" "B"]
         :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c-#u2#s1"}]}"#))]
-    fn test_multicenter_bonds_resolver_plan_identity(#[case] molecule: MoleculeAst) {
+    fn test_multicenter_bonds_resolver_plan_identity(#[case] molecule: Molecule) {
         assert_eq!(
             MulticenterBondsResolver::new().plan(&molecule),
             Solution::Determined(Edits::new())
@@ -174,7 +171,7 @@ mod tests {
         Solution::Determined(Edits::new()),
     )]
     fn test_multicenter_bonds_resolver_plan_constraints(
-        #[case] molecule: MoleculeAst,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, MulticenterBondsContradiction>,
     ) {
         assert_eq!(MulticenterBondsResolver::new().plan(&molecule), expected);
@@ -188,8 +185,8 @@ mod tests {
                        :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c0#u2#s3"}]}"#)
     )]
     fn test_multicenter_bonds_resolver_resolve(
-        #[case] mut molecule: MoleculeAst,
-        #[case] expected: MoleculeAst,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
     ) {
         assert_eq!(
             MulticenterBondsResolver::new().resolve(&mut molecule),
