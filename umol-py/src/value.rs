@@ -1,5 +1,5 @@
-//! `ValueTerm` — arithmetic term over integers, matching `umol_graph_ir::ir::ValueTerm`
-//! as a native PyO3 complex enum. AST recursion (`Box<Self>` / `Vec<Self>`) becomes
+//! `ArithExpr` — arithmetic expression over integers, matching `umol_graph_ir::ir::ArithExpr`
+//! as a native PyO3 complex enum. IR recursion (`Box<Self>` / `Vec<Self>`) becomes
 //! `Py<Self>` / `Vec<Py<Self>>`; per-variant construction and `match` work natively
 //! on the Python side.
 // Blanket-allow the `absolute_paths` false positives from pyo3's `hash` derive
@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    AsLit, MemOp as GraphIrMemOp, RelOp as GraphIrRelOp, ValueAst as GraphIrValueAst,
-    ValuePredicate as GraphIrValuePredicate, ValueTerm as GraphIrValueTerm,
+    ArithExpr as GraphIrArithExpr, AsLit, MemOp as GraphIrMemOp, PredExpr as GraphIrPredExpr,
+    RelOp as GraphIrRelOp, ValueAst as GraphIrValueAst,
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
@@ -77,20 +77,20 @@ impl MemOp {
     }
 }
 
-/// Arithmetic term over integers.
+/// Arithmetic expression over integers.
 #[pyclass]
-pub enum ValueTerm {
+pub enum ArithExpr {
     Lit(i64),
     Var(String),
-    Neg(Py<ValueTerm>),
-    Sum(Vec<Py<ValueTerm>>),
-    Product(Vec<Py<ValueTerm>>),
-    Div(Py<ValueTerm>, Py<ValueTerm>),
-    Rem(Py<ValueTerm>, Py<ValueTerm>),
+    Neg(Py<ArithExpr>),
+    Sum(Vec<Py<ArithExpr>>),
+    Product(Vec<Py<ArithExpr>>),
+    Div(Py<ArithExpr>, Py<ArithExpr>),
+    Rem(Py<ArithExpr>, Py<ArithExpr>),
 }
 
 #[pymethods]
-impl ValueTerm {
+impl ArithExpr {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -101,73 +101,73 @@ impl ValueTerm {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            ValueTerm::Lit(_) => ("Lit", 1),
-            ValueTerm::Var(_) => ("Var", 1),
-            ValueTerm::Neg(_) => ("Neg", 1),
-            ValueTerm::Sum(_) => ("Sum", 1),
-            ValueTerm::Product(_) => ("Product", 1),
-            ValueTerm::Div(_, _) => ("Div", 2),
-            ValueTerm::Rem(_, _) => ("Rem", 2),
+            ArithExpr::Lit(_) => ("Lit", 1),
+            ArithExpr::Var(_) => ("Var", 1),
+            ArithExpr::Neg(_) => ("Neg", 1),
+            ArithExpr::Sum(_) => ("Sum", 1),
+            ArithExpr::Product(_) => ("Product", 1),
+            ArithExpr::Div(_, _) => ("Div", 2),
+            ArithExpr::Rem(_, _) => ("Rem", 2),
         };
-        variant_repr(slf.bind(py).as_any(), "ValueTerm", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "ArithExpr", variant, arity)
     }
 }
 
-impl ValueTerm {
-    /// Build the Python value from the AST term (one Python object per node).
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrValueTerm) -> PyResult<ValueTerm> {
+impl ArithExpr {
+    /// Build the Python value from the IR expression (one Python object per node).
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrArithExpr) -> PyResult<ArithExpr> {
         Ok(match ast {
-            GraphIrValueTerm::Lit(n) => ValueTerm::Lit(*n),
-            GraphIrValueTerm::Var(name) => ValueTerm::Var(name.clone()),
-            GraphIrValueTerm::Neg(t) => {
-                ValueTerm::Neg(into_py_variant(py, Self::from_rust(py, t)?)?)
+            GraphIrArithExpr::Lit(n) => ArithExpr::Lit(*n),
+            GraphIrArithExpr::Var(name) => ArithExpr::Var(name.clone()),
+            GraphIrArithExpr::Neg(t) => {
+                ArithExpr::Neg(into_py_variant(py, Self::from_rust(py, t)?)?)
             }
-            GraphIrValueTerm::Sum(terms) => ValueTerm::Sum(
+            GraphIrArithExpr::Sum(terms) => ArithExpr::Sum(
                 terms
                     .iter()
                     .map(|t| into_py_variant(py, Self::from_rust(py, t)?))
                     .collect::<PyResult<_>>()?,
             ),
-            GraphIrValueTerm::Product(terms) => ValueTerm::Product(
+            GraphIrArithExpr::Product(terms) => ArithExpr::Product(
                 terms
                     .iter()
                     .map(|t| into_py_variant(py, Self::from_rust(py, t)?))
                     .collect::<PyResult<_>>()?,
             ),
-            GraphIrValueTerm::Div(a, b) => ValueTerm::Div(
+            GraphIrArithExpr::Div(a, b) => ArithExpr::Div(
                 into_py_variant(py, Self::from_rust(py, a)?)?,
                 into_py_variant(py, Self::from_rust(py, b)?)?,
             ),
-            GraphIrValueTerm::Rem(a, b) => ValueTerm::Rem(
+            GraphIrArithExpr::Rem(a, b) => ArithExpr::Rem(
                 into_py_variant(py, Self::from_rust(py, a)?)?,
                 into_py_variant(py, Self::from_rust(py, b)?)?,
             ),
         })
     }
 
-    /// Lower the Python value back to the AST term.
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrValueTerm {
+    /// Convert the Python value back to the IR expression.
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrArithExpr {
         match self {
-            ValueTerm::Lit(n) => GraphIrValueTerm::Lit(*n),
-            ValueTerm::Var(name) => GraphIrValueTerm::Var(name.clone()),
-            ValueTerm::Neg(t) => GraphIrValueTerm::Neg(Box::new(t.bind(py).borrow().to_rust(py))),
-            ValueTerm::Sum(terms) => GraphIrValueTerm::Sum(
+            ArithExpr::Lit(n) => GraphIrArithExpr::Lit(*n),
+            ArithExpr::Var(name) => GraphIrArithExpr::Var(name.clone()),
+            ArithExpr::Neg(t) => GraphIrArithExpr::Neg(Box::new(t.bind(py).borrow().to_rust(py))),
+            ArithExpr::Sum(terms) => GraphIrArithExpr::Sum(
                 terms
                     .iter()
                     .map(|t| t.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
-            ValueTerm::Product(terms) => GraphIrValueTerm::Product(
+            ArithExpr::Product(terms) => GraphIrArithExpr::Product(
                 terms
                     .iter()
                     .map(|t| t.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
-            ValueTerm::Div(a, b) => GraphIrValueTerm::Div(
+            ArithExpr::Div(a, b) => GraphIrArithExpr::Div(
                 Box::new(a.bind(py).borrow().to_rust(py)),
                 Box::new(b.bind(py).borrow().to_rust(py)),
             ),
-            ValueTerm::Rem(a, b) => GraphIrValueTerm::Rem(
+            ArithExpr::Rem(a, b) => GraphIrArithExpr::Rem(
                 Box::new(a.bind(py).borrow().to_rust(py)),
                 Box::new(b.bind(py).borrow().to_rust(py)),
             ),
@@ -176,26 +176,26 @@ impl ValueTerm {
 }
 
 impl_py_canonicalize!(
-    ValueTerm,
-    GraphIrValueTerm,
-    |value: &ValueTerm, py: Python<'_>| -> PyResult<GraphIrValueTerm> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrValueTerm| -> PyResult<ValueTerm> {
-        ValueTerm::from_rust(py, &value)
+    ArithExpr,
+    GraphIrArithExpr,
+    |value: &ArithExpr, py: Python<'_>| -> PyResult<GraphIrArithExpr> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: GraphIrArithExpr| -> PyResult<ArithExpr> {
+        ArithExpr::from_rust(py, &value)
     }
 );
 
-/// Boolean predicate over value terms.
+/// Predicate expression over arithmetic expressions.
 #[pyclass]
-pub enum ValuePredicate {
-    Rel(Py<ValueTerm>, RelOp, Py<ValueTerm>),
-    Mem(Py<ValueTerm>, MemOp, BTreeSet<i64>),
-    Not(Py<ValuePredicate>),
-    And(Vec<Py<ValuePredicate>>),
-    Or(Vec<Py<ValuePredicate>>),
+pub enum PredExpr {
+    Rel(Py<ArithExpr>, RelOp, Py<ArithExpr>),
+    Mem(Py<ArithExpr>, MemOp, BTreeSet<i64>),
+    Not(Py<PredExpr>),
+    And(Vec<Py<PredExpr>>),
+    Or(Vec<Py<PredExpr>>),
 }
 
 #[pymethods]
-impl ValuePredicate {
+impl PredExpr {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -206,41 +206,36 @@ impl ValuePredicate {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            ValuePredicate::Rel(_, _, _) => ("Rel", 3),
-            ValuePredicate::Mem(_, _, _) => ("Mem", 3),
-            ValuePredicate::Not(_) => ("Not", 1),
-            ValuePredicate::And(_) => ("And", 1),
-            ValuePredicate::Or(_) => ("Or", 1),
+            PredExpr::Rel(_, _, _) => ("Rel", 3),
+            PredExpr::Mem(_, _, _) => ("Mem", 3),
+            PredExpr::Not(_) => ("Not", 1),
+            PredExpr::And(_) => ("And", 1),
+            PredExpr::Or(_) => ("Or", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "ValuePredicate", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "PredExpr", variant, arity)
     }
 }
 
-impl ValuePredicate {
-    pub(crate) fn from_rust(
-        py: Python<'_>,
-        ast: &GraphIrValuePredicate,
-    ) -> PyResult<ValuePredicate> {
+impl PredExpr {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrPredExpr) -> PyResult<PredExpr> {
         Ok(match ast {
-            GraphIrValuePredicate::Rel(a, op, b) => ValuePredicate::Rel(
-                into_py_variant(py, ValueTerm::from_rust(py, a)?)?,
+            GraphIrPredExpr::Rel(a, op, b) => PredExpr::Rel(
+                into_py_variant(py, ArithExpr::from_rust(py, a)?)?,
                 RelOp::from_rust(*op),
-                into_py_variant(py, ValueTerm::from_rust(py, b)?)?,
+                into_py_variant(py, ArithExpr::from_rust(py, b)?)?,
             ),
-            GraphIrValuePredicate::Mem(t, op, members) => ValuePredicate::Mem(
-                into_py_variant(py, ValueTerm::from_rust(py, t)?)?,
+            GraphIrPredExpr::Mem(t, op, members) => PredExpr::Mem(
+                into_py_variant(py, ArithExpr::from_rust(py, t)?)?,
                 MemOp::from_rust(*op),
                 members.clone(),
             ),
-            GraphIrValuePredicate::Not(p) => {
-                ValuePredicate::Not(into_py_variant(py, Self::from_rust(py, p)?)?)
-            }
-            GraphIrValuePredicate::And(ps) => ValuePredicate::And(
+            GraphIrPredExpr::Not(p) => PredExpr::Not(into_py_variant(py, Self::from_rust(py, p)?)?),
+            GraphIrPredExpr::And(ps) => PredExpr::And(
                 ps.iter()
                     .map(|p| into_py_variant(py, Self::from_rust(py, p)?))
                     .collect::<PyResult<_>>()?,
             ),
-            GraphIrValuePredicate::Or(ps) => ValuePredicate::Or(
+            GraphIrPredExpr::Or(ps) => PredExpr::Or(
                 ps.iter()
                     .map(|p| into_py_variant(py, Self::from_rust(py, p)?))
                     .collect::<PyResult<_>>()?,
@@ -248,33 +243,31 @@ impl ValuePredicate {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrValuePredicate {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrPredExpr {
         match self {
-            ValuePredicate::Rel(a, op, b) => GraphIrValuePredicate::Rel(
+            PredExpr::Rel(a, op, b) => GraphIrPredExpr::Rel(
                 a.bind(py).borrow().to_rust(py),
                 op.to_rust(),
                 b.bind(py).borrow().to_rust(py),
             ),
-            ValuePredicate::Mem(t, op, members) => GraphIrValuePredicate::Mem(
+            PredExpr::Mem(t, op, members) => GraphIrPredExpr::Mem(
                 t.bind(py).borrow().to_rust(py),
                 op.to_rust(),
                 members.clone(),
             ),
-            ValuePredicate::Not(p) => {
-                GraphIrValuePredicate::Not(Box::new(p.bind(py).borrow().to_rust(py)))
+            PredExpr::Not(p) => GraphIrPredExpr::Not(Box::new(p.bind(py).borrow().to_rust(py))),
+            PredExpr::And(ps) => {
+                GraphIrPredExpr::And(ps.iter().map(|p| p.bind(py).borrow().to_rust(py)).collect())
             }
-            ValuePredicate::And(ps) => GraphIrValuePredicate::And(
-                ps.iter().map(|p| p.bind(py).borrow().to_rust(py)).collect(),
-            ),
-            ValuePredicate::Or(ps) => GraphIrValuePredicate::Or(
-                ps.iter().map(|p| p.bind(py).borrow().to_rust(py)).collect(),
-            ),
+            PredExpr::Or(ps) => {
+                GraphIrPredExpr::Or(ps.iter().map(|p| p.bind(py).borrow().to_rust(py)).collect())
+            }
         }
     }
 }
 
 /// Integer-valued atom/bond field: the undetermined wildcard, a literal, a literal
-/// set, a range, an arithmetic term, or a boolean predicate.
+/// set, a range, an arithmetic expression, or a predicate expression.
 #[pyclass]
 pub enum ValueAst {
     Undetermined(),
@@ -282,8 +275,8 @@ pub enum ValueAst {
     LitSet(BTreeSet<i64>),
     RangeFrom(i64),
     RangeTo(i64),
-    Term(Py<ValueTerm>),
-    Predicate(Py<ValuePredicate>),
+    ArithExpr(Py<ArithExpr>),
+    PredExpr(Py<PredExpr>),
 }
 
 #[pymethods]
@@ -309,8 +302,8 @@ impl ValueAst {
             ValueAst::LitSet(_) => ("LitSet", 1),
             ValueAst::RangeFrom(_) => ("RangeFrom", 1),
             ValueAst::RangeTo(_) => ("RangeTo", 1),
-            ValueAst::Term(_) => ("Term", 1),
-            ValueAst::Predicate(_) => ("Predicate", 1),
+            ValueAst::ArithExpr(_) => ("ArithExpr", 1),
+            ValueAst::PredExpr(_) => ("PredExpr", 1),
         };
         variant_repr(slf.bind(py).as_any(), "ValueAst", variant, arity)
     }
@@ -324,11 +317,11 @@ impl ValueAst {
             GraphIrValueAst::LitSet(members) => ValueAst::LitSet((**members).clone()),
             GraphIrValueAst::RangeFrom(n) => ValueAst::RangeFrom(*n),
             GraphIrValueAst::RangeTo(n) => ValueAst::RangeTo(*n),
-            GraphIrValueAst::Term(t) => {
-                ValueAst::Term(into_py_variant(py, ValueTerm::from_rust(py, t)?)?)
+            GraphIrValueAst::ArithExpr(t) => {
+                ValueAst::ArithExpr(into_py_variant(py, ArithExpr::from_rust(py, t)?)?)
             }
-            GraphIrValueAst::Predicate(p) => {
-                ValueAst::Predicate(into_py_variant(py, ValuePredicate::from_rust(py, p)?)?)
+            GraphIrValueAst::PredExpr(p) => {
+                ValueAst::PredExpr(into_py_variant(py, PredExpr::from_rust(py, p)?)?)
             }
         })
     }
@@ -340,9 +333,11 @@ impl ValueAst {
             ValueAst::LitSet(members) => GraphIrValueAst::LitSet(Box::new(members.clone())),
             ValueAst::RangeFrom(n) => GraphIrValueAst::RangeFrom(*n),
             ValueAst::RangeTo(n) => GraphIrValueAst::RangeTo(*n),
-            ValueAst::Term(t) => GraphIrValueAst::Term(Box::new(t.bind(py).borrow().to_rust(py))),
-            ValueAst::Predicate(p) => {
-                GraphIrValueAst::Predicate(Box::new(p.bind(py).borrow().to_rust(py)))
+            ValueAst::ArithExpr(t) => {
+                GraphIrValueAst::ArithExpr(Box::new(t.bind(py).borrow().to_rust(py)))
+            }
+            ValueAst::PredExpr(p) => {
+                GraphIrValueAst::PredExpr(Box::new(p.bind(py).borrow().to_rust(py)))
             }
         }
     }
@@ -423,36 +418,36 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrValueTerm::Lit(5))]
-    #[case(GraphIrValueTerm::Var("x".to_string()))]
-    #[case(GraphIrValueTerm::Neg(Box::new(GraphIrValueTerm::Lit(3))))]
-    #[case(GraphIrValueTerm::Sum(vec![GraphIrValueTerm::Lit(1), GraphIrValueTerm::Lit(2)]))]
-    #[case(GraphIrValueTerm::Div(
-        Box::new(GraphIrValueTerm::Lit(6)),
-        Box::new(GraphIrValueTerm::Lit(2))
+    #[case(GraphIrArithExpr::Lit(5))]
+    #[case(GraphIrArithExpr::Var("x".to_string()))]
+    #[case(GraphIrArithExpr::Neg(Box::new(GraphIrArithExpr::Lit(3))))]
+    #[case(GraphIrArithExpr::Sum(vec![GraphIrArithExpr::Lit(1), GraphIrArithExpr::Lit(2)]))]
+    #[case(GraphIrArithExpr::Div(
+        Box::new(GraphIrArithExpr::Lit(6)),
+        Box::new(GraphIrArithExpr::Lit(2))
     ))]
-    fn test_value_term_roundtrip(#[case] ast: GraphIrValueTerm) {
+    fn test_arith_expr_roundtrip(#[case] ast: GraphIrArithExpr) {
         Python::attach(|py| {
-            let value = ValueTerm::from_rust(py, &ast).unwrap();
+            let value = ArithExpr::from_rust(py, &ast).unwrap();
             assert_eq!(value.to_rust(py), ast);
         });
     }
 
     #[rstest]
-    #[case(GraphIrValuePredicate::Rel(GraphIrValueTerm::Var("h".into()), GraphIrRelOp::Le, GraphIrValueTerm::Lit(3)))]
-    #[case(GraphIrValuePredicate::Mem(GraphIrValueTerm::Lit(0), GraphIrMemOp::In, BTreeSet::from([1, 2, 3])))]
-    #[case(GraphIrValuePredicate::Not(Box::new(GraphIrValuePredicate::Rel(
-        GraphIrValueTerm::Lit(1),
+    #[case(GraphIrPredExpr::Rel(GraphIrArithExpr::Var("h".into()), GraphIrRelOp::Le, GraphIrArithExpr::Lit(3)))]
+    #[case(GraphIrPredExpr::Mem(GraphIrArithExpr::Lit(0), GraphIrMemOp::In, BTreeSet::from([1, 2, 3])))]
+    #[case(GraphIrPredExpr::Not(Box::new(GraphIrPredExpr::Rel(
+        GraphIrArithExpr::Lit(1),
         GraphIrRelOp::Eq,
-        GraphIrValueTerm::Lit(1),
+        GraphIrArithExpr::Lit(1),
     ))))]
-    #[case(GraphIrValuePredicate::And(vec![
-        GraphIrValuePredicate::Rel(GraphIrValueTerm::Lit(1), GraphIrRelOp::Lt, GraphIrValueTerm::Lit(2)),
-        GraphIrValuePredicate::Rel(GraphIrValueTerm::Lit(3), GraphIrRelOp::Gt, GraphIrValueTerm::Lit(2)),
+    #[case(GraphIrPredExpr::And(vec![
+        GraphIrPredExpr::Rel(GraphIrArithExpr::Lit(1), GraphIrRelOp::Lt, GraphIrArithExpr::Lit(2)),
+        GraphIrPredExpr::Rel(GraphIrArithExpr::Lit(3), GraphIrRelOp::Gt, GraphIrArithExpr::Lit(2)),
     ]))]
-    fn test_value_predicate_roundtrip(#[case] ast: GraphIrValuePredicate) {
+    fn test_pred_expr_roundtrip(#[case] ast: GraphIrPredExpr) {
         Python::attach(|py| {
-            let value = ValuePredicate::from_rust(py, &ast).unwrap();
+            let value = PredExpr::from_rust(py, &ast).unwrap();
             assert_eq!(value.to_rust(py), ast);
         });
     }
@@ -463,11 +458,11 @@ mod tests {
     #[case(GraphIrValueAst::LitSet(Box::new(BTreeSet::from([1, 2, 3]))))]
     #[case(GraphIrValueAst::RangeFrom(1))]
     #[case(GraphIrValueAst::RangeTo(9))]
-    #[case(GraphIrValueAst::Term(Box::new(GraphIrValueTerm::Var("x".into()))))]
-    #[case(GraphIrValueAst::Predicate(Box::new(GraphIrValuePredicate::Rel(
-        GraphIrValueTerm::Var("h".into()),
+    #[case(GraphIrValueAst::ArithExpr(Box::new(GraphIrArithExpr::Var("x".into()))))]
+    #[case(GraphIrValueAst::PredExpr(Box::new(GraphIrPredExpr::Rel(
+        GraphIrArithExpr::Var("h".into()),
         GraphIrRelOp::Le,
-        GraphIrValueTerm::Lit(3),
+        GraphIrArithExpr::Lit(3),
     ))))]
     fn test_value_ast_roundtrip(#[case] ast: GraphIrValueAst) {
         Python::attach(|py| {

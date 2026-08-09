@@ -25,7 +25,7 @@ pub(crate) use umol_graph_ir::dsl::{
     StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_graph_ir::ir::{
-    aromatic_covalence, AddBond, AromaticSystemAst, AromaticSystemConstraintAst,
+    aromatic_covalence, AddBond, ArithExpr, AromaticSystemAst, AromaticSystemConstraintAst,
     AromaticSystemConstraintKey, AromaticSystemConstraintsAst, AromaticSystemDelta,
     AromaticSystemFieldChange, AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate,
     AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintKey,
@@ -43,16 +43,16 @@ pub(crate) use umol_graph_ir::ir::{
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondDelta, NoncovalentBondFieldChange,
     NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
-    NoncovalentBondUpdate, OrientedLigandPermutation, ReactionAst, ReactionSpanAst, RelOp,
-    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst, StereoAtomConstraintAst,
-    StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomHandle,
-    StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
+    NoncovalentBondUpdate, OrientedLigandPermutation, PredExpr, ReactionAst, ReactionSpanAst,
+    RelOp, RelationalConstraint, RingMembershipAst, RingScope, StereoAtomAst,
+    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange,
+    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst,
     StereoBondConstraintsAst, StereoBondDelta, StereoBondFieldChange, StereoBondHandle,
     StereoBondId, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
     StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition,
     Stereogenicity, StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity,
     TopicityAst, TopicityRelationAst, TransactionError, UnpairedElectronsAst,
-    UnpairedElectronsUpdate, ValueAst, ValuePredicate, ValueTerm,
+    UnpairedElectronsUpdate, ValueAst,
 };
 pub(crate) use umol_perm::{Orientation, Permutation};
 
@@ -104,54 +104,54 @@ pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = V
         4 => Just(ValueAst::Undetermined),
         4 => range.clone().prop_map(ValueAst::Lit),
         1 => prop::collection::vec(range, 2..=3).prop_map(ValueAst::lit_set),
-        2 => value_term_strategy().prop_map(ValueAst::term),
-        2 => value_predicate_strategy().prop_map(ValueAst::predicate),
+        2 => arith_expr_strategy().prop_map(ValueAst::arith_expr),
+        2 => pred_expr_strategy().prop_map(ValueAst::pred_expr),
     ]
     .prop_map(canonicalize_value)
 }
 
-/// Full `ValueTerm` grammar: `Lit`/`Var` leaves under `Neg`, n-ary `Sum`/
+/// Full `ArithExpr` grammar: `Lit`/`Var` leaves under `Neg`, n-ary `Sum`/
 /// `Product`, and binary `Div`/`Rem`. Generated raw; `value_basic` canonicalizes.
-fn value_term_strategy() -> BoxedStrategy<ValueTerm> {
+fn arith_expr_strategy() -> BoxedStrategy<ArithExpr> {
     let leaf = prop_oneof![
-        (-10i64..=10).prop_map(ValueTerm::Lit),
-        id_strategy().prop_map(ValueTerm::Var),
+        (-10i64..=10).prop_map(ArithExpr::Lit),
+        id_strategy().prop_map(ArithExpr::Var),
     ]
     .boxed();
     leaf.prop_recursive(3, 8, 3, |inner| {
         prop_oneof![
-            inner.clone().prop_map(|t| ValueTerm::Neg(Box::new(t))),
-            prop::collection::vec(inner.clone(), 2..=3).prop_map(ValueTerm::Sum),
-            prop::collection::vec(inner.clone(), 2..=3).prop_map(ValueTerm::Product),
+            inner.clone().prop_map(|t| ArithExpr::Neg(Box::new(t))),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(ArithExpr::Sum),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(ArithExpr::Product),
             (inner.clone(), inner.clone())
-                .prop_map(|(a, b)| ValueTerm::Div(Box::new(a), Box::new(b))),
-            (inner.clone(), inner).prop_map(|(a, b)| ValueTerm::Rem(Box::new(a), Box::new(b))),
+                .prop_map(|(a, b)| ArithExpr::Div(Box::new(a), Box::new(b))),
+            (inner.clone(), inner).prop_map(|(a, b)| ArithExpr::Rem(Box::new(a), Box::new(b))),
         ]
         .boxed()
     })
     .boxed()
 }
 
-/// Full `ValuePredicate` grammar: `Rel`/`Mem` leaves over terms, under `Not`,
+/// Full `PredExpr` grammar: `Rel`/`Mem` leaves over arithmetic expressions, under `Not`,
 /// `And`, `Or`. Generated raw; `value_basic` canonicalizes (folding/NNF).
-fn value_predicate_strategy() -> BoxedStrategy<ValuePredicate> {
-    let term = value_term_strategy();
+fn pred_expr_strategy() -> BoxedStrategy<PredExpr> {
+    let term = arith_expr_strategy();
     let leaf = prop_oneof![
         (term.clone(), rel_op_strategy(), term.clone())
-            .prop_map(|(a, op, b)| ValuePredicate::Rel(a, op, b)),
+            .prop_map(|(a, op, b)| PredExpr::Rel(a, op, b)),
         (
             term,
             mem_op_strategy(),
             prop::collection::vec(-10i64..=10, 1..=3)
         )
-            .prop_map(|(e, op, s)| ValuePredicate::Mem(e, op, s.into_iter().collect())),
+            .prop_map(|(e, op, s)| PredExpr::Mem(e, op, s.into_iter().collect())),
     ]
     .boxed();
     leaf.prop_recursive(2, 6, 3, |inner| {
         prop_oneof![
-            inner.clone().prop_map(|p| ValuePredicate::Not(Box::new(p))),
-            prop::collection::vec(inner.clone(), 2..=3).prop_map(ValuePredicate::And),
-            prop::collection::vec(inner, 2..=3).prop_map(ValuePredicate::Or),
+            inner.clone().prop_map(|p| PredExpr::Not(Box::new(p))),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(PredExpr::And),
+            prop::collection::vec(inner, 2..=3).prop_map(PredExpr::Or),
         ]
         .boxed()
     })
@@ -183,15 +183,15 @@ pub(crate) fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
 
 /// Possibly **non-canonical** (but satisfiable) `ValueAst`: unlike `value_basic`
 /// it does not canonicalize, so it exercises the input-canonicality-independent
-/// lattice laws on raw `Term`/`Predicate` forms. Unsatisfiable draws are filtered
+/// lattice laws on raw `ArithExpr`/`PredExpr` forms. Unsatisfiable draws are filtered
 /// out — on an unsatisfiable target the `matches` law's meet-derived RHS only
 /// agrees with the default for satisfiable targets.
 pub(crate) fn raw_value_ast_strategy() -> BoxedStrategy<ValueAst> {
     prop_oneof![
         2 => Just(ValueAst::Undetermined),
         2 => (-10i64..=10).prop_map(ValueAst::Lit),
-        3 => value_term_strategy().prop_map(ValueAst::term),
-        3 => value_predicate_strategy().prop_map(ValueAst::predicate),
+        3 => arith_expr_strategy().prop_map(ValueAst::arith_expr),
+        3 => pred_expr_strategy().prop_map(ValueAst::pred_expr),
     ]
     .prop_filter("satisfiable", |v| v.clone().canonicalize().is_ok())
     .boxed()
@@ -366,9 +366,9 @@ pub(crate) fn non_vacuous_unpaired_electrons_strategy(
 }
 
 /// Simple value strategy used inside constraint values: `Undetermined`,
-/// `Lit`, and `LitSet`. No symbolic `Term`/`Predicate` — the constraint
+/// `Lit`, and `LitSet`. No symbolic `ArithExpr`/`PredExpr` — the constraint
 /// formatters route to `fmt_value_field_required` / `fmt_ring_count` / the
-/// various `#r` blocks, and a `Term(Lit(n))` would render to a pure integer
+/// various `#r` blocks, and an `ArithExpr(Lit(n))` would render to a pure integer
 /// that the parser then re-reads as a plain `Lit`, breaking roundtrip. The
 /// molecule-level EDN tests cover symbolic values on constraint values through
 /// the tree-based path, so the gap is contained.

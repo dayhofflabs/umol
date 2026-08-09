@@ -1,4 +1,4 @@
-//! Value AST.
+//! Numeric form and its expression language.
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -11,8 +11,8 @@ use super::operators::{MemOp, RelOp};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
 /// Integer-valued atom/bond field: undetermined (pattern wildcard), a literal,
-/// a finite literal set, an arithmetic term over variables, or a boolean
-/// predicate constraining the field. Used for charge, hydrogen count, isotope
+/// a finite literal set, an arithmetic expression over variables, or a predicate
+/// expression constraining the field. Used for charge, hydrogen count, isotope
 /// mass, valence, bond order, etc.
 ///
 /// Equality is **lazy**: derived `Eq`/`Hash`/`Ord` are structural ("same
@@ -26,37 +26,37 @@ pub enum ValueAst {
     LitSet(Box<BTreeSet<i64>>),
     RangeFrom(i64),
     RangeTo(i64),
-    Term(Box<ValueTerm>),
-    Predicate(Box<ValuePredicate>),
+    ArithExpr(Box<ArithExpr>),
+    PredExpr(Box<PredExpr>),
 }
 
-/// Arithmetic term over `i64`, the value-sort half of the field grammar. `Sum`
+/// Arithmetic expression over `i64`, the value-sort half of the field grammar. `Sum`
 /// and `Product` are n-ary (associative + commutative by construction);
 /// subtraction lowers to `Sum([a, Neg(b)])`; `Div`/`Rem` stay binary. A ground
-/// term folds to a `Lit` (or `Neg(Lit)`), which `ValueAst` lifts to `Lit`.
+/// expression folds to a `Lit` (or `Neg(Lit)`), which `ValueAst` lifts to `Lit`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValueTerm {
+pub enum ArithExpr {
     Lit(i64),
     Var(String),
-    Neg(Box<ValueTerm>),
-    Sum(Vec<ValueTerm>),
-    Product(Vec<ValueTerm>),
-    Div(Box<ValueTerm>, Box<ValueTerm>),
-    Rem(Box<ValueTerm>, Box<ValueTerm>),
+    Neg(Box<ArithExpr>),
+    Sum(Vec<ArithExpr>),
+    Product(Vec<ArithExpr>),
+    Div(Box<ArithExpr>, Box<ArithExpr>),
+    Rem(Box<ArithExpr>, Box<ArithExpr>),
 }
 
-/// Boolean predicate over terms, the constraint-sort half of the field grammar.
+/// Predicate expression over arithmetic expressions, the constraint-sort half of the field grammar.
 /// `Rel` and `Mem` operators are negation-closed (`RelOp` has `Ne`, `MemOp` has
 /// `NotIn`), so canonicalization eliminates `Not` entirely — it survives only as
 /// faithful parser input for `!`. ⊤/⊥ are not variants: a predicate that decides
 /// is lifted by `ValueAst` to `Undetermined` / `Err(Contradiction)`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValuePredicate {
-    Rel(ValueTerm, RelOp, ValueTerm),
-    Mem(ValueTerm, MemOp, BTreeSet<i64>),
-    Not(Box<ValuePredicate>),
-    And(Vec<ValuePredicate>),
-    Or(Vec<ValuePredicate>),
+pub enum PredExpr {
+    Rel(ArithExpr, RelOp, ArithExpr),
+    Mem(ArithExpr, MemOp, BTreeSet<i64>),
+    Not(Box<PredExpr>),
+    And(Vec<PredExpr>),
+    Or(Vec<PredExpr>),
 }
 
 impl ValueAst {
@@ -73,7 +73,7 @@ impl ValueAst {
     }
 
     pub fn var(name: impl Into<String>) -> Self {
-        Self::Term(Box::new(ValueTerm::Var(name.into())))
+        Self::ArithExpr(Box::new(ArithExpr::Var(name.into())))
     }
 
     pub fn range_from(bound: i64) -> Self {
@@ -84,12 +84,12 @@ impl ValueAst {
         Self::RangeTo(bound)
     }
 
-    pub fn term(term: ValueTerm) -> Self {
-        Self::Term(Box::new(term))
+    pub fn arith_expr(expression: ArithExpr) -> Self {
+        Self::ArithExpr(Box::new(expression))
     }
 
-    pub fn predicate(predicate: ValuePredicate) -> Self {
-        Self::Predicate(Box::new(predicate))
+    pub fn pred_expr(expression: PredExpr) -> Self {
+        Self::PredExpr(Box::new(expression))
     }
 }
 
@@ -125,11 +125,11 @@ impl Canonicalize for ValueAst {
             ValueAst::LitSet(set) => lift_set(*set)?,
             ValueAst::RangeFrom(n) => ValueAst::RangeFrom(n),
             ValueAst::RangeTo(n) => ValueAst::RangeTo(n),
-            ValueAst::Term(term) => lift_term(canon_term(*term)),
-            ValueAst::Predicate(predicate) => match canon_predicate(*predicate) {
-                PredicateForm::Top => ValueAst::Undetermined,
-                PredicateForm::Bottom => return Err(Contradiction),
-                PredicateForm::Predicate(p) => ValueAst::Predicate(Box::new(p)),
+            ValueAst::ArithExpr(term) => lift_arith_expr(canon_arith_expr(*term)),
+            ValueAst::PredExpr(predicate) => match reduce_pred_expr(*predicate) {
+                PredicateReduction::Top => ValueAst::Undetermined,
+                PredicateReduction::Bottom => return Err(Contradiction),
+                PredicateReduction::Predicate(p) => ValueAst::PredExpr(Box::new(p)),
             },
         })
     }
@@ -142,9 +142,9 @@ impl Canonicalize for ValueAst {
     }
 }
 
-impl Canonicalize for ValueTerm {
+impl Canonicalize for ArithExpr {
     fn canonicalize(self) -> Result<Self, Contradiction> {
-        Ok(canon_term(self))
+        Ok(canon_arith_expr(self))
     }
 }
 
@@ -157,76 +157,76 @@ fn lift_set(set: BTreeSet<i64>) -> Result<ValueAst, Contradiction> {
     }
 }
 
-/// Lift a canonical term: a ground term (`Lit` or `Neg(Lit)`) becomes `Lit`.
-fn lift_term(term: ValueTerm) -> ValueAst {
-    match term_const(&term) {
+/// Lift a canonical arithmetic expression: a ground expression becomes `Lit`.
+fn lift_arith_expr(expression: ArithExpr) -> ValueAst {
+    match arith_expr_const(&expression) {
         Some(n) => ValueAst::Lit(n),
-        None => ValueAst::Term(Box::new(term)),
+        None => ValueAst::ArithExpr(Box::new(expression)),
     }
 }
 
-/// Canonical literal term: the sign lives in `Neg`, so `Lit` is always ≥ 0.
-fn term_lit(n: i64) -> ValueTerm {
+/// Canonical literal expression: the sign lives in `Neg`, so `Lit` is always ≥ 0.
+fn arith_expr_lit(n: i64) -> ArithExpr {
     if n < 0 {
-        ValueTerm::Neg(Box::new(ValueTerm::Lit(-n)))
+        ArithExpr::Neg(Box::new(ArithExpr::Lit(-n)))
     } else {
-        ValueTerm::Lit(n)
+        ArithExpr::Lit(n)
     }
 }
 
-/// The integer a canonical term denotes, if ground (`Lit(n)` or `Neg(Lit(n))`).
-fn term_const(term: &ValueTerm) -> Option<i64> {
-    match term {
-        ValueTerm::Lit(n) => Some(*n),
-        ValueTerm::Neg(inner) => match inner.as_ref() {
-            ValueTerm::Lit(n) => Some(-n),
+/// The integer a canonical expression denotes, if ground.
+fn arith_expr_const(expression: &ArithExpr) -> Option<i64> {
+    match expression {
+        ArithExpr::Lit(n) => Some(*n),
+        ArithExpr::Neg(inner) => match inner.as_ref() {
+            ArithExpr::Lit(n) => Some(-n),
             _ => None,
         },
         _ => None,
     }
 }
 
-fn canon_term(term: ValueTerm) -> ValueTerm {
-    match term {
-        ValueTerm::Lit(n) => term_lit(n),
-        ValueTerm::Var(_) => term,
-        ValueTerm::Neg(inner) => canon_neg(canon_term(*inner)),
-        ValueTerm::Sum(operands) => canon_sum(operands),
-        ValueTerm::Product(operands) => canon_product(operands),
-        ValueTerm::Div(a, b) => canon_div_rem(canon_term(*a), canon_term(*b), false),
-        ValueTerm::Rem(a, b) => canon_div_rem(canon_term(*a), canon_term(*b), true),
+fn canon_arith_expr(expression: ArithExpr) -> ArithExpr {
+    match expression {
+        ArithExpr::Lit(n) => arith_expr_lit(n),
+        ArithExpr::Var(_) => expression,
+        ArithExpr::Neg(inner) => canon_neg(canon_arith_expr(*inner)),
+        ArithExpr::Sum(operands) => canon_sum(operands),
+        ArithExpr::Product(operands) => canon_product(operands),
+        ArithExpr::Div(a, b) => canon_div_rem(canon_arith_expr(*a), canon_arith_expr(*b), false),
+        ArithExpr::Rem(a, b) => canon_div_rem(canon_arith_expr(*a), canon_arith_expr(*b), true),
     }
 }
 
 /// `inner` is already canonical.
-fn canon_neg(inner: ValueTerm) -> ValueTerm {
+fn canon_neg(inner: ArithExpr) -> ArithExpr {
     match inner {
-        ValueTerm::Neg(grand) => *grand,
-        ValueTerm::Lit(0) => ValueTerm::Lit(0),
-        other => ValueTerm::Neg(Box::new(other)),
+        ArithExpr::Neg(grand) => *grand,
+        ArithExpr::Lit(0) => ArithExpr::Lit(0),
+        other => ArithExpr::Neg(Box::new(other)),
     }
 }
 
-fn canon_sum(operands: Vec<ValueTerm>) -> ValueTerm {
+fn canon_sum(operands: Vec<ArithExpr>) -> ArithExpr {
     let mut terms = Vec::new();
     let mut constant: i64 = 0;
     flatten_sum(operands, &mut terms, &mut constant);
     if constant != 0 {
-        terms.push(term_lit(constant));
+        terms.push(arith_expr_lit(constant));
     }
     terms.sort();
     match terms.len() {
-        0 => ValueTerm::Lit(0),
+        0 => ArithExpr::Lit(0),
         1 => terms.pop().unwrap(),
-        _ => ValueTerm::Sum(terms),
+        _ => ArithExpr::Sum(terms),
     }
 }
 
-fn flatten_sum(operands: Vec<ValueTerm>, terms: &mut Vec<ValueTerm>, constant: &mut i64) {
+fn flatten_sum(operands: Vec<ArithExpr>, terms: &mut Vec<ArithExpr>, constant: &mut i64) {
     for operand in operands {
-        match canon_term(operand) {
-            ValueTerm::Sum(inner) => flatten_sum(inner, terms, constant),
-            other => match term_const(&other) {
+        match canon_arith_expr(operand) {
+            ArithExpr::Sum(inner) => flatten_sum(inner, terms, constant),
+            other => match arith_expr_const(&other) {
                 Some(n) => *constant += n,
                 None => terms.push(other),
             },
@@ -234,29 +234,29 @@ fn flatten_sum(operands: Vec<ValueTerm>, terms: &mut Vec<ValueTerm>, constant: &
     }
 }
 
-fn canon_product(operands: Vec<ValueTerm>) -> ValueTerm {
+fn canon_product(operands: Vec<ArithExpr>) -> ArithExpr {
     let mut terms = Vec::new();
     let mut constant: i64 = 1;
     flatten_product(operands, &mut terms, &mut constant);
     if constant == 0 {
-        return ValueTerm::Lit(0);
+        return ArithExpr::Lit(0);
     }
     if constant != 1 {
-        terms.push(term_lit(constant));
+        terms.push(arith_expr_lit(constant));
     }
     terms.sort();
     match terms.len() {
-        0 => ValueTerm::Lit(1),
+        0 => ArithExpr::Lit(1),
         1 => terms.pop().unwrap(),
-        _ => ValueTerm::Product(terms),
+        _ => ArithExpr::Product(terms),
     }
 }
 
-fn flatten_product(operands: Vec<ValueTerm>, terms: &mut Vec<ValueTerm>, constant: &mut i64) {
+fn flatten_product(operands: Vec<ArithExpr>, terms: &mut Vec<ArithExpr>, constant: &mut i64) {
     for operand in operands {
-        match canon_term(operand) {
-            ValueTerm::Product(inner) => flatten_product(inner, terms, constant),
-            other => match term_const(&other) {
+        match canon_arith_expr(operand) {
+            ArithExpr::Product(inner) => flatten_product(inner, terms, constant),
+            other => match arith_expr_const(&other) {
                 Some(n) => *constant *= n,
                 None => terms.push(other),
             },
@@ -265,41 +265,41 @@ fn flatten_product(operands: Vec<ValueTerm>, terms: &mut Vec<ValueTerm>, constan
 }
 
 /// `a`/`b` already canonical; folds a ground `(Lit) op (Lit)` when divisor ≠ 0.
-fn canon_div_rem(a: ValueTerm, b: ValueTerm, is_rem: bool) -> ValueTerm {
-    if let (Some(x), Some(y)) = (term_const(&a), term_const(&b)) {
+fn canon_div_rem(a: ArithExpr, b: ArithExpr, is_rem: bool) -> ArithExpr {
+    if let (Some(x), Some(y)) = (arith_expr_const(&a), arith_expr_const(&b)) {
         if y != 0 {
-            return term_lit(if is_rem { x % y } else { x / y });
+            return arith_expr_lit(if is_rem { x % y } else { x / y });
         }
     }
     let (a, b) = (Box::new(a), Box::new(b));
     if is_rem {
-        ValueTerm::Rem(a, b)
+        ArithExpr::Rem(a, b)
     } else {
-        ValueTerm::Div(a, b)
+        ArithExpr::Div(a, b)
     }
 }
 
-/// Predicate canonical form, threading ⊤/⊥ that no `ValuePredicate` variant can
+/// Predicate canonical form, threading ⊤/⊥ that no `PredExpr` variant can
 /// hold. Lifted to `ValueAst` (⊤ → `Undetermined`, ⊥ → `Err`).
-enum PredicateForm {
+enum PredicateReduction {
     Top,
     Bottom,
-    Predicate(ValuePredicate),
+    Predicate(PredExpr),
 }
 
-fn canon_predicate(predicate: ValuePredicate) -> PredicateForm {
+fn reduce_pred_expr(predicate: PredExpr) -> PredicateReduction {
     match predicate {
-        ValuePredicate::Rel(a, op, b) => canon_rel(canon_term(a), op, canon_term(b)),
-        ValuePredicate::Mem(e, op, set) => canon_mem(canon_term(e), op, set),
-        ValuePredicate::Not(inner) => negate(canon_predicate(*inner)),
-        ValuePredicate::And(operands) => canon_junction(operands, true),
-        ValuePredicate::Or(operands) => canon_junction(operands, false),
+        PredExpr::Rel(a, op, b) => canon_rel(canon_arith_expr(a), op, canon_arith_expr(b)),
+        PredExpr::Mem(e, op, set) => canon_mem(canon_arith_expr(e), op, set),
+        PredExpr::Not(inner) => negate(reduce_pred_expr(*inner)),
+        PredExpr::And(operands) => canon_junction(operands, true),
+        PredExpr::Or(operands) => canon_junction(operands, false),
     }
 }
 
 /// `a`/`b` already canonical.
-fn canon_rel(a: ValueTerm, op: RelOp, b: ValueTerm) -> PredicateForm {
-    if let (Some(x), Some(y)) = (term_const(&a), term_const(&b)) {
+fn canon_rel(a: ArithExpr, op: RelOp, b: ArithExpr) -> PredicateReduction {
+    if let (Some(x), Some(y)) = (arith_expr_const(&a), arith_expr_const(&b)) {
         let holds = match op {
             RelOp::Lt => x < y,
             RelOp::Le => x <= y,
@@ -309,21 +309,21 @@ fn canon_rel(a: ValueTerm, op: RelOp, b: ValueTerm) -> PredicateForm {
             RelOp::Ne => x != y,
         };
         return if holds {
-            PredicateForm::Top
+            PredicateReduction::Top
         } else {
-            PredicateForm::Bottom
+            PredicateReduction::Bottom
         };
     }
     let rel = match op {
-        RelOp::Gt => ValuePredicate::Rel(b, RelOp::Lt, a),
-        RelOp::Ge => ValuePredicate::Rel(b, RelOp::Le, a),
+        RelOp::Gt => PredExpr::Rel(b, RelOp::Lt, a),
+        RelOp::Ge => PredExpr::Rel(b, RelOp::Le, a),
         RelOp::Eq | RelOp::Ne => {
             let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
-            ValuePredicate::Rel(lo, op, hi)
+            PredExpr::Rel(lo, op, hi)
         }
-        RelOp::Lt | RelOp::Le => ValuePredicate::Rel(a, op, b),
+        RelOp::Lt | RelOp::Le => PredExpr::Rel(a, op, b),
     };
-    PredicateForm::Predicate(rel)
+    PredicateReduction::Predicate(rel)
 }
 
 fn neg_rel_op(op: RelOp) -> RelOp {
@@ -345,23 +345,23 @@ fn neg_mem_op(op: MemOp) -> MemOp {
 }
 
 /// `e` already canonical; `set` is sorted/deduped by type.
-fn canon_mem(e: ValueTerm, op: MemOp, set: BTreeSet<i64>) -> PredicateForm {
-    if let Some(x) = term_const(&e) {
+fn canon_mem(e: ArithExpr, op: MemOp, set: BTreeSet<i64>) -> PredicateReduction {
+    if let Some(x) = arith_expr_const(&e) {
         let present = set.contains(&x);
         let holds = match op {
             MemOp::In => present,
             MemOp::NotIn => !present,
         };
         return if holds {
-            PredicateForm::Top
+            PredicateReduction::Top
         } else {
-            PredicateForm::Bottom
+            PredicateReduction::Bottom
         };
     }
     match set.len() {
         0 => match op {
-            MemOp::In => PredicateForm::Bottom,
-            MemOp::NotIn => PredicateForm::Top,
+            MemOp::In => PredicateReduction::Bottom,
+            MemOp::NotIn => PredicateReduction::Top,
         },
         1 => {
             let only = *set.iter().next().unwrap();
@@ -369,56 +369,56 @@ fn canon_mem(e: ValueTerm, op: MemOp, set: BTreeSet<i64>) -> PredicateForm {
                 MemOp::In => RelOp::Eq,
                 MemOp::NotIn => RelOp::Ne,
             };
-            canon_rel(e, rel_op, term_lit(only))
+            canon_rel(e, rel_op, arith_expr_lit(only))
         }
-        _ => PredicateForm::Predicate(ValuePredicate::Mem(e, op, set)),
+        _ => PredicateReduction::Predicate(PredExpr::Mem(e, op, set)),
     }
 }
 
-fn negate(form: PredicateForm) -> PredicateForm {
+fn negate(form: PredicateReduction) -> PredicateReduction {
     match form {
-        PredicateForm::Top => PredicateForm::Bottom,
-        PredicateForm::Bottom => PredicateForm::Top,
-        PredicateForm::Predicate(p) => negate_predicate(p),
+        PredicateReduction::Top => PredicateReduction::Bottom,
+        PredicateReduction::Bottom => PredicateReduction::Top,
+        PredicateReduction::Predicate(p) => negate_pred_expr(p),
     }
 }
 
 /// `predicate` is already canonical (so it carries no `Not`).
-fn negate_predicate(predicate: ValuePredicate) -> PredicateForm {
+fn negate_pred_expr(predicate: PredExpr) -> PredicateReduction {
     match predicate {
-        ValuePredicate::Rel(a, op, b) => canon_rel(a, neg_rel_op(op), b),
-        ValuePredicate::Mem(e, op, set) => canon_mem(e, neg_mem_op(op), set),
-        ValuePredicate::Not(inner) => canon_predicate(*inner),
-        ValuePredicate::And(operands) => {
-            canon_junction_forms(operands.into_iter().map(negate_predicate).collect(), false)
+        PredExpr::Rel(a, op, b) => canon_rel(a, neg_rel_op(op), b),
+        PredExpr::Mem(e, op, set) => canon_mem(e, neg_mem_op(op), set),
+        PredExpr::Not(inner) => reduce_pred_expr(*inner),
+        PredExpr::And(operands) => {
+            canon_junction_forms(operands.into_iter().map(negate_pred_expr).collect(), false)
         }
-        ValuePredicate::Or(operands) => {
-            canon_junction_forms(operands.into_iter().map(negate_predicate).collect(), true)
+        PredExpr::Or(operands) => {
+            canon_junction_forms(operands.into_iter().map(negate_pred_expr).collect(), true)
         }
     }
 }
 
-fn canon_junction(operands: Vec<ValuePredicate>, is_and: bool) -> PredicateForm {
-    canon_junction_forms(operands.into_iter().map(canon_predicate).collect(), is_and)
+fn canon_junction(operands: Vec<PredExpr>, is_and: bool) -> PredicateReduction {
+    canon_junction_forms(operands.into_iter().map(reduce_pred_expr).collect(), is_and)
 }
 
-fn canon_junction_forms(forms: Vec<PredicateForm>, is_and: bool) -> PredicateForm {
-    let mut operands: Vec<ValuePredicate> = Vec::new();
+fn canon_junction_forms(forms: Vec<PredicateReduction>, is_and: bool) -> PredicateReduction {
+    let mut operands: Vec<PredExpr> = Vec::new();
     for form in forms {
         match form {
-            PredicateForm::Top => {
+            PredicateReduction::Top => {
                 if !is_and {
-                    return PredicateForm::Top;
+                    return PredicateReduction::Top;
                 }
             }
-            PredicateForm::Bottom => {
+            PredicateReduction::Bottom => {
                 if is_and {
-                    return PredicateForm::Bottom;
+                    return PredicateReduction::Bottom;
                 }
             }
-            PredicateForm::Predicate(p) => match p {
-                ValuePredicate::And(inner) if is_and => operands.extend(inner),
-                ValuePredicate::Or(inner) if !is_and => operands.extend(inner),
+            PredicateReduction::Predicate(p) => match p {
+                PredExpr::And(inner) if is_and => operands.extend(inner),
+                PredExpr::Or(inner) if !is_and => operands.extend(inner),
                 other => operands.push(other),
             },
         }
@@ -428,16 +428,16 @@ fn canon_junction_forms(forms: Vec<PredicateForm>, is_and: bool) -> PredicateFor
     match operands.len() {
         0 => {
             if is_and {
-                PredicateForm::Top
+                PredicateReduction::Top
             } else {
-                PredicateForm::Bottom
+                PredicateReduction::Bottom
             }
         }
-        1 => PredicateForm::Predicate(operands.pop().unwrap()),
-        _ => PredicateForm::Predicate(if is_and {
-            ValuePredicate::And(operands)
+        1 => PredicateReduction::Predicate(operands.pop().unwrap()),
+        _ => PredicateReduction::Predicate(if is_and {
+            PredExpr::And(operands)
         } else {
-            ValuePredicate::Or(operands)
+            PredExpr::Or(operands)
         }),
     }
 }
@@ -446,7 +446,7 @@ impl AsLit for ValueAst {
     type Lit = i64;
 
     /// The single integer this value denotes, only when it is a literal.
-    /// Non-canonicalizing: a `Term` or `LitSet` that would fold to a literal
+    /// Non-canonicalizing: an `ArithExpr` or `LitSet` that would fold to a literal
     /// still returns `None` (canonicalize first if folding is wanted).
     #[inline]
     fn as_lit(&self) -> Option<i64> {
@@ -471,7 +471,7 @@ impl Lattice for ValueAst {
     }
 
     /// Greatest lower bound, canonicalizing both operands and the result.
-    /// Distinct symbolic forms (`Term`/`Predicate`) meet only when equal once
+    /// Distinct symbolic forms (`ArithExpr`/`PredExpr`) meet only when equal once
     /// canonical; symbolic versus concrete is rejected.
     fn meet(&self, other: &Self) -> Option<Self> {
         let a = self.canonical().ok()?;
@@ -568,11 +568,12 @@ impl Lattice for ValueAst {
 
     /// Partial-order check `target ⊑ self` (pattern admits every value target
     /// admits), specialized for the literal cases so the matcher's per-candidate
-    /// path allocates nothing. `Term`/`Predicate` on either side fall back to the
+    /// path allocates nothing. `ArithExpr`/`PredExpr` on either side fall back to the
     /// canonicalizing `meet`-derived default, which this must equal.
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
-            (Self::Term(_) | Self::Predicate(_), _) | (_, Self::Term(_) | Self::Predicate(_)) => {
+            (Self::ArithExpr(_) | Self::PredExpr(_), _)
+            | (_, Self::ArithExpr(_) | Self::PredExpr(_)) => {
                 match (self.meet(target), target.canonical()) {
                     (Some(meet), Ok(target)) => meet == *target,
                     _ => false,
@@ -668,10 +669,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit_set(ValueAst::lit_set([2, 1, 2]), ValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))))]
-    #[case::var(ValueAst::var("x"), ValueAst::Term(Box::new(ValueTerm::Var("x".to_string()))))]
-    #[case::rel_predicate(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1))), ValueAst::Predicate(Box::new(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1)))))]
-    #[case::term(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::Term(Box::new(ValueTerm::Var("x".to_string()))))]
-    #[case::predicate(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))), ValueAst::Predicate(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::var(ValueAst::var("x"), ValueAst::ArithExpr(Box::new(ArithExpr::Var("x".to_string()))))]
+    #[case::rel_predicate(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("r".to_string()), RelOp::Ge, ArithExpr::Lit(1))), ValueAst::PredExpr(Box::new(PredExpr::Rel(ArithExpr::Var("r".to_string()), RelOp::Ge, ArithExpr::Lit(1)))))]
+    #[case::term(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::ArithExpr(Box::new(ArithExpr::Var("x".to_string()))))]
+    #[case::predicate(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))), ValueAst::PredExpr(Box::new(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
     fn test_value_ast_constructors(#[case] actual: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(actual, expected);
     }
@@ -690,46 +691,46 @@ mod tests {
     #[rstest]
     #[case::litset_singleton(ValueAst::lit_set([7]), Ok(ValueAst::Lit(7)))]
     #[case::litset_empty(ValueAst::lit_set([]), Err(Contradiction))]
-    #[case::term_ground(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(2), ValueTerm::Lit(3)])), Ok(ValueAst::Lit(5)))]
-    #[case::term_neg_lit(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(4)))), Ok(ValueAst::Lit(-4)))]
-    #[case::term_neg_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))))), Ok(ValueAst::term(ValueTerm::Var("x".to_string()))))]
-    #[case::term_sum_identity(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(0)])), Ok(ValueAst::term(ValueTerm::Var("x".to_string()))))]
-    #[case::term_sum_sorted_const_first(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(1)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Var("x".to_string())]))))]
-    #[case::term_sum_flatten(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(1)]), ValueTerm::Lit(2)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(3), ValueTerm::Var("x".to_string())]))))]
-    #[case::term_product_annihilator(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(0)])), Ok(ValueAst::Lit(0)))]
-    #[case::term_product_identity(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(1)])), Ok(ValueAst::term(ValueTerm::Var("x".to_string()))))]
-    #[case::term_div_fold(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), Ok(ValueAst::Lit(3)))]
-    #[case::term_rem_fold(ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), Ok(ValueAst::Lit(1)))]
-    #[case::pred_rel_true(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))), Ok(ValueAst::Undetermined))]
-    #[case::pred_rel_false(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))), Err(Contradiction))]
-    #[case::pred_rel_orient_ge(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Ge, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Le, ValueTerm::Var("x".to_string())))))]
-    #[case::pred_rel_eq_sorted(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Eq, ValueTerm::Lit(0))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Eq, ValueTerm::Var("x".to_string())))))]
-    #[case::pred_not_eq_to_ne(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Eq, ValueTerm::Lit(0))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Ne, ValueTerm::Var("x".to_string())))))]
-    #[case::pred_mem_singleton(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Eq, ValueTerm::Var("x".to_string())))))]
-    #[case::pred_mem_notin_empty(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::new())), Ok(ValueAst::Undetermined))]
-    #[case::pred_mem_in_empty(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::new())), Err(Contradiction))]
-    #[case::pred_not_mem_to_notin(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))))), Ok(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2])))))]
-    #[case::pred_and_drops_top(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Le, ValueTerm::Lit(3)), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Le, ValueTerm::Lit(3)))))]
-    #[case::pred_demorgan(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))])))), Ok(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::NotIn, BTreeSet::from([3, 4]))]))))]
-    #[case::term_sum_neg_const(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(-3)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Neg(Box::new(ValueTerm::Lit(3)))]))))]
-    #[case::term_neg_zero(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(0)))), Ok(ValueAst::Lit(0)))]
-    #[case::term_product_flatten(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Var("y".to_string())]), ValueTerm::Var("z".to_string())])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Var("y".to_string()), ValueTerm::Var("z".to_string())]))))]
-    #[case::term_product_sort(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("b".to_string()), ValueTerm::Var("a".to_string())])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("a".to_string()), ValueTerm::Var("b".to_string())]))))]
-    #[case::term_product_const_fold(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(2), ValueTerm::Lit(3), ValueTerm::Var("x".to_string())])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(6), ValueTerm::Var("x".to_string())]))))]
-    #[case::term_sum_empty(ValueAst::term(ValueTerm::Sum(vec![])), Ok(ValueAst::Lit(0)))]
-    #[case::term_product_empty(ValueAst::term(ValueTerm::Product(vec![])), Ok(ValueAst::Lit(1)))]
-    #[case::term_div_by_zero(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(0)))), Ok(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(0))))))]
-    #[case::pred_and_flatten(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))]), ValuePredicate::Mem(ValueTerm::Var("z".to_string()), MemOp::In, BTreeSet::from([5, 6]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(ValueTerm::Var("z".to_string()), MemOp::In, BTreeSet::from([5, 6]))]))))]
-    #[case::pred_and_sort_dedup(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))]))))]
-    #[case::pred_and_bottom(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Err(Contradiction))]
-    #[case::pred_or_drops_bottom(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Ok(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
-    #[case::pred_or_top(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::Undetermined))]
-    #[case::pred_and_empty(ValueAst::predicate(ValuePredicate::And(vec![])), Ok(ValueAst::Undetermined))]
-    #[case::pred_or_empty(ValueAst::predicate(ValuePredicate::Or(vec![])), Err(Contradiction))]
-    #[case::pred_not_not(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Not(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))))))), Ok(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
-    #[case::pred_not_le(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Le, ValueTerm::Lit(3))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(3), RelOp::Lt, ValueTerm::Var("x".to_string())))))]
-    #[case::pred_rel_orient_gt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Gt, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Lt, ValueTerm::Var("x".to_string())))))]
-    #[case::pred_mem_notin_singleton(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Ne, ValueTerm::Var("x".to_string())))))]
+    #[case::term_ground(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(2), ArithExpr::Lit(3)])), Ok(ValueAst::Lit(5)))]
+    #[case::term_neg_lit(ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Lit(4)))), Ok(ValueAst::Lit(-4)))]
+    #[case::term_neg_neg(ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))))), Ok(ValueAst::arith_expr(ArithExpr::Var("x".to_string()))))]
+    #[case::term_sum_identity(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Var("x".to_string()), ArithExpr::Lit(0)])), Ok(ValueAst::arith_expr(ArithExpr::Var("x".to_string()))))]
+    #[case::term_sum_sorted_const_first(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Var("x".to_string()), ArithExpr::Lit(1)])), Ok(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Var("x".to_string())]))))]
+    #[case::term_sum_flatten(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Sum(vec![ArithExpr::Var("x".to_string()), ArithExpr::Lit(1)]), ArithExpr::Lit(2)])), Ok(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(3), ArithExpr::Var("x".to_string())]))))]
+    #[case::term_product_annihilator(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("x".to_string()), ArithExpr::Lit(0)])), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_identity(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("x".to_string()), ArithExpr::Lit(1)])), Ok(ValueAst::arith_expr(ArithExpr::Var("x".to_string()))))]
+    #[case::term_div_fold(ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), Ok(ValueAst::Lit(3)))]
+    #[case::term_rem_fold(ValueAst::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), Ok(ValueAst::Lit(1)))]
+    #[case::pred_rel_true(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(1))), Ok(ValueAst::Undetermined))]
+    #[case::pred_rel_false(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))), Err(Contradiction))]
+    #[case::pred_rel_orient_ge(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Ge, ArithExpr::Lit(1))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Le, ArithExpr::Var("x".to_string())))))]
+    #[case::pred_rel_eq_sorted(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Eq, ArithExpr::Lit(0))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(0), RelOp::Eq, ArithExpr::Var("x".to_string())))))]
+    #[case::pred_not_eq_to_ne(ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Eq, ArithExpr::Lit(0))))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(0), RelOp::Ne, ArithExpr::Var("x".to_string())))))]
+    #[case::pred_mem_singleton(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([5]))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(5), RelOp::Eq, ArithExpr::Var("x".to_string())))))]
+    #[case::pred_mem_notin_empty(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::new())), Ok(ValueAst::Undetermined))]
+    #[case::pred_mem_in_empty(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::new())), Err(Contradiction))]
+    #[case::pred_not_mem_to_notin(ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))))), Ok(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2])))))]
+    #[case::pred_and_drops_top(ValueAst::pred_expr(PredExpr::And(vec![PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Le, ArithExpr::Lit(3)), PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(1))])), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Le, ArithExpr::Lit(3)))))]
+    #[case::pred_demorgan(ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::And(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))])))), Ok(ValueAst::pred_expr(PredExpr::Or(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2])), PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::NotIn, BTreeSet::from([3, 4]))]))))]
+    #[case::term_sum_neg_const(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Var("x".to_string()), ArithExpr::Lit(-3)])), Ok(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Var("x".to_string()), ArithExpr::Neg(Box::new(ArithExpr::Lit(3)))]))))]
+    #[case::term_neg_zero(ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Lit(0)))), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_flatten(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Product(vec![ArithExpr::Var("x".to_string()), ArithExpr::Var("y".to_string())]), ArithExpr::Var("z".to_string())])), Ok(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("x".to_string()), ArithExpr::Var("y".to_string()), ArithExpr::Var("z".to_string())]))))]
+    #[case::term_product_sort(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("b".to_string()), ArithExpr::Var("a".to_string())])), Ok(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("a".to_string()), ArithExpr::Var("b".to_string())]))))]
+    #[case::term_product_const_fold(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(2), ArithExpr::Lit(3), ArithExpr::Var("x".to_string())])), Ok(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(6), ArithExpr::Var("x".to_string())]))))]
+    #[case::term_sum_empty(ValueAst::arith_expr(ArithExpr::Sum(vec![])), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_empty(ValueAst::arith_expr(ArithExpr::Product(vec![])), Ok(ValueAst::Lit(1)))]
+    #[case::term_div_by_zero(ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(0)))), Ok(ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(0))))))]
+    #[case::pred_and_flatten(ValueAst::pred_expr(PredExpr::And(vec![PredExpr::And(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))]), PredExpr::Mem(ArithExpr::Var("z".to_string()), MemOp::In, BTreeSet::from([5, 6]))])), Ok(ValueAst::pred_expr(PredExpr::And(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), PredExpr::Mem(ArithExpr::Var("z".to_string()), MemOp::In, BTreeSet::from([5, 6]))]))))]
+    #[case::pred_and_sort_dedup(ValueAst::pred_expr(PredExpr::And(vec![PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))])), Ok(ValueAst::pred_expr(PredExpr::And(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))]))))]
+    #[case::pred_and_bottom(ValueAst::pred_expr(PredExpr::And(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))])), Err(Contradiction))]
+    #[case::pred_or_drops_bottom(ValueAst::pred_expr(PredExpr::Or(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))])), Ok(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::pred_or_top(ValueAst::pred_expr(PredExpr::Or(vec![PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(1))])), Ok(ValueAst::Undetermined))]
+    #[case::pred_and_empty(ValueAst::pred_expr(PredExpr::And(vec![])), Ok(ValueAst::Undetermined))]
+    #[case::pred_or_empty(ValueAst::pred_expr(PredExpr::Or(vec![])), Err(Contradiction))]
+    #[case::pred_not_not(ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::Not(Box::new(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))))))), Ok(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::pred_not_le(ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Le, ArithExpr::Lit(3))))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(3), RelOp::Lt, ArithExpr::Var("x".to_string())))))]
+    #[case::pred_rel_orient_gt(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Gt, ArithExpr::Lit(1))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Lt, ArithExpr::Var("x".to_string())))))]
+    #[case::pred_mem_notin_singleton(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([5]))), Ok(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Lit(5), RelOp::Ne, ArithExpr::Var("x".to_string())))))]
     fn test_value_ast_canonicalize(
         #[case] input: ValueAst,
         #[case] expected: Result<ValueAst, Contradiction>,
@@ -742,17 +743,17 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined)]
     #[case::lit(ValueAst::Lit(3))]
     #[case::litset(ValueAst::lit_set([1, 2, 3]))]
-    #[case::term_var(ValueAst::term(ValueTerm::Var("x".to_string())))]
+    #[case::term_var(ValueAst::arith_expr(ArithExpr::Var("x".to_string())))]
     fn test_value_ast_canonicalize_identity(#[case] input: ValueAst) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::sum(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("b".to_string()), ValueTerm::Lit(2), ValueTerm::Var("a".to_string()), ValueTerm::Lit(3)])))]
-    #[case::product(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("b".to_string()), ValueTerm::Var("a".to_string())])))]
-    #[case::rel(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
-    #[case::or(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2]))])))]
+    #[case::sum(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Var("b".to_string()), ArithExpr::Lit(2), ArithExpr::Var("a".to_string()), ArithExpr::Lit(3)])))]
+    #[case::product(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("b".to_string()), ArithExpr::Var("a".to_string())])))]
+    #[case::rel(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
+    #[case::or(ValueAst::pred_expr(PredExpr::Or(vec![PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2]))])))]
     fn test_value_ast_canonicalize_idempotent(#[case] input: ValueAst) {
         let once = input.canonicalize().unwrap();
         let twice = once.clone().canonicalize().unwrap();
@@ -765,7 +766,7 @@ mod tests {
     #[case::lit_neg(ValueAst::Lit(-5), Some(-5))]
     #[case::undetermined(ValueAst::Undetermined, None)]
     #[case::litset(ValueAst::lit_set([1, 2]), None)]
-    #[case::term(ValueAst::term(ValueTerm::Var("x".to_string())), None)]
+    #[case::term(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), None)]
     fn test_value_ast_as_lit(#[case] ast: ValueAst, #[case] expected: Option<i64>) {
         assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
@@ -777,7 +778,7 @@ mod tests {
     #[case::lit(ValueAst::Lit(3), false)]
     #[case::litset(ValueAst::lit_set([1, 2]), false)]
     #[case::term(ValueAst::var("x"), false)]
-    #[case::predicate(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1))), false)]
+    #[case::predicate(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("r".to_string()), RelOp::Ge, ArithExpr::Lit(1))), false)]
     #[case::range_from(ValueAst::RangeFrom(1), false)]
     fn test_value_ast_is_undetermined(#[case] ast: ValueAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
@@ -794,9 +795,9 @@ mod tests {
     #[case::set_set_multi(ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([2, 3, 4]), Some(ValueAst::lit_set([2, 3])))]
     #[case::set_set_singleton(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), Some(ValueAst::Lit(2)))]
     #[case::set_set_empty(ValueAst::lit_set([1, 2]), ValueAst::lit_set([3, 4]), None)]
-    #[case::term_term_eq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())), Some(ValueAst::term(ValueTerm::Var("x".to_string()))))]
-    #[case::term_term_neq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("y".to_string())), None)]
-    #[case::term_lit(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::Lit(5), None)]
+    #[case::term_term_eq(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::arith_expr(ArithExpr::Var("x".to_string())), Some(ValueAst::arith_expr(ArithExpr::Var("x".to_string()))))]
+    #[case::term_term_neq(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::arith_expr(ArithExpr::Var("y".to_string())), None)]
+    #[case::arith_expr_lit(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::Lit(5), None)]
     #[case::rangefrom_lit_in(ValueAst::RangeFrom(1), ValueAst::Lit(2), Some(ValueAst::Lit(2)))]
     #[case::rangefrom_lit_out(ValueAst::RangeFrom(2), ValueAst::Lit(1), None)]
     #[case::rangefrom_rangefrom(ValueAst::RangeFrom(1), ValueAst::RangeFrom(3), Some(ValueAst::RangeFrom(3)))]
@@ -819,8 +820,8 @@ mod tests {
     #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::lit_set([3, 4]))]
     #[case::lit_set(ValueAst::Lit(5), ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([1, 2, 3, 5]))]
     #[case::set_set(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), ValueAst::lit_set([1, 2, 3]))]
-    #[case::term_term_eq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())))]
-    #[case::term_term_neq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("y".to_string())), ValueAst::Undetermined)]
+    #[case::term_term_eq(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::arith_expr(ArithExpr::Var("x".to_string())))]
+    #[case::term_term_neq(ValueAst::arith_expr(ArithExpr::Var("x".to_string())), ValueAst::arith_expr(ArithExpr::Var("y".to_string())), ValueAst::Undetermined)]
     #[case::rangefrom_rangefrom(ValueAst::RangeFrom(3), ValueAst::RangeFrom(1), ValueAst::RangeFrom(1))]
     #[case::rangeto_rangeto(ValueAst::RangeTo(3), ValueAst::RangeTo(5), ValueAst::RangeTo(5))]
     #[case::rangefrom_lit_overapprox(ValueAst::RangeFrom(1), ValueAst::Lit(5), ValueAst::Undetermined)]

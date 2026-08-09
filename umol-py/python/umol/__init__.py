@@ -213,8 +213,8 @@ from ._native import (
     ValenceModel,
     ValenceTable,
     ValueAst,
-    ValuePredicate,
-    ValueTerm,
+    PredExpr,
+    ArithExpr,
     WlHashScheme,
 )
 from .elements import E
@@ -436,8 +436,8 @@ __all__ = [
     "ValenceModel",
     "ValenceTable",
     "ValueAst",
-    "ValuePredicate",
-    "ValueTerm",
+    "PredExpr",
+    "ArithExpr",
     "WlHashScheme",
     "__version__",
 ]

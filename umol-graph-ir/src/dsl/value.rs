@@ -14,11 +14,11 @@ use winnow::Parser;
 use super::error::{PResult, ParseError};
 use super::operators::{mem_op, mem_op_str, rel_op, rel_op_str};
 use crate::ir::traits::{FromIr, IntoIr};
-use crate::ir::value::{ValueAst, ValuePredicate, ValueTerm};
+use crate::ir::value::{ArithExpr, PredExpr, ValueAst};
 
 /// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
-/// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `Term`/
-/// `Predicate` → string via the value subgrammar (EDN has no native form for
+/// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `ArithExpr`/
+/// `PredExpr` → string via the value subgrammar (EDN has no native form for
 /// the arithmetic/boolean grammar and round-trip fidelity is mandatory).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ValueDsl(pub ValueAst);
@@ -87,8 +87,8 @@ impl ToEdn for ValueDsl {
             }
             ValueAst::RangeFrom(_)
             | ValueAst::RangeTo(_)
-            | ValueAst::Term(_)
-            | ValueAst::Predicate(_) => Edn::Str(Cow::Owned(self.to_string())),
+            | ValueAst::ArithExpr(_)
+            | ValueAst::PredExpr(_) => Edn::Str(Cow::Owned(self.to_string())),
         }
     }
 }
@@ -113,8 +113,8 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
         ValueAst::LitSet(s) => fmt_set(f, s.iter().copied()),
         ValueAst::RangeFrom(n) => write!(f, "({n}..)"),
         ValueAst::RangeTo(n) => write!(f, "(..{n})"),
-        ValueAst::Term(t) => fmt_term(f, t, PREC_OR),
-        ValueAst::Predicate(p) => fmt_predicate(f, p, PREC_OR),
+        ValueAst::ArithExpr(t) => fmt_arith_expr(f, t, PREC_OR),
+        ValueAst::PredExpr(p) => fmt_pred_expr(f, p, PREC_OR),
     }
 }
 
@@ -132,60 +132,60 @@ pub(crate) fn fmt_set<T: fmt::Display>(
     f.write_char('}')
 }
 
-fn term_prec(t: &ValueTerm) -> u8 {
+fn arith_expr_prec(t: &ArithExpr) -> u8 {
     match t {
-        ValueTerm::Lit(_) | ValueTerm::Var(_) => PREC_ATOM,
-        ValueTerm::Neg(_) => PREC_NEG,
-        ValueTerm::Product(_) | ValueTerm::Div(..) | ValueTerm::Rem(..) => PREC_PRODUCT,
-        ValueTerm::Sum(_) => PREC_SUM,
+        ArithExpr::Lit(_) | ArithExpr::Var(_) => PREC_ATOM,
+        ArithExpr::Neg(_) => PREC_NEG,
+        ArithExpr::Product(_) | ArithExpr::Div(..) | ArithExpr::Rem(..) => PREC_PRODUCT,
+        ArithExpr::Sum(_) => PREC_SUM,
     }
 }
 
-fn fmt_term(f: &mut fmt::Formatter<'_>, t: &ValueTerm, parent: u8) -> fmt::Result {
-    let prec = term_prec(t);
+fn fmt_arith_expr(f: &mut fmt::Formatter<'_>, t: &ArithExpr, parent: u8) -> fmt::Result {
+    let prec = arith_expr_prec(t);
     let wrap = prec < parent;
     if wrap {
         f.write_char('(')?;
     }
     match t {
-        ValueTerm::Lit(n) => write!(f, "{}", n)?,
-        ValueTerm::Var(name) => write!(f, "?{}", name)?,
-        ValueTerm::Neg(inner) => {
+        ArithExpr::Lit(n) => write!(f, "{}", n)?,
+        ArithExpr::Var(name) => write!(f, "?{}", name)?,
+        ArithExpr::Neg(inner) => {
             f.write_char('-')?;
-            fmt_term(f, inner, PREC_NEG)?;
+            fmt_arith_expr(f, inner, PREC_NEG)?;
         }
-        ValueTerm::Sum(operands) => {
+        ArithExpr::Sum(operands) => {
             for (i, operand) in operands.iter().enumerate() {
                 match (i, operand) {
-                    (0, _) => fmt_term(f, operand, PREC_PRODUCT)?,
-                    (_, ValueTerm::Neg(inner)) => {
+                    (0, _) => fmt_arith_expr(f, operand, PREC_PRODUCT)?,
+                    (_, ArithExpr::Neg(inner)) => {
                         f.write_str(" - ")?;
-                        fmt_term(f, inner, PREC_PRODUCT)?;
+                        fmt_arith_expr(f, inner, PREC_PRODUCT)?;
                     }
                     (_, _) => {
                         f.write_str(" + ")?;
-                        fmt_term(f, operand, PREC_PRODUCT)?;
+                        fmt_arith_expr(f, operand, PREC_PRODUCT)?;
                     }
                 }
             }
         }
-        ValueTerm::Product(operands) => {
+        ArithExpr::Product(operands) => {
             for (i, operand) in operands.iter().enumerate() {
                 if i > 0 {
                     f.write_str(" * ")?;
                 }
-                fmt_term(f, operand, if i == 0 { PREC_PRODUCT } else { PREC_NEG })?;
+                fmt_arith_expr(f, operand, if i == 0 { PREC_PRODUCT } else { PREC_NEG })?;
             }
         }
-        ValueTerm::Div(a, b) => {
-            fmt_term(f, a, PREC_PRODUCT)?;
+        ArithExpr::Div(a, b) => {
+            fmt_arith_expr(f, a, PREC_PRODUCT)?;
             f.write_str(" / ")?;
-            fmt_term(f, b, PREC_NEG)?;
+            fmt_arith_expr(f, b, PREC_NEG)?;
         }
-        ValueTerm::Rem(a, b) => {
-            fmt_term(f, a, PREC_PRODUCT)?;
+        ArithExpr::Rem(a, b) => {
+            fmt_arith_expr(f, a, PREC_PRODUCT)?;
             f.write_str(" % ")?;
-            fmt_term(f, b, PREC_NEG)?;
+            fmt_arith_expr(f, b, PREC_NEG)?;
         }
     }
     if wrap {
@@ -194,50 +194,50 @@ fn fmt_term(f: &mut fmt::Formatter<'_>, t: &ValueTerm, parent: u8) -> fmt::Resul
     Ok(())
 }
 
-fn pred_prec(p: &ValuePredicate) -> u8 {
+fn pred_expr_prec(p: &PredExpr) -> u8 {
     match p {
-        ValuePredicate::Or(_) => PREC_OR,
-        ValuePredicate::And(_) => PREC_AND,
-        ValuePredicate::Not(_) => PREC_NOT,
-        ValuePredicate::Rel(..) => PREC_REL,
-        ValuePredicate::Mem(..) => PREC_MEM,
+        PredExpr::Or(_) => PREC_OR,
+        PredExpr::And(_) => PREC_AND,
+        PredExpr::Not(_) => PREC_NOT,
+        PredExpr::Rel(..) => PREC_REL,
+        PredExpr::Mem(..) => PREC_MEM,
     }
 }
 
-fn fmt_predicate(f: &mut fmt::Formatter<'_>, p: &ValuePredicate, parent: u8) -> fmt::Result {
-    let prec = pred_prec(p);
+fn fmt_pred_expr(f: &mut fmt::Formatter<'_>, p: &PredExpr, parent: u8) -> fmt::Result {
+    let prec = pred_expr_prec(p);
     let wrap = prec < parent;
     if wrap {
         f.write_char('(')?;
     }
     match p {
-        ValuePredicate::Or(operands) => {
+        PredExpr::Or(operands) => {
             for (i, operand) in operands.iter().enumerate() {
                 if i > 0 {
                     f.write_str(" | ")?;
                 }
-                fmt_predicate(f, operand, PREC_AND)?;
+                fmt_pred_expr(f, operand, PREC_AND)?;
             }
         }
-        ValuePredicate::And(operands) => {
+        PredExpr::And(operands) => {
             for (i, operand) in operands.iter().enumerate() {
                 if i > 0 {
                     f.write_str(" & ")?;
                 }
-                fmt_predicate(f, operand, PREC_NOT)?;
+                fmt_pred_expr(f, operand, PREC_NOT)?;
             }
         }
-        ValuePredicate::Not(inner) => {
+        PredExpr::Not(inner) => {
             f.write_char('!')?;
-            fmt_predicate(f, inner, PREC_NOT)?;
+            fmt_pred_expr(f, inner, PREC_NOT)?;
         }
-        ValuePredicate::Rel(l, op, r) => {
-            fmt_term(f, l, PREC_OR)?;
+        PredExpr::Rel(l, op, r) => {
+            fmt_arith_expr(f, l, PREC_OR)?;
             write!(f, " {} ", rel_op_str(*op))?;
-            fmt_term(f, r, PREC_OR)?;
+            fmt_arith_expr(f, r, PREC_OR)?;
         }
-        ValuePredicate::Mem(e, op, set) => {
-            fmt_term(f, e, PREC_OR)?;
+        PredExpr::Mem(e, op, set) => {
+            fmt_arith_expr(f, e, PREC_OR)?;
             write!(f, " {} ", mem_op_str(*op))?;
             fmt_set(f, set.iter().copied())?;
         }
@@ -278,31 +278,30 @@ fn range(i: &mut &str) -> PResult<ValueAst> {
     .parse_next(i)
 }
 
-/// A parsed expression carries its sort: the arithmetic operators build a
-/// `Term`, the relational/membership/boolean operators build a `Predicate`.
+/// A parsed expression carries its sort.
 enum Parsed {
-    Term(ValueTerm),
-    Predicate(ValuePredicate),
+    ArithExpr(ArithExpr),
+    PredExpr(PredExpr),
 }
 
 fn parsed_to_value(parsed: Parsed) -> ValueAst {
     match parsed {
-        Parsed::Term(t) => ValueAst::term(t),
-        Parsed::Predicate(p) => ValueAst::predicate(p),
+        Parsed::ArithExpr(expression) => ValueAst::arith_expr(expression),
+        Parsed::PredExpr(expression) => ValueAst::pred_expr(expression),
     }
 }
 
-fn require_term(parsed: Parsed) -> PResult<ValueTerm> {
+fn require_arith_expr(parsed: Parsed) -> PResult<ArithExpr> {
     match parsed {
-        Parsed::Term(t) => Ok(t),
-        Parsed::Predicate(_) => Err(ErrMode::Backtrack(ParseError::Syntax)),
+        Parsed::ArithExpr(expression) => Ok(expression),
+        Parsed::PredExpr(_) => Err(ErrMode::Backtrack(ParseError::Syntax)),
     }
 }
 
-fn require_predicate(parsed: Parsed) -> PResult<ValuePredicate> {
+fn require_pred_expr(parsed: Parsed) -> PResult<PredExpr> {
     match parsed {
-        Parsed::Predicate(p) => Ok(p),
-        Parsed::Term(_) => Err(ErrMode::Backtrack(ParseError::Syntax)),
+        Parsed::PredExpr(expression) => Ok(expression),
+        Parsed::ArithExpr(_) => Err(ErrMode::Backtrack(ParseError::Syntax)),
     }
 }
 
@@ -365,11 +364,11 @@ fn or_expr(i: &mut &str) -> PResult<Parsed> {
     if rest.is_empty() {
         return Ok(head);
     }
-    let mut operands = vec![require_predicate(head)?];
+    let mut operands = vec![require_pred_expr(head)?];
     for p in rest {
-        operands.push(require_predicate(p)?);
+        operands.push(require_pred_expr(p)?);
     }
-    Ok(Parsed::Predicate(ValuePredicate::Or(operands)))
+    Ok(Parsed::PredExpr(PredExpr::Or(operands)))
 }
 
 fn and_expr(i: &mut &str) -> PResult<Parsed> {
@@ -382,17 +381,17 @@ fn and_expr(i: &mut &str) -> PResult<Parsed> {
     if rest.is_empty() {
         return Ok(head);
     }
-    let mut operands = vec![require_predicate(head)?];
+    let mut operands = vec![require_pred_expr(head)?];
     for p in rest {
-        operands.push(require_predicate(p)?);
+        operands.push(require_pred_expr(p)?);
     }
-    Ok(Parsed::Predicate(ValuePredicate::And(operands)))
+    Ok(Parsed::PredExpr(PredExpr::And(operands)))
 }
 
 fn not_expr(i: &mut &str) -> PResult<Parsed> {
     if opt(terminated('!', multispace0)).parse_next(i)?.is_some() {
-        let inner = require_predicate(not_expr.parse_next(i)?)?;
-        Ok(Parsed::Predicate(ValuePredicate::Not(Box::new(inner))))
+        let inner = require_pred_expr(not_expr.parse_next(i)?)?;
+        Ok(Parsed::PredExpr(PredExpr::Not(Box::new(inner))))
     } else {
         rel_expr.parse_next(i)
     }
@@ -408,9 +407,9 @@ fn rel_expr(i: &mut &str) -> PResult<Parsed> {
     match rhs {
         None => Ok(lhs),
         Some((op, r)) => {
-            let l = require_term(lhs)?;
-            let r = require_term(r)?;
-            Ok(Parsed::Predicate(ValuePredicate::Rel(l, op, r)))
+            let l = require_arith_expr(lhs)?;
+            let r = require_arith_expr(r)?;
+            Ok(Parsed::PredExpr(PredExpr::Rel(l, op, r)))
         }
     }
 }
@@ -422,8 +421,8 @@ fn mem_expr(i: &mut &str) -> PResult<Parsed> {
     match membership {
         None => Ok(head),
         Some((op, values)) => {
-            let term = require_term(head)?;
-            Ok(Parsed::Predicate(ValuePredicate::Mem(
+            let term = require_arith_expr(head)?;
+            Ok(Parsed::PredExpr(PredExpr::Mem(
                 term,
                 op,
                 values.into_iter().collect(),
@@ -442,16 +441,16 @@ fn add_expr(i: &mut &str) -> PResult<Parsed> {
     if tail.is_empty() {
         return Ok(head);
     }
-    let mut operands = vec![require_term(head)?];
+    let mut operands = vec![require_arith_expr(head)?];
     for (op, rhs) in tail {
-        let rhs = require_term(rhs)?;
+        let rhs = require_arith_expr(rhs)?;
         operands.push(if op == '-' {
-            ValueTerm::Neg(Box::new(rhs))
+            ArithExpr::Neg(Box::new(rhs))
         } else {
             rhs
         });
     }
-    Ok(Parsed::Term(ValueTerm::Sum(operands)))
+    Ok(Parsed::ArithExpr(ArithExpr::Sum(operands)))
 }
 
 fn add_op(i: &mut &str) -> PResult<char> {
@@ -468,22 +467,22 @@ fn mult_expr(i: &mut &str) -> PResult<Parsed> {
     if tail.is_empty() {
         return Ok(head);
     }
-    let mut acc = require_term(head)?;
+    let mut acc = require_arith_expr(head)?;
     for (op, rhs) in tail {
-        let rhs = require_term(rhs)?;
+        let rhs = require_arith_expr(rhs)?;
         acc = match op {
             '*' => match acc {
-                ValueTerm::Product(mut factors) => {
+                ArithExpr::Product(mut factors) => {
                     factors.push(rhs);
-                    ValueTerm::Product(factors)
+                    ArithExpr::Product(factors)
                 }
-                other => ValueTerm::Product(vec![other, rhs]),
+                other => ArithExpr::Product(vec![other, rhs]),
             },
-            '/' => ValueTerm::Div(Box::new(acc), Box::new(rhs)),
-            _ => ValueTerm::Rem(Box::new(acc), Box::new(rhs)),
+            '/' => ArithExpr::Div(Box::new(acc), Box::new(rhs)),
+            _ => ArithExpr::Rem(Box::new(acc), Box::new(rhs)),
         };
     }
-    Ok(Parsed::Term(acc))
+    Ok(Parsed::ArithExpr(acc))
 }
 
 fn mult_op(i: &mut &str) -> PResult<char> {
@@ -497,17 +496,17 @@ fn unary_expr(i: &mut &str) -> PResult<Parsed> {
     if negations == 0 {
         return Ok(base);
     }
-    let mut term = require_term(base)?;
+    let mut term = require_arith_expr(base)?;
     for _ in 0..negations {
-        term = ValueTerm::Neg(Box::new(term));
+        term = ArithExpr::Neg(Box::new(term));
     }
-    Ok(Parsed::Term(term))
+    Ok(Parsed::ArithExpr(term))
 }
 
 fn base_expr(i: &mut &str) -> PResult<Parsed> {
     alt((
-        uint.map(|n| Parsed::Term(ValueTerm::Lit(n))),
-        preceded('?', variable_name).map(|name| Parsed::Term(ValueTerm::Var(name))),
+        uint.map(|n| Parsed::ArithExpr(ArithExpr::Lit(n))),
+        preceded('?', variable_name).map(|name| Parsed::ArithExpr(ArithExpr::Var(name))),
         delimited('(', delimited(multispace0, or_expr, multispace0), ')'),
     ))
     .parse_next(i)
@@ -533,33 +532,33 @@ mod tests {
     #[case::range_from("(1..)", ValueAst::RangeFrom(1))]
     #[case::range_to("(..3)", ValueAst::RangeTo(3))]
     #[case::range_from_neg("(-2..)", ValueAst::RangeFrom(-2))]
-    #[case::var("?h", ValueAst::term(ValueTerm::Var("h".to_string())))]
-    #[case::sum("1 + 2", ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)])))]
-    #[case::diff("1 - 2", ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Neg(Box::new(ValueTerm::Lit(2)))])))]
-    #[case::mult("3 * ?h", ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(3), ValueTerm::Var("h".to_string())])))]
-    #[case::div("10 / 3", ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))))]
-    #[case::rem("10 % 3", ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))))]
-    #[case::neg_var("-?x", ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))))]
-    #[case::rel_eq("?h == 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))))]
-    #[case::rel_ne("?h != 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ne, ValueTerm::Lit(0))))]
-    #[case::rel_ge("?h >= 1", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
-    #[case::rel_le("?h <= 1", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Le, ValueTerm::Lit(1))))]
-    #[case::rel_lt("?h < 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Lt, ValueTerm::Lit(0))))]
-    #[case::rel_gt("?h > 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Gt, ValueTerm::Lit(0))))]
-    #[case::mem_in("?h :: {0,1}", ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1]))))]
-    #[case::mem_notin("?h !: {0,1}", ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))))]
-    #[case::not("!?h == 0", ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))))))]
-    #[case::and("?h == 0 & ?v == 1", ValueAst::predicate(ValuePredicate::And(vec![
-        ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
-        ValuePredicate::Rel(ValueTerm::Var("v".to_string()), RelOp::Eq, ValueTerm::Lit(1)),
+    #[case::var("?h", ValueAst::arith_expr(ArithExpr::Var("h".to_string())))]
+    #[case::sum("1 + 2", ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])))]
+    #[case::diff("1 - 2", ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Neg(Box::new(ArithExpr::Lit(2)))])))]
+    #[case::mult("3 * ?h", ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(3), ArithExpr::Var("h".to_string())])))]
+    #[case::div("10 / 3", ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))))]
+    #[case::rem("10 % 3", ValueAst::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))))]
+    #[case::neg_var("-?x", ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))))]
+    #[case::rel_eq("?h == 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))))]
+    #[case::rel_ne("?h != 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ne, ArithExpr::Lit(0))))]
+    #[case::rel_ge("?h >= 1", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
+    #[case::rel_le("?h <= 1", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Le, ArithExpr::Lit(1))))]
+    #[case::rel_lt("?h < 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Lt, ArithExpr::Lit(0))))]
+    #[case::rel_gt("?h > 0", ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Gt, ArithExpr::Lit(0))))]
+    #[case::mem_in("?h :: {0,1}", ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1]))))]
+    #[case::mem_notin("?h !: {0,1}", ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))))]
+    #[case::not("!?h == 0", ValueAst::pred_expr(PredExpr::Not(Box::new(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))))))]
+    #[case::and("?h == 0 & ?v == 1", ValueAst::pred_expr(PredExpr::And(vec![
+        PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
+        PredExpr::Rel(ArithExpr::Var("v".to_string()), RelOp::Eq, ArithExpr::Lit(1)),
     ])))]
-    #[case::or("?h == 0 | ?v == 1", ValueAst::predicate(ValuePredicate::Or(vec![
-        ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
-        ValuePredicate::Rel(ValueTerm::Var("v".to_string()), RelOp::Eq, ValueTerm::Lit(1)),
+    #[case::or("?h == 0 | ?v == 1", ValueAst::pred_expr(PredExpr::Or(vec![
+        PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
+        PredExpr::Rel(ArithExpr::Var("v".to_string()), RelOp::Eq, ArithExpr::Lit(1)),
     ])))]
-    #[case::paren_arith("(0 + 1) * 1", ValueAst::term(ValueTerm::Product(vec![
-        ValueTerm::Sum(vec![ValueTerm::Lit(0), ValueTerm::Lit(1)]),
-        ValueTerm::Lit(1),
+    #[case::paren_arith("(0 + 1) * 1", ValueAst::arith_expr(ArithExpr::Product(vec![
+        ArithExpr::Sum(vec![ArithExpr::Lit(0), ArithExpr::Lit(1)]),
+        ArithExpr::Lit(1),
     ])))]
     fn test_value(#[case] input: &str, #[case] expected: ValueAst) {
         let result = value.parse(input);
@@ -599,26 +598,26 @@ mod tests {
     #[case::set(ValueAst::lit_set([0, 1, 2]), "{0,1,2}")]
     #[case::range_from(ValueAst::RangeFrom(1), "(1..)")]
     #[case::range_to(ValueAst::RangeTo(3), "(..3)")]
-    #[case::term_var(ValueAst::term(ValueTerm::Var("h".to_string())), "?h")]
-    #[case::term_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))), "-?x")]
-    #[case::term_sum(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)])), "1 + 2")]
-    #[case::term_mul(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(3), ValueTerm::Var("h".to_string())])), "3 * ?h")]
-    #[case::term_div(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), "10 / 3")]
-    #[case::term_rem(ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), "10 % 3")]
-    #[case::pred_rel(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))), "?h == 0")]
-    #[case::pred_ne(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ne, ValueTerm::Lit(0))), "?h != 0")]
-    #[case::pred_lt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Lt, ValueTerm::Lit(0))), "?h < 0")]
-    #[case::pred_le(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Le, ValueTerm::Lit(1))), "?h <= 1")]
-    #[case::pred_gt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Gt, ValueTerm::Lit(0))), "?h > 0")]
-    #[case::pred_ge(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))), "?h >= 1")]
-    #[case::pred_mem(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
-    #[case::pred_mem_notin(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
-    #[case::pred_and_of_or(ValueAst::predicate(ValuePredicate::And(vec![
-        ValuePredicate::Or(vec![
-            ValuePredicate::Rel(ValueTerm::Var("a".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
-            ValuePredicate::Rel(ValueTerm::Var("b".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
+    #[case::term_var(ValueAst::arith_expr(ArithExpr::Var("h".to_string())), "?h")]
+    #[case::term_neg(ValueAst::arith_expr(ArithExpr::Neg(Box::new(ArithExpr::Var("x".to_string())))), "-?x")]
+    #[case::term_sum(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])), "1 + 2")]
+    #[case::term_mul(ValueAst::arith_expr(ArithExpr::Product(vec![ArithExpr::Lit(3), ArithExpr::Var("h".to_string())])), "3 * ?h")]
+    #[case::term_div(ValueAst::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), "10 / 3")]
+    #[case::term_rem(ValueAst::arith_expr(ArithExpr::Rem(Box::new(ArithExpr::Lit(10)), Box::new(ArithExpr::Lit(3)))), "10 % 3")]
+    #[case::pred_rel(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))), "?h == 0")]
+    #[case::pred_ne(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ne, ArithExpr::Lit(0))), "?h != 0")]
+    #[case::pred_lt(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Lt, ArithExpr::Lit(0))), "?h < 0")]
+    #[case::pred_le(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Le, ArithExpr::Lit(1))), "?h <= 1")]
+    #[case::pred_gt(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Gt, ArithExpr::Lit(0))), "?h > 0")]
+    #[case::pred_ge(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))), "?h >= 1")]
+    #[case::pred_mem(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
+    #[case::pred_mem_notin(ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
+    #[case::pred_and_of_or(ValueAst::pred_expr(PredExpr::And(vec![
+        PredExpr::Or(vec![
+            PredExpr::Rel(ArithExpr::Var("a".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
+            PredExpr::Rel(ArithExpr::Var("b".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
         ]),
-        ValuePredicate::Rel(ValueTerm::Var("c".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
+        PredExpr::Rel(ArithExpr::Var("c".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
     ])), "(?a == 0 | ?b == 0) & ?c == 0")]
     fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
         assert_eq!(ValueDsl::from_ir(&input, &()).to_string(), expected);
@@ -661,10 +660,10 @@ mod tests {
     #[case::lit(ValueAst::Lit(4), Edn::Int(4))]
     #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
     #[case::set(ValueAst::lit_set([1, 2, 3]), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
-    #[case::term_var(ValueAst::term(ValueTerm::Var("h".to_string())), Edn::Str(Cow::Borrowed("?h")))]
+    #[case::term_var(ValueAst::arith_expr(ArithExpr::Var("h".to_string())), Edn::Str(Cow::Borrowed("?h")))]
     #[case::range_from(ValueAst::RangeFrom(1), Edn::Str(Cow::Borrowed("(1..)")))]
     #[case::pred_rel(
-        ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))),
+        ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
     fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
@@ -682,7 +681,7 @@ mod tests {
     #[case::str_range(Edn::Str(Cow::Borrowed("(1..)")), ValueAst::RangeFrom(1))]
     #[case::str_pred(
         Edn::Str(Cow::Borrowed("?h == 0")),
-        ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))),
+        ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
     )]
     fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: ValueAst) {
         use umol_edn::FromEdn;
@@ -703,7 +702,7 @@ mod tests {
     #[case::set(ValueAst::lit_set([1, 2, 3]))]
     #[case::range_from(ValueAst::RangeFrom(1))]
     #[case::range_to(ValueAst::RangeTo(3))]
-    #[case::pred(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
+    #[case::pred(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
     fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
         use umol_edn::{FromEdn, ToEdn};
         let edn = ValueDsl::from_ir(&v, &()).to_edn();

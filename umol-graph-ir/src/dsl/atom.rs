@@ -1306,7 +1306,7 @@ mod tests {
     use crate::ir::operators::{MemOp, RelOp};
     use crate::ir::spin::{UnpairedElectronsAst, UnpairedElectronsUpdate};
     use crate::ir::stereo::{StereoCoset, StereoTerm};
-    use crate::ir::value::{ValuePredicate, ValueTerm};
+    use crate::ir::value::{ArithExpr, PredExpr};
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
@@ -1354,8 +1354,8 @@ mod tests {
     #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::var("h"), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
-    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::pred_expr(PredExpr::Mem(ArithExpr::Var("h".to_string()), MemOp::In, BTreeSet::from([2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
+    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
@@ -1871,7 +1871,7 @@ mod tests {
     #[case::aromatic_value(AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
     #[case::multicenter_not(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
     #[case::multicenter_value(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
-    #[case::valence_expr(AtomConstraintAst::Valence(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1)))), "{:valence \"?h >= 1\"}")]
+    #[case::valence_expr(AtomConstraintAst::Valence(ValueAst::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1)))), "{:valence \"?h >= 1\"}")]
     #[case::ring_membership_size_count_set(AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
     #[case::tetrahedral_stereo_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined), "{:tetrahedral-stereo :undetermined}")]
     #[case::tetrahedral_stereo_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]

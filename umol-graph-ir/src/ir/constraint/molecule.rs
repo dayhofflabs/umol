@@ -794,7 +794,7 @@ mod tests {
     };
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
     use crate::ir::spin::UnpairedElectronsAst;
-    use crate::ir::value::{ValueAst, ValueTerm};
+    use crate::ir::value::{ArithExpr, ValueAst};
     use crate::ir::BooleanAst;
 
     fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdCompaction {
@@ -859,7 +859,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::leaf_folds(
-        Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::term(ValueTerm::Lit(4)))),
+        Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::arith_expr(ArithExpr::Lit(4)))),
         Ok(Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4))),
     )]
     #[case::and_flattens_nested(
@@ -902,7 +902,7 @@ mod tests {
         Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))])),
     )]
     #[case::not_folds_child(
-        Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::term(ValueTerm::Lit(4)))))),
+        Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::arith_expr(ArithExpr::Lit(4)))))),
         Ok(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::valence(4))))),
     )]
     #[case::inner_contradiction_propagates(
@@ -1391,16 +1391,16 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::charge_sum_sorts_and_folds(
-        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0)]), sum: ValueAst::term(ValueTerm::Lit(1)) },
+        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0)]), sum: ValueAst::arith_expr(ArithExpr::Lit(1)) },
         Ok(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: ValueAst::Lit(1) }),
     )]
     #[case::unpaired_electron_coupling_sorts_and_folds(
         MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(2), AtomId(0)]),
-            unpaired_electrons: UnpairedElectronsAst { count: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
+            unpaired_electrons: UnpairedElectronsAst { count: ValueAst::arith_expr(ArithExpr::Lit(0)), multiplicity: ValueAst::arith_expr(ArithExpr::Lit(1)) } },
         Ok(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsAst::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_sorts_and_folds(
-        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: ValueAst::term(ValueTerm::Lit(4)) },
+        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: ValueAst::arith_expr(ArithExpr::Lit(4)) },
         Ok(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(2)]), sum: ValueAst::Lit(4) }),
     )]
     #[case::connected_sorts(

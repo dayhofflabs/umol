@@ -16,7 +16,7 @@ from umol import (
     UnpairedElectronsAst,
     UnpairedElectronsUpdate,
     ValueAst,
-    ValueTerm,
+    ArithExpr,
 )
 
 
@@ -348,15 +348,15 @@ def test_atomview_charge_through_handle():
 
 
 def test_atomast_charge_nested_variant_readable():
-    # A conversion-built nested child (ValueTerm inside ValueAst.Term) must read back
+    # A conversion-built nested child (ArithExpr inside ValueAst.ArithExpr) must read back
     # as a proper variant from Python, not a base instance — regression for the
     # Py::new-vs-IntoPyObject bug.
     atom = AtomAst(Element("C"))
-    atom.charge = ValueAst.Term(ValueTerm.Var("h"))
+    atom.charge = ValueAst.ArithExpr(ArithExpr.Var("h"))
     match atom.charge:
-        case ValueAst.Term(term):
+        case ValueAst.ArithExpr(term):
             match term:
-                case ValueTerm.Var(name):
+                case ArithExpr.Var(name):
                     assert name == "h"
                 case _:
                     raise AssertionError

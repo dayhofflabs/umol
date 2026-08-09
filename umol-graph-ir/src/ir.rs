@@ -123,7 +123,7 @@ pub use validate::{
     ReactionIntegrityError, ReactionIntegrityValidator, RelationalConstraintContradiction,
     RelationalConstraintValidator, RingConstraintContradiction, RingConstraintValidator,
 };
-pub use value::{ValueAst, ValuePredicate, ValueTerm};
+pub use value::{ArithExpr, PredExpr, ValueAst};
 pub use view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,
     AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,

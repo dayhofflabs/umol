@@ -117,7 +117,7 @@ use crate::{
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, Transaction},
-    value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
+    value::{ArithExpr, MemOp, PredExpr, RelOp, ValueAst},
 };
 
 #[cfg(feature = "graph")]
@@ -308,8 +308,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ConstraintsView>()?;
         module.add_class::<RelOp>()?;
         module.add_class::<MemOp>()?;
-        module.add_class::<ValueTerm>()?;
-        module.add_class::<ValuePredicate>()?;
+        module.add_class::<ArithExpr>()?;
+        module.add_class::<PredExpr>()?;
         module.add_class::<ValueAst>()?;
         module.add_class::<ElementAst>()?;
         module.add_class::<IsotopeMass>()?;

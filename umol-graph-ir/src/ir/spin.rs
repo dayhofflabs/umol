@@ -122,7 +122,7 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::{Canonicalize, Lattice};
-    use crate::ir::value::ValueTerm;
+    use crate::ir::value::ArithExpr;
 
     #[rstest]
     fn test_unpaired_electrons_ast_closed_shell() {
@@ -205,7 +205,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_field(
-        UnpairedElectronsAst { count: ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(1)])), multiplicity: ValueAst::Lit(3) },
+        UnpairedElectronsAst { count: ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)])), multiplicity: ValueAst::Lit(3) },
         Ok(UnpairedElectronsAst { count: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) }),
     )]
     #[case::parity_invalid_is_allowed(

@@ -218,8 +218,8 @@ PUBLIC_EXPORTS = frozenset(
     ValenceModel
     ValenceTable
     ValueAst
-    ValuePredicate
-    ValueTerm
+    PredExpr
+    ArithExpr
     WlHashScheme
     __version__
     """.split()

@@ -1068,7 +1068,7 @@ mod tests {
     use umol_graph_core::Compaction;
 
     use super::*;
-    use crate::ir::value::ValueTerm;
+    use crate::ir::value::ArithExpr;
 
     #[rustfmt::skip]
     #[rstest]
@@ -1274,7 +1274,7 @@ mod tests {
     #[case::aromatic_zero(AromaticValenceAst::aromatic(0), Some(AromaticValence::Aromatic(0)))]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(AromaticValence::Aromatic(3)))]
     #[case::aromatic_term_unresolved(
-        AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))),
+        AromaticValenceAst::Aromatic(ValueAst::arith_expr(ArithExpr::Lit(2))),
         None
     )]
     fn test_aromatic_valence_ast_as_lit(
@@ -1287,7 +1287,7 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_folds_inner(
-        AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(1)]))),
+        AromaticValenceAst::Aromatic(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))),
         Ok(AromaticValenceAst::aromatic(2)),
     )]
     #[case::aromatic_zero_not_collapsed(
@@ -1465,7 +1465,7 @@ mod tests {
     #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), None)]
     #[case::multicenter_zero(MulticenterValenceAst::multicenter(0), Some(MulticenterValence::Multicenter(0)))]
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(2), Some(MulticenterValence::Multicenter(2)))]
-    #[case::multicenter_term_unresolved(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3))), None)]
+    #[case::multicenter_term_unresolved(MulticenterValenceAst::Multicenter(ValueAst::arith_expr(ArithExpr::Lit(3))), None)]
     fn test_multicenter_valence_ast_as_lit(
         #[case] v: MulticenterValenceAst,
         #[case] expected: Option<MulticenterValence>,
@@ -1476,7 +1476,7 @@ mod tests {
 
     #[rstest]
     #[case::multicenter_folds_inner(
-        MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)]))),
+        MulticenterValenceAst::Multicenter(ValueAst::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)]))),
         Ok(MulticenterValenceAst::multicenter(3)),
     )]
     #[case::multicenter_zero_not_collapsed(
