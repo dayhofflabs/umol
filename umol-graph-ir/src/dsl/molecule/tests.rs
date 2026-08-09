@@ -63,7 +63,7 @@ fn test_fuzz_molecule_seeds_valid() {
         "invalid seeds:\n{}",
         failures.join("\n")
     );
-    assert_eq!(count, 28);
+    assert_eq!(count, 29);
 }
 
 #[rstest]

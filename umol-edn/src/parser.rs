@@ -77,7 +77,7 @@ pub fn parse_value<'a>(
 ) -> Result<(Edn<'a>, &'a str), ParseError> {
     let ctx = ParseCtx::new(config);
     let mut located = LocatingSlice::new(input);
-    ws_and_comments(&mut located, &ctx);
+    ws_and_comments(&mut located, &ctx).map_err(unwrap_err)?;
     let val = edn_value(&ctx)
         .parse_next(&mut located)
         .map_err(unwrap_err)?;
@@ -90,7 +90,7 @@ pub fn parse_value_strict<'a>(input: &'a str, config: &ParseConfig) -> Result<Ed
     let (val, remaining) = parse_value(input, config)?;
     let ctx = ParseCtx::new(config);
     let mut loc = LocatingSlice::new(remaining);
-    ws_and_comments(&mut loc, &ctx);
+    ws_and_comments(&mut loc, &ctx).map_err(unwrap_err)?;
     let after = rest(&loc);
     if !after.is_empty() {
         let trailing_offset = input.len() - after.len();
@@ -107,7 +107,7 @@ pub fn parse_all<'a>(input: &'a str, config: &ParseConfig) -> Result<Vec<Edn<'a>
     let mut located = LocatingSlice::new(input);
     let mut values = Vec::new();
     loop {
-        ws_and_comments(&mut located, &ctx);
+        ws_and_comments(&mut located, &ctx).map_err(unwrap_err)?;
         if peek_byte(&located).is_none() {
             break;
         }
@@ -123,7 +123,7 @@ fn is_ws(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
 }
 
-fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) {
+fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) -> PResult<()> {
     loop {
         let _: PResult<_> = take_while(0.., is_ws).parse_next(input);
         match peek_byte(input) {
@@ -132,15 +132,13 @@ fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) {
                 let _: PResult<_> = opt('\n').parse_next(input);
             }
             Some(b'#') if rest(input).starts_with("#_") => {
-                let _: PResult<_> = "#_".parse_next(input);
-                ws_and_comments(input, ctx);
-                if edn_value(ctx).parse_next(input).is_err() {
-                    break;
-                }
+                let _: &str = "#_".parse_next(input)?;
+                let _ = edn_value(ctx).parse_next(input)?;
             }
             _ => break,
         }
     }
+    Ok(())
 }
 
 fn edn_value<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
@@ -148,7 +146,7 @@ where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
-        ws_and_comments(input, ctx);
+        ws_and_comments(input, ctx)?;
         edn_value_dispatch(input, ctx)
     }
 }
@@ -518,7 +516,7 @@ where
         ctx.enter_scope(input.current_token_start())?;
         let mut items = EdnSeq::new();
         loop {
-            ws_and_comments(input, ctx);
+            ws_and_comments(input, ctx)?;
             match peek_byte(input) {
                 None => {
                     return Err(ErrMode::Cut(ParseError::UnexpectedEof {
@@ -545,7 +543,7 @@ where
         ctx.enter_scope(input.current_token_start())?;
         let mut items = EdnSeq::new();
         loop {
-            ws_and_comments(input, ctx);
+            ws_and_comments(input, ctx)?;
             match peek_byte(input) {
                 None => {
                     return Err(ErrMode::Cut(ParseError::UnexpectedEof {
@@ -572,7 +570,7 @@ where
         ctx.enter_scope(input.current_token_start())?;
         let mut map = EdnMap::new();
         loop {
-            ws_and_comments(input, ctx);
+            ws_and_comments(input, ctx)?;
             match peek_byte(input) {
                 None => {
                     return Err(ErrMode::Cut(ParseError::UnexpectedEof {
@@ -587,7 +585,7 @@ where
                 _ => {
                     let key_offset = input.current_token_start();
                     let key = edn_value_dispatch(input, ctx)?;
-                    ws_and_comments(input, ctx);
+                    ws_and_comments(input, ctx)?;
                     let val = edn_value_dispatch(input, ctx)?;
                     if ctx.config.duplicate_keys == DuplicateKeyPolicy::Error
                         && map.contains_key(&key)
@@ -612,7 +610,7 @@ where
         ctx.enter_scope(input.current_token_start())?;
         let mut set = EdnSet::new();
         loop {
-            ws_and_comments(input, ctx);
+            ws_and_comments(input, ctx)?;
             match peek_byte(input) {
                 None => {
                     return Err(ErrMode::Cut(ParseError::UnexpectedEof {
@@ -645,7 +643,7 @@ where
             b'{' => edn_set(ctx).parse_next(input),
             b'_' => {
                 let _ = '_'.parse_next(input)?;
-                ws_and_comments(input, ctx);
+                ws_and_comments(input, ctx)?;
                 let _ = edn_value(ctx).parse_next(input)?;
                 edn_value(ctx).parse_next(input)
             }
@@ -669,7 +667,7 @@ where
                     }));
                 }
 
-                ws_and_comments(input, ctx);
+                ws_and_comments(input, ctx)?;
                 let val = edn_value(ctx).parse_next(input)?;
 
                 match ctx.config.tag_readers.get(tag) {
@@ -906,6 +904,15 @@ mod tests {
     #[case::in_vector("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into()))]
     fn test_read_string_discard(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::list("(#_)", EdnError::Parse(ParseError::UnexpectedToken { offset: 3, found: ')' }))]
+    #[case::vector("[#_]", EdnError::Parse(ParseError::UnexpectedToken { offset: 3, found: ']' }))]
+    #[case::map("{#_}", EdnError::Parse(ParseError::UnexpectedToken { offset: 3, found: '}' }))]
+    #[case::set("#{#_}", EdnError::Parse(ParseError::UnexpectedToken { offset: 4, found: '}' }))]
+    fn test_read_string_discard_error(#[case] input: &str, #[case] expected: EdnError) {
+        assert_eq!(read_string(input).unwrap_err(), expected);
     }
 
     #[rstest]

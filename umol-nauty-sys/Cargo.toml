@@ -9,7 +9,7 @@ repository = "https://github.com/rappoport/umol"
 links = "umol_nauty"
 
 [build-dependencies]
-cc = "1"
+cc.workspace = true
 
 [dev-dependencies]
 rstest = "0.26.1"

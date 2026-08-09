@@ -25,6 +25,9 @@ resolver = "2"
 [workspace.package]
 rust-version = "1.87"
 
+[workspace.dependencies]
+cc = "1.2.60"
+
 [profile.bench]
 debug = true
 

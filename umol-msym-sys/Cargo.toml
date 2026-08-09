@@ -8,4 +8,4 @@ license = "MIT"
 links = "msym"
 
 [build-dependencies]
-cc = "1"
+cc.workspace = true
