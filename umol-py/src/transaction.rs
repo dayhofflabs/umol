@@ -91,7 +91,7 @@ mod tests {
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomAst as GraphIrAtomAst, AtomFieldChange as GraphIrAtomFieldChange,
+        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
         AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId, Edit as GraphIrEdit,
         Edits as GraphIrEdits, NumForm as GraphIrNumForm,
     };
@@ -110,7 +110,7 @@ mod tests {
     #[fixture]
     fn add_nitrogen() -> Edits {
         let mut edits = GraphIrEdits::new();
-        edits.add_atom(GraphIrAtomAst::from_element(ChemElement::N));
+        edits.add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         Edits::from_rust(edits)
     }
 
@@ -126,7 +126,7 @@ mod tests {
             .inner
             .as_mut()
             .unwrap()
-            .add_atom(GraphIrAtomAst::from_element(ChemElement::N));
+            .add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         let second = editor.snapshot().unwrap();
 
         assert_eq!(first.inner(), &initial);
@@ -144,7 +144,7 @@ mod tests {
 
         let mut built = editor.build().unwrap();
         *built.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
-            GraphIrAtomAst::from_element(ChemElement::N);
+            GraphIrAtomForm::from_element(ChemElement::N);
         let snapshot_error = editor.snapshot().unwrap_err();
         let build_error = editor.build().unwrap_err();
 
@@ -192,7 +192,7 @@ mod tests {
     fn test_molecule_editor_transact_error(mut carbon_editor: MoleculeEditor) {
         let initial = carbon_editor.snapshot().unwrap();
         let mut edits = GraphIrEdits::new();
-        edits.add_atom(GraphIrAtomAst::from_element(ChemElement::N));
+        edits.add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         edits.push(GraphIrEdit::ModifyAtomField {
             id: GraphIrAtomHandle::Id(GraphIrAtomId(7)),
             change: GraphIrAtomFieldChange::Charge {

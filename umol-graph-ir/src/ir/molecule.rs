@@ -17,8 +17,8 @@ use umol_graph_core::{
 
 use self::transact::TransactionError;
 use super::aromatic::AromaticSystemAst;
-use super::atom::AtomAst;
-use super::bond::BondAst;
+use super::atom::AtomForm;
+use super::bond::BondForm;
 use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
@@ -58,8 +58,8 @@ pub(super) mod transact;
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MoleculeAst {
     graph: Graph,
-    atoms: Arc<Vec<AtomAst>>,
-    bonds: Arc<Vec<BondAst>>,
+    atoms: Arc<Vec<AtomForm>>,
+    bonds: Arc<Vec<BondForm>>,
     dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>>,
     aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
     multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
@@ -74,8 +74,8 @@ pub struct MoleculeAst {
 /// Constructor input for [`MoleculeAst::from_entries`].
 #[derive(Debug, Default, Clone)]
 pub struct MoleculeEntries {
-    pub atoms: Vec<AtomAst>,
-    pub bonds: Vec<(AtomId, AtomId, BondAst)>,
+    pub atoms: Vec<AtomForm>,
+    pub bonds: Vec<(AtomId, AtomId, BondForm)>,
     pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)>,
     pub aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)>,
     pub multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)>,
@@ -403,7 +403,7 @@ impl MoleculeAst {
             .iter()
             .map(|(first, second, _)| [first.0, second.0])
             .collect();
-        let bond_data: Vec<BondAst> = bonds.into_iter().map(|(_, _, d)| d).collect();
+        let bond_data: Vec<BondForm> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
         let dative_bonds = FixedVarBirelationSet::new(
@@ -471,8 +471,8 @@ impl MoleculeAst {
     #[allow(clippy::too_many_arguments)]
     fn from_arcs(
         graph: Graph,
-        atoms: Arc<Vec<AtomAst>>,
-        bonds: Arc<Vec<BondAst>>,
+        atoms: Arc<Vec<AtomForm>>,
+        bonds: Arc<Vec<BondForm>>,
         dative_bonds: Arc<
             FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
         >,
@@ -1270,8 +1270,8 @@ impl MoleculeAst {
     }
 
     /// Replace every atom with `f(atom)` in place (owned in, owned out — no
-    /// `&mut AtomAst` escapes, so the container controls any re-interning).
-    pub fn modify_atoms(&mut self, mut f: impl FnMut(AtomAst) -> AtomAst) {
+    /// `&mut AtomForm` escapes, so the container controls any re-interning).
+    pub fn modify_atoms(&mut self, mut f: impl FnMut(AtomForm) -> AtomForm) {
         for atom in Arc::make_mut(&mut self.atoms).iter_mut() {
             *atom = f(mem::take(atom));
         }
@@ -1285,7 +1285,7 @@ impl MoleculeAst {
     }
 
     /// Replace every bond with `f(bond)` in place.
-    pub fn modify_bonds(&mut self, mut f: impl FnMut(BondAst) -> BondAst) {
+    pub fn modify_bonds(&mut self, mut f: impl FnMut(BondForm) -> BondForm) {
         for bond in Arc::make_mut(&mut self.bonds).iter_mut() {
             *bond = f(mem::take(bond));
         }

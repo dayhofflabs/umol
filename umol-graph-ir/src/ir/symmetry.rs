@@ -576,8 +576,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::coloring::ConstitutionColoring;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ir::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationForm, StereoKind};
@@ -593,9 +593,9 @@ mod tests {
 
     #[fixture]
     fn benzene_ring() -> MoleculeAst {
-        let atoms = vec![AtomAst::from_element(Element::C); 6];
+        let atoms = vec![AtomForm::from_element(Element::C); 6];
         let bonds = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
         MoleculeAst::from_entries(MoleculeEntries {
             atoms,
@@ -606,10 +606,10 @@ mod tests {
 
     // A tetrahedral center on atom 0 with the four given peripheral elements.
     fn tetrahedral(peripherals: [Element; 4]) -> MoleculeAst {
-        let mut atoms = vec![AtomAst::from_element(Element::C)];
-        atoms.extend(peripherals.into_iter().map(AtomAst::from_element));
+        let mut atoms = vec![AtomForm::from_element(Element::C)];
+        atoms.extend(peripherals.into_iter().map(AtomForm::from_element));
         let bonds = (1..=4)
-            .map(|i| (AtomId(0), AtomId(i), BondAst::from_order(1)))
+            .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
             .collect();
         MoleculeAst::from_entries(MoleculeEntries {
             atoms,
@@ -743,19 +743,19 @@ mod tests {
         // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
         let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::F),
-                AtomAst::from_element(Element::Cl),
-                AtomAst::from_element(Element::Br),
-                AtomAst::from_element(Element::I),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+                AtomForm::from_element(Element::I),
             ],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(2)),
-                (AtomId(0), AtomId(2), BondAst::from_order(1)),
-                (AtomId(0), AtomId(3), BondAst::from_order(1)),
-                (AtomId(1), AtomId(4), BondAst::from_order(1)),
-                (AtomId(1), AtomId(5), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_bonds: vec![(
                 BondId(0),

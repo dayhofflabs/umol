@@ -21,7 +21,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
-    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeEntries, NumForm, SubstructureMatchAlgorithm,
+    AtomForm, AtomId, BondForm, MoleculeAst, MoleculeEntries, NumForm, SubstructureMatchAlgorithm,
     SubstructureMatchConfig,
 };
 use walkdir::WalkDir;
@@ -81,15 +81,15 @@ fn load_corpus() -> Vec<MoleculeAst> {
     molecules
 }
 
-fn carbon() -> AtomAst {
-    AtomAst::from_element(Element::C)
+fn carbon() -> AtomForm {
+    AtomForm::from_element(Element::C)
 }
 
-fn any_bond() -> BondAst {
-    BondAst::new(NumForm::Undetermined)
+fn any_bond() -> BondForm {
+    BondForm::new(NumForm::Undetermined)
 }
 
-fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(u32, u32, BondAst)>) -> MoleculeAst {
+fn pattern(atoms: Vec<AtomForm>, bonds: Vec<(u32, u32, BondForm)>) -> MoleculeAst {
     let bond_list = bonds
         .into_iter()
         .map(|(s, t, b)| (AtomId(s), AtomId(t), b))
@@ -109,7 +109,7 @@ fn pattern_branched() -> MoleculeAst {
             carbon(),
             carbon(),
             carbon(),
-            AtomAst::from_element(Element::N),
+            AtomForm::from_element(Element::N),
         ],
         vec![
             (0, 1, any_bond()),
@@ -130,7 +130,7 @@ fn pattern_phenol() -> MoleculeAst {
             carbon(),
             carbon(),
             carbon(),
-            AtomAst::from_element(Element::O),
+            AtomForm::from_element(Element::O),
         ],
         vec![
             (0, 1, any_bond()),

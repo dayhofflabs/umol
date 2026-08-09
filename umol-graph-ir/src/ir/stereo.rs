@@ -1477,7 +1477,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_ast_new() {
+    fn test_stereo_atom_form_new() {
         let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
         assert_eq!(
             stereo_atom.configuration,
@@ -1490,7 +1490,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
     #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
-    fn test_stereo_atom_ast_is_ground(#[case] atom: StereoAtomAst, #[case] expected: bool) {
+    fn test_stereo_atom_form_is_ground(#[case] atom: StereoAtomAst, #[case] expected: bool) {
         assert_eq!(atom.is_ground(), expected);
     }
 
@@ -1498,7 +1498,7 @@ mod tests {
     #[rstest]
     #[case::open_coset(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
     #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
-    fn test_stereo_atom_ast_into_ground(#[case] atom: StereoAtomAst) {
+    fn test_stereo_atom_form_into_ground(#[case] atom: StereoAtomAst) {
         assert_eq!(atom.clone().into_ground(), atom);
     }
 
@@ -1534,7 +1534,7 @@ mod tests {
         StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
         StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
     )]
-    fn test_stereo_atom_ast_update(
+    fn test_stereo_atom_form_update(
         #[case] atom: StereoAtomAst,
         #[case] update: StereoAtomUpdate,
         #[case] expected: StereoAtomAst,
@@ -1544,7 +1544,7 @@ mod tests {
 
     #[rstest]
     #[case::empty(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32))]
-    fn test_stereo_atom_ast_update_identity(#[case] atom: StereoAtomAst) {
+    fn test_stereo_atom_form_update_identity(#[case] atom: StereoAtomAst) {
         assert_eq!(atom.update(&StereoAtomUpdate::default()), atom);
     }
 
@@ -1560,7 +1560,7 @@ mod tests {
         StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
         StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
     )]
-    fn test_stereo_atom_ast_difference_to(
+    fn test_stereo_atom_form_difference_to(
         #[case] atom: StereoAtomAst,
         #[case] other: StereoAtomAst,
         #[case] expected: StereoAtomUpdate,
@@ -1570,7 +1570,7 @@ mod tests {
 
     #[rstest]
     #[case::same(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32))]
-    fn test_stereo_atom_ast_difference_to_identity(#[case] atom: StereoAtomAst) {
+    fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomAst) {
         assert_eq!(atom.difference_to(&atom), StereoAtomUpdate::default());
     }
 
@@ -1606,7 +1606,7 @@ mod tests {
         StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
         StereoBondAst::new(StereoKind::CisTrans, 1_u32),
     )]
-    fn test_stereo_bond_ast_update(
+    fn test_stereo_bond_form_update(
         #[case] bond: StereoBondAst,
         #[case] update: StereoBondUpdate,
         #[case] expected: StereoBondAst,
@@ -1616,7 +1616,7 @@ mod tests {
 
     #[rstest]
     #[case::empty(StereoBondAst::new(StereoKind::CisTrans, 1_u32))]
-    fn test_stereo_bond_ast_update_identity(#[case] bond: StereoBondAst) {
+    fn test_stereo_bond_form_update_identity(#[case] bond: StereoBondAst) {
         assert_eq!(bond.update(&StereoBondUpdate::default()), bond);
     }
 
@@ -1632,7 +1632,7 @@ mod tests {
         StereoBondAst::new(StereoKind::CisTrans, 1_u32),
         StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
     )]
-    fn test_stereo_bond_ast_difference_to(
+    fn test_stereo_bond_form_difference_to(
         #[case] bond: StereoBondAst,
         #[case] other: StereoBondAst,
         #[case] expected: StereoBondUpdate,
@@ -1642,7 +1642,7 @@ mod tests {
 
     #[rstest]
     #[case::same(StereoBondAst::new(StereoKind::CisTrans, 1_u32))]
-    fn test_stereo_bond_ast_difference_to_identity(#[case] bond: StereoBondAst) {
+    fn test_stereo_bond_form_difference_to_identity(#[case] bond: StereoBondAst) {
         assert_eq!(bond.difference_to(&bond), StereoBondUpdate::default());
     }
 
@@ -1653,7 +1653,7 @@ mod tests {
     #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
         StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Undetermined), None)]
     #[case::config_conflict(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), None)]
-    fn test_stereo_atom_ast_meet(
+    fn test_stereo_atom_form_meet(
         #[case] a: StereoAtomAst,
         #[case] b: StereoAtomAst,
         #[case] expected: Option<StereoAtomAst>,
@@ -1665,7 +1665,7 @@ mod tests {
     #[rstest]
     #[case::same_coset(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
     #[case::distinct_cosets_widen(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 2u32), StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::lit_set([1, 2])))]
-    fn test_stereo_atom_ast_join(#[case] a: StereoAtomAst, #[case] b: StereoAtomAst, #[case] expected: StereoAtomAst) {
+    fn test_stereo_atom_form_join(#[case] a: StereoAtomAst, #[case] b: StereoAtomAst, #[case] expected: StereoAtomAst) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
@@ -1673,7 +1673,7 @@ mod tests {
     #[rstest]
     #[case::same_kind_match(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
     #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::SquarePlanar, 1u32), false)]
-    fn test_stereo_atom_ast_matches(
+    fn test_stereo_atom_form_matches(
         #[case] pattern: StereoAtomAst,
         #[case] target: StereoAtomAst,
         #[case] expected: bool,
@@ -1691,7 +1691,7 @@ mod tests {
         StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::lit_set(Vec::<u32>::new())),
         Err(Contradiction),
     )]
-    fn test_stereo_atom_ast_canonicalize(
+    fn test_stereo_atom_form_canonicalize(
         #[case] input: StereoAtomAst,
         #[case] expected: Result<StereoAtomAst, Contradiction>,
     ) {
@@ -1699,7 +1699,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bond_ast_new() {
+    fn test_stereo_bond_form_new() {
         let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Undetermined);
         assert_eq!(
             stereo_bond.configuration,
@@ -1713,7 +1713,7 @@ mod tests {
     #[case::same_kind_narrows(StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Undetermined), StereoBondAst::new(StereoKind::CisTrans, 1u32),
         Some(StereoBondAst::new(StereoKind::CisTrans, 1u32)))]
     #[case::config_conflict(StereoBondAst::new(StereoKind::CisTrans, 0u32), StereoBondAst::new(StereoKind::CisTrans, 1u32), None)]
-    fn test_stereo_bond_ast_meet(
+    fn test_stereo_bond_form_meet(
         #[case] a: StereoBondAst,
         #[case] b: StereoBondAst,
         #[case] expected: Option<StereoBondAst>,
@@ -1731,7 +1731,7 @@ mod tests {
         StereoBondAst::new(StereoKind::CisTrans, StereoCoset::lit_set(Vec::<u32>::new())),
         Err(Contradiction),
     )]
-    fn test_stereo_bond_ast_canonicalize(
+    fn test_stereo_bond_form_canonicalize(
         #[case] input: StereoBondAst,
         #[case] expected: Result<StereoBondAst, Contradiction>,
     ) {
@@ -1911,7 +1911,7 @@ mod tests {
 
     #[rstest]
     #[case::apply(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoKind::Tetrahedral.involution(), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
-    fn test_stereo_atom_ast_apply(
+    fn test_stereo_atom_form_apply(
         #[case] input: StereoAtomAst,
         #[case] permutation: Permutation,
         #[case] expected: StereoAtomAst,
@@ -1924,7 +1924,7 @@ mod tests {
         StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
         StereoAtomAst::new(StereoKind::Tetrahedral, 1u32)
     )]
-    fn test_stereo_atom_ast_swap(#[case] input: StereoAtomAst, #[case] expected: StereoAtomAst) {
+    fn test_stereo_atom_form_swap(#[case] input: StereoAtomAst, #[case] expected: StereoAtomAst) {
         assert_eq!(input.swap(), expected);
     }
 
@@ -1933,7 +1933,7 @@ mod tests {
         StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
         StereoAtomAst::new(StereoKind::Tetrahedral, 1u32)
     )]
-    fn test_stereo_atom_ast_mirror(#[case] input: StereoAtomAst, #[case] expected: StereoAtomAst) {
+    fn test_stereo_atom_form_mirror(#[case] input: StereoAtomAst, #[case] expected: StereoAtomAst) {
         assert_eq!(input.mirror(), expected);
     }
 
@@ -1942,7 +1942,7 @@ mod tests {
         StereoBondAst::new(StereoKind::CisTrans, 0u32),
         StereoBondAst::new(StereoKind::CisTrans, 1u32)
     )]
-    fn test_stereo_bond_ast_swap(#[case] input: StereoBondAst, #[case] expected: StereoBondAst) {
+    fn test_stereo_bond_form_swap(#[case] input: StereoBondAst, #[case] expected: StereoBondAst) {
         assert_eq!(input.swap(), expected);
     }
 
@@ -1967,7 +1967,7 @@ mod tests {
         [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
         1,
     )]
-    fn test_stereo_atom_ast_transform_frame(
+    fn test_stereo_atom_form_transform_frame(
         #[case] before: [StereoLigand; 4],
         #[case] after: [StereoLigand; 4],
         #[case] expected_coset: u32,
@@ -1992,7 +1992,7 @@ mod tests {
         &[StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
         &[StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(5), StereoLigandKind::Atom)],
     )]
-    fn test_stereo_atom_ast_transform_frame_error(
+    fn test_stereo_atom_form_transform_frame_error(
         #[case] before: &[StereoLigand],
         #[case] after: &[StereoLigand],
     ) {
@@ -2003,7 +2003,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_ast_transform_frame_self_inverse() {
+    fn test_stereo_atom_form_transform_frame_self_inverse() {
         let before = [
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -2035,7 +2035,7 @@ mod tests {
         &[StereoLigand::new(AtomId(0), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)],
         None,
     )]
-    fn test_stereo_bond_ast_transform_frame(
+    fn test_stereo_bond_form_transform_frame(
         #[case] before: &[StereoLigand],
         #[case] after: &[StereoLigand],
         #[case] expected: Option<StereoBondAst>,

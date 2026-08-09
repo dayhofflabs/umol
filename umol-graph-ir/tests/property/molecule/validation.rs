@@ -8,7 +8,7 @@ use umol_graph_core::{
     ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
-    AtomAst, AtomConstraintAst, AtomId, Constraint, ConstraintValidateConfig, ConstraintValidator,
+    AtomConstraintAst, AtomForm, AtomId, Constraint, ConstraintValidateConfig, ConstraintValidator,
     Constraints, MoleculeAst, MoleculeEntries, SubstructureMatchAlgorithm,
 };
 
@@ -23,7 +23,7 @@ const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
 
 fn molecule_with(constraint: Constraint) -> MoleculeAst {
     MoleculeAst::from_entries(MoleculeEntries {
-        atoms: vec![AtomAst::from_element(Element::C)],
+        atoms: vec![AtomForm::from_element(Element::C)],
         constraints: Constraints::from(constraint),
         ..MoleculeEntries::default()
     })
@@ -88,7 +88,7 @@ proptest! {
     fn test_constraint_inline_top_level_leaf_agreement(value in 0i64..=3) {
         let constraint = AtomConstraintAst::valence(value);
         let inline = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C).with_constraint(constraint.clone())],
+            atoms: vec![AtomForm::from_element(Element::C).with_constraint(constraint.clone())],
             ..MoleculeEntries::default()
         });
         let top_level = molecule_with(Constraint::Atom(AtomId(0), constraint));

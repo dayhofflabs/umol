@@ -8,12 +8,13 @@ use umol_graph_ir::ir::{
     AromaticSystemAst as GraphIrAromaticSystemAst,
     AromaticSystemDelta as GraphIrAromaticSystemDelta,
     AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange,
-    AromaticSystemId as GraphIrAromaticSystemId, AtomAst as GraphIrAtomAst,
-    AtomDelta as GraphIrAtomDelta, AtomFieldChange as GraphIrAtomFieldChange,
-    AtomId as GraphIrAtomId, BondAst as GraphIrBondAst, BondDelta as GraphIrBondDelta,
-    BondFieldChange as GraphIrBondFieldChange, BondId as GraphIrBondId,
-    Constraint as GraphIrConstraint, ConstraintDelta as GraphIrConstraintDelta,
-    DativeBondAst as GraphIrDativeBondAst, DativeBondDelta as GraphIrDativeBondDelta,
+    AromaticSystemId as GraphIrAromaticSystemId, AtomDelta as GraphIrAtomDelta,
+    AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
+    AtomId as GraphIrAtomId, BondDelta as GraphIrBondDelta,
+    BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
+    BondId as GraphIrBondId, Constraint as GraphIrConstraint,
+    ConstraintDelta as GraphIrConstraintDelta, DativeBondAst as GraphIrDativeBondAst,
+    DativeBondDelta as GraphIrDativeBondDelta,
     DativeBondFieldChange as GraphIrDativeBondFieldChange, DativeBondId as GraphIrDativeBondId,
     Delta as GraphIrDelta, Deltas as GraphIrDeltas,
     MulticenterBondAst as GraphIrMulticenterBondAst,
@@ -485,11 +486,11 @@ impl<'py> IntoPyObject<'py> for &AtomDeltaAstValue {
 }
 
 impl AtomDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrAtomAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrAtomForm) -> PyResult<Self> {
         Ok(Self(Py::new(py, AtomAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrAtomAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrAtomForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -622,11 +623,11 @@ impl<'py> IntoPyObject<'py> for &BondDeltaAstValue {
 }
 
 impl BondDeltaAstValue {
-    fn from_rust(py: Python<'_>, ast: &GraphIrBondAst) -> PyResult<Self> {
+    fn from_rust(py: Python<'_>, ast: &GraphIrBondForm) -> PyResult<Self> {
         Ok(Self(Py::new(py, BondAst::from_inner(ast.clone()))?))
     }
 
-    fn to_rust(&self, py: Python<'_>) -> GraphIrBondAst {
+    fn to_rust(&self, py: Python<'_>) -> GraphIrBondForm {
         self.0.bind(py).borrow().inner().clone()
     }
 }
@@ -3045,11 +3046,11 @@ mod tests {
     #[rstest]
     #[case::add(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     })]
     #[case::remove(GraphIrAtomDelta::Remove {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     })]
     #[case::modify_field(GraphIrAtomDelta::ModifyField {
         id: GraphIrAtomId(3),
@@ -3083,22 +3084,22 @@ mod tests {
     #[case::equal(
         GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
         GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
         true,
     )]
     #[case::different(
         GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
         GraphIrAtomDelta::Add {
             id: GraphIrAtomId(4),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
         false,
     )]
@@ -3118,14 +3119,14 @@ mod tests {
     #[case::add(
         GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
         "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))",
     )]
     #[case::remove(
         GraphIrAtomDelta::Remove {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         },
         "AtomDelta.Remove(id=3, ast=AtomAst.parse('C'))",
     )]
@@ -3166,11 +3167,11 @@ mod tests {
     #[rstest]
     #[case::add(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     })]
     #[case::remove(GraphIrAtomDelta::Remove {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     })]
     #[case::modify_field(GraphIrAtomDelta::ModifyField {
         id: GraphIrAtomId(3),
@@ -3211,12 +3212,12 @@ mod tests {
     #[case::add(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrBondDelta::Remove {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrBondDelta::ModifyField {
         id: GraphIrBondId(2),
@@ -3251,12 +3252,12 @@ mod tests {
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
         true,
     )]
@@ -3264,12 +3265,12 @@ mod tests {
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(1), GraphIrAtomId(5)],
-            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
         false,
     )]
@@ -3290,7 +3291,7 @@ mod tests {
         GraphIrBondDelta::Add {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
         "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
     )]
@@ -3298,7 +3299,7 @@ mod tests {
         GraphIrBondDelta::Remove {
             id: GraphIrBondId(2),
             atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-            ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+            ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
         },
         "BondDelta.Remove(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
     )]
@@ -3340,12 +3341,12 @@ mod tests {
     #[case::add(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::remove(GraphIrBondDelta::Remove {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
     })]
     #[case::modify_field(GraphIrBondDelta::ModifyField {
         id: GraphIrBondId(2),
@@ -4881,12 +4882,12 @@ mod tests {
     #[rstest]
     #[case::atom(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     }))]
     #[case::bond(GraphIrDelta::Bond(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::dative_bond(GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
         id: GraphIrDativeBondId(1),
@@ -4941,18 +4942,18 @@ mod tests {
     #[case::equal(
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         true,
     )]
     #[case::outer_variant(
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
@@ -4963,11 +4964,11 @@ mod tests {
     #[case::child(
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(4),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         false,
     )]
@@ -4987,7 +4988,7 @@ mod tests {
     #[case::atom(
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))"
     )]
@@ -5032,12 +5033,12 @@ mod tests {
     #[rstest]
     #[case::atom(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     }))]
     #[case::bond(GraphIrDelta::Bond(GraphIrBondDelta::Add {
         id: GraphIrBondId(2),
         atoms: [GraphIrAtomId(5), GraphIrAtomId(1)],
-        ast: GraphIrBondAst::new(GraphIrNumForm::Lit(1)),
+        ast: GraphIrBondForm::new(GraphIrNumForm::Lit(1)),
     }))]
     #[case::dative_bond(GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
         id: GraphIrDativeBondId(1),
@@ -5123,7 +5124,7 @@ mod tests {
     #[case::populated(vec![
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         }),
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
             GraphIrAtomId(3),
@@ -5147,22 +5148,22 @@ mod tests {
     #[case::equal(
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         })],
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         })],
         true,
     )]
     #[case::different(
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         })],
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(4),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         })],
         false,
     )]
@@ -5184,7 +5185,7 @@ mod tests {
         vec![
             GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(3),
-                ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             }),
             GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                 GraphIrAtomId(3),
@@ -5209,7 +5210,7 @@ mod tests {
             let mut deltas = Deltas::from_rust(
                 vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                     id: GraphIrAtomId(3),
-                    ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                    ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
                 })]
                 .into_iter()
                 .collect(),
@@ -5223,7 +5224,7 @@ mod tests {
                 &[
                     GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(3),
-                        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
                     }),
                     appended,
                 ]
@@ -5239,7 +5240,7 @@ mod tests {
                 Deltas::from_rust(
                     vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(3),
-                        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
                     })]
                     .into_iter()
                     .collect(),
@@ -5268,7 +5269,7 @@ mod tests {
                 &[
                     GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(3),
-                        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
                     }),
                     GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                         GraphIrAtomId(3),
@@ -5285,7 +5286,7 @@ mod tests {
             let target = Py::new(py, Deltas::from_rust(GraphIrDeltas::new())).unwrap();
             let atom = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(3),
-                ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             });
             let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
                 GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
@@ -5309,7 +5310,7 @@ mod tests {
         Python::attach(|py| {
             let atom = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(3),
-                ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             });
             let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
                 GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
@@ -5363,11 +5364,11 @@ mod tests {
         vec![
             GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(0),
-                ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             }),
             GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
                 id: GraphIrAtomId(0),
-                ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             }),
         ],
         Vec::new(),
@@ -5462,7 +5463,7 @@ mod tests {
     #[case::populated(
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(3),
-            ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+            ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
         })],
         1,
     )]
@@ -5476,7 +5477,7 @@ mod tests {
     #[rstest]
     #[case::positive(0, GraphIrDelta::Atom(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     }))]
     #[case::negative(-1, GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
         GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintAst::degree(2)),
@@ -5487,7 +5488,7 @@ mod tests {
                 vec![
                     GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(3),
-                        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
                     }),
                     GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                         GraphIrAtomId(3),
@@ -5510,7 +5511,7 @@ mod tests {
                 vec![
                     GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(3),
-                        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
                     }),
                     GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                         GraphIrAtomId(3),
@@ -5530,7 +5531,7 @@ mod tests {
         let expected = vec![
             GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(3),
-                ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+                ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
             }),
             GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
                 GraphIrAtomId(3),
@@ -5556,7 +5557,7 @@ mod tests {
     #[case::empty(Vec::new())]
     #[case::populated(vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
-        ast: GraphIrAtomAst::new(GraphIrElementForm::Lit(ChemElement::C)),
+        ast: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
     })])]
     fn test_deltas_roundtrip(#[case] entries: Vec<GraphIrDelta>) {
         let rust: GraphIrDeltas = entries.into_iter().collect();

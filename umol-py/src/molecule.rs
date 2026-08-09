@@ -512,9 +512,9 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemAst as GraphIrAromaticSystemAst, AromaticSystemId as GraphIrAromaticSystemId,
-        AtomAst as GraphIrAtomAst, AtomFieldChange as GraphIrAtomFieldChange,
+        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
         AtomHandle as GraphIrAtomHandle, AtomUpdate as GraphIrAtomUpdate,
-        BondAst as GraphIrBondAst, Constraint as GraphIrConstraint,
+        BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
         Constraints as GraphIrConstraints, DativeBondAst as GraphIrDativeBondAst,
         DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
         Entity as GraphIrEntity, MoleculeConstraint as GraphIrMoleculeConstraint,
@@ -606,7 +606,7 @@ mod tests {
         );
         assert_eq!(
             metadata.atom_alias("x"),
-            Some(&GraphIrAtomDsl(GraphIrAtomAst::from_element(
+            Some(&GraphIrAtomDsl(GraphIrAtomForm::from_element(
                 ChemElement::C
             )))
         );
@@ -659,7 +659,7 @@ mod tests {
         metadata
             .add_atom_alias(
                 "x",
-                GraphIrAtomDsl(GraphIrAtomAst::from_element(ChemElement::C)),
+                GraphIrAtomDsl(GraphIrAtomForm::from_element(ChemElement::C)),
             )
             .unwrap();
 
@@ -705,24 +705,24 @@ mod tests {
             let atoms = vec![
                 Py::new(
                     py,
-                    PyAtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::C)),
+                    PyAtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
                 )
                 .unwrap(),
                 Py::new(
                     py,
-                    PyAtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::B)),
+                    PyAtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::B)),
                 )
                 .unwrap(),
                 Py::new(
                     py,
-                    PyAtomAst::from_inner(GraphIrAtomAst::from_element(ChemElement::N)),
+                    PyAtomAst::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
                 )
                 .unwrap(),
             ];
             let bonds = vec![(
                 0,
                 1,
-                Py::new(py, BondAst::from_inner(GraphIrBondAst::from_order(1))).unwrap(),
+                Py::new(py, BondAst::from_inner(GraphIrBondForm::from_order(1))).unwrap(),
             )];
             let dative = vec![(
                 vec![2],
@@ -888,11 +888,11 @@ mod tests {
             },
         );
         let methyl = rust_edits
-            .add_atom(GraphIrAtomAst::from_element(ChemElement::C).with_implicit_hydrogens(3_i64));
+            .add_atom(GraphIrAtomForm::from_element(ChemElement::C).with_implicit_hydrogens(3_i64));
         rust_edits.add_bond(
             GraphIrAtomHandle::Id(GraphIrAtomId(0)),
             methyl,
-            GraphIrBondAst::from_order(1),
+            GraphIrBondForm::from_order(1),
         );
         let molecule = MoleculeAst::from_rust(initial.clone());
 
@@ -914,7 +914,7 @@ mod tests {
         let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
         let molecule = MoleculeAst::from_rust(initial.clone());
         let mut rust_edits = GraphIrEdits::new();
-        rust_edits.add_atom(GraphIrAtomAst::from_element(ChemElement::N));
+        rust_edits.add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         rust_edits.push(GraphIrEdit::ModifyAtomField {
             id: GraphIrAtomHandle::Id(GraphIrAtomId(7)),
             change: GraphIrAtomFieldChange::Charge {
@@ -1415,7 +1415,7 @@ mod tests {
     fn test_molecule_ast_atoms(#[case] elements: Vec<ChemElement>, #[case] expected: usize) {
         let atoms = elements
             .into_iter()
-            .map(GraphIrAtomAst::from_element)
+            .map(GraphIrAtomForm::from_element)
             .collect();
         let molecule = MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms,
@@ -1500,7 +1500,7 @@ mod tests {
     fn test_molecule_ast_eq() {
         assert_eq!(MoleculeAst::new(), MoleculeAst::new());
         let carbon = MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }));
         assert_ne!(MoleculeAst::new(), carbon);
@@ -1511,8 +1511,8 @@ mod tests {
     #[case::noncovalent(
         MoleculeAst(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::O),
-                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
                 GraphIrAtomId(0),

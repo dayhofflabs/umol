@@ -109,26 +109,26 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst,
+        AromaticSystemId, AtomForm, AtomId, BondConstraintKey, BondForm, MoleculeAst,
         MoleculeEntries, RingConfig, UnpairedElectronsForm,
     };
     use umol_graph_ir::mol_dsl_ground;
 
     use super::*;
 
-    fn kekule_carbon() -> AtomAst {
-        let mut atom = AtomAst::from_element(Element::C);
+    fn kekule_carbon() -> AtomForm {
+        let mut atom = AtomForm::from_element(Element::C);
         atom.charge = NumForm::Lit(0);
         atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
         atom
     }
 
     fn benzene_kekule() -> MoleculeAst {
-        let atoms: Vec<AtomAst> = (0..6).map(|_| kekule_carbon()).collect();
+        let atoms: Vec<AtomForm> = (0..6).map(|_| kekule_carbon()).collect();
         let bonds: Vec<_> = (0..6)
             .map(|i| {
                 let order = if i % 2 == 0 { 2 } else { 1 };
-                (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(order))
+                (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(order))
             })
             .collect();
         MoleculeAst::from_entries(MoleculeEntries {

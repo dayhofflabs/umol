@@ -1,7 +1,7 @@
 //! The `frag!` function-like macro: the shared path grammar (see [`crate::parse`]) extended with
 //! `^name` port markers, desugaring to an L3 `Fragment` — a `MoleculeAst` body built via L2, wrapped
 //! with one port per marker. A bond incident to a `^name` marker declares a port on the real endpoint
-//! (name `name`, colour = the bond's `BondAst`); a bond between two markers is a `compile_error!`.
+//! (name `name`, colour = the bond's `BondForm`); a bond between two markers is a `compile_error!`.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -60,7 +60,7 @@ fn codegen(input: MolInput) -> Result<TokenStream> {
             #[allow(unused_imports)]
             use ::umol_graph_ir::ir::spec::*;
             #[allow(unused_imports)]
-            use ::umol_graph_ir::ir::{AtomId, BondAst, Fragment};
+            use ::umol_graph_ir::ir::{AtomId, BondForm, Fragment};
             Fragment::new((MoleculeSpec::new() #atoms #(+ #bonds)* #(+ #overlays)*).build())
                 #(#port_calls)*
         }
@@ -75,13 +75,13 @@ fn port_name(atom: &Atom) -> &Ident {
     }
 }
 
-/// A `.with_port(name, AtomId(atom), colour)` call — the port's colour is the bond op's `BondAst`.
+/// A `.with_port(name, AtomId(atom), colour)` call — the port's colour is the bond op's `BondForm`.
 fn port_call(name: &Ident, atom: u32, op: &Bond) -> TokenStream {
     let name = LitStr::new(&name.to_string(), name.span());
     let colour = match op {
-        Bond::Single => quote! { BondAst::from_order(1) },
-        Bond::Double => quote! { BondAst::from_order(2) },
-        Bond::Triple => quote! { BondAst::from_order(3) },
+        Bond::Single => quote! { BondForm::from_order(1) },
+        Bond::Double => quote! { BondForm::from_order(2) },
+        Bond::Triple => quote! { BondForm::from_order(3) },
         Bond::Spec { spec, .. } => quote! { #spec },
     };
     quote! { .with_port(#name, AtomId(#atom), #colour) }

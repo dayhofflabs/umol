@@ -1,6 +1,6 @@
 //! Per-atom electron-conservation equation. `check` reports the molecule-wide
-//! verdict; `check_atom` evaluates a standalone `AtomAst` (topology-derived
-//! valences default to zero); `enumerate_atom` returns the ground `AtomAst`
+//! verdict; `check_atom` evaluates a standalone `AtomForm` (topology-derived
+//! valences default to zero); `enumerate_atom` returns the ground `AtomForm`
 //! candidates satisfying the equation when fields are `Undetermined`. Shared
 //! physics, not tied to a specific valence model.
 
@@ -10,7 +10,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::{
-    aromatic_covalence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
+    aromatic_covalence, AromaticValenceAst, AsLit, AtomConstraintAst, AtomConstraintsAst, AtomForm,
     AtomId, ElementForm, Lattice, MoleculeAst, MulticenterValenceAst, NumForm,
     UnpairedElectronsForm,
 };
@@ -47,7 +47,7 @@ impl ValenceInvariants {
     /// only a non-negative literal constraint raises them. `Underdetermined`
     /// when element / charge / implicit-H / lone-pairs / unpaired electrons are not all
     /// `Lit`.
-    pub fn check_atom(atom: &AtomAst) -> Solution<(), ValenceMismatch> {
+    pub fn check_atom(atom: &AtomForm) -> Solution<(), ValenceMismatch> {
         let (
             Some(element),
             Some(charge),
@@ -255,7 +255,7 @@ impl ValenceInvariants {
         }
     }
 
-    /// Enumerate all ground `AtomAst` candidates for `atom_id` consistent with the per-atom
+    /// Enumerate all ground `AtomForm` candidates for `atom_id` consistent with the per-atom
     /// electron conservation. Returns an empty `Vec` if no candidate exists.
     ///
     /// Per-field bounds:
@@ -267,7 +267,7 @@ impl ValenceInvariants {
     /// Structural inputs read from the atom (constraint, else topology):
     /// `valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`, `multicenter_valence`.
     ///
-    pub fn enumerate_atom(ast: &MoleculeAst, atom_id: AtomId) -> Vec<AtomAst> {
+    pub fn enumerate_atom(ast: &MoleculeAst, atom_id: AtomId) -> Vec<AtomForm> {
         let atom = ast.atom(atom_id);
         let Some(element) = atom.element().as_lit() else {
             return Vec::new();
@@ -354,7 +354,7 @@ impl ValenceInvariants {
             0..=(element.max_unpaired_electrons() as i64),
         );
 
-        let mut candidates: Vec<AtomAst> = Vec::new();
+        let mut candidates: Vec<AtomForm> = Vec::new();
         for charge in charge_range {
             for &implicit_h in &implicit_h_range {
                 for &lone_pairs in &lone_pair_range {
@@ -385,7 +385,7 @@ impl ValenceInvariants {
                         else {
                             continue;
                         };
-                        let assignment = AtomAst {
+                        let assignment = AtomForm {
                             element: ElementForm::Lit(element),
                             charge: NumForm::Lit(charge),
                             implicit_hydrogens: NumForm::Lit(implicit_h),
@@ -487,7 +487,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementForm, IsotopeMassForm,
+        AtomConstraintAst, AtomConstraintsAst, AtomForm, AtomId, ElementForm, IsotopeMassForm,
         MoleculeAst, MoleculeEntries, NumForm, UnpairedElectronsForm,
     };
 
@@ -496,7 +496,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ground_methane(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -508,7 +508,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::undetermined_h(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -519,7 +519,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::orbital_count_mismatch(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -541,7 +541,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ground_methane(
-        AtomAst {
+        AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -552,7 +552,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::not_aromatic(
-        AtomAst {
+        AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -566,7 +566,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::aromatic_zero(
-        AtomAst {
+        AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -580,7 +580,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::undetermined_charge(
-        AtomAst {
+        AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Undetermined,
             lone_pairs: NumForm::Lit(0),
@@ -591,7 +591,7 @@ mod tests {
         Solution::Underdetermined(()),
     )]
     #[case::orbital_count_mismatch(
-        AtomAst {
+        AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -602,7 +602,7 @@ mod tests {
         Solution::Contradictory(ValenceMismatch::OrbitalCount { atom_id: AtomId(0), orbital_count: 198, electron_count: 103 }),
     )]
     fn test_valence_invariants_check_atom(
-        #[case] atom: AtomAst,
+        #[case] atom: AtomForm,
         #[case] expected: Solution<(), ValenceMismatch>,
     ) {
         assert_eq!(ValenceInvariants::check_atom(&atom), expected);
@@ -610,7 +610,7 @@ mod tests {
 
     #[rstest]
     #[case::ground_methane(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -625,7 +625,7 @@ mod tests {
 
     #[rstest]
     #[case::methane(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -633,7 +633,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
@@ -644,7 +644,7 @@ mod tests {
         }],
     )]
     #[case::infeasible_h(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             lone_pairs: NumForm::Lit(0),
@@ -658,7 +658,7 @@ mod tests {
     // Every enumerated field already ground: the single combination is returned
     // verbatim (oxygen atom, triplet, two lone pairs).
     #[case::all_fields_ground(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::O),
             charge: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(0),
@@ -667,7 +667,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::O),
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
@@ -680,7 +680,7 @@ mod tests {
     // Unpaired electrons fully ground to a non-maximal but valid coupling (3 electrons as a
     // doublet); lone pairs open and fixed by conservation to 1.
     #[case::ground_unpaired_electrons(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::N),
             charge: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(0),
@@ -688,7 +688,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::N),
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
@@ -701,7 +701,7 @@ mod tests {
     // Multiplicity is ground (singlet), unpaired-electron count open: conservation fixes the
     // count to 2, and the meet keeps the pinned multiplicity (open-shell singlet).
     #[case::ground_multiplicity(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(2),
@@ -713,7 +713,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
@@ -726,7 +726,7 @@ mod tests {
     // Unpaired electrons pinned to a physically impossible pair (count 2, multiplicity 2):
     // the only conservation-valid count is incompatible, so no candidate.
     #[case::inconsistent_unpaired_electrons(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(2),
@@ -740,7 +740,7 @@ mod tests {
     // Both components open: unpaired-electron count fixed by conservation to 2, multiplicity
     // defaulted by `into_ground` to the maximum (triplet carbene).
     #[case::open_unpaired_electrons(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             charge: NumForm::Lit(0),
             implicit_hydrogens: NumForm::Lit(2),
@@ -748,7 +748,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
@@ -760,7 +760,7 @@ mod tests {
     )]
     // Nonzero (given) charge: oxide anion, 7 electrons, resolves to a doublet.
     #[case::nonzero_charge(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::O),
             charge: NumForm::Lit(-1),
             implicit_hydrogens: NumForm::Lit(0),
@@ -768,7 +768,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::O),
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(-1),
@@ -781,7 +781,7 @@ mod tests {
     // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
     // preserved through `into_ground`.
     #[case::specified_isotope(
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst {
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             isotope_mass: IsotopeMassForm::Lit(13),
             charge: NumForm::Lit(0),
@@ -790,7 +790,7 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
-        vec![AtomAst {
+        vec![AtomForm {
             element: ElementForm::Lit(Element::C),
             isotope_mass: IsotopeMassForm::Lit(13),
             charge: NumForm::Lit(0),
@@ -803,7 +803,7 @@ mod tests {
     fn test_valence_invariants_enumerate_atom(
         #[case] ast: MoleculeAst,
         #[case] atom_id: AtomId,
-        #[case] expected: Vec<AtomAst>,
+        #[case] expected: Vec<AtomForm>,
     ) {
         assert_eq!(ValenceInvariants::enumerate_atom(&ast, atom_id), expected);
     }

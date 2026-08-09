@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use umol_graph_core::{EdgeId, NodeId};
 
-use super::super::bond::BondAst;
+use super::super::bond::BondForm;
 use super::super::constraint::{BondConstraintAst, BondConstraintsAst};
 use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
@@ -21,11 +21,11 @@ use super::stereo::StereoBondView;
 #[derive(Clone, Copy)]
 pub struct BondViews<'a> {
     molecule: &'a MoleculeAst,
-    bonds: &'a [BondAst],
+    bonds: &'a [BondForm],
 }
 
 impl<'a> BondViews<'a> {
-    pub(crate) fn new(molecule: &'a MoleculeAst, bonds: &'a [BondAst]) -> Self {
+    pub(crate) fn new(molecule: &'a MoleculeAst, bonds: &'a [BondForm]) -> Self {
         Self { molecule, bonds }
     }
 
@@ -123,7 +123,7 @@ impl<'a> BondViews<'a> {
 pub struct BondView<'a> {
     pub id: BondId,
     atoms: [NodeId; 2],
-    pub ast: &'a BondAst,
+    pub ast: &'a BondForm,
     molecule: &'a MoleculeAst,
 }
 
@@ -221,7 +221,7 @@ impl<'a> BondView<'a> {
 pub struct BondViewMut<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut BondAst,
+    pub ast: &'a mut BondForm,
 }
 
 // Editor-scope view bundles for bonds.
@@ -229,13 +229,13 @@ pub struct BondViewMut<'a> {
 pub struct BondEditorView<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a BondAst,
+    pub ast: &'a BondForm,
 }
 
 pub struct BondEditorViewMut<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut BondAst,
+    pub ast: &'a mut BondForm,
 }
 
 #[cfg(test)]
@@ -246,8 +246,8 @@ mod tests {
 
     use super::super::assert_exact_size_by;
     use crate::ir::aromatic::AromaticSystemAst;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::constraint::{BondConstraintAst, BondConstraintsAst};
     use crate::ir::dative::DativeBondAst;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
@@ -261,15 +261,15 @@ mod tests {
     fn molecule() -> MoleculeAst {
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
             ],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(2)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
             aromatic: vec![(
@@ -312,9 +312,9 @@ mod tests {
         assert_exact_size_by(
             molecule.bonds().iter(),
             vec![
-                (BondId(0), [AtomId(0), AtomId(1)], BondAst::from_order(1)),
-                (BondId(1), [AtomId(1), AtomId(2)], BondAst::from_order(2)),
-                (BondId(2), [AtomId(2), AtomId(3)], BondAst::from_order(1)),
+                (BondId(0), [AtomId(0), AtomId(1)], BondForm::from_order(1)),
+                (BondId(1), [AtomId(1), AtomId(2)], BondForm::from_order(2)),
+                (BondId(2), [AtomId(2), AtomId(3)], BondForm::from_order(1)),
             ],
             |view| (view.id, view.atom_ids(), view.ast.clone()),
         );
@@ -334,7 +334,7 @@ mod tests {
         let view = res.unwrap();
         assert_eq!(view.id, BondId(1));
         assert_eq!(view.atom_ids(), [AtomId(1), AtomId(2)]);
-        assert_eq!(*view.ast, BondAst::from_order(2));
+        assert_eq!(*view.ast, BondForm::from_order(2));
     }
 
     #[rstest]
@@ -385,11 +385,11 @@ mod tests {
     #[fixture]
     fn stereo_molecule() -> MoleculeAst {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 4],
+            atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(2)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             stereo_bonds: vec![(
                 BondId(1),

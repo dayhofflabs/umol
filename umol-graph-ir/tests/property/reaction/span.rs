@@ -10,7 +10,7 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{
-    AtomAst, AtomId, BondId, EntitySpan, MoleculeAst, MoleculeCorrespondence, MoleculeEntries,
+    AtomForm, AtomId, BondId, EntitySpan, MoleculeAst, MoleculeCorrespondence, MoleculeEntries,
     ReactionAst, ReactionSpanAst, ReactionSpanEntries, StereoLigand,
 };
 
@@ -72,9 +72,9 @@ struct ReactionSides {
 fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
     molecule_entries_structurally_unambiguous_strategy().prop_map(|mut lhs_entries| {
         lhs_entries.atoms.extend([
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::N),
-            AtomAst::from_element(Element::O),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
         ]);
         let atom_count = lhs_entries.atoms.len();
         let reverse_atom = |id: AtomId| AtomId((atom_count - 1 - id.0 as usize) as u32);

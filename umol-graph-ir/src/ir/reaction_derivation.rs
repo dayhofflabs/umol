@@ -88,8 +88,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
-    use super::super::atom::AtomAst;
-    use super::super::bond::BondAst;
+    use super::super::atom::AtomForm;
+    use super::super::bond::BondForm;
     use super::super::delta::{BondDelta, Delta, Deltas};
     use super::super::edit::BondFieldChange;
     use super::super::id::{AtomId, BondId};
@@ -101,18 +101,18 @@ mod tests {
     fn derivation_parts() -> (MoleculeAst, MoleculeAst, MoleculeCorrespondence) {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             ..Default::default()
         });
         let comap = MoleculeCorrespondence::induce(
@@ -145,7 +145,7 @@ mod tests {
         let (mut lhs, rhs, comap) = derivation_parts;
         let expected = lhs.clone();
         let derivation = ReactionDerivation::new(lhs.clone(), rhs, comap);
-        *lhs.atom_mut(AtomId(0)).ast = AtomAst::from_element(Element::N);
+        *lhs.atom_mut(AtomId(0)).ast = AtomForm::from_element(Element::N);
         assert_eq!(derivation.lhs(), &expected);
     }
 
@@ -230,26 +230,26 @@ mod tests {
     fn test_reaction_derivation_chain() {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
         let mid = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(3))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(3))],
             ..Default::default()
         });
         let first_comap = MoleculeCorrespondence::induce(

@@ -75,7 +75,7 @@ proptest! {
 
     #[test]
     fn test_molecule_ast_equiv_under_transitive(
-        atoms in prop::collection::vec(atom_ast_strategy(), 0..=5),
+        atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
     ) {
         let count = atoms.len();
         let first_order = (0..count).collect::<Vec<_>>();
@@ -142,7 +142,7 @@ proptest! {
 
     #[test]
     fn test_molecule_ast_equiv_under_symmetric_under_reverse(
-        atoms in prop::collection::vec(atom_ast_strategy(), 0..=5),
+        atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
         change_mapped_atom in any::<bool>(),
     ) {
         let count = atoms.len();

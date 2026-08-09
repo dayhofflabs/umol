@@ -568,7 +568,7 @@ mod tests {
         AromaticSystemConstraintAst as GraphIrAromaticSystemConstraintAst,
         AromaticSystemConstraintKey as GraphIrAromaticSystemConstraintKey,
         AromaticSystemConstraintsAst as GraphIrAromaticSystemConstraintsAst,
-        AtomAst as GraphIrAtomAst, AtomId as GraphIrAtomId,
+        AtomForm as GraphIrAtomForm, AtomId as GraphIrAtomId,
         ElectronCountsForm as GraphIrElectronCountsForm, MoleculeEntries,
         NumForm as GraphIrNumForm, UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
@@ -580,7 +580,7 @@ mod tests {
     /// (electrons `[1,1,1,1,1,1]`), aromatic system id 0.
     fn benzene(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C); 6],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 6],
             aromatic: vec![(
                 (0u32..6).map(GraphIrAtomId).collect(),
                 GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1]),
@@ -1011,7 +1011,7 @@ mod tests {
         Python::attach(|py| {
             // benzene's six carbons plus one isolated carbon (atom id 6)
             let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C); 7],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 7],
                 aromatic: vec![(
                     (0u32..6).map(GraphIrAtomId).collect(),
                     GraphIrAromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1]),

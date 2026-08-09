@@ -528,8 +528,8 @@ mod tests {
 
     use super::*;
     use crate::ir::aromatic::AromaticSystemAst;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondAst;
     use crate::ir::multicenter::MulticenterBondAst;
     use crate::ir::noncovalent::NoncovalentBondAst;
@@ -658,20 +658,20 @@ mod tests {
     fn test_molecule_correspondence_induce() {
         // lhs C-C-C with a dative (donor 2 → acceptor 1); rhs adds a fourth atom + bond.
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 3],
+            atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
             ],
             dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 4],
+            atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
             ..Default::default()
@@ -719,11 +719,11 @@ mod tests {
         #[case] declared_right_count: usize,
     ) {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); left_atom_count],
+            atoms: vec![AtomForm::from_element(Element::C); left_atom_count],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); right_atom_count],
+            atoms: vec![AtomForm::from_element(Element::C); right_atom_count],
             ..Default::default()
         });
         let atoms = Correspondence::new(Vec::new(), declared_left_count, declared_right_count)
@@ -734,20 +734,20 @@ mod tests {
 
     #[rstest]
     fn test_molecule_correspondence_induce_incidence_error() {
-        let atoms = vec![AtomAst::from_element(Element::C); 2];
+        let atoms = vec![AtomForm::from_element(Element::C); 2];
         let entry_pairs = vec![
             (
                 MoleculeEntries {
                     atoms: atoms.clone(),
                     bonds: vec![
-                        (AtomId(0), AtomId(1), BondAst::default()),
-                        (AtomId(0), AtomId(1), BondAst::default()),
+                        (AtomId(0), AtomId(1), BondForm::default()),
+                        (AtomId(0), AtomId(1), BondForm::default()),
                     ],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                    bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
                     ..Default::default()
                 },
             ),
@@ -829,7 +829,7 @@ mod tests {
             (
                 MoleculeEntries {
                     atoms: atoms.clone(),
-                    bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                    bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
                     stereo_bonds: vec![
                         (BondId(0), Vec::new(), StereoBondAst::default()),
                         (BondId(0), Vec::new(), StereoBondAst::default()),
@@ -838,7 +838,7 @@ mod tests {
                 },
                 MoleculeEntries {
                     atoms,
-                    bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                    bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
                     stereo_bonds: vec![(BondId(0), Vec::new(), StereoBondAst::default())],
                     ..Default::default()
                 },

@@ -855,8 +855,8 @@ mod tests {
     use umol_perm::Permutation;
 
     use super::super::assert_exact_size_by;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::coloring::ConstitutionColoring;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
@@ -870,11 +870,11 @@ mod tests {
     fn molecule() -> MoleculeAst {
         MoleculeAst::from_entries(MoleculeEntries {
             // Atom 6 is an unbonded spare: a node that is neither stereo-bond site nor ligand.
-            atoms: vec![AtomAst::from_element(Element::C); 7],
+            atoms: vec![AtomForm::from_element(Element::C); 7],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(2)),
-                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(2)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -903,11 +903,11 @@ mod tests {
     #[fixture]
     fn virtual_ligand_molecule() -> MoleculeAst {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 6],
+            atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(2)),
-                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(2)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -938,14 +938,14 @@ mod tests {
     #[fixture]
     fn ring_molecule() -> MoleculeAst {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 6],
+            atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-                (AtomId(3), AtomId(0), BondAst::from_order(1)),
-                (AtomId(0), AtomId(4), BondAst::from_order(1)),
-                (AtomId(1), AtomId(5), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(0), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -1098,7 +1098,7 @@ mod tests {
     fn test_stereo_atom_view_site(molecule: MoleculeAst) {
         let view = molecule.stereo_atom(StereoAtomId(0)).site();
         assert_eq!(view.id, AtomId(0));
-        assert_eq!(view.ast, &AtomAst::from_element(Element::C));
+        assert_eq!(view.ast, &AtomForm::from_element(Element::C));
     }
 
     #[rstest]
@@ -1117,7 +1117,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_view_ligands(molecule: MoleculeAst) {
         let empty = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![],
@@ -1161,14 +1161,14 @@ mod tests {
         // A clean stereocenter: C bonded to four distinct halogens.
         let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::F),
-                AtomAst::from_element(Element::Cl),
-                AtomAst::from_element(Element::Br),
-                AtomAst::from_element(Element::I),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+                AtomForm::from_element(Element::I),
             ],
             bonds: (1..=4)
-                .map(|i| (AtomId(0), AtomId(i), BondAst::from_order(1)))
+                .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
                 .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
@@ -1229,7 +1229,7 @@ mod tests {
             .unwrap();
         let atom = ligand.atom();
         assert_eq!(atom.id, AtomId(1));
-        assert_eq!(atom.ast, &AtomAst::from_element(Element::C));
+        assert_eq!(atom.ast, &AtomForm::from_element(Element::C));
     }
 
     #[rstest]
@@ -1578,10 +1578,10 @@ mod tests {
     fn test_stereo_bond_view_ligands(molecule: MoleculeAst) {
         let empty = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             stereo_bonds: vec![(
                 BondId(0),
                 vec![],

@@ -7,7 +7,7 @@ use thiserror::Error;
 use umol_chem::error::SpinStateError;
 use umol_chem::spin::SpinState;
 use umol_graph_ir::ir::{
-    AromaticSystemId, AsLit, AtomAst, AtomId, BondId, Constraint, Lattice, MoleculeAst,
+    AromaticSystemId, AsLit, AtomForm, AtomId, BondId, Constraint, Lattice, MoleculeAst,
     MoleculeConstraint, MulticenterBondId, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -128,7 +128,7 @@ impl SpinInvariantsValidator {
 
     pub fn validate_atom(
         &self,
-        atom: &AtomAst,
+        atom: &AtomForm,
     ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
         Ok(validate_unpaired_electrons(&atom.unpaired_electrons)
             .map_contradiction(|error| SpinInvariantsContradiction::Atom { error }))
@@ -192,7 +192,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::spin::SpinMultiplicity;
     use umol_graph_ir::ir::{
-        AromaticSystemAst, BondAst, MoleculeEntries, MulticenterBondAst, NumForm,
+        AromaticSystemAst, BondForm, MoleculeEntries, MulticenterBondAst, NumForm,
     };
 
     use super::*;
@@ -259,7 +259,7 @@ mod tests {
     ) {
         assert_eq!(
             SpinInvariantsValidator
-                .validate_atom(&AtomAst {
+                .validate_atom(&AtomForm {
                     unpaired_electrons,
                     ..Default::default()
                 })
@@ -273,10 +273,10 @@ mod tests {
     #[case::all_entity_pairs_valid(
         MoleculeEntries {
             atoms: vec![
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
             aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
             multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
             ..Default::default()
@@ -285,7 +285,7 @@ mod tests {
     )]
     #[case::partial_pair(
         MoleculeEntries {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
                 ..Default::default()
             }],
@@ -296,8 +296,8 @@ mod tests {
     #[case::molecule_atom_reports_id(
         MoleculeEntries {
             atoms: vec![
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() },
             ],
             ..Default::default()
         },
@@ -309,13 +309,13 @@ mod tests {
     #[case::bond_reports_id(
         MoleculeEntries {
             atoms: vec![
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
             ],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }),
-                (AtomId(1), AtomId(2), BondAst { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() }),
+                (AtomId(0), AtomId(1), BondForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }),
+                (AtomId(1), AtomId(2), BondForm { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() }),
             ],
             ..Default::default()
         },
@@ -326,7 +326,7 @@ mod tests {
     )]
     #[case::aromatic_system_reports_id(
         MoleculeEntries {
-            atoms: vec![AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }; 4],
+            atoms: vec![AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }; 4],
             aromatic: vec![
                 (vec![AtomId(0), AtomId(1)], AromaticSystemAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }),
                 (vec![AtomId(2), AtomId(3)], AromaticSystemAst { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() }),
@@ -340,7 +340,7 @@ mod tests {
     )]
     #[case::multicenter_bond_reports_id(
         MoleculeEntries {
-            atoms: vec![AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }; 6],
+            atoms: vec![AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }; 6],
             multicenter: vec![
                 (vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() }),
                 (vec![AtomId(3), AtomId(4), AtomId(5)], MulticenterBondAst { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() }),
@@ -355,13 +355,13 @@ mod tests {
     #[case::underdetermined_does_not_mask_later_contradiction(
         MoleculeEntries {
             atoms: vec![
-                AtomAst {
+                AtomForm {
                     unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) },
                     ..Default::default()
                 },
-                AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
             aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() })],
             multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondAst { unpaired_electrons: UnpairedElectronsForm::from((2_u8, 2_u8)), ..Default::default() })],
             ..Default::default()
@@ -502,7 +502,7 @@ mod tests {
     )]
     #[case::underdetermined_entity_does_not_mask_invalid_coupling(
         MoleculeEntries {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 unpaired_electrons: UnpairedElectronsForm {
                     count: NumForm::Undetermined,
                     multiplicity: NumForm::Lit(1),
@@ -554,13 +554,13 @@ mod tests {
             };
             let molecule = MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
-                    AtomAst { unpaired_electrons: state_pair(atom_state), ..Default::default() },
-                    AtomAst { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
+                    AtomForm { unpaired_electrons: state_pair(atom_state), ..Default::default() },
+                    AtomForm { unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default() },
                 ],
                 bonds: vec![(
                     AtomId(0),
                     AtomId(1),
-                    BondAst { unpaired_electrons: state_pair(bond_state), ..Default::default() },
+                    BondForm { unpaired_electrons: state_pair(bond_state), ..Default::default() },
                 )],
                 aromatic: vec![(
                     vec![AtomId(0), AtomId(1)],

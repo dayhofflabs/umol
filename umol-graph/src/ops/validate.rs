@@ -28,7 +28,7 @@ use umol_graph_core::{
     ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
-    AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidateConfig,
+    AtomForm, ConstraintContradiction, ConstraintError, ConstraintValidateConfig,
     ConstraintValidator, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm,
 };
@@ -229,7 +229,7 @@ impl<'a> Validator<'a> {
 
     pub fn validate_atom(
         &self,
-        atom: &AtomAst,
+        atom: &AtomForm,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
         match self.valence_invariants.validate_atom(atom)? {
@@ -265,7 +265,7 @@ mod tests {
         AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AtomAst, AtomConstraintAst, AtomId, Constraint, DativeBondId, ElementForm, Entity,
+        AtomConstraintAst, AtomForm, AtomId, Constraint, DativeBondId, ElementForm, Entity,
         IncidenceConstraintContradiction, MoleculeAst, MoleculeConstraint,
         MoleculeConstraintContradiction, MoleculeEntries, NumForm, RelationalConstraint,
         RelationalConstraintContradiction, RingConfig, RingConstraintContradiction, RingScope,
@@ -416,7 +416,7 @@ mod tests {
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
     #[case::invalid_spin(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(2),
@@ -492,7 +492,7 @@ mod tests {
     )]
     #[case::contradiction(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             constraints: Constraint::Atom(AtomId(0), AtomConstraintAst::valence(1)).into(),
             ..Default::default()
         }),
@@ -506,7 +506,7 @@ mod tests {
     #[case::error(
         {
             let mut molecule = MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C)],
+                atoms: vec![AtomForm::from_element(Element::C)],
                 ..Default::default()
             });
             molecule
@@ -537,7 +537,7 @@ mod tests {
     )]
     #[case::partial_spin(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(4),
@@ -554,7 +554,7 @@ mod tests {
     )]
     #[case::invalid_spin(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(2),
@@ -688,7 +688,7 @@ mod tests {
         #[case] unpaired_electrons: UnpairedElectronsForm,
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
-        let mut atom = AtomAst::from_element(Element::C);
+        let mut atom = AtomForm::from_element(Element::C);
         atom.charge = NumForm::Lit(0);
         atom.lone_pairs = NumForm::Lit(0);
         atom.implicit_hydrogens = NumForm::Lit(hydrogens);
@@ -710,7 +710,7 @@ mod tests {
             count in 0_u8..5,
             multiplicity in 0_u8..8,
         ) {
-            let atom = AtomAst {
+            let atom = AtomForm {
                 element: ElementForm::Lit(Element::C),
                 charge: NumForm::Lit(0),
                 implicit_hydrogens: NumForm::Lit(4 - i64::from(count)),
@@ -733,7 +733,7 @@ mod tests {
             multiplicity in 0_u8..8,
         ) {
             let molecule = MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst {
+                atoms: vec![AtomForm {
                     element: ElementForm::Lit(Element::C),
                     charge: NumForm::Lit(0),
                     implicit_hydrogens: NumForm::Lit(4 - i64::from(count)),

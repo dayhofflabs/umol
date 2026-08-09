@@ -138,8 +138,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::super::aromatic::AromaticSystemAst;
-    use super::super::super::atom::AtomAst;
-    use super::super::super::bond::BondAst;
+    use super::super::super::atom::AtomForm;
+    use super::super::super::bond::BondForm;
     use super::super::super::constraint::Constraints;
     use super::super::super::dative::DativeBondAst;
     use super::super::super::molecule::{MoleculeAst, MoleculeEntries};
@@ -151,36 +151,36 @@ mod tests {
     #[rstest]
     #[case::co_deleted(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
         Deltas::from_iter([
-            Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomAst::from_element(Element::C) }),
+            Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) }),
             Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: BondAst::from_order(1),
+                ast: BondForm::from_order(1),
             }),
         ]),
     ))]
     #[case::no_deletion(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
         Deltas::new(),
     ))]
     #[case::isolated_atom(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: vec![],
             ..Default::default()
         }),
         Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
             id: AtomId(0),
-            ast: AtomAst::from_element(Element::C),
+            ast: AtomForm::from_element(Element::C),
         })]),
     ))]
     fn test_dpo_validator_validate_reaction(#[case] reaction: ReactionAst) {
@@ -196,13 +196,13 @@ mod tests {
     #[case::bond(
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
+                ast: AtomForm::from_element(Element::C),
             })]),
         ),
         DpoContradiction::DanglingBond { atom: AtomId(0), bond: BondId(0) }
@@ -210,14 +210,14 @@ mod tests {
     #[case::dative(
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::B)],
+                atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::B)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::N),
+                ast: AtomForm::from_element(Element::N),
             })]),
         ),
         DpoContradiction::DanglingDativeBond { atom: AtomId(0), dative: DativeBondId(0) }
@@ -225,14 +225,14 @@ mod tests {
     #[case::aromatic(
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+                atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
                 aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
+                ast: AtomForm::from_element(Element::C),
             })]),
         ),
         DpoContradiction::DanglingAromaticSystem { atom: AtomId(0), system: AromaticSystemId(0) }
@@ -241,9 +241,9 @@ mod tests {
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
-                    AtomAst::from_element(Element::B),
-                    AtomAst::from_element(Element::H),
-                    AtomAst::from_element(Element::B),
+                    AtomForm::from_element(Element::B),
+                    AtomForm::from_element(Element::H),
+                    AtomForm::from_element(Element::B),
                 ],
                 multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst::from_electrons(vec![3, 5, 7]))],
                 constraints: Constraints::new(),
@@ -251,7 +251,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::B),
+                ast: AtomForm::from_element(Element::B),
             })]),
         ),
         DpoContradiction::DanglingMulticenterBond { atom: AtomId(0), multicenter: MulticenterBondId(0) }
@@ -259,14 +259,14 @@ mod tests {
     #[case::noncovalent(
         ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+                atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::O),
+                ast: AtomForm::from_element(Element::O),
             })]),
         ),
         DpoContradiction::DanglingNoncovalentBond { atom: AtomId(0), noncovalent: NoncovalentBondId(0) }

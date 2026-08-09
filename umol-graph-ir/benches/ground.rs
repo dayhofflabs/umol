@@ -18,8 +18,8 @@ use umol_chem::element::Element;
 use umol_edn::FromEdn;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    ArithExpr, AtomAst, AtomId, BondAst, ElementForm, IntoIr, IsotopeMassForm, MemOp, MoleculeAst,
-    MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsForm,
+    ArithExpr, AtomForm, AtomId, BondForm, ElementForm, IntoIr, IsotopeMassForm, MemOp,
+    MoleculeAst, MoleculeEntries, NumForm, PredExpr, RelOp, UnpairedElectronsForm,
 };
 
 #[path = "fixtures.rs"]
@@ -62,7 +62,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             ArithExpr::Neg(Box::new(ArithExpr::Lit(1))),
         ]))
     };
-    let make_atom = |el: Element| AtomAst {
+    let make_atom = |el: Element| AtomForm {
         element: ElementForm::Lit(el),
         isotope_mass: IsotopeMassForm::Lit(12),
         charge: arith(),
@@ -74,7 +74,7 @@ fn arith_expr_heavy() -> MoleculeAst {
         },
         constraints: Default::default(),
     };
-    let atoms: Vec<AtomAst> = (0..20)
+    let atoms: Vec<AtomForm> = (0..20)
         .map(|i| {
             make_atom(match i % 4 {
                 0 => Element::C,
@@ -84,9 +84,9 @@ fn arith_expr_heavy() -> MoleculeAst {
             })
         })
         .collect();
-    let bonds: Vec<(AtomId, AtomId, BondAst)> = (0..19)
+    let bonds: Vec<(AtomId, AtomId, BondForm)> = (0..19)
         .map(|i| {
-            let bond = BondAst {
+            let bond = BondForm {
                 order: arith(),
                 charge: arith(),
                 unpaired_electrons: UnpairedElectronsForm::default(),

@@ -19,15 +19,15 @@ proptest! {
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
-            AtomAst::from_element(Element::N),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+            AtomForm::from_element(Element::N),
         ];
-        let bonds: Vec<(AtomId, AtomId, BondAst)> = (1..=4)
-            .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+        let bonds: Vec<(AtomId, AtomId, BondForm)> = (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
             .collect();
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -66,15 +66,15 @@ proptest! {
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
-            AtomAst::from_element(Element::N),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+            AtomForm::from_element(Element::N),
         ];
-        let bonds: Vec<(AtomId, AtomId, BondAst)> = (1..=4)
-            .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+        let bonds: Vec<(AtomId, AtomId, BondForm)> = (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
             .collect();
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -108,19 +108,19 @@ proptest! {
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
         ];
         let bonds = vec![
-            (AtomId(0), AtomId(1), BondAst::from_order(2)),
-            (AtomId(0), AtomId(2), BondAst::from_order(1)),
-            (AtomId(0), AtomId(3), BondAst::from_order(1)),
-            (AtomId(1), AtomId(4), BondAst::from_order(1)),
-            (AtomId(1), AtomId(5), BondAst::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
         ];
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -159,20 +159,20 @@ proptest! {
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
-            AtomAst::from_element(Element::N),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+            AtomForm::from_element(Element::N),
         ];
         let bonds = vec![
-            (AtomId(0), AtomId(1), BondAst::from_order(2)),
-            (AtomId(0), AtomId(2), BondAst::from_order(1)),
-            (AtomId(0), AtomId(3), BondAst::from_order(1)),
-            (AtomId(1), AtomId(4), BondAst::from_order(1)),
-            (AtomId(1), AtomId(5), BondAst::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
         ];
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))

@@ -109,7 +109,7 @@ proptest! {
 /// roundtrip back through both the tree and streaming parsers.
 #[rstest]
 fn test_constraint_ref_uses_keyword_when_metadata_binding_present() {
-    let atoms = vec![AtomAst::default(), AtomAst::default()];
+    let atoms = vec![AtomForm::default(), AtomForm::default()];
     let mut cs = Constraints::new();
     cs.push(Constraint::Atom(
         AtomId(0),

@@ -223,7 +223,7 @@ mod tests {
     #[case::from_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondAst { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraintsAst::new() })]
-    fn test_noncovalent_bond_ast_new(
+    fn test_noncovalent_bond_form_new(
         #[case] actual: NoncovalentBondAst,
         #[case] expected: NoncovalentBondAst,
     ) {
@@ -254,7 +254,7 @@ mod tests {
             .with_constraints([NoncovalentBondConstraintAst::intramolecular(false)]),
         NoncovalentBondAst { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) })]
-    fn test_noncovalent_bond_ast_with_methods(
+    fn test_noncovalent_bond_form_with_methods(
         #[case] actual: NoncovalentBondAst,
         #[case] expected: NoncovalentBondAst,
     ) {
@@ -264,7 +264,7 @@ mod tests {
     #[rstest]
     #[case::default_(NoncovalentBondAst::default())]
     #[case::ground(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_bond_ast_into_ground(#[case] bond: NoncovalentBondAst) {
+    fn test_noncovalent_bond_form_into_ground(#[case] bond: NoncovalentBondAst) {
         assert_eq!(bond.clone().into_ground(), bond);
     }
 
@@ -290,7 +290,7 @@ mod tests {
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
         NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), ..Default::default() },
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_bond_ast_update(
+    fn test_noncovalent_bond_form_update(
         #[case] bond: NoncovalentBondAst,
         #[case] update: NoncovalentBondUpdate,
         #[case] expected: NoncovalentBondAst,
@@ -300,7 +300,7 @@ mod tests {
 
     #[rstest]
     #[case::empty(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)))]
-    fn test_noncovalent_bond_ast_update_identity(#[case] bond: NoncovalentBondAst) {
+    fn test_noncovalent_bond_form_update_identity(#[case] bond: NoncovalentBondAst) {
         assert_eq!(bond.update(&NoncovalentBondUpdate::default()), bond);
     }
 
@@ -314,7 +314,7 @@ mod tests {
             constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)),
         },
     )]
-    fn test_noncovalent_bond_ast_difference_to(
+    fn test_noncovalent_bond_form_difference_to(
         #[case] bond: NoncovalentBondAst,
         #[case] other: NoncovalentBondAst,
         #[case] expected: NoncovalentBondUpdate,
@@ -324,14 +324,14 @@ mod tests {
 
     #[rstest]
     #[case::same(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_bond_ast_difference_to_identity(#[case] bond: NoncovalentBondAst) {
+    fn test_noncovalent_bond_form_difference_to_identity(#[case] bond: NoncovalentBondAst) {
         assert_eq!(bond.difference_to(&bond), NoncovalentBondUpdate::default());
     }
 
     #[rstest]
     #[case::default_(NoncovalentBondAst::default(), false)]
     #[case::ground_lit(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
-    fn test_noncovalent_bond_ast_is_ground(
+    fn test_noncovalent_bond_form_is_ground(
         #[case] ast: NoncovalentBondAst,
         #[case] expected: bool,
     ) {
@@ -341,7 +341,7 @@ mod tests {
     #[rstest]
     #[case::ground(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     #[case::undetermined(NoncovalentBondAst::default())]
-    fn test_noncovalent_bond_ast_canonicalize_identity(#[case] input: NoncovalentBondAst) {
+    fn test_noncovalent_bond_form_canonicalize_identity(#[case] input: NoncovalentBondAst) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
@@ -351,7 +351,7 @@ mod tests {
     #[case::same(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
     #[case::different(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), false)]
     #[case::pattern_specific_target_undetermined(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::default(), false)]
-    fn test_noncovalent_bond_ast_matches(
+    fn test_noncovalent_bond_form_matches(
         #[case] pattern: NoncovalentBondAst,
         #[case] target: NoncovalentBondAst,
         #[case] expected: bool,
@@ -473,7 +473,7 @@ mod tests {
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         Some(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))
     )]
-    fn test_noncovalent_bond_ast_meet(
+    fn test_noncovalent_bond_form_meet(
         #[case] a: NoncovalentBondAst,
         #[case] b: NoncovalentBondAst,
         #[case] expected: Option<NoncovalentBondAst>,
@@ -487,7 +487,7 @@ mod tests {
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond),
         NoncovalentBondAst::default()
     )]
-    fn test_noncovalent_bond_ast_join(
+    fn test_noncovalent_bond_form_join(
         #[case] a: NoncovalentBondAst,
         #[case] b: NoncovalentBondAst,
         #[case] expected: NoncovalentBondAst,

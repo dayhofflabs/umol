@@ -15,8 +15,8 @@ use umol_graph_core::{
     SubgraphIsomorphismAlgorithm,
 };
 
-use super::atom::AtomAst;
-use super::bond::BondAst;
+use super::atom::AtomForm;
+use super::bond::BondForm;
 use super::constraint::{AtomConstraintAst, BondConstraintAst, RingScope};
 use super::correspondence::{
     induced_aromatic_systems, induced_bonds, induced_dative_bonds, induced_multicenter_bonds,
@@ -112,7 +112,7 @@ impl MoleculeAst {
         &self,
         host: &'h MoleculeAst,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
-    ) -> (Vec<Cow<'h, AtomAst>>, Vec<Cow<'h, BondAst>>) {
+    ) -> (Vec<Cow<'h, AtomForm>>, Vec<Cow<'h, BondForm>>) {
         let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
         let mut atom_ring_scopes = Vec::new();
         let mut derive_ring_degree = false;

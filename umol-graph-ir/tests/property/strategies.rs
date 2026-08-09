@@ -28,9 +28,9 @@ pub(crate) use umol_graph_ir::ir::{
     aromatic_covalence, AddBond, ArithExpr, AromaticSystemAst, AromaticSystemConstraintAst,
     AromaticSystemConstraintKey, AromaticSystemConstraintsAst, AromaticSystemDelta,
     AromaticSystemFieldChange, AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate,
-    AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintKey,
-    AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomHandle, AtomId, AtomUpdate, BondAst,
-    BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta, BondFieldChange,
+    AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst, AtomConstraintKey,
+    AtomConstraintsAst, AtomDelta, AtomFieldChange, AtomForm, AtomHandle, AtomId, AtomUpdate,
+    BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondDelta, BondFieldChange, BondForm,
     BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize, CisTransStereoForm, Constraint,
     ConstraintEdit, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, DativeBondDelta, DativeBondFieldChange, DativeBondHandle,
@@ -540,7 +540,7 @@ pub(crate) fn dative_bond_update_constraints_strategy(
 }
 
 prop_compose! {
-    pub(crate) fn atom_ast_strategy()
+    pub(crate) fn atom_form_strategy()
     (
         element in element_form_strategy(),
         isotope in isotope_strategy(),
@@ -549,8 +549,8 @@ prop_compose! {
         lone_pairs in value_basic(0..=4),
         unpaired_electrons in unpaired_electrons_strategy(),
         constraints in atom_constraints_strategy(),
-    ) -> AtomAst {
-        AtomAst {
+    ) -> AtomForm {
+        AtomForm {
             element,
             isotope_mass: isotope,
             charge,
@@ -586,14 +586,14 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn bond_ast_strategy()
+    pub(crate) fn bond_form_strategy()
     (
         order in value_basic(1..=4),
         charge in value_basic(-1..=1),
         unpaired_electrons in unpaired_electrons_strategy(),
         constraints in bond_constraints_strategy(),
-    ) -> BondAst {
-        BondAst {
+    ) -> BondForm {
+        BondForm {
             order,
             charge,
             unpaired_electrons,
@@ -619,17 +619,17 @@ prop_compose! {
     }
 }
 
-/// `BondAst` shapes that render to bond keyword shorthands per spec §7.6:
+/// `BondForm` shapes that render to bond keyword shorthands per spec §7.6:
 /// `:single`, `:double`, `:triple`, `:quadruple`, plus `:aromatic` (an
 /// order-1 bond with the inline `Aromatic` flag).
-pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst> {
+pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondForm> {
     prop_oneof![
-        Just(BondAst::new(NumForm::Lit(1))),
-        Just(BondAst::new(NumForm::Lit(2))),
-        Just(BondAst::new(NumForm::Lit(3))),
-        Just(BondAst::new(NumForm::Lit(4))),
+        Just(BondForm::new(NumForm::Lit(1))),
+        Just(BondForm::new(NumForm::Lit(2))),
+        Just(BondForm::new(NumForm::Lit(3))),
+        Just(BondForm::new(NumForm::Lit(4))),
         Just(
-            BondAst::new(NumForm::Lit(1))
+            BondForm::new(NumForm::Lit(1))
                 .with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         ),
     ]
@@ -830,7 +830,7 @@ pub(crate) fn aromatic_system_ast_for(
         })
 }
 
-pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
+pub(crate) fn multicenter_bond_form_strategy() -> impl Strategy<Value = MulticenterBondAst> {
     (value_basic(-2..=2), optional_multicenter_electron_count()).prop_map(
         |(charge, constraints)| MulticenterBondAst {
             electrons: ElectronCountsForm::Undetermined,
@@ -870,7 +870,7 @@ prop_compose! {
     }
 }
 
-pub(crate) fn multicenter_bond_ast_for(
+pub(crate) fn multicenter_bond_form_for(
     atom_count: usize,
 ) -> impl Strategy<Value = MulticenterBondAst> {
     (
@@ -932,7 +932,7 @@ pub(crate) fn noncovalent_bond_update_constraints_strategy(
     })
 }
 
-pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
+pub(crate) fn noncovalent_bond_form_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
     (
         prop::sample::select(NONCOVALENT_KINDS),
         noncovalent_bond_constraints_strategy(),
@@ -1300,7 +1300,7 @@ pub(crate) fn stereo_bond_constraints_strategy(
     })
 }
 
-pub(crate) fn stereo_atom_ast_strategy() -> impl Strategy<Value = StereoAtomAst> {
+pub(crate) fn stereo_atom_form_strategy() -> impl Strategy<Value = StereoAtomAst> {
     (stereo_atom_kind_strategy(), stereo_coset_strategy()).prop_flat_map(|(kind, coset)| {
         stereo_atom_constraints_strategy(kind)
             .prop_map(move |cs| StereoAtomAst::new(kind, coset.clone()).with_constraints(cs))
@@ -1346,7 +1346,7 @@ pub(crate) fn stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomU
     ]
 }
 
-pub(crate) fn stereo_bond_ast_strategy() -> impl Strategy<Value = StereoBondAst> {
+pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondAst> {
     stereo_coset_strategy().prop_flat_map(|coset| {
         stereo_bond_constraints_strategy(StereoKind::CisTrans).prop_map(move |cs| {
             StereoBondAst::new(StereoKind::CisTrans, coset.clone()).with_constraints(cs)
@@ -1402,7 +1402,7 @@ pub(crate) fn stereo_atom_entries_strategy(
     }
     let entry = (
         prop::collection::vec((stereo_ligand_kind_strategy(), 0..atom_count as u32), 1..=4),
-        stereo_atom_ast_strategy(),
+        stereo_atom_form_strategy(),
     );
     prop::collection::vec(entry, 0..=max)
         .prop_map(|entries| {
@@ -1439,7 +1439,7 @@ pub(crate) fn stereo_bond_entries_strategy(
     }
     let entry = (
         prop::collection::vec((stereo_ligand_kind_strategy(), 0..atom_count as u32), 1..=4),
-        stereo_bond_ast_strategy(),
+        stereo_bond_form_strategy(),
     );
     prop::collection::vec(entry, 0..=max)
         .prop_map(|entries| {
@@ -1492,17 +1492,17 @@ pub(crate) fn distinct_atoms_strategy(
 pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntries> {
     (0usize..=5)
         .prop_flat_map(|atom_count| {
-            let atoms = prop::collection::vec(atom_ast_strategy(), atom_count);
+            let atoms = prop::collection::vec(atom_form_strategy(), atom_count);
             let edges = edge_set_strategy(atom_count);
-            let bond_data = prop::collection::vec(bond_ast_strategy(), 0..=8);
+            let bond_data = prop::collection::vec(bond_form_strategy(), 0..=8);
             (Just(atom_count), atoms, edges, bond_data)
         })
         .prop_flat_map(|(atom_count, atoms, edges, bond_pool)| {
             // Truncate bond pool to the number of edges generated.
             let bond_count = edges.len();
-            let bonds: Vec<BondAst> = bond_pool
+            let bonds: Vec<BondForm> = bond_pool
                 .into_iter()
-                .chain(repeat_with(|| BondAst::from_order(1)))
+                .chain(repeat_with(|| BondForm::from_order(1)))
                 .take(bond_count)
                 .collect();
             let bonds_full: Vec<_> = edges
@@ -1536,7 +1536,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                 distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
                     |atoms| {
                         let n = atoms.len();
-                        (Just(atoms), multicenter_bond_ast_for(n))
+                        (Just(atoms), multicenter_bond_form_for(n))
                     },
                 ),
                 0..=multicenter_count_max,
@@ -1544,7 +1544,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
             let noncovalents = prop::collection::vec(
                 (
                     distinct_atoms_strategy(atom_count, 2, 2),
-                    noncovalent_bond_ast_strategy(),
+                    noncovalent_bond_form_strategy(),
                 ),
                 0..=noncovalent_count_max,
             );
@@ -2446,7 +2446,7 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                     }
                 }
                 for (i, element) in ALIAS_ELEMENTS.iter().enumerate() {
-                    meta.add_atom_alias(format!("al{i}"), AtomAst::from_element(*element))
+                    meta.add_atom_alias(format!("al{i}"), AtomForm::from_element(*element))
                         .unwrap();
                 }
                 meta
@@ -2553,7 +2553,7 @@ pub(crate) fn reaction_dsl_strategy() -> impl Strategy<Value = ReactionDsl> {
                     .expect("generated delta keywords are disjoint");
             }
             metadata
-                .add_atom_alias("reaction_alias", AtomAst::from_element(Element::F))
+                .add_atom_alias("reaction_alias", AtomForm::from_element(Element::F))
                 .expect("generated reaction alias is disjoint and bijective");
             ReactionDsl::new(reaction.clone(), metadata)
                 .expect("generated reaction metadata is coherent")
@@ -2629,11 +2629,11 @@ pub(crate) fn transaction_atom_count_strategy() -> impl Strategy<Value = usize> 
     1usize..=6
 }
 
-pub(crate) fn transaction_atoms(count: usize) -> Vec<AtomAst> {
+pub(crate) fn transaction_atoms(count: usize) -> Vec<AtomForm> {
     (0..count)
         .map(|id| {
             let element = ELEMENTS[id % ELEMENTS.len()];
-            AtomAst::from_element(element)
+            AtomForm::from_element(element)
         })
         .collect()
 }
@@ -2642,7 +2642,7 @@ pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
     (0..count.saturating_sub(1))
         .map(|id| AddBond {
             endpoints: [AtomHandle::New(id), AtomHandle::New(id + 1)],
-            ast: BondAst::from_order((id % 3 + 1) as u8),
+            ast: BondForm::from_order((id % 3 + 1) as u8),
         })
         .collect()
 }
@@ -2654,7 +2654,7 @@ pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
             (
                 AtomId(id as u32),
                 AtomId((id + 1) as u32),
-                BondAst::from_order((id % 3 + 1) as u8),
+                BondForm::from_order((id % 3 + 1) as u8),
             )
         })
         .collect();
@@ -2697,7 +2697,7 @@ impl StableAtomHandleTrace {
             atoms: INITIAL_HANDLE_ELEMENTS[..self.initial_count]
                 .iter()
                 .copied()
-                .map(AtomAst::from_element)
+                .map(AtomForm::from_element)
                 .collect(),
             ..Default::default()
         })
@@ -2709,7 +2709,7 @@ impl StableAtomHandleTrace {
             CREATED_HANDLE_ELEMENTS[..self.created_count]
                 .iter()
                 .copied()
-                .map(AtomAst::from_element),
+                .map(AtomForm::from_element),
         );
         edits.remove_topology(
             self.remove_initial
@@ -2727,7 +2727,7 @@ impl StableAtomHandleTrace {
                 .collect(),
             Vec::new(),
         );
-        let sentinel = edits.add_atom(AtomAst::from_element(SENTINEL_HANDLE_ELEMENT));
+        let sentinel = edits.add_atom(AtomForm::from_element(SENTINEL_HANDLE_ELEMENT));
         edits.push(Edit::ModifyAtomField {
             id: if self.target_created {
                 created[self.target_index].clone()
@@ -2757,9 +2757,9 @@ impl StableAtomHandleTrace {
             .filter(|(index, _)| !self.remove_initial[*index])
             .map(|(index, element)| {
                 if !self.target_created && index == self.target_index {
-                    AtomAst::from_element(element).with_charge(7_i64)
+                    AtomForm::from_element(element).with_charge(7_i64)
                 } else {
-                    AtomAst::from_element(element)
+                    AtomForm::from_element(element)
                 }
             });
         let created = CREATED_HANDLE_ELEMENTS[..self.created_count]
@@ -2769,15 +2769,15 @@ impl StableAtomHandleTrace {
             .filter(|(index, _)| !self.remove_created[*index])
             .map(|(index, element)| {
                 if self.target_created && index == self.target_index {
-                    AtomAst::from_element(element).with_charge(7_i64)
+                    AtomForm::from_element(element).with_charge(7_i64)
                 } else {
-                    AtomAst::from_element(element)
+                    AtomForm::from_element(element)
                 }
             });
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: initial
                 .chain(created)
-                .chain([AtomAst::from_element(SENTINEL_HANDLE_ELEMENT).with_charge(9_i64)])
+                .chain([AtomForm::from_element(SENTINEL_HANDLE_ELEMENT).with_charge(9_i64)])
                 .collect(),
             ..Default::default()
         })
@@ -2871,14 +2871,14 @@ pub(crate) struct InvalidTransactionBatch {
 impl InvalidTransactionBatch {
     pub(crate) fn base(&self) -> MoleculeAst {
         let atoms = (0..self.count * 2)
-            .map(|index| AtomAst::from_element(INITIAL_HANDLE_ELEMENTS[index % 4]))
+            .map(|index| AtomForm::from_element(INITIAL_HANDLE_ELEMENTS[index % 4]))
             .collect();
         let bonds = (0..self.count)
             .map(|index| {
                 (
                     AtomId((index * 2) as u32),
                     AtomId((index * 2 + 1) as u32),
-                    BondAst::from_order(1),
+                    BondForm::from_order(1),
                 )
             })
             .collect();
@@ -2967,7 +2967,7 @@ impl InvalidTransactionBatch {
                                 1
                             })),
                         ],
-                        ast: BondAst::from_order(1),
+                        ast: BondForm::from_order(1),
                     })
                     .collect(),
             },
@@ -3287,10 +3287,10 @@ fn transaction_all_entities_molecule() -> MoleculeAst {
         .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
         .collect::<Vec<_>>();
     MoleculeAst::from_entries(MoleculeEntries {
-        atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+        atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
         bonds: vec![
-            (AtomId(0), AtomId(1), BondAst::from_order(1)),
-            (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
         ],
         dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
         aromatic: vec![(
@@ -3594,11 +3594,11 @@ fn transaction_removal_cases() -> Vec<(MoleculeAst, Edits)> {
 fn transaction_creation_case(include_created_constraint: bool) -> (MoleculeAst, Edits) {
     let base = transaction_all_entities_molecule();
     let mut edits = Edits::new();
-    let atom = edits.add_atom(AtomAst::from_element(Element::N));
+    let atom = edits.add_atom(AtomForm::from_element(Element::N));
     let bond = edits.add_bond(
         AtomHandle::Id(AtomId(1)),
         AtomHandle::Id(AtomId(2)),
-        BondAst::from_order(2),
+        BondForm::from_order(2),
     );
     let dative = edits.add_dative_bond(
         vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
@@ -3721,13 +3721,13 @@ pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (Molecule
 }
 
 fn transaction_compaction_molecule(constraints: Constraints) -> MoleculeAst {
-    let atoms = (0..6).map(|_| AtomAst::from_element(Element::C)).collect();
+    let atoms = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
     let bonds = (0..3)
         .map(|index| {
             (
                 AtomId(index * 2),
                 AtomId(index * 2 + 1),
-                BondAst::from_order(1),
+                BondForm::from_order(1),
             )
         })
         .collect();
@@ -3958,7 +3958,7 @@ pub(crate) fn consecutive_transaction_strategy(
         })
         .prop_map(|(first, second)| {
             let base = MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C)],
+                atoms: vec![AtomForm::from_element(Element::C)],
                 ..Default::default()
             });
             let first_edits = Edits::from_iter([Edit::ModifyAtomField {
@@ -3990,9 +3990,9 @@ const DATIVE_ACCEPTORS: [u32; 2] = [1, 5];
 const NONCOVALENT_PAIRS: [[u32; 2]; 2] = [[0, 2], [3, 5]];
 
 pub(crate) fn overlay_transaction_base() -> MoleculeAst {
-    let atoms: Vec<AtomAst> = (0..6).map(|_| AtomAst::from_element(Element::C)).collect();
+    let atoms: Vec<AtomForm> = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
     let bonds = (0..5)
-        .map(|i| (AtomId(i), AtomId(i + 1), BondAst::from_order(1)))
+        .map(|i| (AtomId(i), AtomId(i + 1), BondForm::from_order(1)))
         .collect();
     let dative = (0..2)
         .map(|i| {
@@ -4069,7 +4069,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                 if add > 0 {
                     edits.push(Edit::AddAtoms {
                         atoms: (0..add)
-                            .map(|_| AtomAst::from_element(Element::C))
+                            .map(|_| AtomForm::from_element(Element::C))
                             .collect(),
                     });
                 }
@@ -4237,7 +4237,7 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
         .prop_flat_map(|atom_count| {
             (
                 prop::collection::vec(
-                    element_strategy().prop_map(AtomAst::from_element),
+                    element_strategy().prop_map(AtomForm::from_element),
                     atom_count,
                 ),
                 edge_set_strategy(atom_count),
@@ -4251,7 +4251,7 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
             let bonds = edges
                 .iter()
                 .zip(orders)
-                .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondAst::from_order(order)))
+                .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondForm::from_order(order)))
                 .collect();
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms,
@@ -4292,7 +4292,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
             (
                 Just(atom_count),
                 prop::collection::vec(
-                    element_strategy().prop_map(AtomAst::from_element),
+                    element_strategy().prop_map(AtomForm::from_element),
                     atom_count,
                 ),
                 edge_set_strategy(atom_count),
@@ -4320,7 +4320,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
                     |atoms| {
                         let n = atoms.len();
-                        (Just(atoms), multicenter_bond_ast_for(n))
+                        (Just(atoms), multicenter_bond_form_for(n))
                     },
                 ),
                 0..=1,
@@ -4328,7 +4328,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
             let noncovalents = prop::collection::vec(
                 (
                     distinct_atoms_strategy(atom_count, 2, 2),
-                    noncovalent_bond_ast_strategy(),
+                    noncovalent_bond_form_strategy(),
                 ),
                 0..=1,
             );
@@ -4371,7 +4371,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 let bonds = edges
                     .iter()
                     .zip(orders)
-                    .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondAst::from_order(order)))
+                    .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondForm::from_order(order)))
                     .collect();
                 let dative = datives
                     .into_iter()
@@ -5021,13 +5021,13 @@ fn build_reaction(
         added_atom_ids.push(atom);
         deltas.push(Delta::Atom(AtomDelta::Add {
             id: atom,
-            ast: AtomAst::from_element(element),
+            ast: AtomForm::from_element(element),
         }));
         if let Some(anchor) = anchor {
             deltas.push(Delta::Bond(BondDelta::Add {
                 id: BondId((bond_count + offset) as u32),
                 atoms: [anchor, atom],
-                ast: BondAst::from_order(1),
+                ast: BondForm::from_order(1),
             }));
         }
     }

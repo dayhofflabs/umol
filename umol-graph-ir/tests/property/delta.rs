@@ -18,7 +18,7 @@ use umol_graph_ir::ir::{
 use crate::strategies::*;
 
 /// Apply a `diff` (only `ModifyField` / `ModifyConstraint` deltas) to an atom state.
-fn apply_atom_diff(mut ast: AtomAst, diff: Vec<AtomDelta>) -> AtomAst {
+fn apply_atom_diff(mut ast: AtomForm, diff: Vec<AtomDelta>) -> AtomForm {
     for d in diff {
         match d {
             AtomDelta::ModifyField { change, .. } => {
@@ -34,7 +34,7 @@ fn apply_atom_diff(mut ast: AtomAst, diff: Vec<AtomDelta>) -> AtomAst {
 }
 
 /// Apply a `diff` (only `ModifyField` / `ModifyConstraint` deltas) to a bond state.
-fn apply_bond_diff(mut ast: BondAst, diff: Vec<BondDelta>) -> BondAst {
+fn apply_bond_diff(mut ast: BondForm, diff: Vec<BondDelta>) -> BondForm {
     for d in diff {
         match d {
             BondDelta::ModifyField { change, .. } => {
@@ -162,8 +162,8 @@ fn atoms_strategy() -> impl Strategy<Value = [AtomId; 2]> {
 
 fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
     prop_oneof![
-        (atom_id_strategy(), atom_ast_strategy()).prop_map(|(id, ast)| AtomDelta::Add { id, ast }),
-        (atom_id_strategy(), atom_ast_strategy())
+        (atom_id_strategy(), atom_form_strategy()).prop_map(|(id, ast)| AtomDelta::Add { id, ast }),
+        (atom_id_strategy(), atom_form_strategy())
             .prop_map(|(id, ast)| AtomDelta::Remove { id, ast }),
         (atom_id_strategy(), value_basic(0..=3), value_basic(0..=3)).prop_map(|(id, old, new)| {
             AtomDelta::ModifyField {
@@ -182,9 +182,9 @@ fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
 
 fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
     prop_oneof![
-        (bond_id_strategy(), atoms_strategy(), bond_ast_strategy())
+        (bond_id_strategy(), atoms_strategy(), bond_form_strategy())
             .prop_map(|(id, atoms, ast)| BondDelta::Add { id, atoms, ast }),
-        (bond_id_strategy(), atoms_strategy(), bond_ast_strategy())
+        (bond_id_strategy(), atoms_strategy(), bond_form_strategy())
             .prop_map(|(id, atoms, ast)| BondDelta::Remove { id, atoms, ast }),
         (bond_id_strategy(), value_basic(1..=3), value_basic(1..=3)).prop_map(|(id, old, new)| {
             BondDelta::ModifyField {
@@ -245,14 +245,14 @@ proptest! {
 
     /// `apply(lhs, diff(lhs, rhs)) == rhs` for atoms — the patch algebra law.
     #[test]
-    fn test_atom_delta_diff_apply(lhs in atom_ast_strategy(), rhs in atom_ast_strategy()) {
+    fn test_atom_delta_diff_apply(lhs in atom_form_strategy(), rhs in atom_form_strategy()) {
         let diff = AtomDelta::diff(AtomId(0), &lhs, &rhs);
         prop_assert_eq!(apply_atom_diff(lhs, diff), rhs);
     }
 
     /// `diff(x, x)` is empty and applying it is the identity (atoms).
     #[test]
-    fn test_atom_delta_diff_identity(atom in atom_ast_strategy()) {
+    fn test_atom_delta_diff_identity(atom in atom_form_strategy()) {
         let diff = AtomDelta::diff(AtomId(0), &atom, &atom);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_atom_diff(atom.clone(), diff), atom);
@@ -260,7 +260,7 @@ proptest! {
 
     /// Applying the directed atom update recovers the target up to canonical equality.
     #[test]
-    fn test_atom_ast_difference_to(lhs in atom_ast_strategy(), rhs in atom_ast_strategy()) {
+    fn test_atom_form_difference_to(lhs in atom_form_strategy(), rhs in atom_form_strategy()) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
     }
@@ -276,14 +276,14 @@ proptest! {
 
     /// `apply(lhs, diff(lhs, rhs)) == rhs` for bonds.
     #[test]
-    fn test_bond_delta_diff_apply(lhs in bond_ast_strategy(), rhs in bond_ast_strategy()) {
+    fn test_bond_delta_diff_apply(lhs in bond_form_strategy(), rhs in bond_form_strategy()) {
         let diff = BondDelta::diff(BondId(0), &lhs, &rhs);
         prop_assert_eq!(apply_bond_diff(lhs, diff), rhs);
     }
 
     /// `diff(x, x)` is empty and applying it is the identity (bonds).
     #[test]
-    fn test_bond_delta_diff_identity(bond in bond_ast_strategy()) {
+    fn test_bond_delta_diff_identity(bond in bond_form_strategy()) {
         let diff = BondDelta::diff(BondId(0), &bond, &bond);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_bond_diff(bond.clone(), diff), bond);
@@ -291,7 +291,7 @@ proptest! {
 
     /// Applying the directed bond update recovers the target up to canonical equality.
     #[test]
-    fn test_bond_ast_difference_to(lhs in bond_ast_strategy(), rhs in bond_ast_strategy()) {
+    fn test_bond_form_difference_to(lhs in bond_form_strategy(), rhs in bond_form_strategy()) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
     }
@@ -313,7 +313,7 @@ proptest! {
     }
 
     #[test]
-    fn test_dative_bond_ast_difference_to(
+    fn test_dative_bond_form_difference_to(
         lhs in dative_bond_strategy(),
         rhs in dative_bond_strategy(),
     ) {
@@ -363,7 +363,7 @@ proptest! {
     }
 
     #[test]
-    fn test_multicenter_bond_ast_difference_to(
+    fn test_multicenter_bond_form_difference_to(
         lhs in multicenter_bond_patch_ast_strategy(),
         rhs in multicenter_bond_patch_ast_strategy(),
     ) {
@@ -388,7 +388,7 @@ proptest! {
     }
 
     #[test]
-    fn test_noncovalent_bond_ast_difference_to(
+    fn test_noncovalent_bond_form_difference_to(
         lhs in noncovalent_bond_patch_ast_strategy(),
         rhs in noncovalent_bond_patch_ast_strategy(),
     ) {
@@ -398,24 +398,24 @@ proptest! {
 
     #[test]
     fn test_stereo_atom_delta_diff_apply(
-        lhs in stereo_atom_ast_strategy(),
-        rhs in stereo_atom_ast_strategy(),
+        lhs in stereo_atom_form_strategy(),
+        rhs in stereo_atom_form_strategy(),
     ) {
         let diff = StereoAtomDelta::diff(StereoAtomId(0), &lhs, &rhs);
         prop_assert!(apply_stereo_atom_diff(lhs, diff).canonical_eq(&rhs));
     }
 
     #[test]
-    fn test_stereo_atom_delta_diff_identity(atom in stereo_atom_ast_strategy()) {
+    fn test_stereo_atom_delta_diff_identity(atom in stereo_atom_form_strategy()) {
         let diff = StereoAtomDelta::diff(StereoAtomId(0), &atom, &atom);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_stereo_atom_diff(atom.clone(), diff), atom);
     }
 
     #[test]
-    fn test_stereo_atom_ast_difference_to(
-        lhs in stereo_atom_ast_strategy(),
-        rhs in stereo_atom_ast_strategy(),
+    fn test_stereo_atom_form_difference_to(
+        lhs in stereo_atom_form_strategy(),
+        rhs in stereo_atom_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
@@ -423,24 +423,24 @@ proptest! {
 
     #[test]
     fn test_stereo_bond_delta_diff_apply(
-        lhs in stereo_bond_ast_strategy(),
-        rhs in stereo_bond_ast_strategy(),
+        lhs in stereo_bond_form_strategy(),
+        rhs in stereo_bond_form_strategy(),
     ) {
         let diff = StereoBondDelta::diff(StereoBondId(0), &lhs, &rhs);
         prop_assert!(apply_stereo_bond_diff(lhs, diff).canonical_eq(&rhs));
     }
 
     #[test]
-    fn test_stereo_bond_delta_diff_identity(bond in stereo_bond_ast_strategy()) {
+    fn test_stereo_bond_delta_diff_identity(bond in stereo_bond_form_strategy()) {
         let diff = StereoBondDelta::diff(StereoBondId(0), &bond, &bond);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_stereo_bond_diff(bond.clone(), diff), bond);
     }
 
     #[test]
-    fn test_stereo_bond_ast_difference_to(
-        lhs in stereo_bond_ast_strategy(),
-        rhs in stereo_bond_ast_strategy(),
+    fn test_stereo_bond_form_difference_to(
+        lhs in stereo_bond_form_strategy(),
+        rhs in stereo_bond_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));

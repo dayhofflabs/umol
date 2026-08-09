@@ -17,8 +17,8 @@ use umol_graph_core::{
 };
 
 use super::super::aromatic::AromaticSystemAst;
-use super::super::atom::AtomAst;
-use super::super::bond::BondAst;
+use super::super::atom::AtomForm;
+use super::super::bond::BondForm;
 use super::super::constraint::{Constraint, Constraints};
 use super::super::dative::DativeBondAst;
 use super::super::edit::{
@@ -631,8 +631,8 @@ fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
 #[derive(Clone)]
 pub struct MoleculeEditor {
     graph: Graph,
-    atoms: Arc<Vec<AtomAst>>,
-    bonds: Arc<Vec<BondAst>>,
+    atoms: Arc<Vec<AtomForm>>,
+    bonds: Arc<Vec<BondForm>>,
     dative_bonds: FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
     aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemAst>,
     multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondAst>,
@@ -646,8 +646,8 @@ impl MoleculeEditor {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn from_parts(
         graph: Graph,
-        atoms: Arc<Vec<AtomAst>>,
-        bonds: Arc<Vec<BondAst>>,
+        atoms: Arc<Vec<AtomForm>>,
+        bonds: Arc<Vec<BondForm>>,
         dative_bonds: Arc<
             FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
         >,
@@ -681,7 +681,7 @@ impl MoleculeEditor {
     /// This is a low-level, non-transactional construction primitive. Use
     /// `transact` for checked atomic edits or `transact_unchecked` for trusted
     /// generated edit batches.
-    pub fn add_atom(&mut self, atom: AtomAst) -> AtomId {
+    pub fn add_atom(&mut self, atom: AtomForm) -> AtomId {
         let id = self.graph.add_node();
         Arc::make_mut(&mut self.atoms).push(atom);
         AtomId::from(id)
@@ -691,7 +691,7 @@ impl MoleculeEditor {
     ///
     /// This is a low-level, non-transactional construction primitive. It
     /// assumes `first` and `second` are valid atom ids in the current dense layout.
-    pub fn add_bond(&mut self, first: AtomId, second: AtomId, bond: BondAst) -> BondId {
+    pub fn add_bond(&mut self, first: AtomId, second: AtomId, bond: BondForm) -> BondId {
         let id = self
             .graph
             .add_edge(NodeId::from(first), NodeId::from(second));
@@ -1383,7 +1383,7 @@ impl MoleculeEditor {
     fn restore_bonds(&mut self, removed: Vec<RemovedBond>, undo_compaction: &UndoCompaction) {
         let mut old_endpoints: Vec<Option<[AtomId; 2]>> =
             vec![None; self.bonds.len() + removed.len()];
-        let mut old_bonds: Vec<Option<BondAst>> = vec![None; self.bonds.len() + removed.len()];
+        let mut old_bonds: Vec<Option<BondForm>> = vec![None; self.bonds.len() + removed.len()];
         for removed in removed {
             old_endpoints[removed.id.index()] = Some(removed.endpoints);
             old_bonds[removed.id.index()] = Some(removed.ast);
@@ -1573,8 +1573,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondAst;
     use crate::mol_dsl;
 
@@ -1668,11 +1668,11 @@ mod tests {
     #[fixture]
     fn triatomic() -> MoleculeEditor {
         let mut b = MoleculeAst::default().edit();
-        b.add_atom(AtomAst::from_element(Element::C));
-        b.add_atom(AtomAst::from_element(Element::N));
-        b.add_atom(AtomAst::from_element(Element::O));
-        b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
-        b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(2));
+        b.add_atom(AtomForm::from_element(Element::C));
+        b.add_atom(AtomForm::from_element(Element::N));
+        b.add_atom(AtomForm::from_element(Element::O));
+        b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+        b.add_bond(AtomId(1), AtomId(2), BondForm::from_order(2));
         b
     }
 
@@ -1711,13 +1711,13 @@ mod tests {
     fn test_molecule_editor_remove_added_topology(mut triatomic: MoleculeEditor) {
         let expected = triatomic.clone().build();
         let added_atom = AddedAtom {
-            id: triatomic.add_atom(AtomAst::from_element(Element::F)),
-            ast: AtomAst::from_element(Element::F),
+            id: triatomic.add_atom(AtomForm::from_element(Element::F)),
+            ast: AtomForm::from_element(Element::F),
         };
         let added_bond = AddedBond {
-            id: triatomic.add_bond(AtomId(2), added_atom.id, BondAst::from_order(1)),
+            id: triatomic.add_bond(AtomId(2), added_atom.id, BondForm::from_order(1)),
             endpoints: [AtomId(2), added_atom.id],
-            ast: BondAst::from_order(1),
+            ast: BondForm::from_order(1),
         };
 
         triatomic.remove_added_topology(&[added_atom], &[added_bond]);
@@ -1728,8 +1728,8 @@ mod tests {
     #[rstest]
     fn test_molecule_editor_restore_dative_bond() {
         let mut b = MoleculeAst::default().edit();
-        b.add_atom(AtomAst::from_element(Element::C));
-        b.add_atom(AtomAst::from_element(Element::N));
+        b.add_atom(AtomForm::from_element(Element::C));
+        b.add_atom(AtomForm::from_element(Element::N));
         b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
         b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(2));
         let expected = b.clone().build();
@@ -1758,7 +1758,7 @@ mod tests {
     #[rstest]
     fn test_molecule_editor_snapshot(mut triatomic: MoleculeEditor) {
         let snapshot = triatomic.snapshot();
-        triatomic.add_atom(AtomAst::from_element(Element::F));
+        triatomic.add_atom(AtomForm::from_element(Element::F));
 
         assert_eq!(
             snapshot,

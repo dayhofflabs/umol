@@ -14,7 +14,7 @@ proptest! {
     })]
     #[test]
     fn test_stereo_atom_dsl_display_from_str_roundtrip(
-        stereo in stereo_atom_ast_strategy(),
+        stereo in stereo_atom_form_strategy(),
     ) {
         let dsl = StereoAtomDsl(stereo);
         let rendered = dsl.to_string();
@@ -60,7 +60,7 @@ proptest! {
 
     #[test]
     fn test_stereo_bond_dsl_display_from_str_roundtrip(
-        stereo in stereo_bond_ast_strategy(),
+        stereo in stereo_bond_form_strategy(),
     ) {
         let dsl = StereoBondDsl(stereo);
         let rendered = dsl.to_string();

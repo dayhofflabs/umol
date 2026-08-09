@@ -413,8 +413,8 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
-        AtomId, BondAst, BondConstraintKey, ElectronCountsForm, MoleculeAst, MoleculeEntries,
+        AromaticSystemId, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomForm,
+        AtomId, BondConstraintKey, BondForm, ElectronCountsForm, MoleculeAst, MoleculeEntries,
         NumForm, UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
@@ -458,8 +458,8 @@ mod tests {
         }
     }
 
-    fn aromatic(element: Element, pi: i64) -> AtomAst {
-        let mut atom = AtomAst::from_element(element);
+    fn aromatic(element: Element, pi: i64) -> AtomForm {
+        let mut atom = AtomForm::from_element(element);
         atom.charge = NumForm::Lit(0);
         atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
         atom.constraints.set(AtomConstraintAst::AromaticValence(
@@ -469,9 +469,9 @@ mod tests {
     }
 
     fn benzene() -> MoleculeAst {
-        let atoms: Vec<AtomAst> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
+        let atoms: Vec<AtomForm> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
         let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
         MoleculeAst::from_entries(MoleculeEntries {
             atoms,
@@ -489,7 +489,7 @@ mod tests {
             aromatic(Element::C, 1),
         ];
         let bonds: Vec<_> = (0..5)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondForm::from_order(1)))
             .collect();
         MoleculeAst::from_entries(MoleculeEntries {
             atoms,
@@ -866,9 +866,9 @@ mod tests {
             scope: ElementScope::AllowList(vec![Element::C]),
             ring_limits: RingLimits::default(),
         });
-        let atoms: Vec<AtomAst> = (0..6).map(|_| AtomAst::from_element(Element::C)).collect();
+        let atoms: Vec<AtomForm> = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
         let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
         let mut ast = MoleculeAst::from_entries(MoleculeEntries {
             atoms,

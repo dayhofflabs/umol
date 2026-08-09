@@ -305,17 +305,17 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, MoleculeAst,
+        AromaticValenceAst, AtomConstraintAst, AtomForm, AtomId, BondForm, MoleculeAst,
         MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
 
     use super::*;
 
-    fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
-        (AtomAst::from_element(element), Some(pi))
+    fn aromatic(element: Element, pi: i64) -> (AtomForm, Option<i64>) {
+        (AtomForm::from_element(element), Some(pi))
     }
 
-    fn apply_pi(specs: Vec<(AtomAst, Option<i64>)>) -> Vec<AtomAst> {
+    fn apply_pi(specs: Vec<(AtomForm, Option<i64>)>) -> Vec<AtomForm> {
         specs
             .into_iter()
             .map(|(mut atom, pi)| {
@@ -329,7 +329,7 @@ mod tests {
             .collect()
     }
 
-    fn make_ring(specs: Vec<(AtomAst, Option<i64>)>) -> MoleculeAst {
+    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> MoleculeAst {
         let n = specs.len();
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = (0..n)
@@ -337,7 +337,7 @@ mod tests {
                 (
                     AtomId(i as u32),
                     AtomId(((i + 1) % n) as u32),
-                    BondAst::from_order(1),
+                    BondForm::from_order(1),
                 )
             })
             .collect();
@@ -348,11 +348,11 @@ mod tests {
         })
     }
 
-    fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = edges
             .iter()
-            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
+            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondForm::from_order(1)))
             .collect();
         MoleculeAst::from_entries(MoleculeEntries {
             atoms,

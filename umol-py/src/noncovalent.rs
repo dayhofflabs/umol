@@ -587,7 +587,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomAst as GraphIrAtomAst, BooleanForm as GraphIrBooleanForm, MoleculeEntries,
+        AtomForm as GraphIrAtomForm, BooleanForm as GraphIrBooleanForm, MoleculeEntries,
         NoncovalentBondConstraintAst as GraphIrNoncovalentBondConstraintAst,
         NoncovalentBondConstraintKey as GraphIrNoncovalentBondConstraintKey,
         NoncovalentBondConstraintsAst as GraphIrNoncovalentBondConstraintsAst,
@@ -1245,8 +1245,8 @@ mod tests {
     fn molecule_with_hbond(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::O),
-                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
                 GraphIrAtomId(0),
@@ -1431,9 +1431,9 @@ mod tests {
     fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::O),
-                GraphIrAtomAst::from_element(ChemElement::O),
-                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
                 GraphIrAtomId(0),

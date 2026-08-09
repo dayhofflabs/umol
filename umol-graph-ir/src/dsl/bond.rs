@@ -23,7 +23,7 @@ use super::predicate::{
 };
 use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTransStereoDsl};
 use super::value::{fmt_value, value};
-use crate::ir::bond::{BondAst, BondUpdate};
+use crate::ir::bond::{BondForm, BondUpdate};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst, RingScope};
 use crate::ir::spin::UnpairedElectronsForm;
@@ -31,21 +31,21 @@ use crate::ir::stereo::CisTransStereoForm;
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 use crate::ir::value::NumForm;
 
-/// Surface DSL wrapper around `BondAst`.
+/// Surface DSL wrapper around `BondForm`.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct BondDsl(pub BondAst);
+pub struct BondDsl(pub BondForm);
 
 impl BondDsl {
-    /// Zero-cost reference cast from `&BondAst`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &BondAst) -> &Self {
+    /// Zero-cost reference cast from `&BondForm`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &BondForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const BondAst as *const Self) }
+        unsafe { &*(ast as *const BondForm as *const Self) }
     }
 }
 
-impl From<BondAst> for BondDsl {
-    fn from(ast: BondAst) -> Self {
+impl From<BondForm> for BondDsl {
+    fn from(ast: BondForm) -> Self {
         Self(ast)
     }
 }
@@ -60,7 +60,7 @@ impl FromStr for BondDsl {
 
 impl Display for BondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_bond_ast(f, &self.0)?;
+        fmt_bond_form(f, &self.0)?;
         for c in self.0.constraints.iter() {
             fmt_constraint(f, c)?;
         }
@@ -129,7 +129,7 @@ impl ToEdn for BondDsl {
 /// Canonical means: charge/unpaired electrons at their defaults (Undetermined / default
 /// pair) and either no constraints (orders 1–4) or exactly the `Aromatic`
 /// flag (order 1 → `:aromatic`).
-fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
+fn bond_keyword_for(ast: &BondForm) -> Option<&'static str> {
     if !matches!(ast.charge, NumForm::Undetermined)
         || ast.unpaired_electrons != UnpairedElectronsForm::default()
     {
@@ -148,26 +148,26 @@ fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
     }
 }
 
-impl FromIr<BondAst> for BondDsl {
+impl FromIr<BondForm> for BondDsl {
     type Ctx = BondDefaults;
 
-    fn from_ir(ast: &BondAst, cfg: &Self::Ctx) -> Self {
+    fn from_ir(ast: &BondForm, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_bond(&mut out, cfg);
         BondDsl(out)
     }
 }
 
-impl IntoIr<BondAst> for BondDsl {
+impl IntoIr<BondForm> for BondDsl {
     type Ctx = BondDefaults;
 
-    fn into_ir(mut self, cfg: &Self::Ctx) -> BondAst {
+    fn into_ir(mut self, cfg: &Self::Ctx) -> BondForm {
         raise_bond(&mut self.0, cfg);
         self.0
     }
 }
 
-impl FromStr for BondAst {
+impl FromStr for BondForm {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -175,13 +175,13 @@ impl FromStr for BondAst {
     }
 }
 
-impl Display for BondAst {
+impl Display for BondForm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         BondDsl::from_ref(self).fmt(f)
     }
 }
 
-impl<'de> FromEdn<'de> for BondAst {
+impl<'de> FromEdn<'de> for BondForm {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         Ok(BondDsl::from_edn(edn)?.into_ir(&BondDefaults::default()))
     }
@@ -191,7 +191,7 @@ impl<'de> FromEdn<'de> for BondAst {
     }
 }
 
-impl ToEdn for BondAst {
+impl ToEdn for BondForm {
     fn to_edn(&self) -> Edn<'static> {
         BondDsl::from_ref(self).to_edn()
     }
@@ -207,7 +207,7 @@ fn bond(i: &mut &str) -> PResult<BondDsl> {
     let order = delimited(multispace0, value, multispace0).parse_next(i)?;
     let preds: Vec<BondPredicate> =
         repeat(0.., terminated(bond_predicate, multispace0)).parse_next(i)?;
-    let mut form = BondDsl(BondAst::new(order));
+    let mut form = BondDsl(BondForm::new(order));
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
 }
@@ -405,7 +405,7 @@ fn constraint_tag(c: &BondConstraintAst) -> &'static str {
 }
 
 /// One predicate from a bond-string; the parser yields a `Vec` of these
-/// and the applier folds them into the `BondAst`.
+/// and the applier folds them into the `BondForm`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BondPredicate {
     Charge(NumForm),
@@ -470,7 +470,7 @@ fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(),
     Ok(())
 }
 
-fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
+fn fmt_bond_form(f: &mut fmt::Formatter<'_>, ast: &BondForm) -> fmt::Result {
     match &ast.order {
         NumForm::Lit(n) => write!(f, "{}", n)?,
         NumForm::Undetermined => write!(f, "*")?,
@@ -495,10 +495,10 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintAst) -> fmt::Res
     }
 }
 
-pub(crate) fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
-    // Exhaustive destructure: adding a new BondAst field is a compile error
+pub(crate) fn lower_bond(ast: &mut BondForm, cfg: &BondDefaults) {
+    // Exhaustive destructure: adding a new BondForm field is a compile error
     // here, forcing the author to decide how lowering should handle it.
-    let BondAst {
+    let BondForm {
         order: _,
         charge,
         unpaired_electrons,
@@ -515,10 +515,10 @@ pub(crate) fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     lower_bond_constraints(constraints, cfg);
 }
 
-pub(crate) fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
-    // Exhaustive destructure: adding a new BondAst field is a compile error
+pub(crate) fn raise_bond(ast: &mut BondForm, cfg: &BondDefaults) {
+    // Exhaustive destructure: adding a new BondForm field is a compile error
     // here, forcing the author to decide how raising should handle it.
-    let BondAst {
+    let BondForm {
         order: _,
         charge,
         unpaired_electrons,
@@ -650,38 +650,38 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single("1", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::double("2", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::triple("3", BondDsl(BondAst { order: NumForm::Lit(3), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::quadruple("4", BondDsl(BondAst { order: NumForm::Lit(4), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::single_whitespace("  1  ", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::single_pos_charge("1#c+2", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(2), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::single_neg_charge("1#c-2", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(-2), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::single_zero_charge("1#c0", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::single_plus_only("1#c+", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::single_minus_only("1#c-", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::double_unpaired("2#u3", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(3), multiplicity: NumForm::Undetermined }, constraints: BondConstraintsAst::new() }))]
-    #[case::single_u_only("1#u", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, constraints: BondConstraintsAst::new() }))]
-    #[case::single_mult("1#s2", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) }, constraints: BondConstraintsAst::new() }))]
-    #[case::single_s_only("1#s", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) }, constraints: BondConstraintsAst::new() }))]
-    #[case::double_charge_unpaired("2#c+#u2", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, constraints: BondConstraintsAst::new() }))]
-    #[case::double_charge_mult("2#c-1#s3", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, constraints: BondConstraintsAst::new() }))]
-    #[case::aromatic("1#a", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
-    #[case::aromatic_plus("1#a+", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
-    #[case::aromatic_undetermined("1#a*", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Undetermined)]) }))]
-    #[case::not_aromatic("1#a!", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(false))]) }))]
-    #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
-    #[case::ring_membership_all("1#R2", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(2))]) }))]
-    #[case::ring_membership_all_bare("1#R", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))]) }))]
-    #[case::ring_membership_all_plus("1#R+", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::RangeFrom(1))]) }))]
-    #[case::ring_bang("1#R!", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]) }))]
-    #[case::ring_zero("1#R0", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]) }))]
-    #[case::ring_membership_all_star("1#R*", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)]) }))]
-    #[case::ring_membership_size("1#R(6)", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(6), 1)]) }))]
-    #[case::ring_membership_size_conj("1#R(5)#R(6)", BondDsl(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(5), 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]) }))]
-    #[case::whitespace_before_predicate("2 #c+", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::whitespace_between_predicates("2#c+ #a", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
-    #[case::whitespace_surrounding_predicates("  2  #c+  #a  ", BondDsl(BondAst { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
+    #[case::single("1", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::double("2", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::triple("3", BondDsl(BondForm { order: NumForm::Lit(3), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::quadruple("4", BondDsl(BondForm { order: NumForm::Lit(4), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_whitespace("  1  ", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_pos_charge("1#c+2", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(2), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_neg_charge("1#c-2", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(-2), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_zero_charge("1#c0", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_plus_only("1#c+", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_minus_only("1#c-", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::double_unpaired("2#u3", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(3), multiplicity: NumForm::Undetermined }, constraints: BondConstraintsAst::new() }))]
+    #[case::single_u_only("1#u", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Undetermined }, constraints: BondConstraintsAst::new() }))]
+    #[case::single_mult("1#s2", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(2) }, constraints: BondConstraintsAst::new() }))]
+    #[case::single_s_only("1#s", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(1) }, constraints: BondConstraintsAst::new() }))]
+    #[case::double_charge_unpaired("2#c+#u2", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, constraints: BondConstraintsAst::new() }))]
+    #[case::double_charge_mult("2#c-1#s3", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }, constraints: BondConstraintsAst::new() }))]
+    #[case::aromatic("1#a", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
+    #[case::aromatic_plus("1#a+", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
+    #[case::aromatic_undetermined("1#a*", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Undetermined)]) }))]
+    #[case::not_aromatic("1#a!", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(false))]) }))]
+    #[case::charged_aromatic("1#c+#a", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
+    #[case::ring_membership_all("1#R2", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(2))]) }))]
+    #[case::ring_membership_all_bare("1#R", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(1))]) }))]
+    #[case::ring_membership_all_plus("1#R+", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::RangeFrom(1))]) }))]
+    #[case::ring_bang("1#R!", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]) }))]
+    #[case::ring_zero("1#R0", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Lit(0))]) }))]
+    #[case::ring_membership_all_star("1#R*", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, NumForm::Undetermined)]) }))]
+    #[case::ring_membership_size("1#R(6)", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(6), 1)]) }))]
+    #[case::ring_membership_size_conj("1#R(5)#R(6)", BondDsl(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(5), 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]) }))]
+    #[case::whitespace_before_predicate("2 #c+", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::whitespace_between_predicates("2#c+ #a", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
+    #[case::whitespace_surrounding_predicates("  2  #c+  #a  ", BondDsl(BondForm { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) }))]
     fn test_parse_bond(#[case] input: &str, #[case] expected: BondDsl) {
         let result = bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -831,7 +831,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_dsl_from_ast() {
-        let mut ast = BondAst::new(NumForm::Lit(1));
+        let mut ast = BondForm::new(NumForm::Lit(1));
         ast.charge = NumForm::Lit(0);
         ast.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
         let cfg = BondDefaults::zeroed();
@@ -842,7 +842,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_dsl_into_ast() {
-        let dsl = BondDsl(BondAst::new(NumForm::Lit(1)));
+        let dsl = BondDsl(BondForm::new(NumForm::Lit(1)));
         let cfg = BondDefaults::zeroed();
         let ast = dsl.into_ir(&cfg);
         assert_eq!(ast.charge, NumForm::Lit(0));
@@ -854,7 +854,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_dsl_roundtrip_zeroed() {
-        let input = BondDsl(BondAst::new(NumForm::Lit(2)));
+        let input = BondDsl(BondForm::new(NumForm::Lit(2)));
         let cfg = BondDefaults::zeroed();
         let raised = input.clone().into_ir(&cfg);
         let lowered = BondDsl::from_ir(&raised, &cfg);
@@ -875,12 +875,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(":single", BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::double(":double", BondAst { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::triple(":triple", BondAst { order: NumForm::Lit(3), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::quadruple(":quadruple", BondAst { order: NumForm::Lit(4), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::aromatic(":aromatic", BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) })]
-    fn test_bond_dsl_keyword_shorthand(#[case] input: &str, #[case] expected: BondAst) {
+    #[case::single(":single", BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::double(":double", BondForm { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::triple(":triple", BondForm { order: NumForm::Lit(3), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::quadruple(":quadruple", BondForm { order: NumForm::Lit(4), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::aromatic(":aromatic", BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanForm::Lit(true))]) })]
+    fn test_bond_dsl_keyword_shorthand(#[case] input: &str, #[case] expected: BondForm) {
         let edn = read_string(input).unwrap();
         let dsl = BondDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.0, expected);
@@ -958,8 +958,8 @@ mod tests {
     #[case::ring_membership_all("1#R2")]
     #[case::ring_membership_size("1#R(6)")]
     #[case::cis_trans_stereo("2#C1")]
-    fn test_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
-        let ast: BondAst = s.parse().unwrap();
+    fn test_bond_form_from_str_to_string_roundtrip(#[case] s: &str) {
+        let ast: BondForm = s.parse().unwrap();
         assert_eq!(ast.to_string(), s);
     }
 
@@ -972,9 +972,9 @@ mod tests {
     #[case::cis_trans_stereo_coset_undetermined(bond_dsl!("1#C+"))]
     #[case::cis_trans_stereo_not_stereo(bond_dsl!("1#C!"))]
     #[case::cis_trans_stereo_set(bond_dsl!("1#C{1,2}"))]
-    fn test_bond_ast_to_edn_from_edn_roundtrip(#[case] input: BondAst) {
+    fn test_bond_form_to_edn_from_edn_roundtrip(#[case] input: BondForm) {
         let edn = input.to_edn();
-        let parsed = BondAst::from_edn(&edn).unwrap();
+        let parsed = BondForm::from_edn(&edn).unwrap();
         assert_eq!(parsed, input);
     }
 }

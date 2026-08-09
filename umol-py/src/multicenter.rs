@@ -565,7 +565,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomAst as GraphIrAtomAst, AtomId as GraphIrAtomId,
+        AtomForm as GraphIrAtomForm, AtomId as GraphIrAtomId,
         ElectronCountsForm as GraphIrElectronCountsForm, MoleculeEntries,
         MulticenterBondConstraintAst as GraphIrMulticenterBondConstraintAst,
         MulticenterBondConstraintKey as GraphIrMulticenterBondConstraintKey,
@@ -580,7 +580,7 @@ mod tests {
     /// three (electrons `[1,1,1]`), multicenter bond id 0.
     fn three_center_bond(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::B); 3],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::B); 3],
             multicenter: vec![(
                 (0u32..3).map(GraphIrAtomId).collect(),
                 GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),
@@ -1019,7 +1019,7 @@ mod tests {
         Python::attach(|py| {
             // three borons bonded plus one isolated boron (atom id 3)
             let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::B); 4],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::B); 4],
                 multicenter: vec![(
                     (0u32..3).map(GraphIrAtomId).collect(),
                     GraphIrMulticenterBondAst::from_electrons(vec![1, 1, 1]),

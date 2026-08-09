@@ -17,8 +17,8 @@ use umol_graph_core::{
 use umol_perm::Permutation;
 
 use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
-use super::atom::{AtomAst, AtomUpdate};
-use super::bond::{BondAst, BondUpdate};
+use super::atom::{AtomForm, AtomUpdate};
+use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
     AromaticSystemConstraintAst, AromaticSystemConstraintKey, AtomConstraintAst, AtomConstraintKey,
     BondConstraintAst, BondConstraintKey, Constraint, DativeBondConstraintAst,
@@ -52,11 +52,11 @@ use super::traits::{Canonicalize, EntityPatch, Lattice};
 pub enum AtomDelta {
     Add {
         id: AtomId,
-        ast: AtomAst,
+        ast: AtomForm,
     },
     Remove {
         id: AtomId,
-        ast: AtomAst,
+        ast: AtomForm,
     },
     ModifyField {
         id: AtomId,
@@ -88,7 +88,7 @@ impl AtomDelta {
     }
 
     /// Project an atom update into resolved deltas.
-    pub fn for_update(id: AtomId, current: &AtomAst, update: &AtomUpdate) -> Vec<Self> {
+    pub fn for_update(id: AtomId, current: &AtomForm, update: &AtomUpdate) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.element {
             if !current.element.canonical_eq(new) {
@@ -177,12 +177,12 @@ pub enum BondDelta {
     Add {
         id: BondId,
         atoms: [AtomId; 2],
-        ast: BondAst,
+        ast: BondForm,
     },
     Remove {
         id: BondId,
         atoms: [AtomId; 2],
-        ast: BondAst,
+        ast: BondForm,
     },
     ModifyField {
         id: BondId,
@@ -213,7 +213,7 @@ impl BondDelta {
     }
 
     /// Project a localized-bond update into resolved deltas.
-    pub fn for_update(id: BondId, current: &BondAst, update: &BondUpdate) -> Vec<Self> {
+    pub fn for_update(id: BondId, current: &BondForm, update: &BondUpdate) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.order {
             if !current.order.canonical_eq(new) {
@@ -1373,7 +1373,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
 
 impl EntityPatch for AtomDelta {
     type Id = AtomId;
-    type Ast = AtomAst;
+    type Ast = AtomForm;
     type FieldChange = AtomFieldChange;
     type Constraint = AtomConstraintAst;
 
@@ -1389,11 +1389,11 @@ impl EntityPatch for AtomDelta {
         AtomDelta::ModifyConstraint { id, old, new }
     }
 
-    fn diff(id: AtomId, lhs: &AtomAst, rhs: &AtomAst) -> Vec<Self> {
+    fn diff(id: AtomId, lhs: &AtomForm, rhs: &AtomForm) -> Vec<Self> {
         Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
-    diff_field_ops!(AtomFieldChange, AtomAst, AtomConstraintAst, {
+    diff_field_ops!(AtomFieldChange, AtomForm, AtomConstraintAst, {
         Element => element,
         IsotopeMass => isotope_mass,
         Charge => charge,
@@ -1403,7 +1403,7 @@ impl EntityPatch for AtomDelta {
     });
 
     fn apply_constraint(
-        ast: &mut AtomAst,
+        ast: &mut AtomForm,
         old: Option<AtomConstraintAst>,
         new: Option<AtomConstraintAst>,
     ) -> Result<(), Contradiction> {
@@ -1466,7 +1466,7 @@ impl EntityFold for AtomDelta {
 
 impl EntityPatch for BondDelta {
     type Id = BondId;
-    type Ast = BondAst;
+    type Ast = BondForm;
     type FieldChange = BondFieldChange;
     type Constraint = BondConstraintAst;
 
@@ -1482,18 +1482,18 @@ impl EntityPatch for BondDelta {
         BondDelta::ModifyConstraint { id, old, new }
     }
 
-    fn diff(id: BondId, lhs: &BondAst, rhs: &BondAst) -> Vec<Self> {
+    fn diff(id: BondId, lhs: &BondForm, rhs: &BondForm) -> Vec<Self> {
         Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
-    diff_field_ops!(BondFieldChange, BondAst, BondConstraintAst, {
+    diff_field_ops!(BondFieldChange, BondForm, BondConstraintAst, {
         Order => order,
         Charge => charge,
         UnpairedElectrons => unpaired_electrons,
     });
 
     fn apply_constraint(
-        ast: &mut BondAst,
+        ast: &mut BondForm,
         old: Option<BondConstraintAst>,
         new: Option<BondConstraintAst>,
     ) -> Result<(), Contradiction> {
@@ -2040,7 +2040,10 @@ impl EntityPatch for StereoBondDelta {
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the rhs-hand value of a
 /// preserved entity for a `ReactionSpanAst`.
-pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
+pub(crate) fn apply_atom_change(
+    ast: &mut AtomForm,
+    delta: &AtomDelta,
+) -> Result<(), Contradiction> {
     match delta {
         AtomDelta::ModifyField { change, .. } => AtomDelta::apply_field(ast, change.clone()),
         AtomDelta::ModifyConstraint { old, new, .. } => {
@@ -2050,7 +2053,10 @@ pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<
     }
 }
 
-pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
+pub(crate) fn apply_bond_change(
+    ast: &mut BondForm,
+    delta: &BondDelta,
+) -> Result<(), Contradiction> {
     match delta {
         BondDelta::ModifyField { change, .. } => BondDelta::apply_field(ast, change.clone()),
         BondDelta::ModifyConstraint { old, new, .. } => {
@@ -3139,8 +3145,8 @@ mod tests {
 
     #[rstest]
     #[case::add_remove(
-        AtomDelta::Add { id: AtomId(0), ast: AtomAst::from_element(Element::C) },
-        AtomDelta::Remove { id: AtomId(0), ast: AtomAst::from_element(Element::C) }
+        AtomDelta::Add { id: AtomId(0), ast: AtomForm::from_element(Element::C) },
+        AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) }
     )]
     #[case::set_field(
         AtomDelta::ModifyField {
@@ -3171,7 +3177,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_delta_for_update() {
-        let current = AtomAst::from_element(Element::C)
+        let current = AtomForm::from_element(Element::C)
             .with_isotope_mass(12_u32)
             .with_charge(0_i64)
             .with_implicit_hydrogens(4_i64)
@@ -3254,10 +3260,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(AtomAst::from_element(Element::C), AtomUpdate::default())]
-    #[case::canonical_field(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
-    fn test_atom_delta_for_update_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
+    #[case::empty(AtomForm::from_element(Element::C), AtomUpdate::default())]
+    #[case::canonical_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
+    fn test_atom_delta_for_update_identity(#[case] current: AtomForm, #[case] update: AtomUpdate) {
         assert_eq!(AtomDelta::for_update(AtomId(0), &current, &update), Vec::new());
     }
 
@@ -3265,8 +3271,8 @@ mod tests {
     #[case::singleton_set(NumForm::Lit(1), NumForm::lit_set([1]))]
     fn test_atom_delta_diff_canonical(#[case] lhs: NumForm, #[case] rhs: NumForm) {
         // Canonically-equal charges that are structurally distinct → `diff` emits nothing.
-        let lhs = AtomAst::from_element(Element::C).with_charge(lhs);
-        let rhs = AtomAst::from_element(Element::C).with_charge(rhs);
+        let lhs = AtomForm::from_element(Element::C).with_charge(lhs);
+        let rhs = AtomForm::from_element(Element::C).with_charge(rhs);
         assert_eq!(AtomDelta::diff(AtomId(0), &lhs, &rhs), Vec::new());
     }
 
@@ -3275,12 +3281,12 @@ mod tests {
         BondDelta::Add {
             id: BondId(0),
             atoms: [AtomId(0), AtomId(1)],
-            ast: BondAst::default(),
+            ast: BondForm::default(),
         },
         BondDelta::Remove {
             id: BondId(0),
             atoms: [AtomId(0), AtomId(1)],
-            ast: BondAst::default(),
+            ast: BondForm::default(),
         }
     )]
     #[case::set_field(
@@ -3312,7 +3318,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_delta_for_update() {
-        let current = BondAst::from_order(1)
+        let current = BondForm::from_order(1)
             .with_charge(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraint(BondConstraintAst::ring_membership(
@@ -3374,10 +3380,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(BondAst::from_order(1), BondUpdate::default())]
-    #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
-    fn test_bond_delta_for_update_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
+    #[case::empty(BondForm::from_order(1), BondUpdate::default())]
+    #[case::canonical_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    fn test_bond_delta_for_update_identity(#[case] current: BondForm, #[case] update: BondUpdate) {
         assert_eq!(BondDelta::for_update(BondId(0), &current, &update), Vec::new());
     }
 
@@ -3955,19 +3961,19 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomAst::from_element(Element::C) }),
-        Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomAst::from_element(Element::C) })
+        Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomForm::from_element(Element::C) }),
+        Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) })
     )]
     #[case::bond(
         Delta::Bond(BondDelta::Add {
             id: BondId(0),
             atoms: [AtomId(0), AtomId(1)],
-            ast: BondAst::default(),
+            ast: BondForm::default(),
         }),
         Delta::Bond(BondDelta::Remove {
             id: BondId(0),
             atoms: [AtomId(0), AtomId(1)],
-            ast: BondAst::default(),
+            ast: BondForm::default(),
         })
     )]
     fn test_delta_inverse(#[case] input: Delta, #[case] expected: Delta) {
@@ -3998,8 +4004,8 @@ mod tests {
     fn test_entity_span_superimpose_canonical(#[case] lhs: NumForm, #[case] rhs: NumForm) {
         // Canonically-equal sides that are structurally distinct superimpose to `Unchanged`,
         // not `Modified`.
-        let lhs = AtomAst::from_element(Element::C).with_charge(lhs);
-        let rhs = AtomAst::from_element(Element::C).with_charge(rhs);
+        let lhs = AtomForm::from_element(Element::C).with_charge(lhs);
+        let rhs = AtomForm::from_element(Element::C).with_charge(rhs);
         assert_eq!(
             EntitySpan::superimpose(Some(lhs.clone()), Some(rhs)),
             Some(EntitySpan::Unchanged(lhs))
@@ -4026,19 +4032,19 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        Delta::Atom(AtomDelta::Add { id: AtomId(1), ast: AtomAst::from_element(Element::C) }),
-        Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomAst::from_element(Element::C) })
+        Delta::Atom(AtomDelta::Add { id: AtomId(1), ast: AtomForm::from_element(Element::C) }),
+        Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomForm::from_element(Element::C) })
     )]
     #[case::bond(
         Delta::Bond(BondDelta::Add {
             id: BondId(0),
             atoms: [AtomId(2), AtomId(1)],
-            ast: BondAst::default(),
+            ast: BondForm::default(),
         }),
         Delta::Bond(BondDelta::Add {
             id: BondId(1),
             atoms: [AtomId(1), AtomId(0)],
-            ast: BondAst::default(),
+            ast: BondForm::default(),
         })
     )]
     #[case::dative_resort(
@@ -4200,7 +4206,7 @@ mod tests {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C).with_charge(NumForm::Lit(0)),
+                ast: AtomForm::from_element(Element::C).with_charge(NumForm::Lit(0)),
             }),
             charge_set(0, 0, 1),
         ]);
@@ -4208,7 +4214,7 @@ mod tests {
             deltas.canonicalize().unwrap(),
             Deltas::from_iter([Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C).with_charge(NumForm::Lit(1)),
+                ast: AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1)),
             })]),
         );
     }
@@ -4218,11 +4224,11 @@ mod tests {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
+                ast: AtomForm::from_element(Element::C),
             }),
             Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
+                ast: AtomForm::from_element(Element::C),
             }),
         ]);
         assert_eq!(deltas.canonicalize().unwrap(), Deltas::new());
@@ -4235,14 +4241,14 @@ mod tests {
             charge_set(0, 0, 1),
             Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C).with_charge(NumForm::Lit(1)),
+                ast: AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1)),
             }),
         ]);
         assert_eq!(
             deltas.canonicalize().unwrap(),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C).with_charge(NumForm::Lit(0)),
+                ast: AtomForm::from_element(Element::C).with_charge(NumForm::Lit(0)),
             })]),
         );
     }
@@ -4301,12 +4307,12 @@ mod tests {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
+                ast: AtomForm::from_element(Element::C),
             }),
             Delta::Bond(BondDelta::Add {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: BondAst::default(),
+                ast: BondForm::default(),
             }),
         ]);
         assert!(matches!(deltas.canonicalize(), Err(Contradiction)));

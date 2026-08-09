@@ -4,7 +4,7 @@ use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
 use umol_graph_core::MaximumIndependentSetAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementForm, MoleculeAst,
+    AromaticValenceAst, AtomConstraintAst, AtomForm, AtomId, BondForm, ElementForm, MoleculeAst,
     MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
 };
 
@@ -19,7 +19,7 @@ fn test_clar_aromaticity_find_from_rings() {
     let fixture: GraphFixture = toml::from_str(include_str!("data/coronene_planar.toml")).unwrap();
     let atoms: Vec<_> = (0..fixture.node_count)
         .map(|_| {
-            let mut atom = AtomAst::from_element(Element::C);
+            let mut atom = AtomForm::from_element(Element::C);
             atom.constraints.set(AtomConstraintAst::AromaticValence(
                 AromaticValenceAst::Aromatic(NumForm::Lit(1)),
             ));
@@ -29,7 +29,7 @@ fn test_clar_aromaticity_find_from_rings() {
     let bonds = fixture
         .edges
         .iter()
-        .map(|&[a, b]| (AtomId(a), AtomId(b), BondAst::from_order(1)))
+        .map(|&[a, b]| (AtomId(a), AtomId(b), BondForm::from_order(1)))
         .collect();
     let ast = MoleculeAst::from_entries(MoleculeEntries {
         atoms,

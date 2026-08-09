@@ -1805,10 +1805,10 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AromaticSystemAst as GraphIrAromaticSystemAst,
-        AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange, AtomAst as GraphIrAtomAst,
-        AtomFieldChange as GraphIrAtomFieldChange, BondAst as GraphIrBondAst,
-        BondFieldChange as GraphIrBondFieldChange, Constraint as GraphIrConstraint,
-        DativeBondAst as GraphIrDativeBondAst,
+        AromaticSystemFieldChange as GraphIrAromaticSystemFieldChange,
+        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
+        BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
+        Constraint as GraphIrConstraint, DativeBondAst as GraphIrDativeBondAst,
         DativeBondFieldChange as GraphIrDativeBondFieldChange,
         MoleculeConstraint as GraphIrMoleculeConstraint,
         MulticenterBondAst as GraphIrMulticenterBondAst,
@@ -1928,10 +1928,10 @@ mod tests {
 
     #[rstest]
     #[case::inventory(vec![
-        GraphIrEdit::AddAtoms { atoms: vec![GraphIrAtomAst::default()] },
+        GraphIrEdit::AddAtoms { atoms: vec![GraphIrAtomForm::default()] },
         GraphIrEdit::AddBonds { bonds: vec![GraphIrAddBond {
             endpoints: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrBondAst::default(),
+            ast: GraphIrBondForm::default(),
         }] },
         GraphIrEdit::RemoveTopology {
             atoms: vec![GraphIrAtomHandle::New(0)],

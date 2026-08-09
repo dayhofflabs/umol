@@ -9,8 +9,8 @@ use std::ops::Add;
 use umol_chem::element::Element;
 
 use super::super::aromatic::AromaticSystemAst;
-use super::super::atom::AtomAst;
-use super::super::bond::BondAst;
+use super::super::atom::AtomForm;
+use super::super::bond::BondForm;
 use super::super::constraint::BondConstraintAst;
 use super::super::dative::DativeBondAst;
 use super::super::id::{AtomId, BondId};
@@ -22,11 +22,14 @@ use super::{MoleculeAst, MoleculeBuilder};
 
 /// An atom argument to a spec term: create a fresh atom (optionally named) or reference
 /// one already introduced — by creation `position` or by `name`. What you write picks the
-/// variant by type: `C`/`"C#h3"`/`AtomAst` → create, `(name, spec)` tuple → create-named,
+/// variant by type: `C`/`"C#h3"`/`AtomForm` → create, `(name, spec)` tuple → create-named,
 /// a bare integer → by position, [`name`] → by name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomArg {
-    New { spec: AtomAst, name: Option<String> },
+    New {
+        spec: AtomForm,
+        name: Option<String>,
+    },
     Index(u32),
     Name(String),
 }
@@ -34,7 +37,7 @@ pub enum AtomArg {
 impl From<Element> for AtomArg {
     fn from(element: Element) -> Self {
         Self::New {
-            spec: AtomAst::from_element(element),
+            spec: AtomForm::from_element(element),
             name: None,
         }
     }
@@ -43,14 +46,14 @@ impl From<Element> for AtomArg {
 impl From<&str> for AtomArg {
     fn from(spec: &str) -> Self {
         Self::New {
-            spec: AtomAst::from(spec),
+            spec: AtomForm::from(spec),
             name: None,
         }
     }
 }
 
-impl From<AtomAst> for AtomArg {
-    fn from(spec: AtomAst) -> Self {
+impl From<AtomForm> for AtomArg {
+    fn from(spec: AtomForm) -> Self {
         Self::New { spec, name: None }
     }
 }
@@ -70,7 +73,7 @@ impl From<i32> for AtomArg {
     }
 }
 
-impl<S: Into<String>, T: Into<AtomAst>> From<(S, T)> for AtomArg {
+impl<S: Into<String>, T: Into<AtomForm>> From<(S, T)> for AtomArg {
     fn from((name, spec): (S, T)) -> Self {
         Self::New {
             spec: spec.into(),
@@ -130,7 +133,7 @@ pub enum MoleculeSpecTerm {
         name: Option<String>,
         first: AtomArg,
         second: AtomArg,
-        ast: BondAst,
+        ast: BondForm,
     },
     Chain(Vec<AtomArg>),
     Ring(Vec<AtomArg>),
@@ -181,7 +184,7 @@ pub fn single(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondAst::from_order(1),
+        ast: BondForm::from_order(1),
     }
 }
 
@@ -191,7 +194,7 @@ pub fn double(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondAst::from_order(2),
+        ast: BondForm::from_order(2),
     }
 }
 
@@ -201,16 +204,16 @@ pub fn triple(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondAst::from_order(3),
+        ast: BondForm::from_order(3),
     }
 }
 
-/// A bond carrying an explicit `BondAst` — the escape hatch for a charge, spin, order-set,
+/// A bond carrying an explicit `BondForm` — the escape hatch for a charge, spin, order-set,
 /// or constraint the order verbs can't set.
 pub fn bond(
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    ast: impl Into<BondAst>,
+    ast: impl Into<BondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
         name: None,
@@ -226,7 +229,7 @@ pub fn named_bond(
     name: impl Into<String>,
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    ast: impl Into<BondAst>,
+    ast: impl Into<BondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
         name: Some(name.into()),
@@ -243,7 +246,7 @@ pub fn aromatic_bond(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> M
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
+        ast: BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
     }
 }
 
@@ -554,13 +557,13 @@ mod tests {
     #[rstest]
     #[case::element(
         AtomArg::from(Element::C),
-        AtomArg::New { spec: AtomAst::from_element(Element::C), name: None }
+        AtomArg::New { spec: AtomForm::from_element(Element::C), name: None }
     )]
     #[case::position(AtomArg::from(5_u32), AtomArg::Index(5))]
     #[case::position_signed(AtomArg::from(3_i32), AtomArg::Index(3))]
     #[case::named_tuple(
         AtomArg::from(("carbonyl", Element::O)),
-        AtomArg::New { spec: AtomAst::from_element(Element::O), name: Some("carbonyl".to_string()) }
+        AtomArg::New { spec: AtomForm::from_element(Element::O), name: Some("carbonyl".to_string()) }
     )]
     #[case::name_fn(name("amide"), AtomArg::Name("amide".to_string()))]
     fn test_atom_arg_from(#[case] arg: AtomArg, #[case] expected: AtomArg) {
@@ -596,7 +599,7 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 2);
         assert_eq!(mol.bonds().count(), 1);
-        assert_eq!(mol.bond(BondId(0)).ast, &BondAst::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(2));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -606,7 +609,7 @@ mod tests {
         let spec = atoms([Element::C, Element::O]) + single(0, 1);
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).ast, &BondAst::from_order(1));
+        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(1));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -621,20 +624,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case::single(single(0_u32, 1_u32), BondAst::from_order(1))]
-    #[case::double(double(0_u32, 1_u32), BondAst::from_order(2))]
-    #[case::triple(triple(0_u32, 1_u32), BondAst::from_order(3))]
+    #[case::single(single(0_u32, 1_u32), BondForm::from_order(1))]
+    #[case::double(double(0_u32, 1_u32), BondForm::from_order(2))]
+    #[case::triple(triple(0_u32, 1_u32), BondForm::from_order(3))]
     #[case::aromatic(
         aromatic_bond(0_u32, 1_u32),
-        BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
+        BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
     )]
     #[case::explicit(
-        bond(0_u32, 1_u32, BondAst::from_order(2).with_charge(-1_i64)),
-        BondAst::from_order(2).with_charge(-1_i64)
+        bond(0_u32, 1_u32, BondForm::from_order(2).with_charge(-1_i64)),
+        BondForm::from_order(2).with_charge(-1_i64)
     )]
     fn test_molecule_spec_bond_terms(
         #[case] bond_term: MoleculeSpecTerm,
-        #[case] expected: BondAst,
+        #[case] expected: BondForm,
     ) {
         let spec = atoms([Element::C, Element::C]) + bond_term;
         let mol = spec.build();
@@ -725,10 +728,10 @@ mod tests {
     fn test_molecule_spec_named_bond() {
         // a named bond carries its spec and binds a label (inert without a reference)
         let spec = atoms([Element::C, Element::C])
-            + named_bond("db", 0_u32, 1_u32, BondAst::from_order(2));
+            + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2));
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).ast, &BondAst::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -766,7 +769,7 @@ mod tests {
         // stereo bond referencing the named double bond by name; virtual Hs bear on the two bond
         // atoms by ligand position (0–1 → first atom, 2–3 → second)
         let spec = atoms([Element::C, Element::C, Element::F, Element::Cl])
-            + named_bond("db", 0_u32, 1_u32, BondAst::from_order(2))
+            + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2))
             + stereo_bond(
                 "db",
                 [

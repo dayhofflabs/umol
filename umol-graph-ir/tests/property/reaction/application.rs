@@ -34,16 +34,16 @@ proptest! {
     /// unpaired-electron components and keyed constraint set / replace / remove operations.
     #[test]
     fn test_reaction_ast_apply_atom_update(
-        host_atom in atom_ast_strategy(),
+        host_atom in atom_form_strategy(),
         update in atom_update_strategy(),
     ) {
-        let pattern_atom = AtomAst::default();
+        let pattern_atom = AtomForm::default();
         let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
         let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
         let atom_deltas = AtomDelta::for_update(AtomId(0), &pattern_atom, &effective_update);
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::default()],
+                atoms: vec![AtomForm::default()],
                 ..Default::default()
             }),
             Deltas::from_iter(atom_deltas.into_iter().map(Delta::Atom)),
@@ -73,28 +73,28 @@ proptest! {
     /// A pattern-relative localized-bond update lowers against the matched host bond.
     #[test]
     fn test_reaction_ast_apply_bond_update(
-        host_bond in bond_ast_strategy(),
+        host_bond in bond_form_strategy(),
         update in bond_update_strategy(),
     ) {
-        let pattern_bond = BondAst::default();
+        let pattern_bond = BondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
         let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
         let bond_deltas = BondDelta::for_update(BondId(0), &pattern_bond, &effective_update);
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-                bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(bond_deltas.into_iter().map(Delta::Bond)),
         );
         let host = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), host_bond)],
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), expected_bond)],
             ..Default::default()
         });
@@ -128,19 +128,19 @@ proptest! {
         );
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(dative_deltas.into_iter().map(Delta::DativeBond)),
         );
         let host = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             dative: vec![(vec![AtomId(0)], AtomId(1), host_bond)],
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             dative: vec![(vec![AtomId(0)], AtomId(1), expected_bond)],
             ..Default::default()
         });
@@ -176,9 +176,9 @@ proptest! {
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::N),
-                    AtomAst::from_element(Element::O),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::N),
+                    AtomForm::from_element(Element::O),
                 ],
                 aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], AromaticSystemAst::default())],
                 ..Default::default()
@@ -187,18 +187,18 @@ proptest! {
         );
         let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
             ],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], host_system)],
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
             ],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], expected_system)],
             ..Default::default()
@@ -220,7 +220,7 @@ proptest! {
     /// A pattern-relative multicenter-bond update lowers against the matched host relation.
     #[test]
     fn test_reaction_ast_apply_multicenter_bond_update(
-        mut host_bond in multicenter_bond_ast_for(3),
+        mut host_bond in multicenter_bond_form_for(3),
         update in multicenter_bond_update_for(3),
     ) {
         host_bond.unpaired_electrons = UnpairedElectronsForm::from((2_u8, 3_u8));
@@ -235,9 +235,9 @@ proptest! {
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::N),
-                    AtomAst::from_element(Element::O),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::N),
+                    AtomForm::from_element(Element::O),
                 ],
                 multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst::default())],
                 ..Default::default()
@@ -246,18 +246,18 @@ proptest! {
         );
         let host = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
             ],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], host_bond)],
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
             ],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], expected_bond)],
             ..Default::default()
@@ -279,7 +279,7 @@ proptest! {
     /// A pattern-relative noncovalent-bond update lowers against the matched host relation.
     #[test]
     fn test_reaction_ast_apply_noncovalent_bond_update(
-        host_bond in noncovalent_bond_ast_strategy(),
+        host_bond in noncovalent_bond_form_strategy(),
         update in noncovalent_bond_update_strategy(),
     ) {
         let pattern_bond = NoncovalentBondAst::default();
@@ -292,19 +292,19 @@ proptest! {
         );
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
                 noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(noncovalent_deltas.into_iter().map(Delta::NoncovalentBond)),
         );
         let host = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             noncovalent: vec![(AtomId(0), AtomId(1), host_bond)],
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
             noncovalent: vec![(AtomId(0), AtomId(1), expected_bond)],
             ..Default::default()
         });
@@ -347,10 +347,10 @@ proptest! {
         let stereo_atom_deltas =
             StereoAtomDelta::for_update(StereoAtomId(0), &pattern_atom, &effective_update);
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::N),
-            AtomAst::from_element(Element::O),
-            AtomAst::from_element(Element::F),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::F),
         ];
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
@@ -409,12 +409,12 @@ proptest! {
         let stereo_bond_deltas =
             StereoBondDelta::for_update(StereoBondId(0), &pattern_bond, &effective_update);
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::N),
-            AtomAst::from_element(Element::O),
-            AtomAst::from_element(Element::F),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::F),
         ];
-        let bonds = vec![(AtomId(0), AtomId(1), BondAst::from_order(2))];
+        let bonds = vec![(AtomId(0), AtomId(1), BondForm::from_order(2))];
         let reaction = ReactionAst::new(
             MoleculeAst::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
@@ -489,14 +489,14 @@ proptest! {
     ) {
         let new = 1 - old;
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
         ];
-        let bonds: Vec<(AtomId, AtomId, BondAst)> = (1..=4)
-            .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+        let bonds: Vec<(AtomId, AtomId, BondForm)> = (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
             .collect();
         let rule_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -559,14 +559,14 @@ proptest! {
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
         ];
-        let bonds: Vec<(AtomId, AtomId, BondAst)> = (1..=4)
-            .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+        let bonds: Vec<(AtomId, AtomId, BondForm)> = (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
             .collect();
         let rule_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -622,19 +622,19 @@ proptest! {
     ) {
         let new = 1 - old;
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
         ];
         let bonds = vec![
-            (AtomId(0), AtomId(1), BondAst::from_order(2)),
-            (AtomId(0), AtomId(2), BondAst::from_order(1)),
-            (AtomId(0), AtomId(3), BondAst::from_order(1)),
-            (AtomId(1), AtomId(4), BondAst::from_order(1)),
-            (AtomId(1), AtomId(5), BondAst::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
         ];
         let rule_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -697,19 +697,19 @@ proptest! {
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {
         let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::F),
-            AtomAst::from_element(Element::Cl),
-            AtomAst::from_element(Element::Br),
-            AtomAst::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
         ];
         let bonds = vec![
-            (AtomId(0), AtomId(1), BondAst::from_order(2)),
-            (AtomId(0), AtomId(2), BondAst::from_order(1)),
-            (AtomId(0), AtomId(3), BondAst::from_order(1)),
-            (AtomId(1), AtomId(4), BondAst::from_order(1)),
-            (AtomId(1), AtomId(5), BondAst::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
         ];
         let rule_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))

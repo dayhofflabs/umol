@@ -679,7 +679,7 @@ mod tests {
     #[case::aromatic_false("1#a!", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false))) })]
     #[case::ring_membership_all("1#R2", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64)) })]
     #[case::ring_membership_size("1#R(6)", DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)) })]
-    fn test_dative_bond_ast_from_str(#[case] input: &str, #[case] expected: DativeBondAst) {
+    fn test_dative_bond_form_from_str(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(input.parse::<DativeBondAst>().unwrap(), expected);
     }
 
@@ -691,7 +691,7 @@ mod tests {
     #[case::aromatic_false(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(false))) }, "1#a!")]
     #[case::ring_membership_all(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64)) }, "1#R2")]
     #[case::ring_membership_size(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)) }, "1#R(6)")]
-    fn test_dative_bond_ast_display(#[case] input: DativeBondAst, #[case] expected: &str) {
+    fn test_dative_bond_form_display(#[case] input: DativeBondAst, #[case] expected: &str) {
         assert_eq!(input.to_string(), expected);
     }
 
@@ -699,7 +699,7 @@ mod tests {
     #[rstest]
     #[case::string(r##""1#a""##, DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) })]
     #[case::keyword(":double", DativeBondAst::from_order(2))]
-    fn test_dative_bond_ast_from_edn(#[case] input: &str, #[case] expected: DativeBondAst) {
+    fn test_dative_bond_form_from_edn(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(
             DativeBondAst::from_edn(&read_string(input).unwrap()).unwrap(),
             expected,
@@ -710,7 +710,7 @@ mod tests {
     #[rstest]
     #[case::single(DativeBondAst::from_order(1), ":single")]
     #[case::aromatic(DativeBondAst { order: NumForm::Lit(1), constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanForm::Lit(true))) }, r##""1#a""##)]
-    fn test_dative_bond_ast_to_edn(#[case] input: DativeBondAst, #[case] expected: &str) {
+    fn test_dative_bond_form_to_edn(#[case] input: DativeBondAst, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
 

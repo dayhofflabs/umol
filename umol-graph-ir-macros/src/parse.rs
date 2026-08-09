@@ -158,7 +158,7 @@ pub(crate) enum ElementSpec {
 }
 
 impl ElementSpec {
-    /// The spec as a string literal for the L2 `Into<AtomAst>` path.
+    /// The spec as a string literal for the L2 `Into<AtomForm>` path.
     pub(crate) fn as_lit(&self) -> LitStr {
         match self {
             ElementSpec::Bare(ident) => LitStr::new(&ident.to_string(), ident.span()),

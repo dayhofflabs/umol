@@ -10,7 +10,7 @@ use super::value::NumForm;
 /// Bond AST: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
-pub struct BondAst {
+pub struct BondForm {
     pub order: NumForm,
     pub charge: NumForm,
     pub unpaired_electrons: UnpairedElectronsForm,
@@ -27,7 +27,7 @@ pub struct BondUpdate {
     pub constraints: BondConstraintsAst,
 }
 
-impl BondAst {
+impl BondForm {
     pub fn new(order: NumForm) -> Self {
         Self {
             order,
@@ -81,10 +81,10 @@ impl BondAst {
     }
 
     /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
-    pub fn update(&self, update: &BondUpdate) -> BondAst {
+    pub fn update(&self, update: &BondUpdate) -> BondForm {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
-        BondAst {
+        BondForm {
             order: update.order.clone().unwrap_or_else(|| self.order.clone()),
             charge: update.charge.clone().unwrap_or_else(|| self.charge.clone()),
             unpaired_electrons: self.unpaired_electrons.update(&update.unpaired_electrons),
@@ -134,7 +134,7 @@ impl BondAst {
     }
 }
 
-impl From<&str> for BondAst {
+impl From<&str> for BondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid bond string")
     }
@@ -153,90 +153,90 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(BondAst::new(NumForm::Lit(2)),
-        BondAst { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::from_order(BondAst::from_order(3),
-        BondAst { order: NumForm::Lit(3), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    fn test_bond_ast_new(#[case] actual: BondAst, #[case] expected: BondAst) {
+    #[case::new(BondForm::new(NumForm::Lit(2)),
+        BondForm { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::from_order(BondForm::from_order(3),
+        BondForm { order: NumForm::Lit(3), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    fn test_bond_form_new(#[case] actual: BondForm, #[case] expected: BondForm) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::with_order(BondAst::default().with_order(2_i64),
-        BondAst { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::with_charge(BondAst::from_order(1).with_charge(-1_i64),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
-    #[case::with_unpaired_electrons(BondAst::from_order(1).with_unpaired_electrons((0_u8, 1_u8)),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() })]
-    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+    #[case::with_order(BondForm::default().with_order(2_i64),
+        BondForm { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::with_charge(BondForm::from_order(1).with_charge(-1_i64),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(-1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() })]
+    #[case::with_unpaired_electrons(BondForm::from_order(1).with_unpaired_electrons((0_u8, 1_u8)),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() })]
+    #[case::with_constraint(BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))) })]
     #[case::with_constraints_extends(
-        BondAst::from_order(1)
+        BondForm::from_order(1)
             .with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true)))
             .with_constraints([BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
                 BondConstraintAst::ring_membership(RingScope::All, 1),
                 BondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]) })]
     #[case::with_constraint_appends_same_scope(
-        BondAst::from_order(1)
+        BondForm::from_order(1)
             .with_constraint(BondConstraintAst::ring_membership(RingScope::All, 1))
             .with_constraint(BondConstraintAst::ring_membership(RingScope::All, 2)),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::ring_membership(RingScope::All, 1),
                 BondConstraintAst::ring_membership(RingScope::All, 2),
             ]) })]
     #[case::with_constraint_appends_multi_valued_ring_size(
-        BondAst::from_order(1)
+        BondForm::from_order(1)
             .with_constraint(BondConstraintAst::ring_membership(RingScope::Size(5), 1))
             .with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1)),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from_iter([
                 BondConstraintAst::ring_membership(RingScope::Size(5), 1),
                 BondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]) })]
-    fn test_bond_ast_with_methods(#[case] actual: BondAst, #[case] expected: BondAst) {
+    fn test_bond_form_with_methods(#[case] actual: BondForm, #[case] expected: BondForm) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::order(BondAst::from_order(1), BondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }, BondAst::from_order(2))]
-    #[case::order_undetermined(BondAst::from_order(1), BondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }, BondAst::default())]
-    #[case::charge(BondAst::from_order(1).with_charge(0_i64), BondUpdate { charge: Some(NumForm::Lit(-1)), ..Default::default() }, BondAst::from_order(1).with_charge(-1_i64))]
-    #[case::charge_undetermined(BondAst::from_order(1).with_charge(-1_i64), BondUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, BondAst::from_order(1))]
-    #[case::unpaired_electrons_count(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons((0_u8, 3_u8)))]
-    #[case::unpaired_electrons_multiplicity(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons((2_u8, 1_u8)))]
-    #[case::unpaired_electrons_count_undetermined(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
-    #[case::unpaired_electrons_multiplicity_undetermined(BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, BondAst::from_order(1).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
-    #[case::constraint_set(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))), ..Default::default() }, BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
-    #[case::constraint_replace(BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
-    #[case::constraint_remove(BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }, BondAst::from_order(1))]
-    fn test_bond_ast_update(#[case] bond: BondAst, #[case] update: BondUpdate, #[case] expected: BondAst) {
+    #[case::order(BondForm::from_order(1), BondUpdate { order: Some(NumForm::Lit(2)), ..Default::default() }, BondForm::from_order(2))]
+    #[case::order_undetermined(BondForm::from_order(1), BondUpdate { order: Some(NumForm::Undetermined), ..Default::default() }, BondForm::default())]
+    #[case::charge(BondForm::from_order(1).with_charge(0_i64), BondUpdate { charge: Some(NumForm::Lit(-1)), ..Default::default() }, BondForm::from_order(1).with_charge(-1_i64))]
+    #[case::charge_undetermined(BondForm::from_order(1).with_charge(-1_i64), BondUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, BondForm::from_order(1))]
+    #[case::unpaired_electrons_count(BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, BondForm::from_order(1).with_unpaired_electrons((0_u8, 3_u8)))]
+    #[case::unpaired_electrons_multiplicity(BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, BondForm::from_order(1).with_unpaired_electrons((2_u8, 1_u8)))]
+    #[case::unpaired_electrons_count_undetermined(BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, BondForm::from_order(1).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
+    #[case::unpaired_electrons_multiplicity_undetermined(BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8)), BondUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, BondForm::from_order(1).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
+    #[case::constraint_set(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))), ..Default::default() }, BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
+    #[case::constraint_replace(BondForm::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, BondForm::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
+    #[case::constraint_remove(BondForm::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() }, BondForm::from_order(1))]
+    fn test_bond_form_update(#[case] bond: BondForm, #[case] update: BondUpdate, #[case] expected: BondForm) {
         assert_eq!(bond.update(&update), expected);
     }
 
     #[rstest]
-    #[case::empty(BondAst::from_order(1).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
-    fn test_bond_ast_update_identity(#[case] bond: BondAst) {
+    #[case::empty(BondForm::from_order(1).with_charge(-1_i64).with_unpaired_electrons((2_u8, 3_u8)).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
+    fn test_bond_form_update_identity(#[case] bond: BondForm) {
         assert_eq!(bond.update(&BondUpdate::default()), bond);
     }
 
     #[rstest]
-    fn test_bond_ast_difference_to() {
-        let bond = BondAst::from_order(1)
+    fn test_bond_form_difference_to() {
+        let bond = BondForm::from_order(1)
             .with_charge(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraints([
                 BondConstraintAst::Aromatic(BooleanForm::Lit(true)),
                 BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64),
             ]);
-        let other = BondAst::from_order(2)
+        let other = BondForm::from_order(2)
             .with_unpaired_electrons((2_u8, 1_u8))
             .with_constraints([
                 BondConstraintAst::Aromatic(BooleanForm::Lit(false)),
@@ -261,16 +261,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(BondAst::from_order(1).with_charge(1_i64), BondAst::from_order(1).with_charge(NumForm::lit_set([1])))]
-    fn test_bond_ast_difference_to_identity(#[case] bond: BondAst, #[case] other: BondAst) {
+    #[case::canonical(BondForm::from_order(1).with_charge(1_i64), BondForm::from_order(1).with_charge(NumForm::lit_set([1])))]
+    fn test_bond_form_difference_to_identity(#[case] bond: BondForm, #[case] other: BondForm) {
         assert_eq!(bond.difference_to(&other), BondUpdate::default());
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::from_ground_order(
-        BondAst::from_order(1).into_ground(),
-        BondAst {
+        BondForm::from_order(1).into_ground(),
+        BondForm {
             order: NumForm::Lit(1),
             charge: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
@@ -278,8 +278,8 @@ mod tests {
         },
     )]
     #[case::preserves_set_charge(
-        BondAst::from_order(2).with_charge(1_i64).into_ground(),
-        BondAst {
+        BondForm::from_order(2).with_charge(1_i64).into_ground(),
+        BondForm {
             order: NumForm::Lit(2),
             charge: NumForm::Lit(1),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
@@ -287,124 +287,124 @@ mod tests {
         },
     )]
     #[case::preserves_constraints(
-        BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))).into_ground(),
-        BondAst {
+        BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))).into_ground(),
+        BondForm {
             order: NumForm::Lit(1),
             charge: NumForm::Lit(0),
             unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
         },
     )]
-    fn test_bond_ast_into_ground(#[case] actual: BondAst, #[case] expected: BondAst) {
+    fn test_bond_form_into_ground(#[case] actual: BondForm, #[case] expected: BondForm) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_(BondAst::default(), false)]
-    #[case::order_only(BondAst::from_order(1), false)]
-    #[case::all_ground(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+    #[case::default_(BondForm::default(), false)]
+    #[case::order_only(BondForm::from_order(1), false)]
+    #[case::all_ground(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
         constraints: BondConstraintsAst::new() }, true)]
-    #[case::charge_undetermined(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+    #[case::charge_undetermined(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(),
         constraints: BondConstraintsAst::new() }, false)]
-    #[case::ground_with_constraint(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+    #[case::ground_with_constraint(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
         constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))) }, true)]
-    fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
+    fn test_bond_form_is_ground(#[case] ast: BondForm, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_order(
-        BondAst { order: NumForm::lit_set([2]), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
-        Ok(BondAst { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }),
+        BondForm { order: NumForm::lit_set([2]), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
+        Ok(BondForm { order: NumForm::Lit(2), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }),
     )]
     #[case::order_empty_litset_contradiction(
-        BondAst { order: NumForm::lit_set(Vec::<i64>::new()), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
+        BondForm { order: NumForm::lit_set(Vec::<i64>::new()), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
         Err(Contradiction),
     )]
-    fn test_bond_ast_canonicalize(
-        #[case] input: BondAst,
-        #[case] expected: Result<BondAst, Contradiction>,
+    fn test_bond_form_canonicalize(
+        #[case] input: BondForm,
+        #[case] expected: Result<BondForm, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_matches_ground(BondAst::default(),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
-    #[case::same_order(BondAst::from_order(2), BondAst::from_order(2), true)]
-    #[case::order_mismatch(BondAst::from_order(2), BondAst::from_order(1), false)]
-    #[case::pattern_more_specific_than_target(BondAst::from_order(2), BondAst::default(), false)]
-    #[case::charge_mismatch(BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }, false)]
-    #[case::charge_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }, true)]
-    #[case::unpaired_electrons_mismatch(BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() },
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: (2_u8, 3_u8).into(), constraints: BondConstraintsAst::new() }, false)]
-    #[case::unpaired_electrons_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
+    #[case::default_matches_ground(BondForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
+    #[case::same_order(BondForm::from_order(2), BondForm::from_order(2), true)]
+    #[case::order_mismatch(BondForm::from_order(2), BondForm::from_order(1), false)]
+    #[case::pattern_more_specific_than_target(BondForm::from_order(2), BondForm::default(), false)]
+    #[case::charge_mismatch(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }, false)]
+    #[case::charge_wildcard_pattern(BondForm::from_order(1),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }, true)]
+    #[case::unpaired_electrons_mismatch(BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() },
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: (2_u8, 3_u8).into(), constraints: BondConstraintsAst::new() }, false)]
+    #[case::unpaired_electrons_wildcard_pattern(BondForm::from_order(1),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
     #[case::constraint_required_present(
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))) },
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))) }, true)]
     #[case::constraint_required_absent(
-        BondAst { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+        BondForm { order: NumForm::Lit(1), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
             constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanForm::Lit(true))) },
-        BondAst::from_order(1), false)]
-    fn test_bond_ast_matches(
-        #[case] pattern: BondAst,
-        #[case] target: BondAst,
+        BondForm::from_order(1), false)]
+    fn test_bond_form_matches(
+        #[case] pattern: BondForm,
+        #[case] target: BondForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rstest]
-    #[case::both_default(BondAst::default(), BondAst::default(), Some(BondAst::default()))]
+    #[case::both_default(BondForm::default(), BondForm::default(), Some(BondForm::default()))]
     #[case::narrows_field(
-        BondAst::from_order(2),
-        BondAst { order: NumForm::Undetermined, charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
-        Some(BondAst { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }),
+        BondForm::from_order(2),
+        BondForm { order: NumForm::Undetermined, charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() },
+        Some(BondForm { order: NumForm::Lit(2), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsAst::new() }),
     )]
-    #[case::incompatible_order(BondAst::from_order(2), BondAst::from_order(3), None)]
-    fn test_bond_ast_meet(
-        #[case] a: BondAst,
-        #[case] b: BondAst,
-        #[case] expected: Option<BondAst>,
+    #[case::incompatible_order(BondForm::from_order(2), BondForm::from_order(3), None)]
+    fn test_bond_form_meet(
+        #[case] a: BondForm,
+        #[case] b: BondForm,
+        #[case] expected: Option<BondForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    #[case::widens_to_set(BondAst::from_order(2), BondAst::from_order(3),
-        BondAst { order: NumForm::lit_set([2, 3]), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
+    #[case::widens_to_set(BondForm::from_order(2), BondForm::from_order(3),
+        BondForm { order: NumForm::lit_set([2, 3]), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(),
         constraints: BondConstraintsAst::new() },
     )]
-    fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {
+    fn test_bond_form_join(#[case] a: BondForm, #[case] b: BondForm, #[case] expected: BondForm) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]
     #[case::changed(
-        BondAst::default(),
-        BondAst::from_order(2),
+        BondForm::default(),
+        BondForm::from_order(2),
         true,
-        BondAst::from_order(2)
+        BondForm::from_order(2)
     )]
     #[case::no_change(
-        BondAst::from_order(2),
-        BondAst::from_order(2),
+        BondForm::from_order(2),
+        BondForm::from_order(2),
         false,
-        BondAst::from_order(2)
+        BondForm::from_order(2)
     )]
-    fn test_bond_ast_narrow_from(
-        #[case] mut target: BondAst,
-        #[case] source: BondAst,
+    fn test_bond_form_narrow_from(
+        #[case] mut target: BondForm,
+        #[case] source: BondForm,
         #[case] expected_changed: bool,
-        #[case] expected_after: BondAst,
+        #[case] expected_after: BondForm,
     ) {
         let changed = target.narrow_from(&source);
         assert_eq!(changed, expected_changed);

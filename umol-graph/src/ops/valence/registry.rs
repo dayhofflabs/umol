@@ -1,7 +1,7 @@
 //! Atom-type registry: a lookup of canonical atom patterns keyed by element
 //! and (optionally) charge. Consumed by the AtomTyping valence resolver.
 //!
-//! TOML-loaded entries are parsed via `AtomDsl` and raised to ground `AtomAst`
+//! TOML-loaded entries are parsed via `AtomDsl` and raised to ground `AtomForm`
 //! values with `ground()` defaults plus the valence-relevant constraints zeroed
 //! (valence, donated/accepted pairs, aromatic valence, multicenter valence); all
 //! other constraints stay unconstrained. Stored under both `(element, Some(charge))`
@@ -17,14 +17,14 @@ use umol_chem::element::Element;
 use umol_graph_ir::dsl::{
     AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
 };
-use umol_graph_ir::ir::{AtomAst, ElementForm, IntoIr, NumForm};
+use umol_graph_ir::ir::{AtomForm, ElementForm, IntoIr, NumForm};
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
 
 #[derive(Debug, Clone)]
 pub struct AtomTypeRegistry {
-    atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>>,
+    atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomForm>>,
     content_hash: u64,
 }
 
@@ -58,7 +58,7 @@ impl AtomTypeRegistry {
         &DEFAULT_ATOM_TYPE_REGISTRY
     }
 
-    pub fn from_atoms(atoms: impl IntoIterator<Item = AtomAst>) -> Self {
+    pub fn from_atoms(atoms: impl IntoIterator<Item = AtomForm>) -> Self {
         let mut reg = Self::new();
         for atom in atoms {
             reg.add(atom);
@@ -104,7 +104,7 @@ impl AtomTypeRegistry {
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
             ..AtomDefaults::ground()
         };
-        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>> = BTreeMap::new();
+        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomForm>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {
                 ConfigError::InvalidAtomTypeRegistry(format!("unknown element: {}", element_key))
@@ -116,7 +116,7 @@ impl AtomTypeRegistry {
                         charge_key, element_key
                     ))
                 })?;
-                let atoms: Vec<AtomAst> = sources
+                let atoms: Vec<AtomForm> = sources
                     .iter()
                     .map(|source| parse_entry(source, &defaults, element, charge))
                     .collect::<Result<_, _>>()?;
@@ -141,7 +141,7 @@ impl AtomTypeRegistry {
         Self::from_toml_str(&input)
     }
 
-    pub fn add(&mut self, atom: AtomAst) {
+    pub fn add(&mut self, atom: AtomForm) {
         let element = match &atom.element {
             ElementForm::Lit(e) => *e,
             _ => panic!("registry entries must have literal elements"),
@@ -161,19 +161,19 @@ impl AtomTypeRegistry {
         self.recompute_hash();
     }
 
-    pub fn patterns_for_element(&self, element: Element) -> &[AtomAst] {
+    pub fn patterns_for_element(&self, element: Element) -> &[AtomForm] {
         self.atom_types
             .get(&(element, None))
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn patterns_for_element_and_charge(&self, element: Element, charge: i8) -> &[AtomAst] {
+    pub fn patterns_for_element_and_charge(&self, element: Element, charge: i8) -> &[AtomForm] {
         self.atom_types
             .get(&(element, Some(charge)))
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn lookup(&self, element: Element, charge: Option<i8>) -> &[AtomAst] {
+    pub fn lookup(&self, element: Element, charge: Option<i8>) -> &[AtomForm] {
         self.atom_types
             .get(&(element, charge))
             .map_or(&[], |v| v.as_slice())
@@ -185,11 +185,11 @@ fn parse_entry(
     defaults: &AtomDefaults,
     element: Element,
     charge: i8,
-) -> Result<AtomAst, ConfigError> {
+) -> Result<AtomForm, ConfigError> {
     let dsl: AtomDsl = source
         .parse()
         .map_err(|e| ConfigError::InvalidAtomTypeRegistry(format!("{}: {}", source, e)))?;
-    let atom: AtomAst = dsl.into_ir(defaults);
+    let atom: AtomForm = dsl.into_ir(defaults);
     let &ElementForm::Lit(atom_element) = &atom.element else {
         return Err(ConfigError::InvalidAtomTypeRegistry(format!(
             "atom '{}' has non-literal element",
@@ -232,8 +232,8 @@ macro_rules! registry {
             let dsl: ::umol_graph_ir::dsl::AtomDsl = $source
                 .parse()
                 .expect("invalid atom DSL");
-            let atom: ::umol_graph_ir::ir::AtomAst = <_ as ::umol_graph_ir::ir::IntoIr<
-                ::umol_graph_ir::ir::AtomAst,
+            let atom: ::umol_graph_ir::ir::AtomForm = <_ as ::umol_graph_ir::ir::IntoIr<
+                ::umol_graph_ir::ir::AtomForm,
             >>::into_ir(dsl, &::umol_graph_ir::dsl::AtomDefaults::zeroed());
             registry.add(atom);
         )*

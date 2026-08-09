@@ -391,22 +391,22 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::id::AtomId;
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
 
     #[fixture]
     fn hexagon() -> AtomAutomorphism {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 6],
+            atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-                (AtomId(3), AtomId(4), BondAst::from_order(1)),
-                (AtomId(4), AtomId(5), BondAst::from_order(1)),
-                (AtomId(5), AtomId(0), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
             ],
             ..Default::default()
         })
@@ -417,10 +417,10 @@ mod tests {
     #[fixture]
     fn chain_3() -> AtomAutomorphism {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 3],
+            atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
             ],
             ..Default::default()
         })

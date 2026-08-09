@@ -37,8 +37,8 @@ pub(crate) mod value;
 pub(crate) mod view;
 
 pub use aromatic::{AromaticSystemAst, AromaticSystemUpdate};
-pub use atom::{AtomAst, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
-pub use bond::{BondAst, BondUpdate};
+pub use atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
+pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{

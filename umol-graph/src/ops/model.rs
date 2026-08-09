@@ -38,7 +38,7 @@ impl Default for ChemistryModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValenceModel {
-    /// Atom-typing valence model: the registry of `AtomAst` patterns.
+    /// Atom-typing valence model: the registry of `AtomForm` patterns.
     AtomTyping {
         registry: Cow<'static, AtomTypeRegistry>,
     },

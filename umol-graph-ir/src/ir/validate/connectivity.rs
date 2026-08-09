@@ -197,8 +197,8 @@ mod tests {
 
     use super::*;
     use crate::ir::aromatic::AromaticSystemAst;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::constraint::Constraints;
     use crate::ir::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
 
@@ -222,10 +222,10 @@ mod tests {
     #[rstest]
     fn test_connectivity_validator_validate_disconnected_allowed() {
         let mol = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+            atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             ..Default::default()
         });
@@ -240,10 +240,10 @@ mod tests {
     #[rstest]
     fn test_connectivity_validator_validate_disconnected_forbidden() {
         let mol = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+            atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             ..Default::default()
         });
@@ -264,10 +264,10 @@ mod tests {
     fn test_connectivity_validator_validate_aromatic_spanning() {
         // an aromatic system over atoms in the two separate bond components — disallowed by default
         let mol = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+            atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             aromatic: vec![(
                 vec![AtomId(0), AtomId(2)],
@@ -292,10 +292,10 @@ mod tests {
     fn test_connectivity_validator_validate_noncovalent_spanning_allowed() {
         // a noncovalent bond bridging the two components — permitted by default
         let mol = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+            atoms: (0..4).map(|_| AtomForm::from_element(Element::C)).collect(),
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             noncovalent: vec![(
                 AtomId(0),

@@ -1618,7 +1618,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomAst as GraphIrAtomAst, BondAst as GraphIrBondAst,
+        AtomForm as GraphIrAtomForm, BondForm as GraphIrBondForm,
         FluxionalityAst as GraphIrFluxionalityAst, LigandSymmetryAst as GraphIrLigandSymmetryAst,
         MoleculeEntries, StereoAtomConstraintAst as GraphIrStereoAtomConstraintAst,
         StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
@@ -3191,7 +3191,7 @@ mod tests {
 
     fn stereo_atom_molecule(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C); 5],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 5],
             stereo_atoms: vec![(
                 GraphIrAtomId(0),
                 vec![
@@ -3212,22 +3212,22 @@ mod tests {
 
     fn stereo_bond_molecule(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C); 4],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 4],
             bonds: vec![
                 (
                     GraphIrAtomId(0),
                     GraphIrAtomId(1),
-                    GraphIrBondAst::from_order(2),
+                    GraphIrBondForm::from_order(2),
                 ),
                 (
                     GraphIrAtomId(0),
                     GraphIrAtomId(2),
-                    GraphIrBondAst::from_order(1),
+                    GraphIrBondForm::from_order(1),
                 ),
                 (
                     GraphIrAtomId(1),
                     GraphIrAtomId(3),
-                    GraphIrBondAst::from_order(1),
+                    GraphIrBondForm::from_order(1),
                 ),
             ],
             stereo_bonds: vec![(

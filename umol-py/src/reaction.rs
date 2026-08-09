@@ -619,15 +619,16 @@ mod tests {
     use umol_graph_ir::ir::{
         AromaticSystemAst as GraphIrAromaticSystemAst,
         AromaticSystemDelta as GraphIrAromaticSystemDelta,
-        AromaticSystemId as GraphIrAromaticSystemId, AtomAst as GraphIrAtomAst,
-        AtomDelta as GraphIrAtomDelta, AtomFieldChange as GraphIrAtomFieldChange,
-        AtomId as GraphIrAtomId, BondAst as GraphIrBondAst, BondDelta as GraphIrBondDelta,
-        BondFieldChange as GraphIrBondFieldChange, BondId as GraphIrBondId, Canonicalize,
-        Constraint as GraphIrConstraint, ConstraintDelta as GraphIrConstraintDelta,
-        DativeBondAst as GraphIrDativeBondAst, DativeBondDelta as GraphIrDativeBondDelta,
-        DativeBondId as GraphIrDativeBondId, Delta as GraphIrDelta, Deltas as GraphIrDeltas,
-        Entity as GraphIrEntity, EntitySpan as GraphIrEntitySpan,
-        MoleculeAst as GraphIrMoleculeAst, MoleculeConstraint as GraphIrMoleculeConstraint,
+        AromaticSystemId as GraphIrAromaticSystemId, AtomDelta as GraphIrAtomDelta,
+        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
+        AtomId as GraphIrAtomId, BondDelta as GraphIrBondDelta,
+        BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
+        BondId as GraphIrBondId, Canonicalize, Constraint as GraphIrConstraint,
+        ConstraintDelta as GraphIrConstraintDelta, DativeBondAst as GraphIrDativeBondAst,
+        DativeBondDelta as GraphIrDativeBondDelta, DativeBondId as GraphIrDativeBondId,
+        Delta as GraphIrDelta, Deltas as GraphIrDeltas, Entity as GraphIrEntity,
+        EntitySpan as GraphIrEntitySpan, MoleculeAst as GraphIrMoleculeAst,
+        MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
         MoleculeEntries as GraphIrMoleculeEntries, MulticenterBondAst as GraphIrMulticenterBondAst,
         MulticenterBondDelta as GraphIrMulticenterBondDelta,
@@ -865,21 +866,21 @@ mod tests {
     #[case::empty(None, None, GraphIrReactionAst::default())]
     #[case::populated(
         Some(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         })),
         Some(vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(1),
-            ast: GraphIrAtomAst::from_element(ChemElement::O),
+            ast: GraphIrAtomForm::from_element(ChemElement::O),
         })].into_iter().collect()),
         GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 ..Default::default()
             }),
             vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(1),
-                ast: GraphIrAtomAst::from_element(ChemElement::O),
+                ast: GraphIrAtomForm::from_element(ChemElement::O),
             })].into_iter().collect(),
         ),
     )]
@@ -904,7 +905,7 @@ mod tests {
             let lhs = Py::new(
                 py,
                 MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
             )
@@ -914,7 +915,7 @@ mod tests {
                 Deltas::from_rust(
                     vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     })]
                     .into_iter()
                     .collect(),
@@ -935,7 +936,7 @@ mod tests {
                     py,
                     &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
-                        ast: GraphIrAtomAst::from_element(ChemElement::N),
+                        ast: GraphIrAtomForm::from_element(ChemElement::N),
                     }),
                 )
                 .unwrap(),
@@ -956,11 +957,11 @@ mod tests {
         vec![
             GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(2),
-                ast: GraphIrAtomAst::from_element(ChemElement::N),
+                ast: GraphIrAtomForm::from_element(ChemElement::N),
             }),
             GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
                 id: GraphIrAtomId(1),
-                ast: GraphIrAtomAst::from_element(ChemElement::O),
+                ast: GraphIrAtomForm::from_element(ChemElement::O),
             }),
         ],
     )]
@@ -1073,13 +1074,13 @@ mod tests {
             );
             assert_eq!(
                 metadata.lhs().atom_alias("lhs-c"),
-                Some(&GraphIrAtomDsl(GraphIrAtomAst::from_element(
+                Some(&GraphIrAtomDsl(GraphIrAtomForm::from_element(
                     ChemElement::C
                 )))
             );
             assert_eq!(
                 metadata.atom_alias("delta-o"),
-                Some(&GraphIrAtomDsl(GraphIrAtomAst::from_element(
+                Some(&GraphIrAtomDsl(GraphIrAtomForm::from_element(
                     ChemElement::O
                 )))
             );
@@ -1203,17 +1204,17 @@ mod tests {
     #[rstest]
     #[case::identity(
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }),
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }),
         vec![(0, 0)],
         GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 ..Default::default()
             }),
             GraphIrDeltas::default(),
@@ -1222,15 +1223,15 @@ mod tests {
     #[case::partial_correspondence(
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::O),
             ],
             ..Default::default()
         }),
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::N),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::N),
             ],
             ..Default::default()
         }),
@@ -1238,19 +1239,19 @@ mod tests {
         GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    GraphIrAtomAst::from_element(ChemElement::C),
-                    GraphIrAtomAst::from_element(ChemElement::O),
+                    GraphIrAtomForm::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::O),
                 ],
                 ..Default::default()
             }),
             vec![
                 GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
                     id: GraphIrAtomId(1),
-                    ast: GraphIrAtomAst::from_element(ChemElement::O),
+                    ast: GraphIrAtomForm::from_element(ChemElement::O),
                 }),
                 GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                     id: GraphIrAtomId(2),
-                    ast: GraphIrAtomAst::from_element(ChemElement::N),
+                    ast: GraphIrAtomForm::from_element(ChemElement::N),
                 }),
             ]
             .into_iter()
@@ -1260,28 +1261,28 @@ mod tests {
     #[case::bond_order(
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
             ],
-            bonds: vec![(GraphIrAtomId(0), GraphIrAtomId(1), GraphIrBondAst::from_order(1))],
+            bonds: vec![(GraphIrAtomId(0), GraphIrAtomId(1), GraphIrBondForm::from_order(1))],
             ..Default::default()
         }),
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
             ],
-            bonds: vec![(GraphIrAtomId(0), GraphIrAtomId(1), GraphIrBondAst::from_order(2))],
+            bonds: vec![(GraphIrAtomId(0), GraphIrAtomId(1), GraphIrBondForm::from_order(2))],
             ..Default::default()
         }),
         vec![(0, 0), (1, 1)],
         GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    GraphIrAtomAst::from_element(ChemElement::C),
-                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::C),
                 ],
-                bonds: vec![(GraphIrAtomId(0), GraphIrAtomId(1), GraphIrBondAst::from_order(1))],
+                bonds: vec![(GraphIrAtomId(0), GraphIrAtomId(1), GraphIrBondForm::from_order(1))],
                 ..Default::default()
             }),
             vec![GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
@@ -1457,15 +1458,15 @@ mod tests {
         Python::attach(|py| {
             let lhs_before = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    GraphIrAtomAst::from_element(ChemElement::C),
-                    GraphIrAtomAst::from_element(ChemElement::O),
+                    GraphIrAtomForm::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::O),
                 ],
                 ..Default::default()
             });
             let rhs_before = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    GraphIrAtomAst::from_element(ChemElement::C),
-                    GraphIrAtomAst::from_element(ChemElement::N),
+                    GraphIrAtomForm::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::N),
                 ],
                 ..Default::default()
             });
@@ -1492,7 +1493,7 @@ mod tests {
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::F)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
                 });
             let delta = into_py_variant(
@@ -1501,7 +1502,7 @@ mod tests {
                     py,
                     &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(3),
-                        ast: GraphIrAtomAst::from_element(ChemElement::Cl),
+                        ast: GraphIrAtomForm::from_element(ChemElement::Cl),
                     }),
                 )
                 .unwrap(),
@@ -1517,7 +1518,7 @@ mod tests {
             assert_eq!(
                 changed.lhs,
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::F)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
                 })
             );
@@ -1525,7 +1526,7 @@ mod tests {
                 changed.deltas.as_slice().last(),
                 Some(&GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                     id: GraphIrAtomId(3),
-                    ast: GraphIrAtomAst::from_element(ChemElement::Cl),
+                    ast: GraphIrAtomForm::from_element(ChemElement::Cl),
                 }))
             );
         });
@@ -1542,7 +1543,7 @@ mod tests {
 
             *first_lhs.bind(py).borrow_mut().inner_mut() =
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 });
             let delta = into_py_variant(
@@ -1551,7 +1552,7 @@ mod tests {
                     py,
                     &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     }),
                 )
                 .unwrap(),
@@ -1568,12 +1569,12 @@ mod tests {
                 reaction.bind(py).borrow().to_rust(py),
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
                     vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     })]
                     .into_iter()
                     .collect(),
@@ -1589,7 +1590,7 @@ mod tests {
             let lhs = Py::new(
                 py,
                 MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
             )
@@ -1599,7 +1600,7 @@ mod tests {
                 Deltas::from_rust(
                     vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     })]
                     .into_iter()
                     .collect(),
@@ -1620,7 +1621,7 @@ mod tests {
                     py,
                     &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
-                        ast: GraphIrAtomAst::from_element(ChemElement::N),
+                        ast: GraphIrAtomForm::from_element(ChemElement::N),
                     }),
                 )
                 .unwrap(),
@@ -1637,12 +1638,12 @@ mod tests {
         Python::attach(|py| {
             let expected = GraphIrReactionAst::new(
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 }),
                 vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                     id: GraphIrAtomId(1),
-                    ast: GraphIrAtomAst::from_element(ChemElement::O),
+                    ast: GraphIrAtomForm::from_element(ChemElement::O),
                 })]
                 .into_iter()
                 .collect(),
@@ -1666,7 +1667,7 @@ mod tests {
                 py,
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C).with_charge(0)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(0)],
                         ..Default::default()
                     }),
                     vec![
@@ -1722,7 +1723,7 @@ mod tests {
                 py,
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C).with_charge(0)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(0)],
                         ..Default::default()
                     }),
                     vec![
@@ -1766,12 +1767,12 @@ mod tests {
                 py,
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
                     vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     })]
                     .into_iter()
                     .collect(),
@@ -1783,8 +1784,8 @@ mod tests {
                 reaction.to_reaction_span(py).unwrap().to_rust(),
                 GraphIrReactionSpanAst::from_entries(GraphIrReactionSpanEntries {
                     atoms: vec![
-                        GraphIrEntitySpan::Unchanged(GraphIrAtomAst::from_element(ChemElement::C)),
-                        GraphIrEntitySpan::Added(GraphIrAtomAst::from_element(ChemElement::O)),
+                        GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(ChemElement::C)),
+                        GraphIrEntitySpan::Added(GraphIrAtomForm::from_element(ChemElement::O)),
                     ],
                     ..Default::default()
                 })
@@ -1800,13 +1801,13 @@ mod tests {
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C),
-                            GraphIrAtomAst::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C),
                         ],
                         bonds: vec![(
                             GraphIrAtomId(0),
                             GraphIrAtomId(1),
-                            GraphIrBondAst::from_order(1),
+                            GraphIrBondForm::from_order(1),
                         )],
                         ..Default::default()
                     }),
@@ -1852,8 +1853,8 @@ mod tests {
                 reversed.to_rust(py).lhs,
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::N),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::N),
                     ],
                     ..Default::default()
                 })
@@ -2064,7 +2065,7 @@ mod tests {
             for composite in &composites {
                 *composite.lhs.bind(py).borrow_mut().inner_mut() =
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::F)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                         ..Default::default()
                     });
                 let delta = into_py_variant(
@@ -2073,7 +2074,7 @@ mod tests {
                         py,
                         &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                             id: GraphIrAtomId(8),
-                            ast: GraphIrAtomAst::from_element(ChemElement::Cl),
+                            ast: GraphIrAtomForm::from_element(ChemElement::Cl),
                         }),
                     )
                     .unwrap(),
@@ -2088,7 +2089,7 @@ mod tests {
                 assert_eq!(
                     composite.to_rust(py).lhs,
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::F)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                         ..Default::default()
                     })
                 );
@@ -2096,7 +2097,7 @@ mod tests {
                     composite.to_rust(py).deltas.as_slice().last(),
                     Some(&GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(8),
-                        ast: GraphIrAtomAst::from_element(ChemElement::Cl),
+                        ast: GraphIrAtomForm::from_element(ChemElement::Cl),
                     }))
                 );
             }
@@ -2134,15 +2135,15 @@ mod tests {
                 [
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
-                            GraphIrAtomAst::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
+                            GraphIrAtomForm::from_element(ChemElement::C),
                         ],
                         ..Default::default()
                     }),
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C),
-                            GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
+                            GraphIrAtomForm::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
                         ],
                         ..Default::default()
                     }),
@@ -2167,13 +2168,13 @@ mod tests {
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::N)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::N)],
                     ..Default::default()
                 });
             reaction.deltas = Py::new(py, Deltas::from_rust(GraphIrDeltas::default())).unwrap();
             *host.bind(py).borrow_mut().inner_mut() =
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::F)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
                 });
 
@@ -2190,15 +2191,15 @@ mod tests {
                 vec![
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
-                            GraphIrAtomAst::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
+                            GraphIrAtomForm::from_element(ChemElement::C),
                         ],
                         ..Default::default()
                     }),
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C),
-                            GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
+                            GraphIrAtomForm::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
                         ],
                         ..Default::default()
                     }),
@@ -2270,15 +2271,15 @@ mod tests {
                 vec![
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
-                            GraphIrAtomAst::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
+                            GraphIrAtomForm::from_element(ChemElement::C),
                         ],
                         ..Default::default()
                     }),
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
-                            GraphIrAtomAst::from_element(ChemElement::C),
-                            GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
+                            GraphIrAtomForm::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
                         ],
                         ..Default::default()
                     }),
@@ -2295,19 +2296,19 @@ mod tests {
                 py,
                 MoleculeAst::from_rust(GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::O),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::O),
                     ],
                     bonds: vec![
                         (
                             GraphIrAtomId(0),
                             GraphIrAtomId(1),
-                            GraphIrBondAst::from_order(1),
+                            GraphIrBondForm::from_order(1),
                         ),
                         (
                             GraphIrAtomId(0),
                             GraphIrAtomId(1),
-                            GraphIrBondAst::from_order(2),
+                            GraphIrBondForm::from_order(2),
                         ),
                     ],
                     ..Default::default()
@@ -2745,7 +2746,7 @@ mod tests {
                 py,
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
                     GraphIrDeltas::new(),
@@ -2772,12 +2773,12 @@ mod tests {
     #[case::populated(
         GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 ..Default::default()
             }),
             vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                 id: GraphIrAtomId(1),
-                ast: GraphIrAtomAst::from_element(ChemElement::O),
+                ast: GraphIrAtomForm::from_element(ChemElement::O),
             })].into_iter().collect(),
         ),
         r##"{:deltas [{:atom {:add "O"}}] :lhs {:atoms ["C"] :bonds []}}"##,
@@ -2798,7 +2799,7 @@ mod tests {
                 py,
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
                     GraphIrDeltas::new(),
@@ -2808,7 +2809,7 @@ mod tests {
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C).with_charge(1)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(1)],
                     ..Default::default()
                 });
             let delta = into_py_variant(
@@ -2817,7 +2818,7 @@ mod tests {
                     py,
                     &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     }),
                 )
                 .unwrap(),
@@ -2866,12 +2867,12 @@ mod tests {
                 py,
                 GraphIrReactionAst::new(
                     GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                         ..Default::default()
                     }),
                     vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     })]
                     .into_iter()
                     .collect(),
@@ -2890,12 +2891,12 @@ mod tests {
     #[case::empty(GraphIrReactionAst::default())]
     #[case::populated(GraphIrReactionAst::new(
         GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }),
         vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
             id: GraphIrAtomId(1),
-            ast: GraphIrAtomAst::from_element(ChemElement::O),
+            ast: GraphIrAtomForm::from_element(ChemElement::O),
         })]
         .into_iter()
         .collect(),
@@ -2913,12 +2914,12 @@ mod tests {
         Python::attach(|py| {
             let expected = GraphIrReactionAst::new(
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 }),
                 vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                     id: GraphIrAtomId(1),
-                    ast: GraphIrAtomAst::from_element(ChemElement::O),
+                    ast: GraphIrAtomForm::from_element(ChemElement::O),
                 })]
                 .into_iter()
                 .collect(),
@@ -2938,12 +2939,12 @@ mod tests {
         Python::attach(|py| {
             let expected = GraphIrReactionAst::new(
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 }),
                 vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                     id: GraphIrAtomId(1),
-                    ast: GraphIrAtomAst::from_element(ChemElement::O),
+                    ast: GraphIrAtomForm::from_element(ChemElement::O),
                 })]
                 .into_iter()
                 .collect(),
@@ -2971,13 +2972,13 @@ mod tests {
     fn derivation_and_host() -> (GraphIrReactionDerivation, GraphIrMoleculeAst) {
         let pattern = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
             ],
             bonds: vec![(
                 GraphIrAtomId(0),
                 GraphIrAtomId(1),
-                GraphIrBondAst::from_order(1),
+                GraphIrBondForm::from_order(1),
             )],
             ..Default::default()
         });
@@ -3028,10 +3029,10 @@ mod tests {
             PyCorrespondence::from_rust(expected.atom_correspondence())
         );
 
-        *host.atom_mut(GraphIrAtomId(0)).ast = GraphIrAtomAst::from_element(ChemElement::F);
+        *host.atom_mut(GraphIrAtomId(0)).ast = GraphIrAtomForm::from_element(ChemElement::F);
         let mut lhs = derivation.lhs();
         *lhs.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
-            GraphIrAtomAst::from_element(ChemElement::N);
+            GraphIrAtomForm::from_element(ChemElement::N);
 
         assert_eq!(derivation.to_rust(), expected);
         assert_ne!(derivation.lhs().inner(), &host);
@@ -3047,7 +3048,7 @@ mod tests {
         let reversed = derivation.reverse();
         let mut reversed_lhs = reversed.lhs();
         *reversed_lhs.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
-            GraphIrAtomAst::from_element(ChemElement::N);
+            GraphIrAtomForm::from_element(ChemElement::N);
 
         assert_eq!(reversed.to_rust(), expected.reverse());
         assert_eq!(derivation.to_rust(), expected);
@@ -3090,7 +3091,7 @@ mod tests {
         let chained = first_value.chain(&second_value);
         let mut chained_rhs = chained.rhs();
         *chained_rhs.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
-            GraphIrAtomAst::from_element(ChemElement::N);
+            GraphIrAtomForm::from_element(ChemElement::N);
 
         assert_eq!(chained.to_rust(), first.chain(&second));
         assert_eq!(first_value.to_rust(), first);
@@ -3106,13 +3107,13 @@ mod tests {
         let expected_reaction = GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
-                    GraphIrAtomAst::from_element(ChemElement::C),
-                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::C),
                 ],
                 bonds: vec![(
                     GraphIrAtomId(0),
                     GraphIrAtomId(1),
-                    GraphIrBondAst::from_order(1),
+                    GraphIrBondForm::from_order(1),
                 )],
                 ..Default::default()
             }),
@@ -3142,7 +3143,7 @@ mod tests {
                     py,
                     &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
-                        ast: GraphIrAtomAst::from_element(ChemElement::O),
+                        ast: GraphIrAtomForm::from_element(ChemElement::O),
                     }),
                 )
                 .unwrap(),
@@ -3228,7 +3229,7 @@ mod tests {
     ) {
         let reaction = GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 ..Default::default()
             }),
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
@@ -3241,8 +3242,8 @@ mod tests {
         );
         let host = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
             ],
             ..Default::default()
         });
@@ -3299,15 +3300,15 @@ mod tests {
             [
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
-                        GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
-                        GraphIrAtomAst::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
+                        GraphIrAtomForm::from_element(ChemElement::C),
                     ],
                     ..Default::default()
                 }),
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::C).with_charge(1),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::C).with_charge(1),
                     ],
                     ..Default::default()
                 }),
@@ -3320,7 +3321,7 @@ mod tests {
         let expected_second = second.to_rust();
         let mut detached = first.rhs();
         *detached.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
-            GraphIrAtomAst::from_element(ChemElement::F);
+            GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(first.to_rust(), expected_first);
         assert_eq!(second.to_rust(), expected_second);
     }
@@ -3341,25 +3342,25 @@ mod tests {
     fn test_reaction_application_iter_rejection() {
         let reaction = GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 ..Default::default()
             }),
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
                 id: GraphIrAtomId(0),
-                ast: GraphIrAtomAst::from_element(ChemElement::C),
+                ast: GraphIrAtomForm::from_element(ChemElement::C),
             })]),
         );
         let host = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::C),
-                GraphIrAtomAst::from_element(ChemElement::O),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::O),
             ],
             bonds: vec![(
                 GraphIrAtomId(1),
                 GraphIrAtomId(3),
-                GraphIrBondAst::from_order(1),
+                GraphIrBondForm::from_order(1),
             )],
             ..Default::default()
         });
@@ -3384,27 +3385,27 @@ mod tests {
             [
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::O),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::O),
                     ],
                     bonds: vec![(
                         GraphIrAtomId(0),
                         GraphIrAtomId(2),
-                        GraphIrBondAst::from_order(1)
+                        GraphIrBondForm::from_order(1)
                     )],
                     ..Default::default()
                 }),
                 GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::C),
-                        GraphIrAtomAst::from_element(ChemElement::O),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::C),
+                        GraphIrAtomForm::from_element(ChemElement::O),
                     ],
                     bonds: vec![(
                         GraphIrAtomId(1),
                         GraphIrAtomId(2),
-                        GraphIrBondAst::from_order(1)
+                        GraphIrBondForm::from_order(1)
                     )],
                     ..Default::default()
                 }),
@@ -3421,7 +3422,7 @@ mod tests {
         });
         let reaction = GraphIrReactionAst::new(
             GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 constraints: constraint.clone().into(),
                 ..Default::default()
             }),
@@ -3430,7 +3431,7 @@ mod tests {
             ))]),
         );
         let host = GraphIrMoleculeAst::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![GraphIrAtomAst::from_element(ChemElement::C)],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         });
         let correspondence = GraphIrMoleculeCorrespondence::induce(

@@ -5,8 +5,8 @@
 
 use std::ops::Add;
 
-use super::super::atom::{AtomAst, ElementForm};
-use super::super::bond::BondAst;
+use super::super::atom::{AtomForm, ElementForm};
+use super::super::bond::BondForm;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::id::AtomId;
 use super::super::traits::Lattice;
@@ -21,7 +21,7 @@ use super::MoleculeEntries;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Port {
     pub atom: AtomId,
-    pub bond: BondAst,
+    pub bond: BondForm,
     pub name: Option<String>,
 }
 
@@ -82,7 +82,7 @@ impl Fragment {
         mut self,
         name: impl Into<String>,
         atom: AtomId,
-        bond: impl Into<BondAst>,
+        bond: impl Into<BondForm>,
     ) -> Self {
         self.ports.push(Port {
             atom,
@@ -93,7 +93,7 @@ impl Fragment {
     }
 
     /// Declare an unnamed port on `atom` (addressed by index only).
-    pub fn with_unnamed_port(mut self, atom: AtomId, bond: impl Into<BondAst>) -> Self {
+    pub fn with_unnamed_port(mut self, atom: AtomId, bond: impl Into<BondForm>) -> Self {
         self.ports.push(Port {
             atom,
             bond: bond.into(),
@@ -129,7 +129,7 @@ impl Fragment {
     pub fn finish_open(self) -> MoleculeAst {
         let mut editor = self.body.edit();
         for port in self.ports {
-            let wildcard = editor.add_atom(AtomAst::new(ElementForm::undetermined()));
+            let wildcard = editor.add_atom(AtomForm::new(ElementForm::undetermined()));
             editor.add_bond(port.atom, wildcard, port.bond);
         }
         editor.build()
@@ -251,31 +251,31 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::{AtomAst, ElementForm};
+    use crate::ir::atom::{AtomForm, ElementForm};
     use crate::ir::id::BondId;
 
     #[rstest]
     fn test_fragment_with_port() {
         let body = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         });
         let fragment = Fragment::new(body)
-            .with_port("open", AtomId(0), BondAst::from_order(1))
-            .with_unnamed_port(AtomId(0), BondAst::from_order(2));
+            .with_port("open", AtomId(0), BondForm::from_order(1))
+            .with_unnamed_port(AtomId(0), BondForm::from_order(2));
 
         assert_eq!(
             fragment.ports(),
             &[
                 Port {
                     atom: AtomId(0),
-                    bond: BondAst::from_order(1),
+                    bond: BondForm::from_order(1),
                     name: Some("open".to_string()),
                 },
                 Port {
                     atom: AtomId(0),
-                    bond: BondAst::from_order(2),
+                    bond: BondForm::from_order(2),
                     name: None,
                 },
             ]
@@ -285,7 +285,7 @@ mod tests {
     #[rstest]
     fn test_fragment_finish() {
         let body = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         });
@@ -297,34 +297,34 @@ mod tests {
     #[should_panic(expected = "unpaired port")]
     fn test_fragment_finish_error() {
         let body = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         });
         Fragment::new(body)
-            .with_port("open", AtomId(0), BondAst::from_order(1))
+            .with_port("open", AtomId(0), BondForm::from_order(1))
             .finish();
     }
 
     #[rstest]
     fn test_fragment_finish_open() {
         let body = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         });
         let pattern = Fragment::new(body)
-            .with_port("r", AtomId(0), BondAst::from_order(2))
+            .with_port("r", AtomId(0), BondForm::from_order(2))
             .finish_open();
 
         // the free port became a wildcard atom double-bonded to the carbon
         assert_eq!(pattern.atoms().count(), 2);
         assert_eq!(
             pattern.atom(AtomId(1)).ast,
-            &AtomAst::new(ElementForm::undetermined())
+            &AtomForm::new(ElementForm::undetermined())
         );
         assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
-        assert_eq!(pattern.bond(BondId(0)).ast, &BondAst::from_order(2));
+        assert_eq!(pattern.bond(BondId(0)).ast, &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -339,20 +339,20 @@ mod tests {
     #[rstest]
     fn test_fragment_add() {
         let left = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("left", AtomId(0), BondAst::from_order(1));
+        .with_port("left", AtomId(0), BondForm::from_order(1));
         let right = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::O),
-                AtomAst::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::N),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }))
-        .with_port("right", AtomId(1), BondAst::from_order(2));
+        .with_port("right", AtomId(1), BondForm::from_order(2));
 
         let combined = left + right;
 
@@ -365,12 +365,12 @@ mod tests {
             &[
                 Port {
                     atom: AtomId(0),
-                    bond: BondAst::from_order(1),
+                    bond: BondForm::from_order(1),
                     name: Some("left".to_string()),
                 },
                 Port {
                     atom: AtomId(2),
-                    bond: BondAst::from_order(2),
+                    bond: BondForm::from_order(2),
                     name: Some("right".to_string()),
                 },
             ]
@@ -380,23 +380,23 @@ mod tests {
     #[rstest]
     fn test_fragment_attach() {
         let left = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("a", AtomId(0), BondAst::from_order(1));
+        .with_port("a", AtomId(0), BondForm::from_order(1));
         let right = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::O)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("b", AtomId(0), BondAst::from_order(1));
+        .with_port("b", AtomId(0), BondForm::from_order(1));
 
         let joined = left.attach("a", right, "b");
 
         assert_eq!(joined.body().atoms().count(), 2);
         assert_eq!(joined.body().bonds().count(), 1);
-        assert_eq!(joined.body().bond(BondId(0)).ast, &BondAst::from_order(1));
+        assert_eq!(joined.body().bond(BondId(0)).ast, &BondForm::from_order(1));
         assert_eq!(
             joined.body().bond(BondId(0)).atom_ids(),
             [AtomId(0), AtomId(1)]
@@ -408,38 +408,38 @@ mod tests {
     fn test_fragment_attach_meet() {
         // an undetermined (⊤) port absorbs the partner's bond spec through `meet`
         let left = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("a", AtomId(0), BondAst::default());
+        .with_port("a", AtomId(0), BondForm::default());
         let right = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::O)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("b", AtomId(0), BondAst::from_order(2));
+        .with_port("b", AtomId(0), BondForm::from_order(2));
 
         let body = left.attach("a", right, "b").finish();
 
-        assert_eq!(body.bond(BondId(0)).ast, &BondAst::from_order(2));
+        assert_eq!(body.bond(BondId(0)).ast, &BondForm::from_order(2));
     }
 
     #[rstest]
     #[should_panic(expected = "no port named")]
     fn test_fragment_attach_error_missing_port() {
         let left = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("a", AtomId(0), BondAst::from_order(1));
+        .with_port("a", AtomId(0), BondForm::from_order(1));
         let right = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::O)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("b", AtomId(0), BondAst::from_order(1));
+        .with_port("b", AtomId(0), BondForm::from_order(1));
 
         left.attach("a", right, "missing");
     }
@@ -448,17 +448,17 @@ mod tests {
     #[should_panic(expected = "incompatible ports")]
     fn test_fragment_attach_error_incompatible() {
         let left = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("a", AtomId(0), BondAst::from_order(1));
+        .with_port("a", AtomId(0), BondForm::from_order(1));
         let right = Fragment::new(MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::O)],
+            atoms: vec![AtomForm::from_element(Element::O)],
             bonds: Vec::new(),
             ..Default::default()
         }))
-        .with_port("b", AtomId(0), BondAst::from_order(2));
+        .with_port("b", AtomId(0), BondForm::from_order(2));
 
         left.attach("a", right, "b");
     }

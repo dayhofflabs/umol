@@ -48,8 +48,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use crate::ir::aromatic::AromaticSystemAst;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondAst;
     use crate::ir::id::{AtomId, BondId};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
@@ -60,15 +60,15 @@ mod tests {
     fn molecule() -> MoleculeAst {
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
             ],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(2)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
             aromatic: vec![(
@@ -90,15 +90,15 @@ mod tests {
 
     #[rstest]
     fn test_neighbor_view_fields(molecule: MoleculeAst) {
-        let collected: Vec<(BondId, AtomId, BondAst)> = molecule
+        let collected: Vec<(BondId, AtomId, BondForm)> = molecule
             .neighbors(AtomId(2))
             .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))
             .collect();
         assert_eq!(
             collected,
             vec![
-                (BondId(1), AtomId(1), BondAst::from_order(2)),
-                (BondId(2), AtomId(3), BondAst::from_order(1)),
+                (BondId(1), AtomId(1), BondForm::from_order(2)),
+                (BondId(2), AtomId(3), BondForm::from_order(1)),
             ],
         );
     }

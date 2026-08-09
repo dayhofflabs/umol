@@ -40,7 +40,7 @@ proptest! {
     // The entity DSL types carry a compact string form (Display) parsed by their
     // own `FromStr`; the invariant is `parse(display(x)) == x` for any generated AST.
     #[test]
-    fn test_atom_dsl_display_from_str_roundtrip(atom in atom_ast_strategy()) {
+    fn test_atom_dsl_display_from_str_roundtrip(atom in atom_form_strategy()) {
         let dsl = AtomDsl(atom);
         let rendered = dsl.to_string();
         let parsed: AtomDsl = rendered.parse().map_err(|e| {
@@ -50,7 +50,7 @@ proptest! {
     }
 
     #[test]
-    fn test_bond_dsl_display_from_str_roundtrip(bond in bond_ast_strategy()) {
+    fn test_bond_dsl_display_from_str_roundtrip(bond in bond_form_strategy()) {
         let dsl = BondDsl(bond);
         let rendered = dsl.to_string();
         let parsed: BondDsl = rendered.parse().map_err(|e| {
@@ -64,7 +64,7 @@ proptest! {
     /// shapes (order-only, no charge / unpaired-electron fields / non-aromatic constraints,
     /// or order-1 with the `Aromatic` flag) render as keyword shorthands.
     #[test]
-    fn test_bond_dsl_to_edn_from_edn_roundtrip(bond in bond_ast_strategy()) {
+    fn test_bond_dsl_to_edn_from_edn_roundtrip(bond in bond_form_strategy()) {
         let dsl = BondDsl(bond);
         let edn = dsl.to_edn();
         let parsed = BondDsl::from_edn(&edn).map_err(|e| {
@@ -139,7 +139,7 @@ proptest! {
 
     #[test]
     fn test_multicenter_bond_dsl_display_from_str_roundtrip(
-        bond in multicenter_bond_ast_strategy(),
+        bond in multicenter_bond_form_strategy(),
     ) {
         let dsl = MulticenterBondDsl(bond);
         let rendered = dsl.to_string();
@@ -231,7 +231,7 @@ proptest! {
 
     #[test]
     fn test_noncovalent_bond_dsl_display_from_str_roundtrip(
-        bond in noncovalent_bond_ast_strategy(),
+        bond in noncovalent_bond_form_strategy(),
     ) {
         let dsl = NoncovalentBondDsl(bond);
         let rendered = dsl.to_string();
@@ -382,7 +382,7 @@ proptest! {
 
     #[test]
     fn test_multicenter_bond_constraints_ast_take_exact_size(
-        mut constraints in multicenter_bond_ast_strategy().prop_map(|ast| ast.constraints),
+        mut constraints in multicenter_bond_form_strategy().prop_map(|ast| ast.constraints),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
@@ -451,9 +451,9 @@ proptest! {
     MulticenterValenceAst::Undetermined
 ))]
 fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraintAst) {
-    let mut atom = AtomAst::default();
+    let mut atom = AtomForm::default();
     atom.constraints.set(vacuous);
     let with_vacuous = AtomDsl(atom).to_string();
-    let bare = AtomDsl(AtomAst::default()).to_string();
+    let bare = AtomDsl(AtomForm::default()).to_string();
     assert_eq!(with_vacuous, bare);
 }

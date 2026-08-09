@@ -46,15 +46,15 @@ proptest! {
             match kind {
                 EntityKind::Atom => {
                     counts[0] += 1;
-                    direct.add_atom(AtomAst::default());
-                    entries.push(Edit::AddAtoms { atoms: vec![AtomAst::default()] });
+                    direct.add_atom(AtomForm::default());
+                    entries.push(Edit::AddAtoms { atoms: vec![AtomForm::default()] });
                 }
                 EntityKind::Bond => {
                     counts[1] += 1;
                     direct.add_bond(
                         AtomHandle::Id(AtomId(0)),
                         AtomHandle::Id(AtomId(1)),
-                        BondAst::default(),
+                        BondForm::default(),
                     );
                     entries.push(Edit::AddBonds {
                         bonds: vec![AddBond {
@@ -62,7 +62,7 @@ proptest! {
                                 AtomHandle::Id(AtomId(0)),
                                 AtomHandle::Id(AtomId(1)),
                             ],
-                            ast: BondAst::default(),
+                            ast: BondForm::default(),
                         }],
                     });
                 }
@@ -153,11 +153,11 @@ proptest! {
             StereoBondHandle::New(counts[7]),
         );
         let direct_next = (
-            direct.add_atom(AtomAst::default()),
+            direct.add_atom(AtomForm::default()),
             direct.add_bond(
                 AtomHandle::Id(AtomId(0)),
                 AtomHandle::Id(AtomId(1)),
-                BondAst::default(),
+                BondForm::default(),
             ),
             direct.add_dative_bond(Vec::new(), DativeBondAst::default()),
             direct.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
@@ -178,11 +178,11 @@ proptest! {
             ),
         );
         let pushed_next = (
-            pushed.add_atom(AtomAst::default()),
+            pushed.add_atom(AtomForm::default()),
             pushed.add_bond(
                 AtomHandle::Id(AtomId(0)),
                 AtomHandle::Id(AtomId(1)),
-                BondAst::default(),
+                BondForm::default(),
             ),
             pushed.add_dative_bond(Vec::new(), DativeBondAst::default()),
             pushed.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
@@ -203,11 +203,11 @@ proptest! {
             ),
         );
         let collected_next = (
-            collected.add_atom(AtomAst::default()),
+            collected.add_atom(AtomForm::default()),
             collected.add_bond(
                 AtomHandle::Id(AtomId(0)),
                 AtomHandle::Id(AtomId(1)),
-                BondAst::default(),
+                BondForm::default(),
             ),
             collected.add_dative_bond(Vec::new(), DativeBondAst::default()),
             collected.add_aromatic_system(Vec::new(), AromaticSystemAst::default()),
@@ -273,25 +273,25 @@ proptest! {
     ) {
         let base = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
-                AtomAst::from_element(Element::F),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::F),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
         let mut edits = Edits::new();
         for kind in &kinds {
             match kind {
                 EntityKind::Atom => {
-                    edits.add_atom(AtomAst::from_element(Element::P));
+                    edits.add_atom(AtomForm::from_element(Element::P));
                 }
                 EntityKind::Bond => {
                     edits.add_bond(
                         AtomHandle::Id(AtomId(2)),
                         AtomHandle::Id(AtomId(3)),
-                        BondAst::from_order(1),
+                        BondForm::from_order(1),
                     );
                 }
                 EntityKind::DativeBond => {
@@ -609,8 +609,8 @@ proptest! {
         aromatic_components in partial_unpaired_electrons_update_strategy(),
         multicenter_components in partial_unpaired_electrons_update_strategy(),
     ) {
-        let atom = AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8));
-        let bond = BondAst::from_order(1).with_unpaired_electrons((2_u8, 3_u8));
+        let atom = AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8));
+        let bond = BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8));
         let aromatic = AromaticSystemAst::from_electrons(vec![1, 1, 1])
             .with_unpaired_electrons((2_u8, 3_u8));
         let multicenter = MulticenterBondAst::from_electrons(vec![1, 1, 1])
@@ -632,14 +632,14 @@ proptest! {
             ..Default::default()
         };
         let base = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![atom.clone(), AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
+            atoms: vec![atom.clone(), AtomForm::from_element(Element::N), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), bond.clone())],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.clone())],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.clone())],
             ..Default::default()
         });
         let expected = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![atom.update(&atom_update), AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
+            atoms: vec![atom.update(&atom_update), AtomForm::from_element(Element::N), AtomForm::from_element(Element::O)],
             bonds: vec![(AtomId(0), AtomId(1), bond.update(&bond_update))],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.update(&aromatic_update))],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.update(&multicenter_update))],

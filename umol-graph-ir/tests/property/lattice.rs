@@ -339,7 +339,7 @@ proptest! {
     }
 
     #[test]
-    fn test_dative_bond_ast_lattice_laws(
+    fn test_dative_bond_form_lattice_laws(
         a in dative_bond_strategy(),
         b in dative_bond_strategy(),
         c in dative_bond_strategy(),
@@ -349,10 +349,10 @@ proptest! {
     }
 
     #[test]
-    fn test_multicenter_bond_ast_lattice_laws(
-        a in multicenter_bond_ast_strategy(),
-        b in multicenter_bond_ast_strategy(),
-        c in multicenter_bond_ast_strategy(),
+    fn test_multicenter_bond_form_lattice_laws(
+        a in multicenter_bond_form_strategy(),
+        b in multicenter_bond_form_strategy(),
+        c in multicenter_bond_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -369,30 +369,30 @@ proptest! {
     }
 
     #[test]
-    fn test_noncovalent_bond_ast_lattice_laws(
-        a in noncovalent_bond_ast_strategy(),
-        b in noncovalent_bond_ast_strategy(),
-        c in noncovalent_bond_ast_strategy(),
+    fn test_noncovalent_bond_form_lattice_laws(
+        a in noncovalent_bond_form_strategy(),
+        b in noncovalent_bond_form_strategy(),
+        c in noncovalent_bond_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_stereo_atom_ast_lattice_laws(
-        a in stereo_atom_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in stereo_atom_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in stereo_atom_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+    fn test_stereo_atom_form_lattice_laws(
+        a in stereo_atom_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in stereo_atom_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in stereo_atom_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_stereo_bond_ast_lattice_laws(
-        a in stereo_bond_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in stereo_bond_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in stereo_bond_ast_strategy().prop_map(|value| value.canonicalize().unwrap()),
+    fn test_stereo_bond_form_lattice_laws(
+        a in stereo_bond_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in stereo_bond_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in stereo_bond_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -612,20 +612,20 @@ proptest! {
     }
 
     #[test]
-    fn test_atom_ast_lattice_laws(
-        a in atom_ast_strategy(),
-        b in atom_ast_strategy(),
-        c in atom_ast_strategy(),
+    fn test_atom_form_lattice_laws(
+        a in atom_form_strategy(),
+        b in atom_form_strategy(),
+        c in atom_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_bond_ast_lattice_laws(
-        a in bond_ast_strategy(),
-        b in bond_ast_strategy(),
-        c in bond_ast_strategy(),
+    fn test_bond_form_lattice_laws(
+        a in bond_form_strategy(),
+        b in bond_form_strategy(),
+        c in bond_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

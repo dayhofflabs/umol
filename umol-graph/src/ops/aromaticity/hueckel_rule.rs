@@ -250,19 +250,19 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsForm,
+        AromaticValenceAst, AtomConstraintAst, AtomForm, AtomId, BondForm, ElectronCountsForm,
         ElementForm, MoleculeAst, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
 
     use super::*;
 
-    fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
-        (AtomAst::from_element(element), Some(pi))
+    fn aromatic(element: Element, pi: i64) -> (AtomForm, Option<i64>) {
+        (AtomForm::from_element(element), Some(pi))
     }
 
-    fn aromatic_charged(element: Element, charge: i64, pi: i64) -> (AtomAst, Option<i64>) {
+    fn aromatic_charged(element: Element, charge: i64, pi: i64) -> (AtomForm, Option<i64>) {
         (
-            AtomAst {
+            AtomForm {
                 element: ElementForm::Lit(element),
                 charge: NumForm::Lit(charge),
                 ..Default::default()
@@ -271,11 +271,11 @@ mod tests {
         )
     }
 
-    fn plain(element: Element) -> (AtomAst, Option<i64>) {
-        (AtomAst::from_element(element), None)
+    fn plain(element: Element) -> (AtomForm, Option<i64>) {
+        (AtomForm::from_element(element), None)
     }
 
-    fn apply_pi(specs: Vec<(AtomAst, Option<i64>)>) -> Vec<AtomAst> {
+    fn apply_pi(specs: Vec<(AtomForm, Option<i64>)>) -> Vec<AtomForm> {
         specs
             .into_iter()
             .map(|(mut atom, pi)| {
@@ -289,14 +289,14 @@ mod tests {
             .collect()
     }
 
-    fn make_ring(specs: Vec<(AtomAst, Option<i64>)>) -> MoleculeAst {
+    fn make_ring(specs: Vec<(AtomForm, Option<i64>)>) -> MoleculeAst {
         let n = specs.len();
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
                     AtomId(i as u32),
                     AtomId(((i + 1) % n) as u32),
-                    BondAst::from_order(1),
+                    BondForm::from_order(1),
                 )
             })
             .collect();
@@ -308,10 +308,10 @@ mod tests {
         })
     }
 
-    fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomForm, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
         let bonds: Vec<_> = edges
             .iter()
-            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
+            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondForm::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
         MoleculeAst::from_entries(MoleculeEntries {

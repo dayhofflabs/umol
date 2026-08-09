@@ -17,7 +17,7 @@ use super::value::NumForm;
 /// constraints (valence, degree, ring membership, etc.) that pattern
 /// against the surrounding topology.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
-pub struct AtomAst {
+pub struct AtomForm {
     pub element: ElementForm,
     pub isotope_mass: IsotopeMassForm,
     pub charge: NumForm,
@@ -42,7 +42,7 @@ pub struct AtomUpdate {
     pub constraints: AtomConstraintsAst,
 }
 
-impl AtomAst {
+impl AtomForm {
     pub fn new(element: ElementForm) -> Self {
         Self {
             element,
@@ -109,10 +109,10 @@ impl AtomAst {
     }
 
     /// Apply an attribute update, leaving omitted fields and constraint keys unchanged.
-    pub fn update(&self, update: &AtomUpdate) -> AtomAst {
+    pub fn update(&self, update: &AtomUpdate) -> AtomForm {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
-        AtomAst {
+        AtomForm {
             element: update
                 .element
                 .clone()
@@ -201,7 +201,7 @@ impl AtomAst {
     }
 }
 
-impl From<Element> for AtomAst {
+impl From<Element> for AtomForm {
     fn from(element: Element) -> Self {
         Self::from_element(element)
     }
@@ -209,7 +209,7 @@ impl From<Element> for AtomAst {
 
 /// Construction sugar for `b.atom("C#h3")`: parse a compact atom-string, panicking on
 /// invalid input — a bad literal is a programmer error, like the `atom_dsl!` macro.
-impl From<&str> for AtomAst {
+impl From<&str> for AtomForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid atom string")
     }
@@ -731,10 +731,10 @@ mod tests {
     use crate::ir::constraint::{AtomConstraintAst, RingScope};
 
     #[rstest]
-    fn test_atom_ast_from_element() {
+    fn test_atom_form_from_element() {
         assert_eq!(
-            AtomAst::from_element(Element::C),
-            AtomAst {
+            AtomForm::from_element(Element::C),
+            AtomForm {
                 element: ElementForm::Lit(Element::C),
                 ..Default::default()
             },
@@ -742,67 +742,67 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ast_from() {
-        let expected = AtomAst {
+    fn test_atom_form_from() {
+        let expected = AtomForm {
             element: ElementForm::Lit(Element::C),
             ..Default::default()
         };
-        assert_eq!(AtomAst::from(Element::C), expected);
-        assert_eq!(AtomAst::from("C"), expected);
+        assert_eq!(AtomForm::from(Element::C), expected);
+        assert_eq!(AtomForm::from("C"), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::with_element_form(AtomAst::default().with_element(ElementForm::Lit(Element::C)), AtomAst { element: ElementForm::Lit(Element::C), ..Default::default() })]
-    #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementForm::Lit(Element::N), ..Default::default() })]
-    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_u32), AtomAst { isotope_mass: IsotopeMassForm::Lit(12), ..Default::default() })]
-    #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: NumForm::Lit(1), ..Default::default() })]
-    #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: NumForm::Lit(3), ..Default::default() })]
-    #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: NumForm::Lit(2), ..Default::default() })]
-    #[case::with_unpaired_electrons_tuple(AtomAst::default().with_unpaired_electrons((0_u8, 1_u8)), AtomAst { unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() })]
-    #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)),
-        AtomAst { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)),..Default::default() })]
-    #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)).with_constraints([AtomConstraintAst::donated_pairs(1_i64), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
-        AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::donated_pairs(1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
-    #[case::with_constraint_replaces_same_kind(AtomAst::default().with_constraint(AtomConstraintAst::valence(3_i64)).with_constraint(AtomConstraintAst::valence(4_i64)),
-        AtomAst { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)), ..Default::default() })]
-    fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {
+    #[case::with_element_form(AtomForm::default().with_element(ElementForm::Lit(Element::C)), AtomForm { element: ElementForm::Lit(Element::C), ..Default::default() })]
+    #[case::with_element_primitive(AtomForm::default().with_element(Element::N), AtomForm { element: ElementForm::Lit(Element::N), ..Default::default() })]
+    #[case::with_isotope_mass(AtomForm::default().with_isotope_mass(12_u32), AtomForm { isotope_mass: IsotopeMassForm::Lit(12), ..Default::default() })]
+    #[case::with_charge(AtomForm::default().with_charge(1_i64), AtomForm { charge: NumForm::Lit(1), ..Default::default() })]
+    #[case::with_implicit_hydrogens(AtomForm::default().with_implicit_hydrogens(3_i64), AtomForm { implicit_hydrogens: NumForm::Lit(3), ..Default::default() })]
+    #[case::with_lone_pairs(AtomForm::default().with_lone_pairs(2_i64), AtomForm { lone_pairs: NumForm::Lit(2), ..Default::default() })]
+    #[case::with_unpaired_electrons_tuple(AtomForm::default().with_unpaired_electrons((0_u8, 1_u8)), AtomForm { unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), ..Default::default() })]
+    #[case::with_constraint(AtomForm::default().with_constraint(AtomConstraintAst::valence(4_i64)),
+        AtomForm { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)),..Default::default() })]
+    #[case::with_constraints_extends(AtomForm::default().with_constraint(AtomConstraintAst::valence(4_i64)).with_constraints([AtomConstraintAst::donated_pairs(1_i64), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
+        AtomForm { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::donated_pairs(1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
+    #[case::with_constraint_replaces_same_kind(AtomForm::default().with_constraint(AtomConstraintAst::valence(3_i64)).with_constraint(AtomConstraintAst::valence(4_i64)),
+        AtomForm { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)), ..Default::default() })]
+    fn test_atom_form_with_methods(#[case] actual: AtomForm, #[case] expected: AtomForm) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::element(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementForm::Lit(Element::N)), ..Default::default() }, AtomAst::from_element(Element::N))]
-    #[case::element_undetermined(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementForm::Undetermined), ..Default::default() }, AtomAst::default())]
-    #[case::isotope_mass(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassForm::Lit(13)), ..Default::default() }, AtomAst::from_element(Element::C).with_isotope_mass(13_u32))]
-    #[case::isotope_mass_undetermined(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassForm::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
-    #[case::charge(AtomAst::from_element(Element::C).with_charge(0_i64), AtomUpdate { charge: Some(NumForm::Lit(1)), ..Default::default() }, AtomAst::from_element(Element::C).with_charge(1_i64))]
-    #[case::charge_undetermined(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
-    #[case::implicit_hydrogens(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(NumForm::Lit(3)), ..Default::default() }, AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64))]
-    #[case::implicit_hydrogens_undetermined(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(NumForm::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
-    #[case::lone_pairs(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(NumForm::Lit(2)), ..Default::default() }, AtomAst::from_element(Element::N).with_lone_pairs(2_i64))]
-    #[case::lone_pairs_undetermined(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(NumForm::Undetermined), ..Default::default() }, AtomAst::from_element(Element::N))]
-    #[case::unpaired_electrons(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)))]
-    #[case::unpaired_electrons_count(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 3_u8)))]
-    #[case::unpaired_electrons_multiplicity(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 1_u8)))]
-    #[case::unpaired_electrons_count_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
-    #[case::unpaired_electrons_multiplicity_undetermined(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, AtomAst::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
-    #[case::constraint_set(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
-    #[case::constraint_replace(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
-    #[case::constraint_remove(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() }, AtomAst::from_element(Element::C))]
-    fn test_atom_ast_update(#[case] atom: AtomAst, #[case] update: AtomUpdate, #[case] expected: AtomAst) {
+    #[case::element(AtomForm::from_element(Element::C), AtomUpdate { element: Some(ElementForm::Lit(Element::N)), ..Default::default() }, AtomForm::from_element(Element::N))]
+    #[case::element_undetermined(AtomForm::from_element(Element::C), AtomUpdate { element: Some(ElementForm::Undetermined), ..Default::default() }, AtomForm::default())]
+    #[case::isotope_mass(AtomForm::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassForm::Lit(13)), ..Default::default() }, AtomForm::from_element(Element::C).with_isotope_mass(13_u32))]
+    #[case::isotope_mass_undetermined(AtomForm::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassForm::Undetermined), ..Default::default() }, AtomForm::from_element(Element::C))]
+    #[case::charge(AtomForm::from_element(Element::C).with_charge(0_i64), AtomUpdate { charge: Some(NumForm::Lit(1)), ..Default::default() }, AtomForm::from_element(Element::C).with_charge(1_i64))]
+    #[case::charge_undetermined(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::Undetermined), ..Default::default() }, AtomForm::from_element(Element::C))]
+    #[case::implicit_hydrogens(AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(NumForm::Lit(3)), ..Default::default() }, AtomForm::from_element(Element::C).with_implicit_hydrogens(3_i64))]
+    #[case::implicit_hydrogens_undetermined(AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(NumForm::Undetermined), ..Default::default() }, AtomForm::from_element(Element::C))]
+    #[case::lone_pairs(AtomForm::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(NumForm::Lit(2)), ..Default::default() }, AtomForm::from_element(Element::N).with_lone_pairs(2_i64))]
+    #[case::lone_pairs_undetermined(AtomForm::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(NumForm::Undetermined), ..Default::default() }, AtomForm::from_element(Element::N))]
+    #[case::unpaired_electrons(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)))]
+    #[case::unpaired_electrons_count(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Lit(0)), multiplicity: None }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons((0_u8, 3_u8)))]
+    #[case::unpaired_electrons_multiplicity(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Lit(1)) }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 1_u8)))]
+    #[case::unpaired_electrons_count_undetermined(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: Some(NumForm::Undetermined), multiplicity: None }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Undetermined, multiplicity: NumForm::Lit(3) }))]
+    #[case::unpaired_electrons_multiplicity_undetermined(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomUpdate { unpaired_electrons: UnpairedElectronsUpdate { count: None, multiplicity: Some(NumForm::Undetermined) }, ..Default::default() }, AtomForm::from_element(Element::C).with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }))]
+    #[case::constraint_set(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    #[case::constraint_replace(AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    #[case::constraint_remove(AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() }, AtomForm::from_element(Element::C))]
+    fn test_atom_form_update(#[case] atom: AtomForm, #[case] update: AtomUpdate, #[case] expected: AtomForm) {
         assert_eq!(atom.update(&update), expected);
     }
 
     #[rstest]
-    #[case::empty(AtomAst::from_element(Element::C).with_charge(1_i64).with_constraint(AtomConstraintAst::valence(4_i64)))]
-    fn test_atom_ast_update_identity(#[case] atom: AtomAst) {
+    #[case::empty(AtomForm::from_element(Element::C).with_charge(1_i64).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    fn test_atom_form_update_identity(#[case] atom: AtomForm) {
         assert_eq!(atom.update(&AtomUpdate::default()), atom);
     }
 
     #[rstest]
-    fn test_atom_ast_difference_to() {
-        let atom = AtomAst::from_element(Element::C)
+    fn test_atom_form_difference_to() {
+        let atom = AtomForm::from_element(Element::C)
             .with_isotope_mass(12_u32)
             .with_charge(0_i64)
             .with_implicit_hydrogens(4_i64)
@@ -812,7 +812,7 @@ mod tests {
                 AtomConstraintAst::valence(4_i64),
                 AtomConstraintAst::donated_pairs(1_i64),
             ]);
-        let other = AtomAst::from_element(Element::N)
+        let other = AtomForm::from_element(Element::N)
             .with_isotope_mass(13_u32)
             .with_implicit_hydrogens(3_i64)
             .with_lone_pairs(1_i64)
@@ -842,145 +842,145 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(AtomAst::from_element(Element::C).with_charge(1_i64), AtomAst::from_element(Element::C).with_charge(NumForm::lit_set([1])))]
-    fn test_atom_ast_difference_to_identity(#[case] atom: AtomAst, #[case] other: AtomAst) {
+    #[case::canonical(AtomForm::from_element(Element::C).with_charge(1_i64), AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])))]
+    fn test_atom_form_difference_to_identity(#[case] atom: AtomForm, #[case] other: AtomForm) {
         assert_eq!(atom.difference_to(&other), AtomUpdate::default());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
-        AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
+    #[case::from_element(AtomForm::from_element(Element::C).into_ground(),
+        AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
         lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
-    #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
-        AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(0),
+    #[case::with_charge(AtomForm::from_element(Element::C).with_charge(1_i64).into_ground(),
+        AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(0),
         lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
-    #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground(),
-        AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
+    #[case::constraint(AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground(),
+        AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
         lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
-    fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
+    fn test_atom_form_into_ground(#[case] actual: AtomForm, #[case] expected: AtomForm) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_(AtomAst::default(), false)]
-    #[case::all_ground(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+    #[case::default_(AtomForm::default(), false)]
+    #[case::all_ground(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, true)]
-    #[case::element_undetermined(AtomAst { element: ElementForm::Undetermined, isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+    #[case::element_undetermined(AtomForm { element: ElementForm::Undetermined, isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::isotope_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Undetermined, charge: NumForm::Lit(0),
+    #[case::isotope_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Undetermined, charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::charge_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Undetermined,
+    #[case::charge_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Undetermined,
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::hydrogens_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+    #[case::hydrogens_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Undetermined, lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::lone_pairs_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+    #[case::lone_pairs_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AtomConstraintsAst::new() }, false)]
-    #[case::unpaired_electrons_undetermined(AtomAst { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
+    #[case::unpaired_electrons_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(),
         constraints: AtomConstraintsAst::new() }, false)]
-    fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
+    fn test_atom_form_is_ground(#[case] ast: AtomForm, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_charge(
-        AtomAst::from_element(Element::C).with_charge(NumForm::lit_set([4])),
-        Ok(AtomAst::from_element(Element::C).with_charge(4)),
+        AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([4])),
+        Ok(AtomForm::from_element(Element::C).with_charge(4)),
     )]
     #[case::charge_empty_litset_contradiction(
-        AtomAst::from_element(Element::C).with_charge(NumForm::lit_set(Vec::<i64>::new())),
+        AtomForm::from_element(Element::C).with_charge(NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction),
     )]
-    fn test_atom_ast_canonicalize(
-        #[case] input: AtomAst,
-        #[case] expected: Result<AtomAst, Contradiction>,
+    fn test_atom_form_canonicalize(
+        #[case] input: AtomForm,
+        #[case] expected: Result<AtomForm, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard_vs_ground(AtomAst::default(), AtomAst::from_element(Element::C), true)]
-    #[case::same_element(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C), true)]
-    #[case::element_mismatch(AtomAst::from_element(Element::C), AtomAst::from_element(Element::N), false)]
-    #[case::pattern_more_specific_than_target(AtomAst::from_element(Element::C), AtomAst::default(), false)]
-    #[case::charge_mismatch(AtomAst::from_element(Element::C).with_charge(1_i64), AtomAst::from_element(Element::C).with_charge(0_i64), false)]
-    #[case::charge_wildcard_pattern(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1_i64), true)]
-    #[case::isotope_mismatch(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomAst::from_element(Element::C).with_isotope_mass(13_u32), false)]
-    #[case::hydrogens_mismatch(AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64), AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), false)]
-    #[case::lone_pairs_mismatch(AtomAst::from_element(Element::C).with_lone_pairs(1_i64), AtomAst::from_element(Element::C).with_lone_pairs(2_i64), false)]
-    #[case::unpaired_electrons_mismatch(AtomAst::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomAst::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)), false)]
+    #[case::wildcard_vs_ground(AtomForm::default(), AtomForm::from_element(Element::C), true)]
+    #[case::same_element(AtomForm::from_element(Element::C), AtomForm::from_element(Element::C), true)]
+    #[case::element_mismatch(AtomForm::from_element(Element::C), AtomForm::from_element(Element::N), false)]
+    #[case::pattern_more_specific_than_target(AtomForm::from_element(Element::C), AtomForm::default(), false)]
+    #[case::charge_mismatch(AtomForm::from_element(Element::C).with_charge(1_i64), AtomForm::from_element(Element::C).with_charge(0_i64), false)]
+    #[case::charge_wildcard_pattern(AtomForm::from_element(Element::C), AtomForm::from_element(Element::C).with_charge(1_i64), true)]
+    #[case::isotope_mismatch(AtomForm::from_element(Element::C).with_isotope_mass(12_u32), AtomForm::from_element(Element::C).with_isotope_mass(13_u32), false)]
+    #[case::hydrogens_mismatch(AtomForm::from_element(Element::C).with_implicit_hydrogens(3_i64), AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64), false)]
+    #[case::lone_pairs_mismatch(AtomForm::from_element(Element::C).with_lone_pairs(1_i64), AtomForm::from_element(Element::C).with_lone_pairs(2_i64), false)]
+    #[case::unpaired_electrons_mismatch(AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8)), AtomForm::from_element(Element::C).with_unpaired_electrons((0_u8, 1_u8)), false)]
     #[case::constraint_required_present(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
         true)]
     #[case::constraint_required_absent(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
-        AtomAst::from_element(Element::C),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomForm::from_element(Element::C),
         false)]
     #[case::constraint_value_mismatch(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3)),
         false)]
-    fn test_atom_ast_matches(
-        #[case] pattern: AtomAst,
-        #[case] target: AtomAst,
+    fn test_atom_form_matches(
+        #[case] pattern: AtomForm,
+        #[case] target: AtomForm,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rstest]
-    #[case::both_default(AtomAst::default(), AtomAst::default(), Some(AtomAst::default()))]
+    #[case::both_default(AtomForm::default(), AtomForm::default(), Some(AtomForm::default()))]
     #[case::element_mismatch(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::N),
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::N),
         None
     )]
-    #[case::narrows_charge(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1),
-        Some(AtomAst::from_element(Element::C).with_charge(1)))]
-    fn test_atom_ast_meet(
-        #[case] a: AtomAst,
-        #[case] b: AtomAst,
-        #[case] expected: Option<AtomAst>,
+    #[case::narrows_charge(AtomForm::from_element(Element::C), AtomForm::from_element(Element::C).with_charge(1),
+        Some(AtomForm::from_element(Element::C).with_charge(1)))]
+    fn test_atom_form_meet(
+        #[case] a: AtomForm,
+        #[case] b: AtomForm,
+        #[case] expected: Option<AtomForm>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    #[case::element_mismatch_widens(AtomAst::from_element(Element::C), AtomAst::from_element(Element::N),
+    #[case::element_mismatch_widens(AtomForm::from_element(Element::C), AtomForm::from_element(Element::N),
         ElementForm::lit_set(vec![Element::C, Element::N]))]
-    fn test_atom_ast_join_element(
-        #[case] a: AtomAst,
-        #[case] b: AtomAst,
+    fn test_atom_form_join_element(
+        #[case] a: AtomForm,
+        #[case] b: AtomForm,
         #[case] expected: ElementForm,
     ) {
         assert_eq!(a.join(&b).unwrap().element, expected);
     }
 
     #[rstest]
-    #[case::charge_change(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1), true,
-        AtomAst::from_element(Element::C).with_charge(1))]
+    #[case::charge_change(AtomForm::from_element(Element::C), AtomForm::from_element(Element::C).with_charge(1), true,
+        AtomForm::from_element(Element::C).with_charge(1))]
     #[case::no_change(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::C),
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::C),
         false,
-        AtomAst::from_element(Element::C)
+        AtomForm::from_element(Element::C)
     )]
-    fn test_atom_ast_narrow_from(
-        #[case] mut target: AtomAst,
-        #[case] source: AtomAst,
+    fn test_atom_form_narrow_from(
+        #[case] mut target: AtomForm,
+        #[case] source: AtomForm,
         #[case] expected_changed: bool,
-        #[case] expected_after: AtomAst,
+        #[case] expected_after: AtomForm,
     ) {
         let changed = target.narrow_from(&source);
         assert_eq!(changed, expected_changed);

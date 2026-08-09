@@ -55,7 +55,7 @@ impl FromStr for MulticenterBondDsl {
 
 impl Display for MulticenterBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_multicenter_bond_ast(f, &self.0)
+        fmt_multicenter_bond_form(f, &self.0)
     }
 }
 
@@ -230,7 +230,7 @@ fn electron_count_value(ast: &MulticenterBondAst) -> Option<&NumForm> {
         .next()
 }
 
-fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
+fn fmt_multicenter_bond_form(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_electron_counts(f, &ast.electrons)?;
     fmt_charge(f, &ast.charge)?;
     fmt_unpaired_electrons(f, &ast.unpaired_electrons)?;
@@ -701,7 +701,7 @@ mod tests {
     #[rstest]
     #[case::undetermined("*", MulticenterBondAst::default())]
     #[case::charged("[1,1,1]#c+", MulticenterBondAst { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: MulticenterBondConstraintsAst::new() })]
-    fn test_multicenter_bond_ast_from_str(
+    fn test_multicenter_bond_form_from_str(
         #[case] input: &str,
         #[case] expected: MulticenterBondAst,
     ) {
@@ -712,7 +712,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(MulticenterBondAst::default(), "*")]
     #[case::charged(MulticenterBondAst { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: MulticenterBondConstraintsAst::new() }, "[1,1,1]#c+")]
-    fn test_multicenter_bond_ast_display(
+    fn test_multicenter_bond_form_display(
         #[case] input: MulticenterBondAst,
         #[case] expected: &str,
     ) {

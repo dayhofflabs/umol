@@ -4376,8 +4376,8 @@ mod tests {
 
     use super::*;
     use crate::ir::aromatic::AromaticSystemAst;
-    use crate::ir::atom::{AtomAst, ElementForm, IsotopeMassForm};
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
+    use crate::ir::bond::BondForm;
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::{
         AromaticSystemConstraintAst, AtomConstraintsAst, BondConstraintsAst, Constraint,
@@ -4406,7 +4406,7 @@ mod tests {
         MoleculeDefaults::new(),
         Edits::from_iter([
             Edit::AddAtoms {
-                atoms: vec![AtomAst {
+                atoms: vec![AtomForm {
                     element: ElementForm::Lit(Element::C),
                     implicit_hydrogens: NumForm::Lit(3),
                     ..Default::default()
@@ -4415,7 +4415,7 @@ mod tests {
             Edit::AddBonds {
                 bonds: vec![AddBond {
                     endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                    ast: BondAst::from_order(1),
+                    ast: BondForm::from_order(1),
                 }],
             },
         ]),
@@ -4435,7 +4435,7 @@ mod tests {
         r#"[{:atom {:add "O"}}]"#,
         MoleculeDefaults::ground(),
         Edits::from_iter([Edit::AddAtoms {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::O),
                 isotope_mass: IsotopeMassForm::Natural,
                 charge: NumForm::Lit(0),
@@ -4682,7 +4682,7 @@ mod tests {
         r#"{:atom {:add "C"}}"#,
         MoleculeDefaults::ground(),
         Edits::from_iter([Edit::AddAtoms {
-            atoms: vec![AtomAst {
+            atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
                 isotope_mass: IsotopeMassForm::Natural,
                 charge: NumForm::Lit(0),
@@ -4736,7 +4736,7 @@ mod tests {
         Edits::from_iter([Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                ast: BondAst {
+                ast: BondForm {
                     order: NumForm::Lit(1),
                     charge: NumForm::Lit(0),
                     unpaired_electrons: UnpairedElectronsForm::closed_shell(),
@@ -4821,7 +4821,7 @@ mod tests {
     #[rstest]
     #[case::atom_add(
         Edit::AddAtoms {
-            atoms: vec![AtomAst::from_element(Element::C).into_ground()],
+            atoms: vec![AtomForm::from_element(Element::C).into_ground()],
         },
         MoleculeDefaults::ground(),
         r#"{:atom {:add "C"}}"#,
@@ -4830,7 +4830,7 @@ mod tests {
         Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                ast: BondAst::from_order(1).into_ground(),
+                ast: BondForm::from_order(1).into_ground(),
             }],
         },
         MoleculeDefaults::ground(),

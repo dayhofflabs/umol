@@ -471,7 +471,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomAst as GraphIrAtomAst, BooleanForm as GraphIrBooleanForm,
+        AtomForm as GraphIrAtomForm, BooleanForm as GraphIrBooleanForm,
         DativeBondConstraintAst as GraphIrDativeBondConstraintAst,
         DativeBondConstraintKey as GraphIrDativeBondConstraintKey,
         DativeBondConstraintsAst as GraphIrDativeBondConstraintsAst, MoleculeEntries,
@@ -488,8 +488,8 @@ mod tests {
     fn ammonia_borane(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                GraphIrAtomAst::from_element(ChemElement::B),
-                GraphIrAtomAst::from_element(ChemElement::N),
+                GraphIrAtomForm::from_element(ChemElement::B),
+                GraphIrAtomForm::from_element(ChemElement::N),
             ],
             dative: vec![(
                 vec![GraphIrAtomId(1)],
@@ -688,9 +688,9 @@ mod tests {
             // B(0) accepts from N(1); C(2) isolated
             let molecule = GraphIrMoleculeAst::from_entries(MoleculeEntries {
                 atoms: vec![
-                    GraphIrAtomAst::from_element(ChemElement::B),
-                    GraphIrAtomAst::from_element(ChemElement::N),
-                    GraphIrAtomAst::from_element(ChemElement::C),
+                    GraphIrAtomForm::from_element(ChemElement::B),
+                    GraphIrAtomForm::from_element(ChemElement::N),
+                    GraphIrAtomForm::from_element(ChemElement::C),
                 ],
                 dative: vec![(
                     vec![GraphIrAtomId(1)],

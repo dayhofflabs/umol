@@ -49,11 +49,11 @@ proptest! {
         coset in 0u32..2,
     ) {
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: iter::once(AtomAst::from_element(Element::C))
-                .chain(elements.into_iter().map(AtomAst::from_element))
+            atoms: iter::once(AtomForm::from_element(Element::C))
+                .chain(elements.into_iter().map(AtomForm::from_element))
                 .collect(),
             bonds: (1..=4)
-                .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+                .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
                 .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
@@ -89,11 +89,11 @@ proptest! {
         coset in 2u32..=32,
     ) {
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: iter::once(AtomAst::from_element(Element::C))
-                .chain(elements.into_iter().map(AtomAst::from_element))
+            atoms: iter::once(AtomForm::from_element(Element::C))
+                .chain(elements.into_iter().map(AtomForm::from_element))
                 .collect(),
             bonds: (1..=4)
-                .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+                .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
                 .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
@@ -116,7 +116,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_atom_ast_transform_frame(
+    fn test_stereo_atom_form_transform_frame(
         args in stereo_atom_kind_strategy().prop_flat_map(|kind| {
             (
                 Just(kind),
@@ -141,7 +141,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_bond_ast_transform_frame(
+    fn test_stereo_bond_form_transform_frame(
         coset in 0..StereoKind::CisTrans.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {

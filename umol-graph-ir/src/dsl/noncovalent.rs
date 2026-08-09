@@ -51,7 +51,7 @@ impl FromStr for NoncovalentBondDsl {
 
 impl Display for NoncovalentBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_noncovalent_bond_ast(f, &self.0)
+        fmt_noncovalent_bond_form(f, &self.0)
     }
 }
 
@@ -237,7 +237,7 @@ fn kind_symbol(k: NoncovalentBondKind) -> &'static str {
     }
 }
 
-fn fmt_noncovalent_bond_ast(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
+fn fmt_noncovalent_bond_form(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
     fmt_kind(f, &ast.kind)?;
     for c in ast.constraints.iter() {
         fmt_constraint(f, c)?;
@@ -588,7 +588,7 @@ mod tests {
     #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     #[case::xbond("Xbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond))]
     #[case::ybond("Ybd", NoncovalentBondAst::from_kind(NoncovalentBondKind::ChalcogenBond))]
-    fn test_noncovalent_bond_ast_from_str(
+    fn test_noncovalent_bond_form_from_str(
         #[case] input: &str,
         #[case] expected: NoncovalentBondAst,
     ) {
@@ -600,7 +600,7 @@ mod tests {
     #[case::intramolecular(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)), "Hbd#I")]
     #[case::intermolecular(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(false)), "Hbd#I!")]
     #[case::undetermined_constraint(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::Intramolecular(BooleanForm::Undetermined)), "Hbd")]
-    fn test_noncovalent_bond_ast_display(
+    fn test_noncovalent_bond_form_display(
         #[case] input: NoncovalentBondAst,
         #[case] expected: &str,
     ) {

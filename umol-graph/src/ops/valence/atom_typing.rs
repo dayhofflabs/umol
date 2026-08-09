@@ -1,10 +1,10 @@
 //! Atom-typing valence resolver: plans registry-driven narrowing for each atom
-//! against `AtomAst` patterns keyed by element and (optionally) charge.
+//! against `AtomForm` patterns keyed by element and (optionally) charge.
 
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AsLit, AtomAst, AtomHandle, AtomId, Edits, Lattice, MoleculeAst, TransactionError,
+    AsLit, AtomForm, AtomHandle, AtomId, Edits, Lattice, MoleculeAst, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -87,7 +87,7 @@ impl<'a> AtomTypingValence<'a> {
         &self,
         ast: &MoleculeAst,
         id: AtomId,
-    ) -> Result<Option<AtomAst>, AtomTypingError> {
+    ) -> Result<Option<AtomForm>, AtomTypingError> {
         let atom = ast.atom(id);
         if atom.is_ground() {
             return Ok(None);
@@ -137,10 +137,10 @@ impl<'a> AtomTypingValence<'a> {
 
     fn select_candidate(
         &self,
-        pattern: &AtomAst,
+        pattern: &AtomForm,
         element: Element,
         charge: Option<i8>,
-    ) -> Option<&AtomAst> {
+    ) -> Option<&AtomForm> {
         self.registry
             .lookup(element, charge)
             .iter()

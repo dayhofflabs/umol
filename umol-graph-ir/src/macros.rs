@@ -14,7 +14,7 @@ macro_rules! mol_dsl {
 }
 
 /// Parse molecule-EDN string into a `MoleculeAst` with `MoleculeDefaults::ground()` applied.
-/// Mirrors `AtomAst::into_ground()` at the molecule scope.
+/// Mirrors `AtomForm::into_ground()` at the molecule scope.
 #[macro_export]
 macro_rules! mol_dsl_ground {
     ($s:expr $(,)?) => {{
@@ -29,7 +29,7 @@ macro_rules! mol_dsl_ground {
     }};
 }
 
-/// Parse a compact atom-string into an `AtomAst`.
+/// Parse a compact atom-string into an `AtomForm`.
 ///
 /// ```ignore
 /// let a = atom_dsl!("C#h*#a+");
@@ -37,17 +37,17 @@ macro_rules! mol_dsl_ground {
 #[macro_export]
 macro_rules! atom_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::AtomAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::AtomForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse atom DSL into an `AtomAst` with `AtomDefaults::ground()` applied.
+/// Parse atom DSL into an `AtomForm` with `AtomDefaults::ground()` applied.
 #[macro_export]
 macro_rules! atom_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AtomDsl =
             <$crate::dsl::AtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::AtomDsl as $crate::ir::IntoIr<$crate::ir::AtomAst>>::into_ir(
+        <$crate::dsl::AtomDsl as $crate::ir::IntoIr<$crate::ir::AtomForm>>::into_ir(
             dsl,
             &$crate::dsl::AtomDefaults::ground(),
         )
@@ -62,7 +62,7 @@ macro_rules! atom_update_dsl {
     }};
 }
 
-/// Parse a compact bond-string into a `BondAst`.
+/// Parse a compact bond-string into a `BondForm`.
 ///
 /// ```ignore
 /// let b = bond_dsl!("1#a");
@@ -70,17 +70,17 @@ macro_rules! atom_update_dsl {
 #[macro_export]
 macro_rules! bond_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::ir::BondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ir::BondForm as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
-/// Parse a bond DSL into a `BondAst` with `BondDefaults::ground()` applied.
+/// Parse a bond DSL into a `BondForm` with `BondDefaults::ground()` applied.
 #[macro_export]
 macro_rules! bond_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::BondDsl =
             <$crate::dsl::BondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::BondDsl as $crate::ir::IntoIr<$crate::ir::BondAst>>::into_ir(
+        <$crate::dsl::BondDsl as $crate::ir::IntoIr<$crate::ir::BondForm>>::into_ir(
             dsl,
             &$crate::dsl::BondDefaults::ground(),
         )
@@ -233,11 +233,11 @@ mod tests {
     use crate::dsl::{AtomDsl, MoleculeDsl, MoleculeMetadata};
     use crate::ir::constraint::RingScope;
     use crate::ir::{
-        AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst,
-        AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
-        BondUpdate, BooleanForm, DativeBondAst, DativeBondConstraintAst, ElementForm, Entity,
-        MoleculeAst, MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
-        NumForm, StereoAtomAst, StereoBondAst, StereoCoset, StereoKind,
+        AromaticSystemAst, AromaticSystemConstraintAst, AtomConstraintAst, AtomConstraintsAst,
+        AtomForm, AtomId, AtomUpdate, BondConstraintAst, BondConstraintsAst, BondForm, BondUpdate,
+        BooleanForm, DativeBondAst, DativeBondConstraintAst, ElementForm, Entity, MoleculeAst,
+        MoleculeEntries, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, NumForm,
+        StereoAtomAst, StereoBondAst, StereoCoset, StereoKind,
     };
 
     #[rustfmt::skip]
@@ -247,8 +247,8 @@ mod tests {
         r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#,
         MoleculeDsl::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C); 2],
-                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                atoms: vec![AtomForm::from_element(Element::C); 2],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
                 ..Default::default()
             }),
             {
@@ -264,7 +264,7 @@ mod tests {
         r#"{:atoms [[:a "C"] [:b "C"]] :bonds []}"#,
         MoleculeDsl::new(
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst::from_element(Element::C); 2],
+                atoms: vec![AtomForm::from_element(Element::C); 2],
                 bonds: vec![],
                 ..Default::default()
             }),
@@ -290,12 +290,12 @@ mod tests {
     #[rstest]
     #[case::empty("{}", MoleculeAst::default())]
     #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
-        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }))]
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomForm::from_element(Element::O)],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() }))]
     #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#e3"}]}"##,
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 3],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1)), (AtomId(1), AtomId(2), BondForm::from_order(1)), (AtomId(2), AtomId(0), BondForm::from_order(1))],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintAst::electron_count(3)))],
             ..Default::default()
@@ -313,17 +313,17 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], bonds: vec![], ..Default::default() }))]
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], bonds: vec![], ..Default::default() }))]
     #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
-        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::from_element(Element::C).with_charge(1_i64).into_ground()], bonds: vec![], ..Default::default() }))]
+        MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64).into_ground()], bonds: vec![], ..Default::default() }))]
     fn test_mol_ground_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
         assert_eq!(mol_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon_charge("C#c+", AtomAst::from_element(Element::C).with_charge(1_i64))]
-    fn test_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
+    #[case::carbon_charge("C#c+", AtomForm::from_element(Element::C).with_charge(1_i64))]
+    fn test_atom_macro(#[case] input: &str, #[case] expected: AtomForm) {
         assert_eq!(atom_dsl!(input), expected);
     }
 
@@ -335,10 +335,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon_h4("C #h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
-    #[case::carbon("C", AtomAst::from_element(Element::C).into_ground())]
-    #[case::carbon_v4("C #v4", AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground())]
-    fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomAst) {
+    #[case::carbon_h4("C #h4", AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
+    #[case::carbon("C", AtomForm::from_element(Element::C).into_ground())]
+    #[case::carbon_v4("C #v4", AtomForm::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground())]
+    fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomForm) {
         assert_eq!(atom_dsl_ground!(input), expected);
     }
 
@@ -354,9 +354,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::double("2", BondAst::from_order(2))]
-    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
-    fn test_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
+    #[case::double("2", BondForm::from_order(2))]
+    #[case::aromatic("1#a", BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))))]
+    fn test_bond_macro(#[case] input: &str, #[case] expected: BondForm) {
         assert_eq!(bond_dsl!(input), expected);
     }
 
@@ -368,8 +368,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::double("2", BondAst::from_order(2).into_ground())]
-    fn test_bond_ground_macro(#[case] input: &str, #[case] expected: BondAst) {
+    #[case::double("2", BondForm::from_order(2).into_ground())]
+    fn test_bond_ground_macro(#[case] input: &str, #[case] expected: BondForm) {
         assert_eq!(bond_dsl_ground!(input), expected);
     }
 

@@ -215,8 +215,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
@@ -229,13 +229,13 @@ mod tests {
         // C-C-O: the two carbons share an element; oxygen differs.
         MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::O),
             ],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
             ],
             ..Default::default()
         })
@@ -265,12 +265,12 @@ mod tests {
         // Two stereo atoms of different kinds (Tetrahedral, SquarePlanar) and a
         // stereo bond, on a C₆ chain — enough to exercise kind + tag distinction.
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 6],
+            atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-                (AtomId(3), AtomId(4), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(4), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![
                 (
@@ -342,9 +342,9 @@ mod tests {
         // the unpaired-electron components are indistinguishable under `features`.
         let mol = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C)
+                AtomForm::from_element(Element::C)
                     .with_unpaired_electrons(unpaired_electrons_a),
-                AtomAst::from_element(Element::C)
+                AtomForm::from_element(Element::C)
                     .with_unpaired_electrons(unpaired_electrons_b),
             ],
             bonds: vec![],

@@ -52,8 +52,8 @@ use super::stereo::{
     parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, StereoAtomDsl,
     StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl,
 };
-use crate::ir::atom::{AtomAst, AtomUpdate};
-use crate::ir::bond::{BondAst, BondUpdate};
+use crate::ir::atom::{AtomForm, AtomUpdate};
+use crate::ir::bond::{BondForm, BondUpdate};
 use crate::ir::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
@@ -2744,7 +2744,7 @@ fn render_atom_ref(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
 
 /// A created atom (`:add`) — its keyword and aliases live in the reaction frame (the alias namespace
 /// is the lhs ∪ reaction union). Renders `<atom-dsl>` or `[<keyword> <atom-dsl>]`.
-fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn<'static> {
+fn render_atom_entry(id: AtomId, atom: &AtomForm, meta: &ReactionMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
     let spec = match meta.atom_alias_name(dsl) {
         Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
@@ -2781,7 +2781,7 @@ fn render_bond_ref(id: BondId, meta: &ReactionMetadata) -> Edn<'static> {
 fn render_bond_entry(
     id: BondId,
     atoms: [AtomId; 2],
-    ast: &BondAst,
+    ast: &BondForm,
     meta: &ReactionMetadata,
 ) -> Edn<'static> {
     let bond_edn = BondDsl::from_ref(ast).to_edn();
@@ -2945,11 +2945,11 @@ mod tests {
     #[case::sn2(ReactionAst::new(
         mol_dsl!(r##"{:atoms ["C" "Br"] :bonds [[0 1 "1"]]}"##),
         Deltas::from_iter([
-            Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::O) }),
+            Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomForm::from_element(Element::O) }),
             Delta::Bond(BondDelta::Add {
                 id: BondId(1),
                 atoms: [AtomId(0), AtomId(2)],
-                ast: BondAst::from_order(1),
+                ast: BondForm::from_order(1),
             }),
             Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(1),
@@ -2977,7 +2977,7 @@ mod tests {
         DeltaInput::AtomAdd(AtomEntryInput {
             keyword: None,
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
-                let mut a = AtomAst::new(ElementForm::Lit(Element::C));
+                let mut a = AtomForm::new(ElementForm::Lit(Element::C));
                 a.implicit_hydrogens = NumForm::Lit(3);
                 a
             }))),
@@ -2988,7 +2988,7 @@ mod tests {
         DeltaInput::AtomAdd(AtomEntryInput {
             keyword: Some("nu".into()),
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
-                let mut a = AtomAst::new(ElementForm::Lit(Element::O));
+                let mut a = AtomForm::new(ElementForm::Lit(Element::O));
                 a.implicit_hydrogens = NumForm::Lit(1);
                 a
             }))),
@@ -3023,7 +3023,7 @@ mod tests {
         DeltaInput::AtomAdd(AtomEntryInput {
             keyword: None,
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
-                let mut a = AtomAst::new(ElementForm::Lit(Element::C));
+                let mut a = AtomForm::new(ElementForm::Lit(Element::C));
                 a.implicit_hydrogens = NumForm::Lit(3);
                 a
             }))),
@@ -3034,7 +3034,7 @@ mod tests {
         DeltaInput::AtomAdd(AtomEntryInput {
             keyword: Some("nu".into()),
             spec: AtomSpecInput::Bare(Box::new(AtomDsl({
-                let mut a = AtomAst::new(ElementForm::Lit(Element::O));
+                let mut a = AtomForm::new(ElementForm::Lit(Element::O));
                 a.implicit_hydrogens = NumForm::Lit(1);
                 a
             }))),
@@ -3070,7 +3070,7 @@ mod tests {
             keyword: None,
             first: AtomRef::Index(0),
             second: AtomRef::Index(1),
-            bond: BondDsl(BondAst::from_order(1)),
+            bond: BondDsl(BondForm::from_order(1)),
         })
     )]
     #[case::add_map_keyword(
@@ -3079,7 +3079,7 @@ mod tests {
             keyword: Some("b1".into()),
             first: AtomRef::Keyword("c".into()),
             second: AtomRef::Keyword("nu".into()),
-            bond: BondDsl(BondAst::from_order(2)),
+            bond: BondDsl(BondForm::from_order(2)),
         })
     )]
     #[case::remove_keyword("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Keyword("b1".into())))]
@@ -3120,7 +3120,7 @@ mod tests {
             keyword: None,
             first: AtomRef::Index(0),
             second: AtomRef::Index(1),
-            bond: BondDsl(BondAst::from_order(1)),
+            bond: BondDsl(BondForm::from_order(1)),
         })
     )]
     #[case::add_map_keyword(
@@ -3129,7 +3129,7 @@ mod tests {
             keyword: Some("b1".into()),
             first: AtomRef::Keyword("c".into()),
             second: AtomRef::Keyword("nu".into()),
-            bond: BondDsl(BondAst::from_order(2)),
+            bond: BondDsl(BondForm::from_order(2)),
         })
     )]
     #[case::remove_keyword("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Keyword("b1".into())))]
@@ -3374,7 +3374,9 @@ mod tests {
             lhs: MoleculeInput {
                 atoms: vec![AtomEntryInput {
                     keyword: None,
-                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(
+                        Element::C,
+                    )))),
                 }],
                 ..Default::default()
             },
@@ -3382,7 +3384,9 @@ mod tests {
             deltas: vec![
                 DeltaInput::AtomAdd(AtomEntryInput {
                     keyword: None,
-                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))),
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(
+                        Element::O,
+                    )))),
                 }),
                 DeltaInput::BondRemove(BondRef::Index(0)),
                 DeltaInput::ConstraintAdd(ConstraintDsl::Molecule(
@@ -3403,7 +3407,9 @@ mod tests {
             lhs: MoleculeInput {
                 atoms: vec![AtomEntryInput {
                     keyword: None,
-                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(
+                        Element::C,
+                    )))),
                 }],
                 ..Default::default()
             },
@@ -3411,7 +3417,9 @@ mod tests {
             deltas: vec![
                 DeltaInput::AtomAdd(AtomEntryInput {
                     keyword: None,
-                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))),
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(
+                        Element::O,
+                    )))),
                 }),
                 DeltaInput::BondRemove(BondRef::Index(0)),
                 DeltaInput::ConstraintAdd(ConstraintDsl::Molecule(
@@ -3438,14 +3446,14 @@ mod tests {
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
                     ast: {
-                        let mut a = AtomAst::new(ElementForm::Lit(Element::C));
+                        let mut a = AtomForm::new(ElementForm::Lit(Element::C));
                         a.implicit_hydrogens = NumForm::Lit(3);
                         a
                     },
                 }),
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(2),
-                    ast: AtomAst::from_element(Element::O),
+                    ast: AtomForm::from_element(Element::O),
                 }),
             ]),
         );
@@ -3454,7 +3462,7 @@ mod tests {
         assert_eq!(
             meta.atom_alias("me"),
             Some(&AtomDsl({
-                let mut atom = AtomAst::new(ElementForm::Lit(Element::C));
+                let mut atom = AtomForm::new(ElementForm::Lit(Element::C));
                 atom.implicit_hydrogens = NumForm::Lit(3);
                 atom
             }))
@@ -3475,12 +3483,12 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomAst::from_element(Element::N),
+                    ast: AtomForm::from_element(Element::N),
                 }),
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(2),
                     ast: {
-                        let mut a = AtomAst::new(ElementForm::Lit(Element::C));
+                        let mut a = AtomForm::new(ElementForm::Lit(Element::C));
                         a.implicit_hydrogens = NumForm::Lit(3);
                         a
                     },
@@ -3489,12 +3497,12 @@ mod tests {
         );
         assert_eq!(
             meta.atom_alias("lo"),
-            Some(&AtomDsl(AtomAst::from_element(Element::N)))
+            Some(&AtomDsl(AtomForm::from_element(Element::N)))
         );
         assert_eq!(
             meta.atom_alias("hi"),
             Some(&AtomDsl({
-                let mut atom = AtomAst::new(ElementForm::Lit(Element::C));
+                let mut atom = AtomForm::new(ElementForm::Lit(Element::C));
                 atom.implicit_hydrogens = NumForm::Lit(3);
                 atom
             }))
@@ -3506,7 +3514,7 @@ mod tests {
             vec![(
                 "hi",
                 AtomDsl({
-                    let mut atom = AtomAst::new(ElementForm::Lit(Element::C));
+                    let mut atom = AtomForm::new(ElementForm::Lit(Element::C));
                     atom.implicit_hydrogens = NumForm::Lit(3);
                     atom
                 })
@@ -3525,7 +3533,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomAst::from_element(Element::Br),
+                ast: AtomForm::from_element(Element::Br),
             })]),
         );
     }
@@ -3664,12 +3672,12 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomAst::from_element(Element::O),
+                    ast: AtomForm::from_element(Element::O),
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: BondAst::from_order(1),
+                    ast: BondForm::from_order(1),
                 }),
             ]),
         );
@@ -3687,7 +3695,7 @@ mod tests {
             Deltas::from_iter([Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: BondAst::from_order(1),
+                ast: BondForm::from_order(1),
             })]),
         );
     }
@@ -3998,7 +4006,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomAst::from_element(Element::O),
+                    ast: AtomForm::from_element(Element::O),
                 }),
                 Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(
                     AtomId(1),
@@ -4044,12 +4052,12 @@ mod tests {
             deltas: Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomAst::from_element(Element::O),
+                    ast: AtomForm::from_element(Element::O),
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: BondAst::from_order(1),
+                    ast: BondForm::from_order(1),
                 }),
             ]),
         }
@@ -4105,7 +4113,7 @@ mod tests {
             .unwrap();
         lhs.set_keyword(Entity::StereoBond(StereoBondId(0)), "t1")
             .unwrap();
-        lhs.add_atom_alias("lhs-o", AtomAst::from_element(Element::O))
+        lhs.add_atom_alias("lhs-o", AtomForm::from_element(Element::O))
             .unwrap();
 
         let mut metadata = ReactionMetadata::from(lhs);
@@ -4134,7 +4142,7 @@ mod tests {
             .set_delta_keyword(Entity::StereoBond(StereoBondId(1)), "t2")
             .unwrap();
         metadata
-            .add_atom_alias("reaction-n", AtomAst::from_element(Element::N))
+            .add_atom_alias("reaction-n", AtomForm::from_element(Element::N))
             .unwrap();
         metadata
     }
@@ -4159,9 +4167,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::add_reaction_alias(vec![Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::N) })], r##"{:atom {:add [:n :reaction-n]}}"##)]
-    #[case::add_lhs_alias(vec![Delta::Atom(AtomDelta::Add { id: AtomId(3), ast: AtomAst::from_element(Element::O) })], r##"{:atom {:add :lhs-o}}"##)]
-    #[case::remove(vec![Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomAst::from_element(Element::C) })], "{:atom {:remove :c}}")]
+    #[case::add_reaction_alias(vec![Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomForm::from_element(Element::N) })], r##"{:atom {:add [:n :reaction-n]}}"##)]
+    #[case::add_lhs_alias(vec![Delta::Atom(AtomDelta::Add { id: AtomId(3), ast: AtomForm::from_element(Element::O) })], r##"{:atom {:add :lhs-o}}"##)]
+    #[case::remove(vec![Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomForm::from_element(Element::C) })], "{:atom {:remove :c}}")]
     #[case::modify_field(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(-1) } })], r##"{:atom {:modify [:br "#c-"]}}"##)]
     #[case::modify_field_undetermined(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined } })], r##"{:atom {:modify [:br "#c*"]}}"##)]
     #[case::modify_unpaired_electrons(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::from((2_u8, 3_u8)), new: UnpairedElectronsForm::from((2_u8, 1_u8)) } })], r##"{:atom {:modify [:br "#u2#s"]}}"##)]
@@ -4174,8 +4182,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::add(vec![Delta::Bond(BondDelta::Add { id: BondId(2), atoms: [AtomId(1), AtomId(2)], ast: BondAst::from_order(1) })], "{:bond {:add {:id :b2 :atoms [:c :n] :type :single}}}")]
-    #[case::remove(vec![Delta::Bond(BondDelta::Remove { id: BondId(1), atoms: [AtomId(0), AtomId(1)], ast: BondAst::from_order(1) })], "{:bond {:remove :bx}}")]
+    #[case::add(vec![Delta::Bond(BondDelta::Add { id: BondId(2), atoms: [AtomId(1), AtomId(2)], ast: BondForm::from_order(1) })], "{:bond {:add {:id :b2 :atoms [:c :n] :type :single}}}")]
+    #[case::remove(vec![Delta::Bond(BondDelta::Remove { id: BondId(1), atoms: [AtomId(0), AtomId(1)], ast: BondForm::from_order(1) })], "{:bond {:remove :bx}}")]
     #[case::modify_field(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) } })], r##"{:bond {:modify [:b1 "2"]}}"##)]
     #[case::modify_field_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Undetermined } })], r##"{:bond {:modify [:b1 "*"]}}"##)]
     #[case::modify_charge_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Undetermined } })], r##"{:bond {:modify [:b1 "#c*"]}}"##)]

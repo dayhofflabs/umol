@@ -1,6 +1,6 @@
 use rstest::rstest;
 use umol_graph_ir::frag;
-use umol_graph_ir::ir::{AtomAst, AtomId, BondAst, BondId, ElementForm, Fragment, Port};
+use umol_graph_ir::ir::{AtomForm, AtomId, BondForm, BondId, ElementForm, Fragment, Port};
 
 #[rstest]
 fn test_frag_port() {
@@ -13,7 +13,7 @@ fn test_frag_port() {
         fragment.ports(),
         &[Port {
             atom: AtomId(0),
-            bond: BondAst::from_order(1),
+            bond: BondForm::from_order(1),
             name: Some("x".to_string()),
         }]
     );
@@ -30,12 +30,12 @@ fn test_frag_multiple_ports() {
         &[
             Port {
                 atom: AtomId(0),
-                bond: BondAst::from_order(1),
+                bond: BondForm::from_order(1),
                 name: Some("a".to_string()),
             },
             Port {
                 atom: AtomId(0),
-                bond: BondAst::from_order(2),
+                bond: BondForm::from_order(2),
                 name: Some("b".to_string()),
             },
         ]
@@ -51,7 +51,7 @@ fn test_frag_spec_port() {
         fragment.ports(),
         &[Port {
             atom: AtomId(0),
-            bond: "1#a".parse::<BondAst>().unwrap(),
+            bond: "1#a".parse::<BondForm>().unwrap(),
             name: Some("r".to_string()),
         }]
     );
@@ -65,8 +65,8 @@ fn test_frag_finish_open() {
     assert_eq!(pattern.atoms().count(), 2);
     assert_eq!(
         pattern.atom(AtomId(1)).ast,
-        &AtomAst::new(ElementForm::undetermined())
+        &AtomForm::new(ElementForm::undetermined())
     );
     assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
-    assert_eq!(pattern.bond(BondId(0)).ast, &BondAst::from_order(1));
+    assert_eq!(pattern.bond(BondId(0)).ast, &BondForm::from_order(1));
 }

@@ -41,8 +41,8 @@ use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
 use crate::ir::aromatic::AromaticSystemAst;
-use crate::ir::atom::AtomAst;
-use crate::ir::bond::BondAst;
+use crate::ir::atom::AtomForm;
+use crate::ir::bond::BondForm;
 use crate::ir::dative::DativeBondAst;
 use crate::ir::entity::Entity;
 use crate::ir::id::{
@@ -676,7 +676,7 @@ fn render_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
 }
 
 /// An atom value: its alias keyword if one is bound, else the atom-string.
-pub(super) fn render_atom_value(atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
+pub(super) fn render_atom_value(atom: &AtomForm, meta: &MoleculeMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
     match meta.atom_alias_name(dsl) {
         Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
@@ -684,7 +684,7 @@ pub(super) fn render_atom_value(atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<
     }
 }
 
-fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
+fn render_atom_entry(id: AtomId, atom: &AtomForm, meta: &MoleculeMetadata) -> Edn<'static> {
     let spec = render_atom_value(atom, meta);
     match meta.keyword(Entity::Atom(id)) {
         Some(keyword) => {
@@ -1061,12 +1061,12 @@ pub(crate) enum AtomSpecInput {
     Alias(String),
 }
 
-/// Resolve an atom spec to its `AtomAst`: a bare value is its own atom; an alias is looked up in the
+/// Resolve an atom spec to its `AtomForm`: a bare value is its own atom; an alias is looked up in the
 /// table (unknown → error). Shared by the molecule, reaction, and span `into_ir` paths.
 pub(super) fn resolve_atom_spec(
     spec: AtomSpecInput,
     namespace: &impl Namespace,
-) -> Result<AtomAst, ParseError> {
+) -> Result<AtomForm, ParseError> {
     match spec {
         AtomSpecInput::Bare(dsl) => Ok(dsl.0),
         AtomSpecInput::Alias(name) => match namespace.find_atom_alias(&name) {
@@ -1162,13 +1162,13 @@ impl MoleculeInput {
         }
 
         // Resolve atom aliases.
-        let atoms: Vec<AtomAst> = atom_entries
+        let atoms: Vec<AtomForm> = atom_entries
             .into_iter()
             .map(|entry| resolve_atom_spec(entry.spec, &context))
             .collect::<Result<_, _>>()?;
 
         // Bonds.
-        let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(bond_entries.len());
+        let mut bonds: Vec<(AtomId, AtomId, BondForm)> = Vec::with_capacity(bond_entries.len());
         for entry in bond_entries {
             let a = entry.first.resolve(&context)?;
             let b = entry.second.resolve(&context)?;

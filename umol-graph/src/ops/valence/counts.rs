@@ -9,9 +9,9 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 #[cfg(test)]
 use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
-    aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst,
-    AtomConstraintsAst, AtomHandle, AtomId, AtomView, BooleanForm, Edits, IsotopeMassForm, Lattice,
-    MoleculeAst, NumForm, TransactionError, UnpairedElectronsForm,
+    aromatic_covalence, AromaticValence, AromaticValenceAst, AsLit, AtomConstraintAst,
+    AtomConstraintsAst, AtomForm, AtomHandle, AtomId, AtomView, BooleanForm, Edits,
+    IsotopeMassForm, Lattice, MoleculeAst, NumForm, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -44,7 +44,7 @@ struct CountsInput {
 }
 
 impl CountsInput {
-    fn for_atom(atom: &AtomAst) -> Self {
+    fn for_atom(atom: &AtomForm) -> Self {
         Self {
             valence: atom
                 .constraints
@@ -138,7 +138,7 @@ impl<'a> CountsValence<'a> {
         &self,
         ast: &MoleculeAst,
         atom_id: AtomId,
-    ) -> Result<Option<AtomAst>, CountsError> {
+    ) -> Result<Option<AtomForm>, CountsError> {
         let atom = ast.atom(atom_id);
         if atom.is_ground() {
             return Ok(None);
@@ -161,7 +161,7 @@ impl<'a> CountsValence<'a> {
         Ok(Some(selected))
     }
 
-    pub fn resolve_atom(&self, ast: &mut AtomAst) -> Result<(), CountsError> {
+    pub fn resolve_atom(&self, ast: &mut AtomForm) -> Result<(), CountsError> {
         if ast.is_ground() {
             return Ok(());
         }
@@ -205,7 +205,11 @@ impl<'a> CountsValence<'a> {
         }
     }
 
-    fn select_candidate(&self, atom: &AtomAst, input: CountsInput) -> Result<AtomAst, CountsError> {
+    fn select_candidate(
+        &self,
+        atom: &AtomForm,
+        input: CountsInput,
+    ) -> Result<AtomForm, CountsError> {
         let CountsInput {
             valence,
             accepted_pairs,
@@ -340,7 +344,7 @@ fn candidate_aromatic_valences(
 }
 
 fn derive_lone_pairs_and_unpaired_electrons(
-    atom: &AtomAst,
+    atom: &AtomForm,
     element: Element,
     nonbonding: i64,
 ) -> Option<(i64, i64)> {
@@ -398,8 +402,8 @@ fn derive_atom(
     valence: i64,
     is_aromatic: bool,
     aromatic_valence: i64,
-) -> AtomAst {
-    AtomAst {
+) -> AtomForm {
+    AtomForm {
         implicit_hydrogens: NumForm::Lit(implicit_hydrogens),
         lone_pairs: NumForm::Lit(lone_pairs),
         unpaired_electrons: UnpairedElectronsForm {
@@ -650,7 +654,7 @@ mod tests {
     #[rstest]
     #[case::undetermined_aromatic_out_of_table(atom_dsl!("Fe#c0#h0#a+"), Err(CountsError::UndeterminedAromaticValence))]
     fn test_counts_valence_resolve_atom_error(
-        #[case] mut atom: AtomAst,
+        #[case] mut atom: AtomForm,
         #[case] expected: Result<(), CountsError>,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());

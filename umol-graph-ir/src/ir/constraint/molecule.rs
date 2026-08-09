@@ -787,7 +787,7 @@ mod tests {
     use umol_graph_core::{Compaction, RelationId};
 
     use super::*;
-    use crate::ir::atom::AtomAst;
+    use crate::ir::atom::AtomForm;
     use crate::ir::constraint::RingScope;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -1439,7 +1439,7 @@ mod tests {
     )]
     #[case::sub_pattern_ignores_pattern(
         MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomAst::default()], bonds: vec![], ..Default::default() })) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::from_entries(MoleculeEntries { atoms: vec![AtomForm::default()], bonds: vec![], ..Default::default() })) },
         Ordering::Equal,
     )]
     #[case::sub_pattern_orders_by_anchor(

@@ -362,7 +362,7 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::*;
-    use crate::ir::atom::AtomAst;
+    use crate::ir::atom::AtomForm;
 
     #[rstest]
     fn test_molecule_metadata_new() {
@@ -437,14 +437,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::present("carbon", Some(AtomDsl(AtomAst::from_element(Element::C))))]
+    #[case::present("carbon", Some(AtomDsl(AtomForm::from_element(Element::C))))]
     #[case::absent("nitrogen", None)]
     fn test_molecule_metadata_atom_alias(#[case] name: &str, #[case] expected: Option<AtomDsl>) {
         let metadata = MoleculeMetadata {
             keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -454,8 +454,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::present(AtomDsl(AtomAst::from_element(Element::C)), Some("carbon"))]
-    #[case::absent(AtomDsl(AtomAst::from_element(Element::N)), None)]
+    #[case::present(AtomDsl(AtomForm::from_element(Element::C)), Some("carbon"))]
+    #[case::absent(AtomDsl(AtomForm::from_element(Element::N)), None)]
     fn test_molecule_metadata_atom_alias_name(
         #[case] atom: AtomDsl,
         #[case] expected: Option<&str>,
@@ -464,7 +464,7 @@ mod tests {
             keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -481,19 +481,19 @@ mod tests {
             atom_aliases: [
                 (
                     "carbon".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::C))),
                 ),
                 (
                     "nitrogen".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::N))),
                 ),
             ]
             .into_iter()
             .collect(),
         },
         vec![
-            ("carbon", AtomDsl(AtomAst::from_element(Element::C))),
-            ("nitrogen", AtomDsl(AtomAst::from_element(Element::N))),
+            ("carbon", AtomDsl(AtomForm::from_element(Element::C))),
+            ("nitrogen", AtomDsl(AtomForm::from_element(Element::N))),
         ]
     )]
     fn test_molecule_metadata_iter_atom_aliases(
@@ -573,7 +573,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_metadata_add_atom_alias() {
-        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let atom = AtomDsl(AtomForm::from_element(Element::C));
         let mut actual = MoleculeMetadata::new();
 
         let result = actual.add_atom_alias("carbon", atom.clone());
@@ -592,7 +592,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_metadata_add_atom_alias_idempotent() {
-        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let atom = AtomDsl(AtomForm::from_element(Element::C));
         let mut actual = MoleculeMetadata::new();
         actual.add_atom_alias("carbon", atom.clone()).unwrap();
         let expected = actual.clone();
@@ -606,12 +606,12 @@ mod tests {
     #[rstest]
     #[case::keyword(
         MetadataError::DuplicateKeyword("carbon".to_string()),
-        AtomDsl(AtomAst::from_element(Element::N)),
+        AtomDsl(AtomForm::from_element(Element::N)),
         "carbon"
     )]
     #[case::atom(
         MetadataError::DuplicateAtomAlias("carbon".to_string()),
-        AtomDsl(AtomAst::from_element(Element::C)),
+        AtomDsl(AtomForm::from_element(Element::C)),
         "other"
     )]
     fn test_molecule_metadata_add_atom_alias_error(
@@ -621,7 +621,7 @@ mod tests {
     ) {
         let mut actual = MoleculeMetadata::new();
         actual
-            .add_atom_alias("carbon", AtomAst::from_element(Element::C))
+            .add_atom_alias("carbon", AtomForm::from_element(Element::C))
             .unwrap();
         let expected = actual.clone();
 
@@ -635,7 +635,7 @@ mod tests {
     #[case::keyword_then_alias(false)]
     #[case::alias_then_keyword(true)]
     fn test_molecule_metadata_keyword_alias_collision(#[case] alias_first: bool) {
-        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let atom = AtomDsl(AtomForm::from_element(Element::C));
         let mut actual = MoleculeMetadata::new();
         let result = if alias_first {
             actual.add_atom_alias("carbon", atom.clone()).unwrap();
@@ -690,7 +690,7 @@ mod tests {
             .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -735,7 +735,7 @@ mod tests {
             .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -755,7 +755,7 @@ mod tests {
             .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -792,7 +792,7 @@ mod tests {
             .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -821,7 +821,7 @@ mod tests {
                 .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -841,7 +841,7 @@ mod tests {
             .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -1198,8 +1198,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::reaction("reaction", Some(AtomDsl(AtomAst::from_element(Element::C))))]
-    #[case::lhs("lhs", Some(AtomDsl(AtomAst::from_element(Element::N))))]
+    #[case::reaction("reaction", Some(AtomDsl(AtomForm::from_element(Element::C))))]
+    #[case::lhs("lhs", Some(AtomDsl(AtomForm::from_element(Element::N))))]
     #[case::missing("missing", None)]
     fn test_reaction_metadata_atom_alias(#[case] name: &str, #[case] expected: Option<AtomDsl>) {
         let metadata = ReactionMetadata {
@@ -1207,7 +1207,7 @@ mod tests {
                 keywords: BiBTreeMap::new(),
                 atom_aliases: [(
                     "lhs".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::N))),
                 )]
                 .into_iter()
                 .collect(),
@@ -1215,7 +1215,7 @@ mod tests {
             delta_keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "reaction".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -1225,9 +1225,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::reaction(AtomDsl(AtomAst::from_element(Element::C)), Some("reaction"))]
-    #[case::lhs(AtomDsl(AtomAst::from_element(Element::N)), Some("lhs"))]
-    #[case::missing(AtomDsl(AtomAst::from_element(Element::O)), None)]
+    #[case::reaction(AtomDsl(AtomForm::from_element(Element::C)), Some("reaction"))]
+    #[case::lhs(AtomDsl(AtomForm::from_element(Element::N)), Some("lhs"))]
+    #[case::missing(AtomDsl(AtomForm::from_element(Element::O)), None)]
     fn test_reaction_metadata_atom_alias_name(
         #[case] atom: AtomDsl,
         #[case] expected: Option<&str>,
@@ -1237,7 +1237,7 @@ mod tests {
                 keywords: BiBTreeMap::new(),
                 atom_aliases: [(
                     "lhs".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::N))),
                 )]
                 .into_iter()
                 .collect(),
@@ -1245,7 +1245,7 @@ mod tests {
             delta_keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "reaction".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -1262,7 +1262,7 @@ mod tests {
                 keywords: BiBTreeMap::new(),
                 atom_aliases: [(
                     "lhs".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::O))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::O))),
                 )]
                 .into_iter()
                 .collect(),
@@ -1271,19 +1271,19 @@ mod tests {
             atom_aliases: [
                 (
                     "carbon".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::C))),
                 ),
                 (
                     "nitrogen".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::N))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::N))),
                 ),
             ]
             .into_iter()
             .collect(),
         },
         vec![
-            ("carbon", AtomDsl(AtomAst::from_element(Element::C))),
-            ("nitrogen", AtomDsl(AtomAst::from_element(Element::N))),
+            ("carbon", AtomDsl(AtomForm::from_element(Element::C))),
+            ("nitrogen", AtomDsl(AtomForm::from_element(Element::N))),
         ]
     )]
     fn test_reaction_metadata_iter_reaction_atom_aliases(
@@ -1395,7 +1395,7 @@ mod tests {
             keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "used".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
@@ -1408,7 +1408,7 @@ mod tests {
         delta_keywords: BiBTreeMap::new(),
         atom_aliases: [(
             "used".to_string(),
-            Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+            Box::new(AtomDsl(AtomForm::from_element(Element::C))),
         )]
         .into_iter()
         .collect(),
@@ -1427,7 +1427,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_metadata_add_atom_alias() {
-        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let atom = AtomDsl(AtomForm::from_element(Element::C));
         let mut actual = ReactionMetadata::default();
 
         let result = actual.add_atom_alias("carbon", atom.clone());
@@ -1447,7 +1447,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_metadata_add_atom_alias_identity() {
-        let atom = AtomDsl(AtomAst::from_element(Element::C));
+        let atom = AtomDsl(AtomForm::from_element(Element::C));
         let mut actual = ReactionMetadata {
             lhs: MoleculeMetadata::new(),
             delta_keywords: BiBTreeMap::new(),
@@ -1476,7 +1476,7 @@ mod tests {
             atom_aliases: BiBTreeMap::new(),
         },
         "used",
-        AtomDsl(AtomAst::from_element(Element::C)),
+        AtomDsl(AtomForm::from_element(Element::C)),
         MetadataError::DuplicateKeyword("used".to_string())
     )]
     #[case::delta_keyword(
@@ -1488,7 +1488,7 @@ mod tests {
             atom_aliases: BiBTreeMap::new(),
         },
         "used",
-        AtomDsl(AtomAst::from_element(Element::C)),
+        AtomDsl(AtomForm::from_element(Element::C)),
         MetadataError::DuplicateKeyword("used".to_string())
     )]
     #[case::lhs_alias_name(
@@ -1497,7 +1497,7 @@ mod tests {
                 keywords: BiBTreeMap::new(),
                 atom_aliases: [(
                     "used".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::C))),
                 )]
                 .into_iter()
                 .collect(),
@@ -1506,7 +1506,7 @@ mod tests {
             atom_aliases: BiBTreeMap::new(),
         },
         "used",
-        AtomDsl(AtomAst::from_element(Element::C)),
+        AtomDsl(AtomForm::from_element(Element::C)),
         MetadataError::DuplicateKeyword("used".to_string())
     )]
     #[case::reaction_alias_name(
@@ -1515,13 +1515,13 @@ mod tests {
             delta_keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "used".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
         },
         "used",
-        AtomDsl(AtomAst::from_element(Element::N)),
+        AtomDsl(AtomForm::from_element(Element::N)),
         MetadataError::DuplicateKeyword("used".to_string())
     )]
     #[case::lhs_alias_target(
@@ -1530,7 +1530,7 @@ mod tests {
                 keywords: BiBTreeMap::new(),
                 atom_aliases: [(
                     "used".to_string(),
-                    Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                    Box::new(AtomDsl(AtomForm::from_element(Element::C))),
                 )]
                 .into_iter()
                 .collect(),
@@ -1539,7 +1539,7 @@ mod tests {
             atom_aliases: BiBTreeMap::new(),
         },
         "other",
-        AtomDsl(AtomAst::from_element(Element::C)),
+        AtomDsl(AtomForm::from_element(Element::C)),
         MetadataError::DuplicateAtomAlias("used".to_string())
     )]
     #[case::reaction_alias_target(
@@ -1548,13 +1548,13 @@ mod tests {
             delta_keywords: BiBTreeMap::new(),
             atom_aliases: [(
                 "used".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),
         },
         "other",
-        AtomDsl(AtomAst::from_element(Element::C)),
+        AtomDsl(AtomForm::from_element(Element::C)),
         MetadataError::DuplicateAtomAlias("used".to_string())
     )]
     fn test_reaction_metadata_add_atom_alias_error(
@@ -1579,7 +1579,7 @@ mod tests {
                 .collect(),
             atom_aliases: [(
                 "carbon".to_string(),
-                Box::new(AtomDsl(AtomAst::from_element(Element::C))),
+                Box::new(AtomDsl(AtomForm::from_element(Element::C))),
             )]
             .into_iter()
             .collect(),

@@ -39,18 +39,18 @@ mod tests {
     use umol_graph_core::GeneralMaximumMatchingAlgorithm;
 
     use super::*;
-    use crate::ir::atom::AtomAst;
-    use crate::ir::bond::BondAst;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
     use crate::ir::molecule::{MoleculeAst, MoleculeEntries};
 
     #[fixture]
     fn chain_4_matching() -> BondMatching {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 4],
+            atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             ..Default::default()
         })
@@ -64,14 +64,14 @@ mod tests {
     #[fixture]
     fn ring_6_matching() -> BondMatching {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); 6],
+            atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-                (AtomId(3), AtomId(4), BondAst::from_order(1)),
-                (AtomId(4), AtomId(5), BondAst::from_order(1)),
-                (AtomId(5), AtomId(0), BondAst::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
             ],
             ..Default::default()
         })
@@ -92,7 +92,7 @@ mod tests {
     #[fixture]
     fn singleton_matching() -> BondMatching {
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         })
         .graph()

@@ -105,7 +105,7 @@ proptest! {
         )),
     ) {
         let ast = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C); atom_count],
+            atoms: vec![AtomForm::from_element(Element::C); atom_count],
             ..Default::default()
         });
         let all_atoms = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();

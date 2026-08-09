@@ -231,7 +231,7 @@ pub struct DeltaDefaults {
     pub stereo_bond: StereoBondDefaults,
 }
 
-/// Lowering/raising defaults for atoms: describe how `AtomAst`
+/// Lowering/raising defaults for atoms: describe how `AtomForm`
 /// struct fields and constraintsa are treated when converting between DSL and AST.
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AtomDefaults {
@@ -872,7 +872,7 @@ mod tests {
         MulticenterValenceDefault::NotMulticenter,
         AromaticValenceDefault::NotAromatic
     )]
-    fn test_atom_ast_config_from_edn(
+    fn test_atom_form_config_from_edn(
         #[case] edn: &str,
         #[case] expected_charge: NumericDefault,
         #[case] expected_h: NumericDefault,

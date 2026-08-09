@@ -15,8 +15,8 @@ use std::vec::IntoIter;
 use thiserror::Error;
 
 use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
-use super::atom::{AtomAst, AtomUpdate, ElementForm, IsotopeMassForm};
-use super::bond::{BondAst, BondUpdate};
+use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
+use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
     DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst,
@@ -263,7 +263,7 @@ impl StereoBondFieldChange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddBond {
     pub endpoints: [AtomHandle; 2],
-    pub ast: BondAst,
+    pub ast: BondForm,
 }
 
 /// One modification of a molecule the caller holds.
@@ -285,7 +285,7 @@ pub struct AddBond {
 pub enum Edit {
     // Atoms / bonds
     AddAtoms {
-        atoms: Vec<AtomAst>,
+        atoms: Vec<AtomForm>,
     },
     AddBonds {
         bonds: Vec<AddBond>,
@@ -502,13 +502,13 @@ impl Edits {
         self.edits.push(edit);
     }
 
-    pub fn add_atom(&mut self, ast: AtomAst) -> AtomHandle {
+    pub fn add_atom(&mut self, ast: AtomForm) -> AtomHandle {
         let handle = AtomHandle::New(self.created_atoms);
         self.push(Edit::AddAtoms { atoms: vec![ast] });
         handle
     }
 
-    pub fn add_atoms(&mut self, atoms: impl IntoIterator<Item = AtomAst>) -> Vec<AtomHandle> {
+    pub fn add_atoms(&mut self, atoms: impl IntoIterator<Item = AtomForm>) -> Vec<AtomHandle> {
         let atoms: Vec<_> = atoms.into_iter().collect();
         let handles = (self.created_atoms..self.created_atoms + atoms.len())
             .map(AtomHandle::New)
@@ -517,7 +517,7 @@ impl Edits {
         handles
     }
 
-    pub fn add_bond(&mut self, first: AtomHandle, second: AtomHandle, ast: BondAst) -> BondHandle {
+    pub fn add_bond(&mut self, first: AtomHandle, second: AtomHandle, ast: BondForm) -> BondHandle {
         let handle = BondHandle::New(self.created_bonds);
         self.push(Edit::AddBonds {
             bonds: vec![AddBond {
@@ -749,7 +749,7 @@ impl IntoIterator for Edits {
 
 impl Edits {
     /// Project an atom update into checked host-relative edits.
-    pub fn update_atom(&mut self, id: AtomHandle, current: &AtomAst, update: &AtomUpdate) {
+    pub fn update_atom(&mut self, id: AtomHandle, current: &AtomForm, update: &AtomUpdate) {
         if let Some(new) = &update.element {
             if !current.element.canonical_eq(new) {
                 self.push(Edit::ModifyAtomField {
@@ -839,7 +839,7 @@ impl Edits {
     }
 
     /// Project a localized-bond update into checked host-relative edits.
-    pub fn update_bond(&mut self, id: BondHandle, current: &BondAst, update: &BondUpdate) {
+    pub fn update_bond(&mut self, id: BondHandle, current: &BondForm, update: &BondUpdate) {
         if let Some(new) = &update.order {
             if !current.order.canonical_eq(new) {
                 self.push(Edit::ModifyBondField {
@@ -1660,27 +1660,27 @@ fn collect_molecule_constraint_entities(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedAtom {
     pub id: AtomId,
-    pub ast: AtomAst,
+    pub ast: AtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedBond {
     pub id: BondId,
     pub endpoints: [AtomId; 2],
-    pub ast: BondAst,
+    pub ast: BondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedAtom {
     pub id: AtomId,
-    pub ast: AtomAst,
+    pub ast: AtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedBond {
     pub id: BondId,
     pub endpoints: [AtomId; 2],
-    pub ast: BondAst,
+    pub ast: BondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2022,8 +2022,8 @@ mod tests {
 
     #[rstest]
     fn test_edits_add_methods() {
-        let atom = AtomAst::from_element(Element::C);
-        let bond = BondAst::from_order(1);
+        let atom = AtomForm::from_element(Element::C);
+        let bond = BondForm::from_order(1);
         let dative = DativeBondAst::default();
         let aromatic = AromaticSystemAst::default();
         let multicenter = MulticenterBondAst::default();
@@ -2114,9 +2114,9 @@ mod tests {
 
     #[rstest]
     fn test_edits_add_atoms() {
-        let carbon = AtomAst::from_element(Element::C);
-        let nitrogen = AtomAst::from_element(Element::N);
-        let oxygen = AtomAst::from_element(Element::O);
+        let carbon = AtomForm::from_element(Element::C);
+        let nitrogen = AtomForm::from_element(Element::N);
+        let oxygen = AtomForm::from_element(Element::O);
         let mut edits = Edits::new();
 
         assert_eq!(
@@ -2139,9 +2139,9 @@ mod tests {
 
     #[rstest]
     fn test_edits_add_bonds() {
-        let single = BondAst::from_order(1);
-        let double = BondAst::from_order(2);
-        let triple = BondAst::from_order(3);
+        let single = BondForm::from_order(1);
+        let double = BondForm::from_order(2);
+        let triple = BondForm::from_order(3);
         let mut edits = Edits::new();
         let bonds = vec![
             AddBond {
@@ -2457,15 +2457,15 @@ mod tests {
     fn test_edits_push() {
         let entry = Edit::AddAtoms {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
             ],
         };
         let mut edits = Edits::new();
         edits.push(entry.clone());
 
         assert_eq!(
-            edits.add_atom(AtomAst::from_element(Element::O)),
+            edits.add_atom(AtomForm::from_element(Element::O)),
             AtomHandle::New(2)
         );
         assert_eq!(edits.as_slice()[0], entry);
@@ -2476,19 +2476,19 @@ mod tests {
         let entries = vec![
             Edit::AddAtoms {
                 atoms: vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::N),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::N),
                 ],
             },
             Edit::AddBonds {
                 bonds: vec![
                     AddBond {
                         endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        ast: BondAst::from_order(1),
+                        ast: BondForm::from_order(1),
                     },
                     AddBond {
                         endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-                        ast: BondAst::from_order(1),
+                        ast: BondForm::from_order(1),
                     },
                 ],
             },
@@ -2522,12 +2522,12 @@ mod tests {
         let mut edits: Edits = entries.clone().into_iter().collect();
 
         assert_eq!(edits.as_slice(), entries);
-        assert_eq!(edits.add_atom(AtomAst::default()), AtomHandle::New(2));
+        assert_eq!(edits.add_atom(AtomForm::default()), AtomHandle::New(2));
         assert_eq!(
             edits.add_bond(
                 AtomHandle::Id(AtomId(0)),
                 AtomHandle::Id(AtomId(1)),
-                BondAst::default(),
+                BondForm::default(),
             ),
             BondHandle::New(2),
         );
@@ -2591,7 +2591,7 @@ mod tests {
 
     #[rstest]
     fn test_edits_update_atom() {
-        let current = AtomAst::from_element(Element::C)
+        let current = AtomForm::from_element(Element::C)
             .with_isotope_mass(12_u32)
             .with_charge(0_i64)
             .with_implicit_hydrogens(4_i64)
@@ -2691,10 +2691,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(AtomAst::from_element(Element::C), AtomUpdate::default())]
-    #[case::canonical_field(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
-    fn test_edits_update_atom_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
+    #[case::empty(AtomForm::from_element(Element::C), AtomUpdate::default())]
+    #[case::canonical_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(NumForm::Undetermined)), ..Default::default() })]
+    fn test_edits_update_atom_identity(#[case] current: AtomForm, #[case] update: AtomUpdate) {
         let mut edits = Edits::new();
         edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
 
@@ -2703,7 +2703,7 @@ mod tests {
 
     #[rstest]
     fn test_edits_update_bond() {
-        let current = BondAst::from_order(1)
+        let current = BondForm::from_order(1)
             .with_charge(0_i64)
             .with_unpaired_electrons((2_u8, 3_u8))
             .with_constraint(BondConstraintAst::ring_membership(
@@ -2767,7 +2767,7 @@ mod tests {
 
         let expected = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::default(), AtomAst::default()],
+            atoms: vec![AtomForm::default(), AtomForm::default()],
             bonds: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
         });
@@ -2783,10 +2783,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(BondAst::from_order(1), BondUpdate::default())]
-    #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
-    #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
-    fn test_edits_update_bond_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
+    #[case::empty(BondForm::from_order(1), BondUpdate::default())]
+    #[case::canonical_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
+    fn test_edits_update_bond_identity(#[case] current: BondForm, #[case] update: BondUpdate) {
         let mut edits = Edits::new();
         edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
 
@@ -2837,7 +2837,7 @@ mod tests {
 
         let expected_ast = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::default(), AtomAst::default()],
+            atoms: vec![AtomForm::default(), AtomForm::default()],
             dative: vec![(vec![AtomId(0)], AtomId(1), current.clone())],
             ..Default::default()
         });
@@ -2921,9 +2921,9 @@ mod tests {
         let expected_ast = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::default(),
-                AtomAst::default(),
-                AtomAst::default(),
+                AtomForm::default(),
+                AtomForm::default(),
+                AtomForm::default(),
             ],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], current.clone())],
             ..Default::default()
@@ -3011,9 +3011,9 @@ mod tests {
         let expected_ast = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::default(),
-                AtomAst::default(),
-                AtomAst::default(),
+                AtomForm::default(),
+                AtomForm::default(),
+                AtomForm::default(),
             ],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], current.clone())],
             ..Default::default()
@@ -3090,7 +3090,7 @@ mod tests {
 
         let expected_ast = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::default(), AtomAst::default()],
+            atoms: vec![AtomForm::default(), AtomForm::default()],
             noncovalent: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
         });
@@ -3167,7 +3167,7 @@ mod tests {
 
         let expected_ast = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::default(); 5],
+            atoms: vec![AtomForm::default(); 5],
             stereo_atoms: vec![(
                 AtomId(0),
                 (1..=4)
@@ -3247,8 +3247,8 @@ mod tests {
 
         let expected_ast = current.update(&update);
         let molecule = MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::default(); 6],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            atoms: vec![AtomForm::default(); 6],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             stereo_bonds: vec![(
                 BondId(0),
                 (2..=5)

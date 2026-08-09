@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst,
+    AromaticValenceAst, AtomConstraintAst, AtomForm, AtomId, BondConstraintAst, BondForm,
     BooleanForm, CisTransStereoForm, Constraints, DativeBondAst, ElementForm, IsotopeMassForm,
     Lattice, MoleculeAst, MoleculeEntries, MoleculeEntriesError, MulticenterBondAst,
     NoncovalentBondAst, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
@@ -60,7 +60,7 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
     type Error = RaiseError;
 
     fn try_into_ir(self, ctx: &Self::Ctx) -> Result<MoleculeAst, RaiseError> {
-        let atoms: Vec<AtomAst> = self
+        let atoms: Vec<AtomForm> = self
             .atoms
             .iter()
             .enumerate()
@@ -94,11 +94,11 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
                 let dative_bond = DativeBondAst::new(raise_bond_order(b.order));
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
-                let mut bond_ast = b.try_into_ir(ctx)?;
+                let mut bond_form = b.try_into_ir(ctx)?;
                 if let Some(constraint) = raise_cis_trans_stereo(self, bond_idx)? {
-                    bond_ast.constraints.set(constraint);
+                    bond_form.constraints.set(constraint);
                 }
-                bonds.push((a_idx, b_idx, bond_ast));
+                bonds.push((a_idx, b_idx, bond_form));
             }
         }
 
@@ -132,12 +132,12 @@ impl TryIntoIr<MoleculeAst> for &TableMolecule {
     }
 }
 
-impl TryIntoIr<AtomAst> for &TableAtom {
+impl TryIntoIr<AtomForm> for &TableAtom {
     type Ctx = ();
     type Error = RaiseError;
 
-    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<AtomAst, RaiseError> {
-        let mut atom = AtomAst {
+    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<AtomForm, RaiseError> {
+        let mut atom = AtomForm {
             element: match self.element {
                 Some(element) => ElementForm::Lit(element),
                 None => ElementForm::Undetermined,
@@ -205,12 +205,12 @@ impl TryIntoIr<AtomAst> for &TableAtom {
     }
 }
 
-impl TryIntoIr<BondAst> for &TableBond {
+impl TryIntoIr<BondForm> for &TableBond {
     type Ctx = ();
     type Error = RaiseError;
 
-    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<BondAst, RaiseError> {
-        let mut bond = BondAst::new(raise_bond_order(self.order));
+    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<BondForm, RaiseError> {
+        let mut bond = BondForm::new(raise_bond_order(self.order));
         bond.charge = match self.charge {
             Some(c) => NumForm::Lit(c as i64),
             None => NumForm::Undetermined,
@@ -472,7 +472,7 @@ mod tests {
         assert_eq!(
             ast,
             MoleculeAst::from_entries(MoleculeEntries {
-                atoms: vec![AtomAst {
+                atoms: vec![AtomForm {
                     element: ElementForm::Lit(Element::C),
                     isotope_mass: IsotopeMassForm::Natural,
                     charge: NumForm::Lit(0),
@@ -521,7 +521,7 @@ mod tests {
         None,
         None,
         None,
-        AtomAst {
+        AtomForm {
             element: ElementForm::Undetermined,
             isotope_mass: IsotopeMassForm::Natural,
             charge: NumForm::Lit(0),
@@ -541,7 +541,7 @@ mod tests {
         Some(1),
         Some(2),
         Some(SpinMultiplicity::SINGLET),
-        AtomAst {
+        AtomForm {
             element: ElementForm::Undetermined,
             isotope_mass: IsotopeMassForm::Lit(13),
             charge: NumForm::Lit(-1),
@@ -561,7 +561,7 @@ mod tests {
         #[case] lone_pairs: Option<u8>,
         #[case] unpaired_electrons: Option<u8>,
         #[case] multiplicity: Option<SpinMultiplicity>,
-        #[case] expected: AtomAst,
+        #[case] expected: AtomForm,
     ) {
         let atom = TableAtom {
             isotope_mass,
@@ -583,7 +583,7 @@ mod tests {
         };
         assert_eq!(
             atom.try_into_ir(&()),
-            Ok(AtomAst {
+            Ok(AtomForm {
                 element: ElementForm::Undetermined,
                 isotope_mass: IsotopeMassForm::Natural,
                 charge: NumForm::Lit(0),
@@ -707,7 +707,7 @@ mod tests {
 
         assert_eq!(
             ast.atom(AtomId(0)).ast,
-            &AtomAst {
+            &AtomForm {
                 element: ElementForm::Undetermined,
                 isotope_mass: IsotopeMassForm::Natural,
                 charge: NumForm::Lit(0),

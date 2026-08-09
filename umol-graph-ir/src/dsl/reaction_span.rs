@@ -36,8 +36,8 @@ use super::namespace::MoleculeContext;
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{parse_stereo_ligand, AtomRef, BondRef, StereoLigandRef};
 use super::stereo::{StereoAtomDsl, StereoBondDsl};
-use crate::ir::atom::AtomAst;
-use crate::ir::bond::BondAst;
+use crate::ir::atom::AtomForm;
+use crate::ir::bond::BondForm;
 use crate::ir::entity::Entity;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -370,7 +370,7 @@ pub(crate) enum ConstraintSpanInput {
 #[allow(clippy::type_complexity)]
 pub(crate) struct SpanInput {
     atoms: Vec<(Option<String>, EntitySpan<AtomSpecInput>)>,
-    bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>)>,
+    bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<BondForm>)>,
     dative_bonds: Vec<(
         Option<String>,
         Vec<AtomRef>,
@@ -449,12 +449,12 @@ fn parse_atom_span_entry(
 }
 
 /// Parse a complete bond-entry payload (`[a b bond]` or the `{:id :atoms :type}` map) and wrap its
-/// `BondAst` into the given span side.
+/// `BondForm` into the given span side.
 #[allow(clippy::type_complexity)]
 fn bond_entry_span(
     payload: &Edn<'_>,
-    wrap: impl Fn(BondAst) -> EntitySpan<BondAst>,
-) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>), DeError> {
+    wrap: impl Fn(BondForm) -> EntitySpan<BondForm>,
+) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<BondForm>), DeError> {
     let entry = parse_bond_entry(payload)?;
     Ok((
         entry.keyword,
@@ -495,7 +495,7 @@ fn split_bond_frame<'e>(
 #[allow(clippy::type_complexity)]
 fn parse_bond_span_entry(
     edn: &Edn<'_>,
-) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>), DeError> {
+) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<BondForm>), DeError> {
     match verb_wrapper(edn) {
         None => bond_entry_span(edn, EntitySpan::Unchanged),
         Some(("add", p)) => bond_entry_span(p, EntitySpan::Added),
@@ -1004,7 +1004,7 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
 fn resolve_atom_span(
     span: EntitySpan<AtomSpecInput>,
     context: &MoleculeContext,
-) -> Result<EntitySpan<AtomAst>, ParseError> {
+) -> Result<EntitySpan<AtomForm>, ParseError> {
     Ok(match span {
         EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve_atom_spec(s, context)?),
         EntitySpan::Added(s) => EntitySpan::Added(resolve_atom_spec(s, context)?),
@@ -1033,7 +1033,7 @@ fn resolve_constraint_span(
 impl SpanInput {
     /// Resolve the union-frame span: positions are the union ids (no fresh-id allocation), inline
     /// entity keywords and `:atom-aliases` populate the context, atom `AtomSpecInput` sides resolve to
-    /// `AtomAst`, and participant, site, ligand, and constraint refs resolve against the context.
+    /// `AtomForm`, and participant, site, ligand, and constraint refs resolve against the context.
     /// Checked span construction requires every selected side reference to remain available after
     /// projection; chemistry and other semantic properties are not validated here.
     pub(crate) fn into_ir(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
@@ -1051,12 +1051,12 @@ impl SpanInput {
             context.register_atom_alias(name, *dsl)?;
         }
 
-        // Resolve atoms (alias → AtomAst), bonds (endpoints + value), constraints.
-        let mut atoms: Vec<EntitySpan<AtomAst>> = Vec::with_capacity(atom_count);
+        // Resolve atoms (alias → AtomForm), bonds (endpoints + value), constraints.
+        let mut atoms: Vec<EntitySpan<AtomForm>> = Vec::with_capacity(atom_count);
         for (_, span) in self.atoms {
             atoms.push(resolve_atom_span(span, &context)?);
         }
-        let mut bonds: Vec<(AtomId, AtomId, EntitySpan<BondAst>)> = Vec::with_capacity(bond_count);
+        let mut bonds: Vec<(AtomId, AtomId, EntitySpan<BondForm>)> = Vec::with_capacity(bond_count);
         for (keyword, [ref_a, ref_b], span) in self.bonds {
             let a = ref_a.resolve(&context)?;
             let b = ref_b.resolve(&context)?;
@@ -1178,7 +1178,7 @@ impl FromStr for ReactionSpanDsl {
 
 fn render_atom_span_entry(
     id: AtomId,
-    span: &EntitySpan<AtomAst>,
+    span: &EntitySpan<AtomForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let body = match span {
@@ -1210,10 +1210,10 @@ fn render_atom_span_entry(
 fn render_bond_span_entry(
     id: BondId,
     endpoints: [AtomId; 2],
-    span: &EntitySpan<BondAst>,
+    span: &EntitySpan<BondForm>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
-    let value = |bond: &BondAst| BondDsl::from_ref(bond).to_edn();
+    let value = |bond: &BondForm| BondDsl::from_ref(bond).to_edn();
     match span {
         EntitySpan::Unchanged(b) => render_bond_entry(id, endpoints, value(b), meta),
         EntitySpan::Added(b) => {
@@ -1737,8 +1737,8 @@ mod tests {
     #[rstest]
     #[case::modify(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
             ..Default::default()
         }),
@@ -1750,22 +1750,22 @@ mod tests {
     // Unchanged / Removed / Added atoms and bonds + an Added constraint.
     #[case::add_remove(ReactionAst::new(
         MoleculeAst::from_entries(MoleculeEntries {
-            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
         Deltas::from_iter([
-            Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomAst::from_element(Element::O) }),
+            Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomForm::from_element(Element::O) }),
             Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: BondAst::from_order(1),
+                ast: BondForm::from_order(1),
             }),
-            Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::N) }),
+            Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomForm::from_element(Element::N) }),
             Delta::Bond(BondDelta::Add {
                 id: BondId(1),
                 atoms: [AtomId(0), AtomId(2)],
-                ast: BondAst::from_order(1),
+                ast: BondForm::from_order(1),
             }),
             Delta::Constraint(ConstraintDelta::Add(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
@@ -1782,18 +1782,18 @@ mod tests {
     fn test_reaction_span_dsl_from_ast_superimposed() {
         let lhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::O),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
         let rhs = MoleculeAst::from_entries(MoleculeEntries {
             atoms: vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
             ..Default::default()
         });
         let atoms = Correspondence::new(vec![(AtomId(0), AtomId(0))], 2, 2).unwrap();
@@ -1808,14 +1808,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#""C""#, (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))))]
-    #[case::add(r#"{:add "O"}"#, (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))))]
-    #[case::remove(r#"{:remove "O"}"#, (None, EntitySpan::Removed(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))))]
+    #[case::unchanged(r#""C""#, (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::C)))))))]
+    #[case::add(r#"{:add "O"}"#, (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::O)))))))]
+    #[case::remove(r#"{:remove "O"}"#, (None, EntitySpan::Removed(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::O)))))))]
     #[case::modify(r#"{:modify ["C" "N"]}"#, (None, EntitySpan::Modified {
-        lhs:AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
-        rhs:AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::N)))),
+        lhs:AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::C)))),
+        rhs:AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::N)))),
     }))]
-    #[case::with_keyword(r#"[:c "C"]"#, (Some("c".to_string()), EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))))]
+    #[case::with_keyword(r#"[:c "C"]"#, (Some("c".to_string()), EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::C)))))))]
     #[case::alias(r#":nu"#, (None, EntitySpan::Unchanged(AtomSpecInput::Alias("nu".to_string()))))]
     #[case::add_alias(r#"{:add :nu}"#, (None, EntitySpan::Added(AtomSpecInput::Alias("nu".to_string()))))]
     fn test_parse_atom_span_entry(
@@ -1829,25 +1829,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged("[0 1 :single]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondAst::from_order(1))))]
-    #[case::add("{:add [0 2 :single]}", (None, [AtomRef::Index(0), AtomRef::Index(2)], EntitySpan::Added(BondAst::from_order(1))))]
-    #[case::remove("{:remove [0 1 :single]}", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Removed(BondAst::from_order(1))))]
+    #[case::unchanged("[0 1 :single]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondForm::from_order(1))))]
+    #[case::add("{:add [0 2 :single]}", (None, [AtomRef::Index(0), AtomRef::Index(2)], EntitySpan::Added(BondForm::from_order(1))))]
+    #[case::remove("{:remove [0 1 :single]}", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Removed(BondForm::from_order(1))))]
     #[case::modify("{:modify [0 2 [:single :double]]}", (None, [AtomRef::Index(0), AtomRef::Index(2)], EntitySpan::Modified {
-        lhs:BondAst::from_order(1),
-        rhs:BondAst::from_order(2),
+        lhs:BondForm::from_order(1),
+        rhs:BondForm::from_order(2),
     }))]
-    #[case::unchanged_map_id("{:id :b1 :atoms [0 1] :type :single}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondAst::from_order(1))))]
+    #[case::unchanged_map_id("{:id :b1 :atoms [0 1] :type :single}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondForm::from_order(1))))]
     #[case::modify_map_id("{:modify {:id :b1 :atoms [0 1] :type [:single :double]}}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Modified {
-        lhs:BondAst::from_order(1),
-        rhs:BondAst::from_order(2),
+        lhs:BondForm::from_order(1),
+        rhs:BondForm::from_order(2),
     }))]
-    #[case::triple("[0 1 :triple]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondAst::from_order(3))))]
+    #[case::triple("[0 1 :triple]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondForm::from_order(3))))]
     #[case::aromatic("[0 1 :aromatic]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(
-        BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
+        BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true))),
     )))]
     fn test_parse_bond_span_entry(
         #[case] input: &str,
-        #[case] expected: (Option<String>, [AtomRef; 2], EntitySpan<BondAst>),
+        #[case] expected: (Option<String>, [AtomRef; 2], EntitySpan<BondForm>),
     ) {
         assert_eq!(
             parse_bond_span_entry(&read_string(input).unwrap()).unwrap(),
@@ -2057,13 +2057,13 @@ mod tests {
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]] :constraints [{:connected {}}]}"#,
         SpanInput {
             atoms: vec![
-                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))),
-                (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
+                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::C)))))),
+                (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::O)))))),
             ],
             bonds: vec![(
                 None,
                 [AtomRef::Index(0), AtomRef::Index(1)],
-                EntitySpan::Unchanged(BondAst::from_order(1)),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
             )],
             dative_bonds: vec![],
             aromatic_systems: vec![],
@@ -2081,13 +2081,13 @@ mod tests {
         r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#,
         SpanInput {
             atoms: vec![
-                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))),
-                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
+                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::C)))))),
+                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::O)))))),
             ],
             bonds: vec![(
                 None,
                 [AtomRef::Index(0), AtomRef::Index(1)],
-                EntitySpan::Unchanged(BondAst::from_order(1)),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
             )],
             dative_bonds: vec![],
             aromatic_systems: vec![],
@@ -2104,7 +2104,7 @@ mod tests {
         SpanInput {
             atoms: vec![
                 (None, EntitySpan::Unchanged(AtomSpecInput::Alias("nu".to_string()))),
-                (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
+                (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomForm::from_element(Element::O)))))),
             ],
             bonds: vec![],
             dative_bonds: vec![],
@@ -2134,16 +2134,16 @@ mod tests {
         r#"{:atoms [:nu {:add "O"}] :bonds [{:add [0 1 :single]}] :atom-aliases [:nu "C"]}"#,
         ReactionSpanAst::from_entries(ReactionSpanEntries {
             atoms: vec![
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Added(AtomAst::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
             ],
-            bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondAst::from_order(1)))],
+            bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(1)))],
             ..Default::default()
         }),
         {
             let mut metadata = MoleculeMetadata::new();
             metadata
-                .add_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C)))
+                .add_atom_alias("nu", AtomDsl(AtomForm::from_element(Element::C)))
                 .unwrap();
             metadata
         },
@@ -2152,8 +2152,8 @@ mod tests {
         r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#,
         ReactionSpanAst::from_entries(ReactionSpanEntries {
             atoms: vec![
-                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                EntitySpan::Unchanged(AtomAst::from_element(Element::N)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
             ],
             dative: vec![(
                 vec![AtomId(0)],
@@ -2195,7 +2195,7 @@ mod tests {
         assert_eq!(
             ast.atoms(),
             &[EntitySpan::Unchanged(
-                AtomAst::from_element(Element::C).with_charge(1_i64),
+                AtomForm::from_element(Element::C).with_charge(1_i64),
             )],
         );
         assert_eq!(metadata, MoleculeMetadata::new());
@@ -2319,10 +2319,10 @@ mod tests {
         ReactionSpanDsl::new(
             ReactionSpanAst::from_entries(ReactionSpanEntries {
                 atoms: vec![
-                    EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                    EntitySpan::Added(AtomAst::from_element(Element::O)),
+                    EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                    EntitySpan::Added(AtomForm::from_element(Element::O)),
                 ],
-                bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondAst::from_order(1)))],
+                bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(1)))],
                 ..Default::default()
             }),
             MoleculeMetadata::new(),
@@ -2333,10 +2333,10 @@ mod tests {
         ReactionSpanDsl::new(
             ReactionSpanAst::from_entries(ReactionSpanEntries {
                 atoms: vec![
-                    EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
-                    EntitySpan::Unchanged(AtomAst::from_element(Element::O)),
+                    EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                    EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
                 ],
-                bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondAst::from_order(1)))],
+                bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
                 ..Default::default()
             }),
             MoleculeMetadata::new(),
@@ -2354,36 +2354,36 @@ mod tests {
     #[rstest]
     #[case::unchanged(
         AtomId(0),
-        EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
         MoleculeMetadata::new(),
         r#""C""#
     )]
     #[case::add(
         AtomId(0),
-        EntitySpan::Added(AtomAst::from_element(Element::O)),
+        EntitySpan::Added(AtomForm::from_element(Element::O)),
         MoleculeMetadata::new(),
         r#"{:add "O"}"#
     )]
     #[case::remove(
         AtomId(0),
-        EntitySpan::Removed(AtomAst::from_element(Element::O)),
+        EntitySpan::Removed(AtomForm::from_element(Element::O)),
         MoleculeMetadata::new(),
         r#"{:remove "O"}"#
     )]
-    #[case::modify(AtomId(0), EntitySpan::Modified { lhs:AtomAst::from_element(Element::C), rhs:AtomAst::from_element(Element::N) }, MoleculeMetadata::new(), r#"{:modify ["C" "N"]}"#)]
-    #[case::with_keyword(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), {
+    #[case::modify(AtomId(0), EntitySpan::Modified { lhs:AtomForm::from_element(Element::C), rhs:AtomForm::from_element(Element::N) }, MoleculeMetadata::new(), r#"{:modify ["C" "N"]}"#)]
+    #[case::with_keyword(AtomId(0), EntitySpan::Unchanged(AtomForm::from_element(Element::C)), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::Atom(AtomId(0)), "c").unwrap();
         metadata
     }, r#"[:c "C"]"#)]
-    #[case::alias(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), {
+    #[case::alias(AtomId(0), EntitySpan::Unchanged(AtomForm::from_element(Element::C)), {
         let mut metadata = MoleculeMetadata::new();
-        metadata.add_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C))).unwrap();
+        metadata.add_atom_alias("nu", AtomDsl(AtomForm::from_element(Element::C))).unwrap();
         metadata
     }, r#":nu"#)]
     fn test_render_atom_span_entry(
         #[case] id: AtomId,
-        #[case] span: EntitySpan<AtomAst>,
+        #[case] span: EntitySpan<AtomForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {
@@ -2395,29 +2395,29 @@ mod tests {
 
     #[rstest]
     #[case::unchanged(
-        EntitySpan::Unchanged(BondAst::from_order(1)),
+        EntitySpan::Unchanged(BondForm::from_order(1)),
         MoleculeMetadata::new(),
         "[0 1 :single]"
     )]
     #[case::add(
-        EntitySpan::Added(BondAst::from_order(2)),
+        EntitySpan::Added(BondForm::from_order(2)),
         MoleculeMetadata::new(),
         "{:add [0 1 :double]}"
     )]
     #[case::remove(
-        EntitySpan::Removed(BondAst::from_order(1)),
+        EntitySpan::Removed(BondForm::from_order(1)),
         MoleculeMetadata::new(),
         "{:remove [0 1 :single]}"
     )]
-    #[case::modify(EntitySpan::Modified { lhs:BondAst::from_order(1), rhs:BondAst::from_order(2) }, MoleculeMetadata::new(), "{:modify [0 1 [:single :double]]}")]
-    #[case::with_id(EntitySpan::Unchanged(BondAst::from_order(1)), {
+    #[case::modify(EntitySpan::Modified { lhs:BondForm::from_order(1), rhs:BondForm::from_order(2) }, MoleculeMetadata::new(), "{:modify [0 1 [:single :double]]}")]
+    #[case::with_id(EntitySpan::Unchanged(BondForm::from_order(1)), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::Bond(BondId(0)), "b1").unwrap();
         metadata
     }, "{:id :b1 :atoms [0 1] :type :single}")]
-    #[case::aromatic(EntitySpan::Unchanged(BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
+    #[case::aromatic(EntitySpan::Unchanged(BondForm::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanForm::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
     fn test_render_bond_span_entry(
-        #[case] span: EntitySpan<BondAst>,
+        #[case] span: EntitySpan<BondForm>,
         #[case] meta: MoleculeMetadata,
         #[case] expected: &str,
     ) {

@@ -3,8 +3,8 @@
 //! `MoleculeEditor` and lowers each call onto it.
 
 use super::super::aromatic::AromaticSystemAst;
-use super::super::atom::AtomAst;
-use super::super::bond::BondAst;
+use super::super::atom::AtomForm;
+use super::super::bond::BondForm;
 use super::super::constraint::BondConstraintAst;
 use super::super::dative::DativeBondAst;
 use super::super::id::{
@@ -24,7 +24,7 @@ use super::{MoleculeAst, MoleculeEditor};
 pub struct MoleculeBuilder {
     editor: MoleculeEditor,
     /// Whether each added atom is grounded — its unspecified fields filled with their
-    /// ground defaults (neutral, singlet, …). Applied per atom via `AtomAst::into_ground`.
+    /// ground defaults (neutral, singlet, …). Applied per atom via `AtomForm::into_ground`.
     ground: bool,
 }
 
@@ -38,7 +38,7 @@ impl MoleculeBuilder {
     }
 
     /// A fresh builder that **grounds** each atom — unspecified fields take their ground
-    /// defaults (neutral, singlet, …), reusing `AtomAst::into_ground`. The in-code
+    /// defaults (neutral, singlet, …), reusing `AtomForm::into_ground`. The in-code
     /// analogue of the `mol_dsl_ground!` path. (Partial defaults — e.g. neutral but spin
     /// open — will be the L2 `+`-spec's `charge(0)`/`spin(…)` terms.)
     pub fn ground() -> Self {
@@ -48,9 +48,9 @@ impl MoleculeBuilder {
         }
     }
 
-    /// Add an atom, returning its handle. Accepts an element (`C`), an `AtomAst`, or a
-    /// compact atom-string (`"C#h3"`) via `Into<AtomAst>`.
-    pub fn atom(&mut self, spec: impl Into<AtomAst>) -> AtomId {
+    /// Add an atom, returning its handle. Accepts an element (`C`), an `AtomForm`, or a
+    /// compact atom-string (`"C#h3"`) via `Into<AtomForm>`.
+    pub fn atom(&mut self, spec: impl Into<AtomForm>) -> AtomId {
         let atom = spec.into();
         let atom = if self.ground {
             atom.into_ground()
@@ -62,22 +62,22 @@ impl MoleculeBuilder {
 
     /// Add a single (order-1) bond.
     pub fn single(&mut self, first: AtomId, second: AtomId) -> BondId {
-        self.editor.add_bond(first, second, BondAst::from_order(1))
+        self.editor.add_bond(first, second, BondForm::from_order(1))
     }
 
     /// Add a double (order-2) bond.
     pub fn double(&mut self, first: AtomId, second: AtomId) -> BondId {
-        self.editor.add_bond(first, second, BondAst::from_order(2))
+        self.editor.add_bond(first, second, BondForm::from_order(2))
     }
 
     /// Add a triple (order-3) bond.
     pub fn triple(&mut self, first: AtomId, second: AtomId) -> BondId {
-        self.editor.add_bond(first, second, BondAst::from_order(3))
+        self.editor.add_bond(first, second, BondForm::from_order(3))
     }
 
-    /// Add a bond carrying an explicit `BondAst` — the escape hatch for a bond with a
+    /// Add a bond carrying an explicit `BondForm` — the escape hatch for a bond with a
     /// charge, spin, order-set, or constraint that `single`/`double`/`triple` can't set.
-    pub fn bond(&mut self, first: AtomId, second: AtomId, bond: impl Into<BondAst>) -> BondId {
+    pub fn bond(&mut self, first: AtomId, second: AtomId, bond: impl Into<BondForm>) -> BondId {
         self.editor.add_bond(first, second, bond.into())
     }
 
@@ -87,7 +87,7 @@ impl MoleculeBuilder {
         self.editor.add_bond(
             first,
             second,
-            BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
+            BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
         )
     }
 
@@ -218,17 +218,17 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 3);
         assert_eq!(mol.bonds().count(), 2);
-        assert_eq!(mol.bond(BondId(0)).ast, &BondAst::from_order(1));
-        assert_eq!(mol.bond(BondId(1)).ast, &BondAst::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(1));
+        assert_eq!(mol.bond(BondId(1)).ast, &BondForm::from_order(2));
     }
 
     #[rstest]
-    #[case::undetermined_grounds(AtomAst::from_element(Element::C), NumForm::Lit(0))]
+    #[case::undetermined_grounds(AtomForm::from_element(Element::C), NumForm::Lit(0))]
     #[case::preset_charge_preserved(
-        AtomAst::from_element(Element::C).with_charge(2_i64),
+        AtomForm::from_element(Element::C).with_charge(2_i64),
         NumForm::Lit(2)
     )]
-    fn test_molecule_builder_ground(#[case] spec: AtomAst, #[case] expected_charge: NumForm) {
+    fn test_molecule_builder_ground(#[case] spec: AtomForm, #[case] expected_charge: NumForm) {
         let mut builder = MoleculeBuilder::ground();
         let atom = builder.atom(spec);
         let mol = builder.build();
@@ -243,14 +243,14 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let a = builder.atom(Element::C);
         let b = builder.atom(Element::O);
-        // charge is reachable only through the explicit-BondAst escape hatch
-        let bond = builder.bond(a, b, BondAst::from_order(2).with_charge(-1_i64));
+        // charge is reachable only through the explicit-BondForm escape hatch
+        let bond = builder.bond(a, b, BondForm::from_order(2).with_charge(-1_i64));
         let mol = builder.build();
 
         assert_eq!(bond, BondId(0));
         assert_eq!(
             mol.bond(bond).ast,
-            &BondAst::from_order(2).with_charge(-1_i64)
+            &BondForm::from_order(2).with_charge(-1_i64)
         );
     }
 
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(bond, BondId(0));
         assert_eq!(
             mol.bond(bond).ast,
-            &BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
+            &BondForm::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
         );
     }
 

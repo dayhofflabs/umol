@@ -249,7 +249,7 @@ mod tests {
     use umol_graph_core::Correspondence as GraphCoreCorrespondence;
     use umol_graph_ir::dsl::AtomDsl;
     use umol_graph_ir::ir::{
-        AromaticSystemId, AtomAst, AtomId, BondId, DativeBondId,
+        AromaticSystemId, AtomForm, AtomId, BondId, DativeBondId,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence, MulticenterBondId,
         NoncovalentBondId, StereoAtomId, StereoBondId,
     };
@@ -366,7 +366,7 @@ mod tests {
             metadata.set_keyword(entity, keyword).unwrap();
         }
         metadata
-            .add_atom_alias("carbon", AtomDsl(AtomAst::from_element(Element::C)))
+            .add_atom_alias("carbon", AtomDsl(AtomForm::from_element(Element::C)))
             .unwrap();
         let correspondence = MoleculeCorrespondence::from_rust(GraphIrMoleculeCorrespondence::new(
             GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(1))], 1, 2)
@@ -406,7 +406,7 @@ mod tests {
                 .to_rust()
                 .atom_alias("carbon")
                 .map(|alias| alias.0.clone()),
-            Some(AtomAst::from_element(Element::C))
+            Some(AtomForm::from_element(Element::C))
         );
     }
 
@@ -498,22 +498,22 @@ mod tests {
     #[rstest]
     fn test_reaction_metadata_alias_preservation() {
         let mut lhs = GraphIrMoleculeMetadata::new();
-        lhs.add_atom_alias("carbon", AtomDsl(AtomAst::from_element(Element::C)))
+        lhs.add_atom_alias("carbon", AtomDsl(AtomForm::from_element(Element::C)))
             .unwrap();
         let mut metadata = GraphIrReactionMetadata::from(lhs);
         metadata
-            .add_atom_alias("nitrogen", AtomDsl(AtomAst::from_element(Element::N)))
+            .add_atom_alias("nitrogen", AtomDsl(AtomForm::from_element(Element::N)))
             .unwrap();
 
         let metadata = ReactionMetadata::from_rust(metadata).to_rust();
 
         assert_eq!(
             metadata.atom_alias("carbon").map(|alias| alias.0.clone()),
-            Some(AtomAst::from_element(Element::C))
+            Some(AtomForm::from_element(Element::C))
         );
         assert_eq!(
             metadata.atom_alias("nitrogen").map(|alias| alias.0.clone()),
-            Some(AtomAst::from_element(Element::N))
+            Some(AtomForm::from_element(Element::N))
         );
     }
 

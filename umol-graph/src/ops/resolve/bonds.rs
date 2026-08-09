@@ -1,4 +1,4 @@
-//! Covalent-bond resolver: fills `BondAst` charge and unpaired-electron defaults on bonds
+//! Covalent-bond resolver: fills `BondForm` charge and unpaired-electron defaults on bonds
 //! whose corresponding inherent slots are still `Undetermined` after the
 //! valence and aromaticity passes.
 
