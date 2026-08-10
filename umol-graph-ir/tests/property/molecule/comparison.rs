@@ -1,7 +1,7 @@
 //! Molecule comparison properties.
 //!
 //! The identity-frame laws for `equiv`, the correspondence laws for
-//! `equiv_under`, and agreement with `==` on canonical ASTs deliberately use
+//! `equiv_under`, and agreement with `==` on canonical graph-IR values deliberately use
 //! overlapping molecule domains. They establish distinct relations: semantic
 //! equivalence in a shared frame, semantic equivalence under an explicit frame
 //! mapping, and a canonical-representation oracle, respectively.

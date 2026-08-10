@@ -1,4 +1,4 @@
-//! Stereo AST semantic properties.
+//! Stereo graph IR semantic properties.
 
 use std::iter;
 

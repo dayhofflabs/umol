@@ -1,4 +1,4 @@
-//! Owned aromatic-system ASTs and molecule-backed aromatic-system views.
+//! Owned aromatic-system forms and molecule-backed aromatic-system views.
 
 use std::str::FromStr;
 use std::vec::IntoIter;

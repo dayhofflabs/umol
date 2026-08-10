@@ -4,7 +4,7 @@
 //! atoms with explicit single/double bonds and no aromatic hints. Per-atom π
 //! contributions are derived from bond orders by [`electrons_from_kekule`]
 //! rather than from the `AromaticValence` constraint that the resolver reads.
-//! If the input AST already carries one or more aromatic systems, this is a
+//! If the input molecule already carries one or more aromatic systems, this is a
 //! no-op: re-aromatizing requires kekulizing first.
 
 use thiserror::Error;

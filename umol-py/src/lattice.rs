@@ -1,4 +1,4 @@
-//! Shared generation of Python methods for AST lattice and canonicalization operations.
+//! Shared generation of Python methods for form lattice and canonicalization operations.
 
 pub(crate) use umol_graph_ir::ir::{Canonicalize, Lattice};
 

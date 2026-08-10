@@ -1,4 +1,4 @@
-//! AST indices into atom, bond, and relation tables.
+//! Graph-IR indices into atom, bond, and relation tables.
 
 use std::fmt;
 

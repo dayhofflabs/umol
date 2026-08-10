@@ -1,4 +1,4 @@
-//! Shared operator enums used across the AST.
+//! Shared operator enums used by graph-IR forms.
 
 /// Relational operators for `PredExpr::Rel`. Negation-closed: every
 /// operator's logical negation is another operator (`Lt`↔`Ge`, `Le`↔`Gt`,

@@ -1,4 +1,4 @@
-//! Stereo properties separated into DSL serialization and AST semantics.
+//! Stereo properties separated into DSL serialization and graph IR semantics.
 //!
 //! The parent owns one regression file for the whole subject. Both children use
 //! that file through `super::REGRESSION_FILE`, so reorganizing properties by

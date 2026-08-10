@@ -1,4 +1,4 @@
-//! Electron-counts AST value: `Undetermined`, or a positional per-member-atom
+//! Electron-counts form: `Undetermined`, or a positional per-member-atom
 //! count vector. A value leaf shared by the aromatic-system and multicenter-bond
 //! bindings; the vector is positional (cell = member atom), aligned to the owning
 //! entity's participant order.

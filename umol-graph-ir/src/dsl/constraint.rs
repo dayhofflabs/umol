@@ -1,8 +1,8 @@
 //! Tree-shaped constraint DSLs.
 //!
-//! Boundary types between the AST `Constraint` tree and its EDN form. Refs in
+//! Boundary types between the graph-IR `Constraint` tree and its EDN form. Refs in
 //! the tree carry either an integer index or a keyword reference; resolution to /
-//! from the `AtomId` / `BondId` / ... on the AST is a separate fallible
+//! from the `AtomId` / `BondId` / ... in the graph IR is a separate fallible
 //! step that consults the surrounding `MoleculeMetadata`.
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};

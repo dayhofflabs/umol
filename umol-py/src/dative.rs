@@ -1,4 +1,4 @@
-//! Owned dative-bond ASTs and molecule-backed dative-bond views.
+//! Owned dative-bond forms and molecule-backed dative-bond views.
 
 use std::str::FromStr;
 use std::vec::IntoIter;

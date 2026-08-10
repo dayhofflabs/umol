@@ -1,4 +1,4 @@
-//! Reaction span AST: the superimposed `L ∪_K R` graph encoding a reaction's DPO rule span.
+//! Reaction-span graph IR: the superimposed `L ∪_K R` graph encoding a reaction's DPO rule span.
 //!
 //! Materialized superimposed graph carrying, per atom/bond, both its before and after state plus a
 //! membership tag. The DPO span `L ←K─ R` is read off the tags — `K = Unchanged ∪ Modified`,

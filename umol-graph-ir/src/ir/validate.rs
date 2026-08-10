@@ -1,6 +1,6 @@
-//! Tier-1 (data-integrity) and tier-2 (invariant) validators for molecule and reaction ASTs.
+//! Tier-1 (data-integrity) and tier-2 (invariant) validators for molecules and reactions.
 //!  
-//! - [`entity`] (data-integrity): structural shape checks on molecule ASTs.
+//! - [`entity`] (data-integrity): structural shape checks on molecules.
 //! - [`constraint`] (data-integrity): cross-entity / molecule-scope constraint evaluation.
 //! - [`dpo`] (invariant): DPO reaction invariant (dangling-freedom).
 

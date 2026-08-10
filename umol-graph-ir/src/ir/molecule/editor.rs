@@ -1,4 +1,4 @@
-//! Structural editing for `Molecule`. The AST itself only allows attribute
+//! Structural editing for `Molecule`. The molecule itself only allows attribute
 //! mutation; structural change (add atoms/bonds/relations, remove anything)
 //! goes through `MoleculeEditor`.
 //!

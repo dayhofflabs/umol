@@ -7,7 +7,7 @@
 //!
 //! Relational constraints live **only** at molecule scope — as entries in
 //! `Molecule::constraints` (via `Constraint::Relational(...)`) or inside
-//! `And`/`Or`/`Not` combinators. They cannot be inline on the entity AST:
+//! `And`/`Or`/`Not` combinators. They cannot be inline on an entity form:
 //! the per-entity constraint containers are narrowed to value-only
 //! variants so ref-bearing constraints are unrepresentable inline.
 //!

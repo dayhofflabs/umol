@@ -13,7 +13,7 @@ A shared name is useful only when the semantics and available operations are gen
 
 Use complete words in public identifiers and associated-type names; do not introduce clipped
 abbreviations. In particular, a conversion trait's associated type is `Context`, not `Ctx`.
-Established repository terms recorded by this guide, including `Ast`, `Dsl`, `Id`, and `Config`, do
+Established repository terms recorded by this guide, including `Ir`, `Dsl`, `Id`, and `Config`, do
 not license new abbreviations by analogy.
 
 ## How to use this guide
@@ -40,7 +40,7 @@ model-independent invariants, and model-dependent conformance without mutation. 
 aromatization, and charge delocalization are transformations, not resolver behaviour, because they
 alter determined representation.
 
-**Integrity and validation tiers.** *Integrity* is the AST-owned construction contract and is
+**Integrity and validation tiers.** *Integrity* is the graph-IR-owned construction contract and is
 enforced by an integrity check. *Invariants* are model-independent semantic properties and
 *conformance* is acceptance by a selected chemistry model; both are checked by validators in
 `umol-graph`. Run integrity, invariants, and conformance in that order, but do not give them one API
@@ -68,32 +68,32 @@ have none. Partiality from pairing and partiality from removal are different sem
 
 The generative core of this guide. Each family gains members as work lands, so a new type's suffix
 should be chosen here rather than by analogy with whichever neighbour was read last. Counts are as of
-2026-07-31.
+2026-08-10.
 
 | Suffix | Means | Count | Crates |
 | --- | --- | --- | --- |
-| `*Algorithm` | selects one implementation of one algorithmic problem | 36 | graph-core (primitives), ast, graph |
-| `*Config` | composite operational configuration | 30 | ast (ops), graph, io, py — never graph-core |
+| `*Algorithm` | selects one implementation of one algorithmic problem | 36 | graph-core (primitives), graph-ir, graph |
+| `*Config` | composite operational configuration | 30 | graph-ir (ops), graph, io, py — never graph-core |
 | `*Model` | semantic choices deciding chemical acceptance | 13 | graph |
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
-| `*Kind` | unit-variant enum discriminating a family | 11 | ast, geometric, graph-core, msym, py |
-| `*Features` | bitflag set of independently combinable switches | 1 | ast |
-| `*Level` | closed enum selecting one of several nested named layers | 0 (planned) | ast |
-| `*Constraint` | one assertable predicate over an entity | 6 | ast, py |
-| `*Constraints` | the container holding an entity's constraints | 9 | ast, py — as `*ConstraintsAst`, which is correct: the container is itself lattice-shaped |
-| `*Key` | identifies a constraint slot within a container | 13 | ast, perm, py |
-| `*View` / `*Views` / `*ViewMut` | borrowed accessor into a molecule; plural is the collection; `Mut` is the editing form | 37 / 15 / 16 | ast, io, py |
-| `*Delta` | an encoded change belonging to a reaction side | 18 | ast, py |
-| `*Update` | a field-level change applied to one entity | 10 | ast |
-| `*Defaults` | values used where an input states nothing | 13 | ast, py |
-| `*Overrides` | values that replace what an input stated | 10 | ast |
+| `*Kind` | unit-variant enum discriminating a family | 11 | graph-ir, geometric, graph-core, msym, py |
+| `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
+| `*Level` | closed enum selecting one of several nested named layers | 0 (planned) | graph-ir |
+| `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
+| `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
+| `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
+| `*View` / `*Views` / `*ViewMut` | borrowed accessor into a molecule; plural is the collection; `Mut` is the editing form | 37 / 15 / 16 | graph-ir, io, py |
+| `*Delta` | an encoded change belonging to a reaction side | 18 | graph-ir, py |
+| `*Update` | a field-level change applied to one entity | 10 | graph-ir |
+| `*Defaults` | values used where an input states nothing | 13 | graph-ir, py |
+| `*Overrides` | values that replace what an input stated | 10 | graph-ir |
 | `*Entry` | one row of a table-shaped registry or format | 41 | several |
-| `*Contradiction` | a semantic rejection, the `Solution::Contradictory` payload | 18 | ast, graph |
+| `*Contradiction` | a semantic rejection, the `Solution::Contradictory` payload | 18 | graph-ir, graph |
 | `*Mismatch` | two independently meaningful things that disagree | 3 | graph |
 | `*Error` | operational or setup failure, the `Err` side | 58 | all |
 | `*Validator` | validates a tier-2 invariant or tier-3 conformance property | 12 | graph after the integrity-check migration |
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
-| `*Ast` / `*Dsl` | internal representation / boundary surface | 77 / 38 | ast — **under review** |
+| `*Form` / `*Dsl` | lattice-shaped graph-IR value / boundary surface | 69 / 38 | graph-ir, py |
 
 Families with no member yet, named in settled vocabulary and expected to gain one:
 `*Failure` and transformers (see *Transformer naming* below).
@@ -105,7 +105,7 @@ a different question:
 
 ```
 <entity kind> <role> <plurality> <representation> <mutability>
-    Atom      Constraint    s          Ast
+    Atom      Constraint    s          Form
     Atom      Constraint               Key
     Atom      Editor                   View            Mut
     AromaticSystem          s          View
@@ -114,12 +114,12 @@ a different question:
 - **entity kind** — which of the eight, omitted when the type is not per-kind;
 - **role** — `Constraint`, `Update`, `Delta`, `Editor`, `Defaults`, `Overrides`;
 - **plurality** — a trailing `s` on the role marks the container, not "several of these";
-- **representation** — `Ast` (lattice-shaped internal), `Dsl` (boundary surface), `View` (borrowed
+- **representation** — `Form` (implements `Lattice`), `Dsl` (boundary surface), `View` (borrowed
   accessor), `Key` (identifies a slot);
 - **mutability** — `Mut`, last, only on views.
 
-`AtomConstraintsAst` is therefore correct in every position: one atom's constraint *container*, which
-is itself lattice-shaped and so carries `Ast` by the same rule every other lattice type does. A new
+`AtomConstraintsForm` is therefore correct in every position: one atom's constraint *container*, which
+is itself lattice-shaped and so carries `Form` by the same rule every other lattice type does. A new
 type should be assembled in this order rather than by analogy with the nearest neighbour.
 
 **Two known tensions, neither to be "fixed".** The plural is the least visible marker in the stack —
@@ -129,9 +129,9 @@ than the `s` costs. What makes it learnable instead is that the `s` is positiona
 attaches to the role, never elsewhere, and always means the container, never "several of these".
 
 The length itself comes from the entity kind appearing in both the module path and the type name
-(`ast::constraint::atom::AtomConstraintAst`). Dropping it from the name is the idiomatic Rust fix and
+(`ir::constraint::atom::AtomConstraintForm`). Dropping it from the name is the idiomatic Rust fix and
 would shorten roughly ninety types, but it makes bare imports collide across kinds — `use
-atom::ConstraintsAst` and `use bond::ConstraintsAst` in one scope — which is why most Rust codebases
+atom::ConstraintsForm` and `use bond::ConstraintsForm` in one scope — which is why most Rust codebases
 keep the prefix and silence the lint. Recorded as a considered trade, not an oversight.
 
 ### Constraint singular and plural
@@ -141,14 +141,14 @@ constraints. The plural is never a synonym for "several constraints" in a signat
 store.
 
 **Not:** using the plural for a `Vec<Constraint>` parameter.
-**In code:** `AtomConstraintAst` against `AtomConstraintsAst`; likewise for every entity kind.
+**In code:** `AtomConstraintForm` against `AtomConstraintsForm`; likewise for every entity kind.
 
 ### View and Views
 
 A **`*View`** is a record bundling an index with the underlying data, so a consumer never assembles
 an `(id, data, participants)` tuple by hand. A **`*Views`** is a *namespace*, not a collection: it
 groups the per-relation accessors — `count`, `ids`, `iter`, `get`, `Index` — so they do not have to
-be buried on `MoleculeAst` itself. Adding an entity kind therefore adds a `*Views` namespace rather
+be buried on `Molecule` itself. Adding an entity kind therefore adds a `*Views` namespace rather
 than five more methods on the molecule.
 
 `*ViewMut` is the mutable form; `*EditorView` and `*EditorViewMut` are the editor-scope bundles used
@@ -156,10 +156,10 @@ inside an edit session. Views also exist over derived things, not only entities:
 `RingView`, `RingViews`, `NeighborView`, `StereoLigandView`.
 
 **Views are receivers, never arguments.** A function takes ids and the molecule, or takes the owned
-`*Ast`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
+`*Form`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
 one propagates a borrow through a signature that did not need it.
 
-**Not:** the owned representation, which is the `*Ast` type. A view does not survive its molecule.
+**Not:** the owned representation, which is the `*Form` type. A view does not survive its molecule.
 **In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.
 
 ### Delta and Update
@@ -209,12 +209,16 @@ spelling.
 | `reset` for removing or replacing an entity | `remove`, `replace` | reset clears a constraint to its undetermined form |
 | `config` for semantic acceptance choices | `model` | config is operational |
 | `policy` for chemical acceptance | `model` | policy acts after acceptance is established |
-| `validate_integrity` | `check_integrity` | tier-1 integrity is an AST construction check, not semantic validation |
-| `*Validator` in `umol-ast` | `check_integrity` for tier 1, or move the validator to `umol-graph` for tiers 2 and 3 | validators are chemistry-layer semantic operations |
+| `validate_integrity` | `check_integrity` | tier-1 integrity is a graph-IR construction check, not semantic validation |
+| `*Validator` in `umol-graph-ir` | `check_integrity` for tier 1, or move the validator to `umol-graph` for tiers 2 and 3 | validators are chemistry-layer semantic operations |
 | `*Selection` for nested structural layers | `*Level` | selection does not state that the alternatives form an ordered, nested hierarchy |
 | `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
 | `iterative` for visitor delivery | visitor delivery, `visit_*` | the implementation may remain recursive while visiting results |
 | a bare plural method name for an eager collection-returning operation | `enumerate_*` | delivery must be legible at the call site; the bare plural is reserved for single-value operations |
+| `*Ast` for graph-IR values | `*Form` for a `Lattice` type; bare aggregate name otherwise | the suffix records lattice semantics, not syntax-tree shape |
+| `ast` as the graph-IR module or entity payload member | `ir` for the module; `attributes` for the payload | the graph model is an IR, and the payload is the entity's complete attribute form |
+| `:type` for an entity payload in the DSL | `:attrs` | the payload contains attributes, not the entity kind |
+| `Ctx` in a public identifier | `Context` | public identifiers use complete words |
 
 ## Open issues
 
@@ -227,7 +231,6 @@ text changes at the same time.
 | 1 | Transformer naming has three patterns in use — agent noun (`Kekulizer`, `Aromatizer`), verb phrase (`DelocalizeCharge`), target phrase (`ToExplicitHydrogens`). Needs deciding before the planned members land. | *Transformer naming* | decision |
 | 3 | One patch law, two spellings: `apply`/`diff` on `EntityPatch`, `update`/`difference_to` on the entity update surface. | *Patch algebra* | naming split |
 | 4 | `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`; the `CosetSpace` doc on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so line 25 is wrong. | *Coset* | doc error |
-| 5 | `*Ast` and `*Dsl` are under review; if the rename lands, `In code` lines throughout this guide change. | *Suffixes* table | blocked on naming decision |
 | 6 | `*Failure` and the transformer family are named in settled vocabulary but have no members yet, so the conventions are untested. | *Suffixes* | latent |
 | 7 | Six of eleven `Solution` accessors have no call sites outside `umol-utils`: `into_determined`, `into_data`, `into_contradiction`, `is_determined`, `is_underdetermined`, `contradiction`. API surface rather than nomenclature, but cheap to trim now. | *Solution* | unused surface |
 | 8 | `Derivation`, `Failure` and `Projection` have no `In code` names. | those entries | incomplete |
@@ -254,17 +257,27 @@ every edit succeeds.
 **Not:** plan (which is derived without mutating), transformation.
 **In code:** `apply`, `apply_at`.
 
+### Attributes
+
+An entity's **attributes** are its complete entity form excluding identity and participants. Rust and
+Python fields, constructor arguments, and pattern-matching attributes use `attributes`. The DSL map
+uses `:attrs` for the same payload. Use `form` for an arbitrary lattice value and `ir` for a converted
+graph-IR value; do not extend `attributes` to values that are not complete entity payloads.
+
+**Not:** `ast`, `type`, or the entity's participants.
+**In code:** `attributes` on entity views, edits, undos, and delta variants; `:attrs` in the DSL.
+
 ### Canonical and canonicalize
 
 > **TODO (2026-08-07):** The definitions below are the approved target semantics from discussion
-> doc 186. The current code still uses `Canonicalize` and `canonical_eq` for fixed-frame AST
+> doc 186. The current code still uses `Canonicalize` and `canonical_eq` for fixed-frame form
 > normalization. Remove this marker when the trait rename and aggregate canonicalization API are
 > implemented.
 
-**Canonicalize** selects a canonical entity-id and participant frame for a complete indexed AST
+**Canonicalize** selects a canonical entity-id and participant frame for a complete indexed graph IR
 modulo the admissible remappings. It uses canonical labeling, transports every entity and reference
 through the selected frame, applies the corresponding participant actions, and normalizes the
-carried AST values. The operation takes an explicit canonicalization context.
+carried forms. The operation takes an explicit canonicalization context.
 
 **Canonical equality** compares the complete canonical forms produced under the same context. It is
 the search-based counterpart of `equiv_under`: the caller does not supply a correspondence because
@@ -272,7 +285,7 @@ canonicalization selects the frame.
 
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
-whereas aggregate canonicalization constructs the complete remapped AST.
+whereas aggregate canonicalization constructs the complete remapped graph IR.
 **In code:** `Canonicalize`, `canonicalize`, `canonical_eq`.
 
 ### Class
@@ -286,7 +299,7 @@ Named families: `Symmetric(n)`, `Alternating(n)`, `Cyclic(n)`, `Dihedral(n)`. Ge
 
 **Not:** *kind*, which discriminates entity families. A stereo atom's kind is `StereoKind`; its class
 is `ClassKey`.
-**In code:** `ClassKey`, and the `class` field of the stereo `:type` payload.
+**In code:** `ClassKey`, and the `class` field of the stereo `:attrs` payload.
 
 ### Combine
 
@@ -319,7 +332,7 @@ remapping, which gives every source id an image and never expresses removal.
 
 A **config** contains operational choices controlling how an operation is performed, including
 algorithm selection and iteration limits. `*Config` is the suffix for composite configuration: in
-`umol-ast` it belongs to ops rather than to individual methods, and it is used throughout
+`umol-graph-ir` it belongs to ops rather than to individual methods, and it is used throughout
 `umol-graph`, `umol-io`, and `umol-py`. `umol-graph-core` defines no configs; its operations take
 algorithm selectors directly.
 
@@ -334,7 +347,7 @@ when a proper rotation relates them, so the observable descriptor is the coset r
 
 **Not:** *coset*, which is the equivalence class the configuration falls into; not *conformation*,
 which umol does not represent.
-**In code:** `StereoConfigurationAst`; the `configuration` attribute of stereo atoms and bonds.
+**In code:** `StereoConfigurationForm`; the `configuration` attribute of stereo atoms and bonds.
 
 ### Conformance
 
@@ -357,15 +370,15 @@ constraints, which do not contribute to structural identity.
 
 ### Constraint
 
-A **constraint** is a possibly non-ground assertion represented by the constraint AST types. This is
+A **constraint** is a possibly non-ground assertion represented by the constraint forms. This is
 the public repository term. A constraint restricts the states admitted by an entity or molecule but
 does not contribute to its identity. It therefore does not distinguish structural automorphism
-orbits or select a canonical entity frame. It remains part of the complete AST assertion and is
+orbits or select a canonical entity frame. It remains part of the complete IR assertion and is
 transported and, where required, compared after a structural correspondence has been established.
 
 **Not:** `projection`, `predicate`, or `representation`, when naming the stored object or an
 operation over it. Not an inherent field, which does contribute to identity.
-**In code:** `AtomConstraintAst`, `AtomConstraintsAst`, and the per-entity equivalents.
+**In code:** `AtomConstraintForm`, `AtomConstraintsForm`, and the per-entity equivalents.
 
 ### Contradiction
 
@@ -393,7 +406,7 @@ direction is what lifts it to a reaction span.
 
 Correspondences compose and reverse, which is what lets a chain of operations be followed end to end,
 and `to_remapping` converts one into a total-on-source remapping when it is total on the left. The
-result may map into a larger target id space. End-to-end remapping of a standalone `MoleculeAst`
+result may map into a larger target id space. End-to-end remapping of a standalone `Molecule`
 requires the stronger condition that every entity-family correspondence is total on both sides, so
 the target tables are dense and contain exactly the mapped entities.
 
@@ -500,7 +513,7 @@ The order attribute counts donated pairs, not per-atom contributions, which is w
 dative bond from a multicenter bond over the same atoms.
 
 **Not:** interchangeable, and not *participants* used flatly; a diagnostic should name the role.
-**In code:** `:donors`, `:acceptor`; `DativeBondAst`.
+**In code:** `:donors`, `:acceptor`; `DativeBondForm`.
 
 ### Edit and undo
 
@@ -529,7 +542,7 @@ One leaf type serves both entity kinds rather than being duplicated per kind.
 **Not:** the entity's total, which is a separate asserted constraint (`#e`) cross-checked against the
 vector's sum. Not the entity's charge, which is carried on the entity and is why the five carbons of
 a cyclopentadienyl ring can hold equal contributions.
-**In code:** `ElectronCountsAst`, the leading `electron-counts` of an aromatic or multicenter string.
+**In code:** `ElectronCountsForm`, the leading `electron-counts` of an aromatic or multicenter string.
 
 ### Embedding kind
 
@@ -571,12 +584,12 @@ includes ring constraints.
 
 ### Equality ladder
 
-Three levels of equality exist on AST values and molecules. `equiv_under` is the mapped form of
+Three levels of equality exist on forms and molecules. `equiv_under` is the mapped form of
 `equiv`, not a fourth relation.
 
-- **`==`** — derived structural equality of the stored AST. Same tree, constraints, ids, and order.
+- **`==`** — derived structural equality of the stored IR. Same structure, constraints, ids, and order.
   Deliberately *not* chemical identity, so it stays cheap on the hot path.
-- **`equiv`** — equality of normalized AST values in the current id and participant frame.
+- **`equiv`** — equality of normalized forms in the current id and participant frame.
   **`equiv_under`** is the same after reindexing the receiver into the other's frame via an explicit
   correspondence or participant order. The work is skipped when the payload is
   permutation-invariant.
@@ -591,7 +604,7 @@ Structural canonical labeling initially establishes automorphism orbits from inh
 incidence without constraints. Complete aggregate canonicalization then uses normalized
 constraints to select among structurally equivalent frames. This distinction is especially
 important for patterns: constraints do not define the underlying structural orbits, but they remain
-meaningful parts of the canonical AST assertion.
+meaningful parts of the canonical IR assertion.
 
 **Not:** each other. Reaching for `==` when `equiv` is meant is the common error, because `==` exists
 on everything and silently answers a different question.
@@ -630,6 +643,20 @@ stereo-kind switch and is not limited to constitution.
 **Not:** *level*, whose alternatives are mutually exclusive nested layers.
 **In code:** `MoleculeColoringFeatures` (planned rename of `ConstitutionFeatures`).
 
+### Form
+
+A **`*Form`** is a graph-IR type that implements `Lattice`. The suffix marks exactly that property:
+every Rust `*Form` implements `Lattice`, and a non-lattice type must not carry the suffix. Python
+`*Form` classes bind the corresponding Rust forms and expose the same operations. Forms range from
+leaf values such as `NumForm` to complete entity forms and constraint containers.
+
+The non-lattice aggregate roots are `Molecule`, `Reaction`, and `ReactionSpan`. They use bare names
+because they are complete graph-model objects, not lattice values. Role-bearing types such as
+`MoleculeDsl`, `MoleculeDefaults`, `AtomUpdate`, and `AtomDelta` retain their role suffixes.
+
+**Not:** an abstract syntax tree, a DSL boundary type, or a suffix for every graph-IR value.
+**In code:** `AtomForm`, `AtomConstraintsForm`, `NumForm`; `Molecule`, `Reaction`, `ReactionSpan`.
+
 ### Full
 
 **Full** is the structural level containing constitution plus stereo atoms and stereo bonds. It is
@@ -652,6 +679,16 @@ or merge ground states that happen to have the same downstream numerical effect.
 
 **Not:** valid, or chemically admissible. Structural groundness is separate from both.
 **In code:** `Lattice::is_ground`, `AsLit::as_lit`, `Ground<T>` (planned).
+
+### Graph IR
+
+The **graph IR** is the explicit representation of the graph model. Its Rust package and public
+module path are `umol-graph-ir` and `umol_graph_ir::ir`. Boundary conversions use `FromIr`,
+`IntoIr`, `TryFromIr`, and `TryIntoIr`; their associated type is `Context`.
+
+**Not:** the surface DSL, the format-level table IR, or an AST module retained under the renamed
+crate.
+**In code:** `umol_graph_ir::ir`; the `*Ir` conversion traits.
 
 ### Id, handle, and argument
 
@@ -754,29 +791,29 @@ undetermined.
 
 **Not:** constraint, which restricts admitted states without contributing to identity and may be
 absent.
-**In code:** the non-constraint fields of each `*Ast` entity type.
+**In code:** the non-constraint fields of each entity `*Form`.
 
 ### Integrity
 
-**Integrity** is the tier-1 construction contract of an AST representation: well-formed storage,
+**Integrity** is the tier-1 construction contract of a graph-IR representation: well-formed storage,
 resolvable stored references, required parallel-collection shapes, and kind-dependent values needed
 to interpret the representation. Constraint satisfaction and other model-independent semantic
 conditions are invariants rather than integrity.
 
 **Not:** an invariant or conformance. Integrity is established by construction and checked in
-`umol-ast`; it is not a `Solution` verdict.
+`umol-graph-ir`; it is not a `Solution` verdict.
 **In code:** `check_integrity`, `*IntegrityError`.
 
 ### Integrity check
 
-An **integrity check** is the AST-owned, error-valued operation that enforces tier 1. It returns
+An **integrity check** is the graph-IR-owned, error-valued operation that enforces tier 1. It returns
 `Result<(), *IntegrityError>` and is shared by checked constructors, boundary conversions, and every
-path that publishes the AST type. Trusted asserted constructors use the same implementation and
+path that publishes the IR type. Trusted asserted constructors use the same implementation and
 change only the failure reporting. There is no `*Checker` object.
 
 **Not:** a validator. Validators return semantic `Solution` values and belong in `umol-graph`.
-**In code:** `MoleculeAst::check_integrity`, `ReactionAst::check_integrity`,
-`ReactionSpanAst::check_integrity`; the corresponding `*IntegrityError` types.
+**In code:** `Molecule::check_integrity`, `Reaction::check_integrity`,
+`ReactionSpan::check_integrity`; the corresponding `*IntegrityError` types.
 
 ### Invariant
 
@@ -800,19 +837,19 @@ clarification added for chemist readers and is not repository terminology.
 ### Leaf type
 
 A **leaf type** is a lattice-valued attribute that bottoms out in a concrete domain rather than in
-other AST types. Every leaf follows one shape: an `Undetermined` variant as the top of the lattice, a
+other forms. Every leaf follows one shape: an `Undetermined` variant as the top of the lattice, a
 `Lit` variant carrying a definite value, and whatever enrichments the domain admits.
 
-`BooleanAst` is the minimal case, `Undetermined | Lit(bool)`. `ValueAst` is the richest, adding
-`LitSet`, `RangeFrom`, `RangeTo`, and the two expression arms. `ElectronCountsAst` is shared by
+`BooleanForm` is the minimal case, `Undetermined | Lit(bool)`. `NumForm` is the richest, adding
+`LitSet`, `RangeFrom`, `RangeTo`, and the two expression arms. `ElectronCountsForm` is shared by
 aromatic systems and multicenter bonds rather than duplicated per kind.
 
 A new leaf type should follow the same shape, and should implement `AsLit` so that
 `is_ground() == as_lit().is_some()` holds.
 
 **Not:** an entity type, which is a record of leaves plus a constraint store.
-**In code:** `BooleanAst`, `ValueAst`, `ElectronCountsAst`, `UnpairedElectronsAst`, `ElementAst`,
-`IsotopeMassAst`.
+**In code:** `BooleanForm`, `NumForm`, `ElectronCountsForm`, `UnpairedElectronsForm`, `ElementForm`,
+`IsotopeMassForm`.
 
 ### Level
 
@@ -858,7 +895,7 @@ their qualifier.
 
 **Not:** any overlay entity. The distinction is the topology/overlay split: a localized bond is an
 edge, the others are relations.
-**In code:** `BondAst`, `BondId`, `:bonds`.
+**In code:** `BondForm`, `BondId`, `:bonds`.
 
 ### Matching
 
@@ -941,12 +978,12 @@ attribute beyond charge and spin: `HydrogenBond`, `HalogenBond`, `ChalcogenBond`
 
 **Not:** an order or a strength. Noncovalent bonds carry no order, which is one reason they are
 overlays despite their binary shape.
-**In code:** `NoncovalentBondKind`, `NoncovalentBondKindAst`; the notation literals `Hbd`, `Xbd`,
+**In code:** `NoncovalentBondKind`, `NoncovalentBondKindForm`; the notation literals `Hbd`, `Xbd`,
 `Ybd`, `Ion`, `Vdw`.
 
 ### Normalize
 
-**Normalize** puts an AST value into a deterministic normal form without changing entity ids or
+**Normalize** puts a form into a deterministic normal form without changing entity ids or
 participant frames. It folds value expressions, canonicalizes set representations, flattens and
 deduplicates logical constraints, normalizes entity fields and constraints, and normalizes
 fixed-frame transformation values such as `Deltas`. It is context-free, idempotent on satisfiable
@@ -1051,7 +1088,7 @@ same type.
 
 **Not:** a derivation, which is one firing of a reaction against a concrete host. A reaction is the
 rule; a derivation is an evaluation of it.
-**In code:** `ReactionAst`, `lhs`, `Deltas`.
+**In code:** `Reaction`, `lhs`, `Deltas`.
 
 ### Reaction span
 
@@ -1071,7 +1108,7 @@ source rhs reindexed into that reaction frame and is compared under the induced 
 correspondence, not by structural equality when the source correspondence crosses entity order.
 
 **Not:** a correspondence, which is valueless pairing; not a reaction, which is the rule itself.
-**In code:** `ReactionSpanAst`, `lhs()`, `rhs()`.
+**In code:** `ReactionSpan`, `lhs()`, `rhs()`.
 
 ### Recovery action
 
@@ -1292,11 +1329,11 @@ or a contradiction.
 
 ### Undetermined
 
-**Undetermined** is stored lattice state: an AST value asserts no concrete value at that position. An
+**Undetermined** is stored lattice state: a form asserts no concrete value at that position. An
 absent or undetermined constraint is vacuous and does not assert that an entity is missing.
 
 **Not:** *underdetermined*, which is an operation outcome. Do not use the two interchangeably.
-**In code:** `ValueAst::Undetermined` and the per-type equivalents.
+**In code:** `NumForm::Undetermined` and the per-type equivalents.
 
 ### Valence
 
@@ -1325,7 +1362,7 @@ selecting an authoritative representation. Validators live in `umol-graph`, use 
 `Result<Solution<_, _>, _>` so non-ground semantic questions may be underdetermined.
 
 **Not:** an integrity check, resolution, or transformation. Integrity is ordered before validation
-but is enforced by AST construction rather than by a validator.
+but is enforced by graph-IR construction rather than by a validator.
 **In code:** `Validator`, `validate`.
 
 ## Maintaining this guide

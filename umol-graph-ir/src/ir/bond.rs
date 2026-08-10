@@ -1,4 +1,4 @@
-//! Bond-level AST fragments shared across crates.
+//! Bond forms and updates shared across crates.
 
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 

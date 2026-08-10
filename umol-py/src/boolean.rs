@@ -1,4 +1,4 @@
-//! Boolean AST value: `Undetermined` or a boolean literal. A leaf of the bond and
+//! Boolean form: `Undetermined` or a boolean literal. A leaf of the bond and
 //! dative `Aromatic` constraint.
 
 use pyo3::prelude::*;

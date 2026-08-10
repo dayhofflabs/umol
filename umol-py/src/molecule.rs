@@ -1,4 +1,4 @@
-//! `Molecule` — a molecule (owned graph-AST root), wrapping
+//! `Molecule` — an owned graph-IR root, wrapping
 //! `umol_graph_ir::ir::Molecule`.
 
 use std::str::FromStr;

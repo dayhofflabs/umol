@@ -1,4 +1,4 @@
-//! Error types for molecule AST operations.
+//! Error types for molecule graph-IR operations.
 
 use thiserror::Error;
 

@@ -1,4 +1,4 @@
-//! Python bindings for DSL-to-AST construction defaults.
+//! Python bindings for DSL-to-graph-IR construction defaults.
 
 use pyo3::prelude::*;
 use umol_graph_ir::dsl::{

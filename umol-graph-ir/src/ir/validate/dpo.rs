@@ -1,6 +1,6 @@
 //! Tier-2 (invariant) DPO validator: a reaction's deletions must be dangling-free, that is
 //! deleting an atom must also delete every bond and overlay incident to it.
-//! Operates on the permissive reaction AST. A reaction span establishes dangling-free projected
+//! Operates on the permissive `Reaction`. A reaction span establishes dangling-free projected
 //! sides as a construction invariant.
 
 use std::collections::HashSet;

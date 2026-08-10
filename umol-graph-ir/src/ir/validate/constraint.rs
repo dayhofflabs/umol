@@ -1,4 +1,4 @@
-//! Tier-1 constraint validator: cross-entity and molecule-scope constraint evaluation. Run at AST
+//! Tier-1 constraint validator: cross-entity and molecule-scope constraint evaluation. Run at graph-IR
 //! construction/raise and available standalone; never consults a chemistry model.
 
 use thiserror::Error;

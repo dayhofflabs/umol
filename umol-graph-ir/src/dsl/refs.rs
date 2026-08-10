@@ -1,7 +1,7 @@
 //! Surface-level entity references. Each ref is a positional index (`Edn::Int`),
 //! a keyword (`Edn::Keyword`), or — for non-atom entities — a
 //! *structural* form (`Edn::Map`) naming the entity by its constituent atoms /
-//! bonds. `resolve` turns a ref into an AST id against any parse-time `Namespace`
+//! bonds. `resolve` turns a ref into a graph-IR id against any parse-time `Namespace`
 //! (count for index bounds, `find_by_keyword` for keyword references,
 //! `find_by_participants` for the structural form); `denote` renders an id back
 //! to a ref against any `Metadata` view.

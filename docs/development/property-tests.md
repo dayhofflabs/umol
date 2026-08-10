@@ -14,7 +14,7 @@ the public contract at the point where users need it.
 This document defines the terminology and documentation policy for exposing
 those properties without introducing a second hand-maintained inventory of the
 property suite. It uses `umol-graph-core` as the clearer case, where the
-properties are predominantly topological, and `umol-ast` as the more realistic
+properties are predominantly topological, and `umol-graph-ir` as the more realistic
 case, where one public operation is commonly exercised over several distinct
 operational domains.
 
@@ -138,7 +138,7 @@ For example:
 ```
 
 The operation-family documentation may then state that the properties are checked generatively for
-every entity AST family, including values with independently undetermined spin fields. The example
+every entity-form family, including values with independently undetermined spin fields. The example
 is not a requirement to repeat the same text on eight implementations. A shared trait or
 operation-family location is preferable when it accurately states the common contract.
 
@@ -146,7 +146,7 @@ operation-family location is preferable when it accurately states the common con
 
 The executable test target and `cargo test --test property -- --list` remain
 the authoritative inventory of property tests. The existing
-`umol-ast/tests/property.rs` policy is retained: a property-suite README would
+`umol-graph-ir/tests/property.rs` policy is retained: a property-suite README would
 duplicate the source and drift.
 
 A crate-level “Correctness and validation” page may:
@@ -314,10 +314,10 @@ argument and the cross-validation evidence have different roles:
 - the property test checks the implementation and its agreement with the
   reference path.
 
-## `umol-ast`: properties over multiple operational domains
+## `umol-graph-ir`: properties over multiple operational domains
 
-`umol-ast` cannot be described adequately by saying that it generates
-arbitrary ASTs and checks laws. The same surface participates in several
+`umol-graph-ir` cannot be described adequately by saying that it generates
+arbitrary graph-IR values and checks laws. The same surface participates in several
 different semantics, and the operational domain is part of understanding the
 evidence.
 
@@ -343,7 +343,7 @@ Serialization contains several related but non-identical properties:
 | Property | Operational domain | Comparison |
 | --- | --- | --- |
 | `parse(display(x)) = x` | Generated entity DSL values whose surface is lossless | Exact representation equality |
-| EDN tree roundtrip | Generated AST or DSL values | Exact representation equality |
+| EDN tree roundtrip | Generated IR or DSL values | Exact representation equality |
 | Streaming/tree parser parity | Valid rendered values and arbitrary strings | Equal parsed value or equal rejection |
 | Stable rendering | Successfully parsed canonical surface | Equality of the first and second rendering |
 | Defaults projection roundtrip | Values interpreted under a specified defaults configuration | Equality after applying the same configuration semantics |
@@ -352,7 +352,7 @@ Serialization contains several related but non-identical properties:
 These cannot be collapsed into a single “serialization roundtrips” claim.
 Each property uses a different domain and comparison relation. In particular,
 surface normalization may require canonical equality rather than stored
-representation equality, while a lossless AST EDN roundtrip requires `==`.
+representation equality, while a lossless IR EDN roundtrip requires `==`.
 
 ### Updates, deltas, and edits
 
@@ -394,14 +394,14 @@ The comparison suite already records distinct relations:
 The properties exercise:
 
 - reflexivity and symmetry of `equiv`;
-- agreement of `equiv` with `==` on normalized ASTs;
+- agreement of `equiv` with `==` on normalized forms;
 - reduction of `equiv_under` to `equiv` under the identity correspondence;
 - symmetry under reversing a correspondence;
 - composition of correspondence-aware equivalence on generated atom
   reorderings.
 
 This example shows why the comparison relation must appear in every public
-property. Writing only “the result equals the input” is ambiguous for an AST
+property. Writing only “the result equals the input” is ambiguous for a graph-IR value
 with representation equality, normalized equivalence in a fixed or explicitly
 mapped frame, and aggregate canonical equality.
 

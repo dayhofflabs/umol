@@ -1,4 +1,4 @@
-//! AST-level id mappings between `Molecule` id spaces.
+//! Graph-IR id mappings between `Molecule` id spaces.
 //!
 //! [`IdCompaction`] is the removal compaction produced by
 //! `MoleculeEditor::remove` (wraps `umol_graph_core::Compaction` for atom/bond

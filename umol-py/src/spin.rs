@@ -1,4 +1,4 @@
-//! Exact and AST unpaired-electron values.
+//! Exact and form-valued unpaired-electron representations.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use pyo3::exceptions::PyValueError;

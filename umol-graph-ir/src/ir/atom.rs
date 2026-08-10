@@ -1,4 +1,4 @@
-//! Atom-level AST fragments shared across crates.
+//! Atom forms and updates shared across crates.
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;

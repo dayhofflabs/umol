@@ -1,4 +1,4 @@
-//! Noncovalent-bond kind values, owned ASTs, and molecule-backed views.
+//! Noncovalent-bond kind values, owned forms, and molecule-backed views.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::str::FromStr;

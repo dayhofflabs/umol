@@ -1,5 +1,5 @@
 //! Tier-1 entity-structure validator: structural shape checks on per-relation entities. Run at
-//! AST construction/raise and available standalone; never consults a chemistry model.
+//! graph-IR construction/raise and available standalone; never consults a chemistry model.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 

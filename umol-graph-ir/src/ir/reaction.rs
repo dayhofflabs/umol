@@ -1,4 +1,4 @@
-//! Reaction AST: a left-hand-side molecule plus a resolved transformation (`Deltas`).
+//! Reaction graph IR: a left-hand-side molecule plus a resolved transformation (`Deltas`).
 //!
 //! Homoiconic — a molecule is the empty-deltas case, a rule is a pattern `lhs` plus
 //! deltas, and applying a rule yields a concrete reaction of the same type. The atom

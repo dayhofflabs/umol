@@ -1,4 +1,4 @@
-//! `ReactionSpan` — a Python facade over the superimposed reaction span AST.
+//! `ReactionSpan` — a Python facade over `umol_graph_ir::ir::ReactionSpan`.
 
 use std::str::FromStr;
 

@@ -1,4 +1,4 @@
-//! Owned bond ASTs and molecule-backed bond views.
+//! Owned bond forms and molecule-backed bond views.
 
 use std::str::FromStr;
 use std::vec::IntoIter;

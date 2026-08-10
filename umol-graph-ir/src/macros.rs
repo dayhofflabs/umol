@@ -1,4 +1,4 @@
-//! Construction macros for the AST and DSL objects.
+//! Construction macros for graph-IR and DSL values.
 
 /// Parse a molecule-EDN string into a `Molecule`. MoleculeMetadata (atom IDs,
 /// aliases, etc.) in the input is dropped. Use `MoleculeDsl::from_str` to keep metadata.

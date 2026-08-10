@@ -18,6 +18,20 @@ The central rule is that apparent mutation must have one observable meaning. An 
 changes the object through which the value was obtained or is rejected. A property must not return
 a disconnected mutable copy on which assignments succeed but have no effect on the parent.
 
+## Graph-IR naming at the boundary
+
+The Python surface follows the graph IR's public concepts without retaining obsolete Rust-layer
+names. Lattice types use the `*Form` suffix, while the non-lattice aggregate roots are `Molecule`,
+`Reaction`, and `ReactionSpan`. No `*Ast` compatibility classes are exported.
+
+Entity forms are the `attributes` payload of entity views, edits, and deltas. Constructors,
+properties, annotations, representations, and structural pattern-matching fields use that name.
+The corresponding DSL map key is `:attrs`. Rust-side binding conversions use `from_rust`, `to_rust`,
+and `to_rust_mut`; graph-IR boundary conversions use the `*Ir` trait family.
+
+Recursive subpattern constraints are currently absent from both Rust and Python. They must not be
+reintroduced on only one side of the binding boundary.
+
 ## Public object roles
 
 Every exported class has one of the following roles.

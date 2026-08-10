@@ -1,4 +1,4 @@
-//! AST constraints: per-scope predicates and their containers.
+//! Graph-IR constraints: per-scope predicates and their containers.
 //!
 //! Per-scope enums (`AtomConstraintForm`, `BondConstraintForm`, `DativeBondConstraintForm`,
 //! `AromaticSystemConstraintForm`, `MulticenterBondConstraintForm`,
@@ -6,7 +6,7 @@
 //! admissible at that scope. `Constraint` is the tree node type admitting
 //! per-entity leaves, a molecule-scope leaf, and `And`/`Or`/`Not` combinators.
 //!
-//! Per-entity constraints live inline on the entity AST via the typed
+//! Per-entity constraints live inline on entity forms via the typed
 //! containers (`AtomConstraintsForm`, `BondConstraintsForm`, `DativeBondConstraintsForm`,
 //! `AromaticSystemConstraintsForm`, `MulticenterBondConstraintsForm`,
 //! `NoncovalentBondConstraintsForm`). Each exposes a uniform `new`/`len`/`iter`/

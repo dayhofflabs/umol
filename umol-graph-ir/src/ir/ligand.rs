@@ -1,4 +1,4 @@
-//! Stereo ligand AST: a ligand occupying a coordination position of a stereo site.
+//! Stereo ligand representation: a ligand occupying a coordination position of a stereo site.
 
 use umol_graph_core::{
     Compaction, NodeId, ParticipantAnchor, ParticipantRefs, RelationParticipant, Remapping,

@@ -1,4 +1,4 @@
-//! Atom field values, owned atom ASTs, and molecule-backed atom views.
+//! Atom field values, owned atom forms, and molecule-backed atom views.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::BTreeSet;

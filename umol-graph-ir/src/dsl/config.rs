@@ -1,4 +1,4 @@
-//! AST lowering/raising configuration: mode enums and config structs.
+//! Graph-IR lowering/raising configuration: mode enums and config structs.
 
 use umol_edn::{FromEdn, ToEdn};
 

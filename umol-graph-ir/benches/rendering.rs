@@ -1,6 +1,6 @@
 //! Rendering benchmarks for the DSL layer.
 //!
-//! Covers `MoleculeDsl::to_edn` (AST + MoleculeMetadata → `Edn` tree) over the same
+//! Covers `MoleculeDsl::to_edn` (graph IR + MoleculeMetadata → `Edn` tree) over the same
 //! fixture set as the parsing benches. The render path exercises the
 //! per-entity id lookups (`atom_id`, `bond_id`, ...) on every ref — the
 //! dominant cost on id-heavy molecules.

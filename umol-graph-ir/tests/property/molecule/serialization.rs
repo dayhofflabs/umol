@@ -1,4 +1,4 @@
-//! Molecule AST and DSL serialization properties.
+//! Molecule graph IR and DSL serialization properties.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};

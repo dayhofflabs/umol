@@ -1,7 +1,7 @@
 //! Three-valued outcome of an engine pass.
 //!
 //! `Solution<T, C>` distinguishes a fully-determined result, a
-//! partially-resolved one (the engine ran but the AST is still not ground),
+//! partially-resolved one (the engine ran but the represented value is still not ground),
 //! and a chemistry-level contradiction with a typed diagnostic payload `C`.
 //!
 //! Engine setup or parameter-table errors travel separately in `Result<_, _>`

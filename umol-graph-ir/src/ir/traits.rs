@@ -2,9 +2,9 @@
 //!
 //! `FromIr` / `IntoIr` are infallible conversions parameterized by context.
 //! `TryFromIr` / `TryIntoIr` are fallible, reject invalid boundary inputs.
-//! `AsLit` extracts a literal value from an AST type.
-//! `Lattice` is a refinement lattice on AST value types.
-//! `Canonicalize` is a canonical form of an AST value.
+//! `AsLit` extracts a literal value from a form.
+//! `Lattice` defines the refinement lattice on forms.
+//! `Canonicalize` puts a form into canonical fixed-frame representation.
 //! `Canonical` is a value carrying the guarantee that it is canonical.
 
 use std::borrow::Cow;

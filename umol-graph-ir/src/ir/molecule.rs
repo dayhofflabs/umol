@@ -1,4 +1,4 @@
-//! Molecule structural AST.
+//! Molecule graph IR.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;

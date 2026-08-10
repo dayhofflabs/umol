@@ -1,4 +1,4 @@
-//! Owned multicenter-bond ASTs and molecule-backed multicenter-bond views.
+//! Owned multicenter-bond forms and molecule-backed multicenter-bond views.
 
 use std::str::FromStr;
 use std::vec::IntoIter;

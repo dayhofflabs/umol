@@ -1,4 +1,4 @@
-//! `Reaction` — an owned Python component facade over the Rust reaction AST.
+//! `Reaction` — an owned Python facade over `umol_graph_ir::ir::Reaction`.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::str::FromStr;

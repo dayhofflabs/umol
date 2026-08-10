@@ -1,4 +1,4 @@
-//! Stereo values, configurations, owned entity ASTs, and molecule-backed views.
+//! Stereo values, configurations, owned entity forms, and molecule-backed views.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::BTreeSet;
