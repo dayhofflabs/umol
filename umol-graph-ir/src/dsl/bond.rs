@@ -40,15 +40,15 @@ pub struct BondDsl(pub BondForm);
 
 impl BondDsl {
     /// Zero-cost reference cast from `&BondForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &BondForm) -> &Self {
+    pub fn from_ref(form: &BondForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const BondForm as *const Self) }
+        unsafe { &*(form as *const BondForm as *const Self) }
     }
 }
 
 impl From<BondForm> for BondDsl {
-    fn from(ast: BondForm) -> Self {
-        Self(ast)
+    fn from(form: BondForm) -> Self {
+        Self(form)
     }
 }
 
@@ -131,14 +131,14 @@ impl ToEdn for BondDsl {
 /// Canonical means: charge/unpaired electrons at their defaults (Undetermined / default
 /// pair) and either no constraints (orders 1–4) or exactly the `Aromatic`
 /// flag (order 1 → `:aromatic`).
-fn bond_keyword_for(ast: &BondForm) -> Option<&'static str> {
-    if !matches!(ast.charge, NumForm::Undetermined)
-        || ast.unpaired_electrons != UnpairedElectronsForm::default()
+fn bond_keyword_for(form: &BondForm) -> Option<&'static str> {
+    if !matches!(form.charge, NumForm::Undetermined)
+        || form.unpaired_electrons != UnpairedElectronsForm::default()
     {
         return None;
     }
-    let constraints: Vec<&BondConstraintForm> = ast.constraints.iter().collect();
-    match (&ast.order, constraints.as_slice()) {
+    let constraints: Vec<&BondConstraintForm> = form.constraints.iter().collect();
+    match (&form.order, constraints.as_slice()) {
         (NumForm::Lit(1), []) => Some("single"),
         (NumForm::Lit(2), []) => Some("double"),
         (NumForm::Lit(3), []) => Some("triple"),
@@ -153,8 +153,8 @@ fn bond_keyword_for(ast: &BondForm) -> Option<&'static str> {
 impl FromIr<BondForm> for BondDsl {
     type Ctx = BondDefaults;
 
-    fn from_ir(ast: &BondForm, cfg: &Self::Ctx) -> Self {
-        let mut out = ast.clone();
+    fn from_ir(form: &BondForm, cfg: &Self::Ctx) -> Self {
+        let mut out = form.clone();
         lower_bond(&mut out, cfg);
         BondDsl(out)
     }
@@ -442,45 +442,45 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
     }
 }
 
-fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
-    let ast = &mut form.0;
+fn apply_predicates(dsl: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
+    let bond = &mut dsl.0;
     for pred in preds {
         match pred {
             BondPredicate::Charge(v) => {
-                if !matches!(ast.charge, NumForm::Undetermined) {
+                if !matches!(bond.charge, NumForm::Undetermined) {
                     return Err(ParseError::DuplicateBondPredicate("#c".to_string()));
                 }
-                ast.charge = v;
+                bond.charge = v;
             }
             BondPredicate::UnpairedElectrons(predicate) => {
                 apply_unpaired_electrons_predicate(
-                    &mut ast.unpaired_electrons,
+                    &mut bond.unpaired_electrons,
                     predicate,
                     ParseError::DuplicateBondPredicate,
                 )?;
             }
             BondPredicate::Constraint(c) => {
-                if ast.constraints.contains(c.key()) {
+                if bond.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateBondPredicate(
                         constraint_tag(&c).to_string(),
                     ));
                 }
-                ast.constraints.set(c);
+                bond.constraints.set(c);
             }
         }
     }
     Ok(())
 }
 
-fn fmt_bond_form(f: &mut fmt::Formatter<'_>, ast: &BondForm) -> fmt::Result {
-    match &ast.order {
+fn fmt_bond_form(f: &mut fmt::Formatter<'_>, form: &BondForm) -> fmt::Result {
+    match &form.order {
         NumForm::Lit(n) => write!(f, "{}", n)?,
         NumForm::Undetermined => write!(f, "*")?,
         v => fmt_value(f, v)?,
     }
 
-    fmt_charge(f, &ast.charge)?;
-    fmt_unpaired_electrons(f, &ast.unpaired_electrons)
+    fmt_charge(f, &form.charge)?;
+    fmt_unpaired_electrons(f, &form.unpaired_electrons)
 }
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintForm) -> fmt::Result {
@@ -497,7 +497,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintForm) -> fmt::Re
     }
 }
 
-pub(crate) fn lower_bond(ast: &mut BondForm, cfg: &BondDefaults) {
+pub(crate) fn lower_bond(bond: &mut BondForm, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondForm field is a compile error
     // here, forcing the author to decide how lowering should handle it.
     let BondForm {
@@ -505,7 +505,7 @@ pub(crate) fn lower_bond(ast: &mut BondForm, cfg: &BondDefaults) {
         charge,
         unpaired_electrons,
         constraints,
-    } = ast;
+    } = bond;
 
     if matches!(
         (&cfg.charge, &*charge),
@@ -517,7 +517,7 @@ pub(crate) fn lower_bond(ast: &mut BondForm, cfg: &BondDefaults) {
     lower_bond_constraints(constraints, cfg);
 }
 
-pub(crate) fn raise_bond(ast: &mut BondForm, cfg: &BondDefaults) {
+pub(crate) fn raise_bond(bond: &mut BondForm, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondForm field is a compile error
     // here, forcing the author to decide how raising should handle it.
     let BondForm {
@@ -525,7 +525,7 @@ pub(crate) fn raise_bond(ast: &mut BondForm, cfg: &BondDefaults) {
         charge,
         unpaired_electrons,
         constraints,
-    } = ast;
+    } = bond;
 
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
@@ -571,8 +571,8 @@ pub struct BondConstraintDsl(pub BondConstraintForm);
 impl FromIr<BondConstraintForm> for BondConstraintDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &BondConstraintForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &BondConstraintForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 
@@ -833,11 +833,11 @@ mod tests {
 
     #[rstest]
     fn test_bond_dsl_from_ast() {
-        let mut ast = BondForm::new(NumForm::Lit(1));
-        ast.charge = NumForm::Lit(0);
-        ast.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
+        let mut form = BondForm::new(NumForm::Lit(1));
+        form.charge = NumForm::Lit(0);
+        form.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
         let cfg = BondDefaults::zeroed();
-        let dsl = BondDsl::from_ir(&ast, &cfg);
+        let dsl = BondDsl::from_ir(&form, &cfg);
         assert_eq!(dsl.0.charge, NumForm::Undetermined);
         assert_eq!(dsl.0.unpaired_electrons, UnpairedElectronsForm::default());
     }
@@ -846,10 +846,10 @@ mod tests {
     fn test_bond_dsl_into_ast() {
         let dsl = BondDsl(BondForm::new(NumForm::Lit(1)));
         let cfg = BondDefaults::zeroed();
-        let ast = dsl.into_ir(&cfg);
-        assert_eq!(ast.charge, NumForm::Lit(0));
+        let form = dsl.into_ir(&cfg);
+        assert_eq!(form.charge, NumForm::Lit(0));
         assert_eq!(
-            ast.unpaired_electrons,
+            form.unpaired_electrons,
             UnpairedElectronsForm::from((0_u8, 1_u8))
         );
     }
@@ -961,8 +961,8 @@ mod tests {
     #[case::ring_membership_size("1#R(6)")]
     #[case::cis_trans_stereo("2#C1")]
     fn test_bond_form_from_str_to_string_roundtrip(#[case] s: &str) {
-        let ast: BondForm = s.parse().unwrap();
-        assert_eq!(ast.to_string(), s);
+        let form: BondForm = s.parse().unwrap();
+        assert_eq!(form.to_string(), s);
     }
 
     #[rstest]

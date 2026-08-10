@@ -26,23 +26,23 @@ impl DelocalizationPlan {
         let view = ast.aromatic_system(system);
         let atom_ids: Vec<AtomId> = view.atom_ids().collect();
         let (&first, rest) = atom_ids.split_first()?;
-        let ElementForm::Lit(element) = ast.atom(first).ast.element else {
+        let ElementForm::Lit(element) = ast.atom(first).attributes.element else {
             return None;
         };
         if rest
             .iter()
-            .any(|&atom| ast.atom(atom).ast.element != ElementForm::Lit(element))
+            .any(|&atom| ast.atom(atom).attributes.element != ElementForm::Lit(element))
         {
             return None;
         }
 
-        let ElectronCountsForm::Lit(old_electrons) = &view.ast.electrons else {
+        let ElectronCountsForm::Lit(old_electrons) = &view.attributes.electrons else {
             return None;
         };
         if old_electrons.len() != atom_ids.len() {
             return None;
         }
-        let NumForm::Lit(mut charge) = view.ast.charge else {
+        let NumForm::Lit(mut charge) = view.attributes.charge else {
             return None;
         };
 
@@ -81,13 +81,13 @@ impl DelocalizationPlan {
 
     fn apply(self, ast: &mut Molecule) {
         for (atom_id, contribution) in self.atoms {
-            let atom = &mut ast.atom_mut(atom_id).ast;
+            let atom = &mut ast.atom_mut(atom_id).attributes;
             atom.charge = NumForm::Lit(0);
             atom.constraints.set(AtomConstraintForm::AromaticValence(
                 AromaticValenceForm::Aromatic(NumForm::Lit(contribution)),
             ));
         }
-        let system = &mut ast.aromatic_system_mut(self.system).ast;
+        let system = &mut ast.aromatic_system_mut(self.system).attributes;
         system.charge = NumForm::Lit(self.charge);
         system.electrons = ElectronCountsForm::Lit(self.electrons);
     }

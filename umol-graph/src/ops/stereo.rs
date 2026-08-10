@@ -80,7 +80,7 @@ impl StereoPerception {
                 .collect();
             let assertion = ast
                 .atom(atom)
-                .ast
+                .attributes
                 .constraints
                 .tetrahedral_stereo()
                 .unwrap_or(&TetrahedralStereoForm::Undetermined);
@@ -103,7 +103,7 @@ impl StereoPerception {
             }
             for relation in relations {
                 let entity_candidate =
-                    if relation.ast.configuration.kind() == Some(StereoKind::Tetrahedral) {
+                    if relation.attributes.configuration.kind() == Some(StereoKind::Tetrahedral) {
                         self.derive_stereo_atom(ast, atom, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;
@@ -158,7 +158,7 @@ impl StereoPerception {
                 .collect();
             let assertion = ast
                 .bond(bond)
-                .ast
+                .attributes
                 .constraints
                 .cis_trans_stereo()
                 .unwrap_or(&CisTransStereoForm::Undetermined);
@@ -180,7 +180,7 @@ impl StereoPerception {
             }
             for relation in relations {
                 let entity_candidate =
-                    if relation.ast.configuration.kind() == Some(StereoKind::CisTrans) {
+                    if relation.attributes.configuration.kind() == Some(StereoKind::CisTrans) {
                         self.derive_stereo_bond(ast, bond, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;

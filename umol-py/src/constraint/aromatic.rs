@@ -512,7 +512,7 @@ impl AromaticSystemConstraintsView {
                     .aromatic_systems()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
-                f(&view.ast.constraints)
+                f(&view.attributes.constraints)
             }
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 let system = system.bind(py).borrow();
@@ -532,7 +532,7 @@ impl AromaticSystemConstraintsView {
                 .borrow_mut(py)
                 .inner_mut()
                 .aromatic_system_mut(*id)
-                .ast
+                .attributes
                 .constraints),
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 f(&mut system.borrow_mut(py).inner_mut().constraints)

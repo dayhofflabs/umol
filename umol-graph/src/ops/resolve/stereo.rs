@@ -252,7 +252,7 @@ impl StereoResolver {
                             view.ligands()
                                 .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
                                 .collect(),
-                            view.ast.clone(),
+                            view.attributes.clone(),
                         )
                     })
                     .collect(),
@@ -270,7 +270,7 @@ impl StereoResolver {
                             view.ligands()
                                 .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
                                 .collect(),
-                            view.ast.clone(),
+                            view.attributes.clone(),
                         )
                     })
                     .collect(),
@@ -330,14 +330,14 @@ impl StereoResolver {
                 .set(AtomConstraintForm::TetrahedralStereo(
                     TetrahedralStereoForm::Undetermined,
                 ));
-            edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).ast, &update);
+            edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).attributes, &update);
         }
         for bond in remove_bond_constraints {
             let mut update = BondUpdate::default();
             update.constraints.set(BondConstraintForm::CisTransStereo(
                 CisTransStereoForm::Undetermined,
             ));
-            edits.update_bond(BondHandle::Id(bond), ast.bond(bond).ast, &update);
+            edits.update_bond(BondHandle::Id(bond), ast.bond(bond).attributes, &update);
         }
         Ok(Solution::Determined(edits))
     }
@@ -449,7 +449,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
             ],
-            ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         }])
     )]
     #[case::cis_trans(
@@ -463,7 +463,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
             ],
-            ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         }])
     )]
     fn test_stereo_resolver_plan(
@@ -718,7 +718,7 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         ]))
     )]
@@ -826,7 +826,7 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             },
         ]))
     )]

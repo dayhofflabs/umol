@@ -18,134 +18,143 @@ use umol_graph_ir::ir::{
 use crate::strategies::*;
 
 /// Apply a `diff` (only `ModifyField` / `ModifyConstraint` deltas) to an atom state.
-fn apply_atom_diff(mut ast: AtomForm, diff: Vec<AtomDelta>) -> AtomForm {
+fn apply_atom_diff(mut attributes: AtomForm, diff: Vec<AtomDelta>) -> AtomForm {
     for d in diff {
         match d {
             AtomDelta::ModifyField { change, .. } => {
-                AtomDelta::apply_field(&mut ast, change).unwrap()
+                AtomDelta::apply_field(&mut attributes, change).unwrap()
             }
             AtomDelta::ModifyConstraint { old, new, .. } => {
-                AtomDelta::apply_constraint(&mut ast, old, new).unwrap()
+                AtomDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
 /// Apply a `diff` (only `ModifyField` / `ModifyConstraint` deltas) to a bond state.
-fn apply_bond_diff(mut ast: BondForm, diff: Vec<BondDelta>) -> BondForm {
+fn apply_bond_diff(mut attributes: BondForm, diff: Vec<BondDelta>) -> BondForm {
     for d in diff {
         match d {
             BondDelta::ModifyField { change, .. } => {
-                BondDelta::apply_field(&mut ast, change).unwrap()
+                BondDelta::apply_field(&mut attributes, change).unwrap()
             }
             BondDelta::ModifyConstraint { old, new, .. } => {
-                BondDelta::apply_constraint(&mut ast, old, new).unwrap()
+                BondDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
-fn apply_dative_bond_diff(mut ast: DativeBondForm, diff: Vec<DativeBondDelta>) -> DativeBondForm {
+fn apply_dative_bond_diff(
+    mut attributes: DativeBondForm,
+    diff: Vec<DativeBondDelta>,
+) -> DativeBondForm {
     for delta in diff {
         match delta {
             DativeBondDelta::ModifyField { change, .. } => {
-                DativeBondDelta::apply_field(&mut ast, change).unwrap()
+                DativeBondDelta::apply_field(&mut attributes, change).unwrap()
             }
             DativeBondDelta::ModifyConstraint { old, new, .. } => {
-                DativeBondDelta::apply_constraint(&mut ast, old, new).unwrap()
+                DativeBondDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
 fn apply_aromatic_system_diff(
-    mut ast: AromaticSystemForm,
+    mut attributes: AromaticSystemForm,
     diff: Vec<AromaticSystemDelta>,
 ) -> AromaticSystemForm {
     for delta in diff {
         match delta {
             AromaticSystemDelta::ModifyField { change, .. } => {
-                AromaticSystemDelta::apply_field(&mut ast, change).unwrap()
+                AromaticSystemDelta::apply_field(&mut attributes, change).unwrap()
             }
             AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
-                AromaticSystemDelta::apply_constraint(&mut ast, old, new).unwrap()
+                AromaticSystemDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
 fn apply_multicenter_bond_diff(
-    mut ast: MulticenterBondForm,
+    mut attributes: MulticenterBondForm,
     diff: Vec<MulticenterBondDelta>,
 ) -> MulticenterBondForm {
     for delta in diff {
         match delta {
             MulticenterBondDelta::ModifyField { change, .. } => {
-                MulticenterBondDelta::apply_field(&mut ast, change).unwrap()
+                MulticenterBondDelta::apply_field(&mut attributes, change).unwrap()
             }
             MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
-                MulticenterBondDelta::apply_constraint(&mut ast, old, new).unwrap()
+                MulticenterBondDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
 fn apply_noncovalent_bond_diff(
-    mut ast: NoncovalentBondForm,
+    mut attributes: NoncovalentBondForm,
     diff: Vec<NoncovalentBondDelta>,
 ) -> NoncovalentBondForm {
     for delta in diff {
         match delta {
             NoncovalentBondDelta::ModifyField { change, .. } => {
-                NoncovalentBondDelta::apply_field(&mut ast, change).unwrap()
+                NoncovalentBondDelta::apply_field(&mut attributes, change).unwrap()
             }
             NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
-                NoncovalentBondDelta::apply_constraint(&mut ast, old, new).unwrap()
+                NoncovalentBondDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
-fn apply_stereo_atom_diff(mut ast: StereoAtomForm, diff: Vec<StereoAtomDelta>) -> StereoAtomForm {
+fn apply_stereo_atom_diff(
+    mut attributes: StereoAtomForm,
+    diff: Vec<StereoAtomDelta>,
+) -> StereoAtomForm {
     for delta in diff {
         match delta {
             StereoAtomDelta::ModifyField { change, .. } => {
-                StereoAtomDelta::apply_field(&mut ast, change).unwrap()
+                StereoAtomDelta::apply_field(&mut attributes, change).unwrap()
             }
             StereoAtomDelta::ModifyConstraint { old, new, .. } => {
-                StereoAtomDelta::apply_constraint(&mut ast, old, new).unwrap()
+                StereoAtomDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
-fn apply_stereo_bond_diff(mut ast: StereoBondForm, diff: Vec<StereoBondDelta>) -> StereoBondForm {
+fn apply_stereo_bond_diff(
+    mut attributes: StereoBondForm,
+    diff: Vec<StereoBondDelta>,
+) -> StereoBondForm {
     for delta in diff {
         match delta {
             StereoBondDelta::ModifyField { change, .. } => {
-                StereoBondDelta::apply_field(&mut ast, change).unwrap()
+                StereoBondDelta::apply_field(&mut attributes, change).unwrap()
             }
             StereoBondDelta::ModifyConstraint { old, new, .. } => {
-                StereoBondDelta::apply_constraint(&mut ast, old, new).unwrap()
+                StereoBondDelta::apply_constraint(&mut attributes, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
     }
-    ast
+    attributes
 }
 
 fn atom_id_strategy() -> impl Strategy<Value = AtomId> {
@@ -162,9 +171,10 @@ fn atoms_strategy() -> impl Strategy<Value = [AtomId; 2]> {
 
 fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
     prop_oneof![
-        (atom_id_strategy(), atom_form_strategy()).prop_map(|(id, ast)| AtomDelta::Add { id, ast }),
         (atom_id_strategy(), atom_form_strategy())
-            .prop_map(|(id, ast)| AtomDelta::Remove { id, ast }),
+            .prop_map(|(id, attributes)| AtomDelta::Add { id, attributes }),
+        (atom_id_strategy(), atom_form_strategy())
+            .prop_map(|(id, attributes)| AtomDelta::Remove { id, attributes }),
         (atom_id_strategy(), value_basic(0..=3), value_basic(0..=3)).prop_map(|(id, old, new)| {
             AtomDelta::ModifyField {
                 id,
@@ -182,10 +192,20 @@ fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
 
 fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
     prop_oneof![
-        (bond_id_strategy(), atoms_strategy(), bond_form_strategy())
-            .prop_map(|(id, atoms, ast)| BondDelta::Add { id, atoms, ast }),
-        (bond_id_strategy(), atoms_strategy(), bond_form_strategy())
-            .prop_map(|(id, atoms, ast)| BondDelta::Remove { id, atoms, ast }),
+        (bond_id_strategy(), atoms_strategy(), bond_form_strategy()).prop_map(
+            |(id, atoms, attributes)| BondDelta::Add {
+                id,
+                atoms,
+                attributes
+            }
+        ),
+        (bond_id_strategy(), atoms_strategy(), bond_form_strategy()).prop_map(
+            |(id, atoms, attributes)| BondDelta::Remove {
+                id,
+                atoms,
+                attributes
+            }
+        ),
         (bond_id_strategy(), value_basic(1..=3), value_basic(1..=3)).prop_map(|(id, old, new)| {
             BondDelta::ModifyField {
                 id,

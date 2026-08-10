@@ -29,15 +29,15 @@ pub struct NoncovalentBondDsl(pub NoncovalentBondForm);
 
 impl NoncovalentBondDsl {
     /// Zero-cost reference cast from `&NoncovalentBondForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &NoncovalentBondForm) -> &Self {
+    pub fn from_ref(form: &NoncovalentBondForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const NoncovalentBondForm as *const Self) }
+        unsafe { &*(form as *const NoncovalentBondForm as *const Self) }
     }
 }
 
 impl From<NoncovalentBondForm> for NoncovalentBondDsl {
-    fn from(ast: NoncovalentBondForm) -> Self {
-        Self(ast)
+    fn from(form: NoncovalentBondForm) -> Self {
+        Self(form)
     }
 }
 
@@ -81,8 +81,8 @@ impl ToEdn for NoncovalentBondDsl {
 impl FromIr<NoncovalentBondForm> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
 
-    fn from_ir(ast: &NoncovalentBondForm, _ctx: &Self::Ctx) -> Self {
-        NoncovalentBondDsl(ast.clone())
+    fn from_ir(form: &NoncovalentBondForm, _ctx: &Self::Ctx) -> Self {
+        NoncovalentBondDsl(form.clone())
     }
 }
 
@@ -171,18 +171,18 @@ fn noncovalent_bond_predicate(i: &mut &str) -> PResult<NoncovalentBondPredicate>
 }
 
 fn apply_predicates(
-    form: &mut NoncovalentBondDsl,
+    dsl: &mut NoncovalentBondDsl,
     preds: Vec<NoncovalentBondPredicate>,
 ) -> Result<(), ParseError> {
-    let ast = &mut form.0;
+    let bond = &mut dsl.0;
     for pred in preds {
         let NoncovalentBondPredicate::Constraint(c) = pred;
-        if ast.constraints.contains(c.key()) {
+        if bond.constraints.contains(c.key()) {
             return Err(ParseError::DuplicateNoncovalentBondPredicate(
                 constraint_tag(&c).to_string(),
             ));
         }
-        ast.constraints.set(c);
+        bond.constraints.set(c);
     }
     Ok(())
 }
@@ -237,9 +237,12 @@ fn kind_symbol(k: NoncovalentBondKind) -> &'static str {
     }
 }
 
-fn fmt_noncovalent_bond_form(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondForm) -> fmt::Result {
-    fmt_kind(f, &ast.kind)?;
-    for c in ast.constraints.iter() {
+fn fmt_noncovalent_bond_form(
+    f: &mut fmt::Formatter<'_>,
+    form: &NoncovalentBondForm,
+) -> fmt::Result {
+    fmt_kind(f, &form.kind)?;
+    for c in form.constraints.iter() {
         fmt_constraint(f, c)?;
     }
     Ok(())
@@ -741,10 +744,10 @@ mod tests {
     #[case::intramolecular(NoncovalentBondConstraintForm::intramolecular(true), NoncovalentBondConstraintDsl::Intramolecular(BooleanForm::Lit(true)))]
     #[case::undetermined(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined), NoncovalentBondConstraintDsl::Intramolecular(BooleanForm::Undetermined))]
     fn test_noncovalent_bond_constraint_dsl_from_ast(
-        #[case] ast: NoncovalentBondConstraintForm,
+        #[case] form: NoncovalentBondConstraintForm,
         #[case] expected: NoncovalentBondConstraintDsl,
     ) {
-        assert_eq!(NoncovalentBondConstraintDsl::from_ir(&ast), expected);
+        assert_eq!(NoncovalentBondConstraintDsl::from_ir(&form), expected);
     }
 
     #[rustfmt::skip]

@@ -1413,7 +1413,7 @@ pub(crate) fn stereo_atom_entries_strategy(
             entries
                 .into_iter()
                 .enumerate()
-                .map(|(i, (ligand_specs, ast))| {
+                .map(|(i, (ligand_specs, attributes))| {
                     let site = AtomId(i as u32);
                     let ligands = ligand_specs
                         .into_iter()
@@ -1422,7 +1422,7 @@ pub(crate) fn stereo_atom_entries_strategy(
                             _ => StereoLigand::new(site, kind),
                         })
                         .collect();
-                    (site, ligands, ast)
+                    (site, ligands, attributes)
                 })
                 .collect()
         })
@@ -1450,13 +1450,13 @@ pub(crate) fn stereo_bond_entries_strategy(
             entries
                 .into_iter()
                 .enumerate()
-                .map(|(i, (ligand_specs, ast))| {
+                .map(|(i, (ligand_specs, attributes))| {
                     let site = BondId(i as u32);
                     let ligands = ligand_specs
                         .into_iter()
                         .map(|(kind, a)| StereoLigand::new(AtomId(a), kind))
                         .collect();
-                    (site, ligands, ast)
+                    (site, ligands, attributes)
                 })
                 .collect()
         })
@@ -1649,16 +1649,16 @@ impl ConstraintCounts {
         }
     }
 
-    fn from_ir(ast: &Molecule) -> Self {
+    fn from_ir(molecule: &Molecule) -> Self {
         Self {
-            atom: ast.atoms().count(),
-            bond: ast.bonds().count(),
-            dative: ast.dative_bonds().count(),
-            aromatic: ast.aromatic_systems().count(),
-            multicenter: ast.multicenter_bonds().count(),
-            noncovalent: ast.noncovalent_bonds().count(),
-            stereo_atom: ast.stereo_atoms().count(),
-            stereo_bond: ast.stereo_bonds().count(),
+            atom: molecule.atoms().count(),
+            bond: molecule.bonds().count(),
+            dative: molecule.dative_bonds().count(),
+            aromatic: molecule.aromatic_systems().count(),
+            multicenter: molecule.multicenter_bonds().count(),
+            noncovalent: molecule.noncovalent_bonds().count(),
+            stereo_atom: molecule.stereo_atoms().count(),
+            stereo_bond: molecule.stereo_bonds().count(),
         }
     }
 }
@@ -2155,30 +2155,34 @@ pub(crate) fn molecule_entries_with_constraints_strategy() -> impl Strategy<Valu
 
 pub(crate) fn molecule_ast_with_atom_subset_strategy(
 ) -> impl Strategy<Value = (Molecule, Vec<AtomId>)> {
-    molecule_ast_structurally_unambiguous_strategy().prop_flat_map(|ast| {
-        let atom_count = ast.atoms().count();
-        (Just(ast), prop::collection::vec(any::<bool>(), atom_count)).prop_map(|(ast, keep)| {
-            let atoms = keep
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, keep)| keep.then_some(AtomId(index as u32)))
-                .collect();
-            (ast, atoms)
-        })
+    molecule_ast_structurally_unambiguous_strategy().prop_flat_map(|molecule| {
+        let atom_count = molecule.atoms().count();
+        (
+            Just(molecule),
+            prop::collection::vec(any::<bool>(), atom_count),
+        )
+            .prop_map(|(molecule, keep)| {
+                let atoms = keep
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(index, keep)| keep.then_some(AtomId(index as u32)))
+                    .collect();
+                (molecule, atoms)
+            })
     })
 }
 
 pub(crate) fn molecule_ast_with_removals_strategy(
 ) -> impl Strategy<Value = (Molecule, Vec<AtomId>, Vec<BondId>)> {
-    molecule_ast_strategy().prop_flat_map(|ast| {
-        let atom_count = ast.atoms().count();
-        let bond_count = ast.bonds().count();
+    molecule_ast_strategy().prop_flat_map(|molecule| {
+        let atom_count = molecule.atoms().count();
+        let bond_count = molecule.bonds().count();
         (
-            Just(ast),
+            Just(molecule),
             prop::collection::vec(any::<bool>(), atom_count),
             prop::collection::vec(any::<bool>(), bond_count),
         )
-            .prop_map(|(ast, atom_mask, bond_mask)| {
+            .prop_map(|(molecule, atom_mask, bond_mask)| {
                 let atoms = atom_mask
                     .into_iter()
                     .enumerate()
@@ -2189,7 +2193,7 @@ pub(crate) fn molecule_ast_with_removals_strategy(
                     .enumerate()
                     .filter_map(|(index, remove)| remove.then_some(BondId(index as u32)))
                     .collect();
-                (ast, atoms, bonds)
+                (molecule, atoms, bonds)
             })
     })
 }
@@ -2206,38 +2210,43 @@ pub(crate) fn molecule_entries_structurally_unambiguous_strategy(
     )
 }
 
-fn molecule_entity_incidence_is_unique(ast: &Molecule) -> bool {
-    all_unique(ast.bonds().iter().map(|bond| sorted_pair(bond.atom_ids())))
-        && all_unique(
-            ast.dative_bonds()
-                .iter()
-                .map(|dative| (dative.acceptor_id(), sorted(dative.donor_ids().collect()))),
-        )
-        && all_unique(
-            ast.aromatic_systems()
-                .iter()
-                .map(|aromatic| sorted(aromatic.atom_ids().collect())),
-        )
-        && all_unique(
-            ast.multicenter_bonds()
-                .iter()
-                .map(|multicenter| sorted(multicenter.atom_ids().collect())),
-        )
-        && all_unique(
-            ast.noncovalent_bonds()
-                .iter()
-                .map(|noncovalent| sorted_pair(noncovalent.atom_ids())),
-        )
-        && all_unique(
-            ast.stereo_atoms()
-                .iter()
-                .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
-        )
-        && all_unique(
-            ast.stereo_bonds()
-                .iter()
-                .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
-        )
+fn molecule_entity_incidence_is_unique(molecule: &Molecule) -> bool {
+    all_unique(
+        molecule
+            .bonds()
+            .iter()
+            .map(|bond| sorted_pair(bond.atom_ids())),
+    ) && all_unique(
+        molecule
+            .dative_bonds()
+            .iter()
+            .map(|dative| (dative.acceptor_id(), sorted(dative.donor_ids().collect()))),
+    ) && all_unique(
+        molecule
+            .aromatic_systems()
+            .iter()
+            .map(|aromatic| sorted(aromatic.atom_ids().collect())),
+    ) && all_unique(
+        molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|multicenter| sorted(multicenter.atom_ids().collect())),
+    ) && all_unique(
+        molecule
+            .noncovalent_bonds()
+            .iter()
+            .map(|noncovalent| sorted_pair(noncovalent.atom_ids())),
+    ) && all_unique(
+        molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+    ) && all_unique(
+        molecule
+            .stereo_bonds()
+            .iter()
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+    )
 }
 
 fn all_unique<T>(values: impl IntoIterator<Item = T>) -> bool
@@ -2401,28 +2410,28 @@ pub(crate) fn invalid_metadata_for(
 }
 
 pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
-    molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
-        let counts = ConstraintCounts::from_ir(&ast);
+    molecule_ast_with_constraints_strategy().prop_flat_map(|molecule| {
+        let counts = ConstraintCounts::from_ir(&molecule);
         metadata_for(counts).prop_map(move |metadata| {
-            MoleculeDsl::new(ast.clone(), metadata).expect("generated metadata is coherent")
+            MoleculeDsl::new(molecule.clone(), metadata).expect("generated metadata is coherent")
         })
     })
 }
 
 pub(crate) fn invalid_molecule_dsl_parts_strategy(
 ) -> impl Strategy<Value = (Molecule, MoleculeMetadata, Entity)> {
-    molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
-        let counts = ConstraintCounts::from_ir(&ast);
+    molecule_ast_with_constraints_strategy().prop_flat_map(|molecule| {
+        let counts = ConstraintCounts::from_ir(&molecule);
         invalid_metadata_for(counts)
-            .prop_map(move |(metadata, entity)| (ast.clone(), metadata, entity))
+            .prop_map(move |(metadata, entity)| (molecule.clone(), metadata, entity))
     })
 }
 
 pub(crate) fn molecule_metadata_with_atom_subset_strategy(
 ) -> impl Strategy<Value = (Molecule, MoleculeMetadata, Vec<AtomId>)> {
-    molecule_ast_with_atom_subset_strategy().prop_flat_map(|(ast, atoms)| {
-        metadata_for(ConstraintCounts::from_ir(&ast))
-            .prop_map(move |metadata| (ast.clone(), metadata, atoms.clone()))
+    molecule_ast_with_atom_subset_strategy().prop_flat_map(|(molecule, atoms)| {
+        metadata_for(ConstraintCounts::from_ir(&molecule))
+            .prop_map(move |metadata| (molecule.clone(), metadata, atoms.clone()))
     })
 }
 
@@ -2563,7 +2572,7 @@ pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
     (0..count.saturating_sub(1))
         .map(|id| AddBond {
             endpoints: [AtomHandle::New(id), AtomHandle::New(id + 1)],
-            ast: BondForm::from_order((id % 3 + 1) as u8),
+            attributes: BondForm::from_order((id % 3 + 1) as u8),
         })
         .collect()
 }
@@ -2888,7 +2897,7 @@ impl InvalidTransactionBatch {
                                 1
                             })),
                         ],
-                        ast: BondForm::from_order(1),
+                        attributes: BondForm::from_order(1),
                     })
                     .collect(),
             },
@@ -4475,8 +4484,8 @@ fn stereo_atom_overlay_strategy(
         entries
             .into_iter()
             .map(|(site, ligands, coset)| {
-                let ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
-                (AtomId(site), ligands, ast)
+                let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
+                (AtomId(site), ligands, attributes)
             })
             .collect()
     })
@@ -4505,8 +4514,8 @@ fn stereo_bond_overlay_strategy(
         entries
             .into_iter()
             .map(|(site, ligands, coset)| {
-                let ast = StereoBondForm::new(StereoKind::CisTrans, coset);
-                (BondId(site), ligands, ast)
+                let attributes = StereoBondForm::new(StereoKind::CisTrans, coset);
+                (BondId(site), ligands, attributes)
             })
             .collect()
     })
@@ -4654,7 +4663,7 @@ fn build_reaction(
     for &id in &removed_atoms {
         deltas.push(Delta::Atom(AtomDelta::Remove {
             id,
-            ast: lhs.atom(id).ast.clone(),
+            attributes: lhs.atom(id).attributes.clone(),
         }));
     }
     for &id in &removed_bonds {
@@ -4662,7 +4671,7 @@ fn build_reaction(
         deltas.push(Delta::Bond(BondDelta::Remove {
             id,
             atoms: [AtomId::from(x), AtomId::from(y)],
-            ast: lhs.bond(id).ast.clone(),
+            attributes: lhs.bond(id).attributes.clone(),
         }));
     }
     // A removed atom also takes its incident overlays (DPO-valid; apply never dangles on overlays).
@@ -4685,7 +4694,7 @@ fn build_reaction(
             id,
             donors: view.donor_ids().collect(),
             acceptor: view.acceptor_id(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         }));
     }
     for &id in &removed_aromatic {
@@ -4693,7 +4702,7 @@ fn build_reaction(
         deltas.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
             id,
             atoms: view.atom_ids().collect(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         }));
     }
     for &id in &removed_multicenter {
@@ -4701,7 +4710,7 @@ fn build_reaction(
         deltas.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
             id,
             atoms: view.atom_ids().collect(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         }));
     }
     for &id in &removed_noncovalent {
@@ -4709,7 +4718,7 @@ fn build_reaction(
         deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
             id,
             atoms: view.atom_ids(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         }));
     }
     // A removed atom also takes its incident stereo entities (site OR ligand incidence), else
@@ -4729,7 +4738,7 @@ fn build_reaction(
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                 .collect(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         }));
     }
     for &id in &removed_stereo_bond {
@@ -4741,7 +4750,7 @@ fn build_reaction(
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                 .collect(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         }));
     }
     for (index, new_charge) in charges.into_iter().enumerate() {
@@ -4750,7 +4759,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.atom(id).ast.charge.clone();
+        let old = lhs.atom(id).attributes.charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::Atom(AtomDelta::ModifyField {
@@ -4765,7 +4774,7 @@ fn build_reaction(
             continue;
         }
         let Some(order) = new_order else { continue };
-        let old = lhs.bond(id).ast.order.clone();
+        let old = lhs.bond(id).attributes.order.clone();
         let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::Bond(BondDelta::ModifyField {
@@ -4788,7 +4797,7 @@ fn build_reaction(
             continue;
         }
         let Some(order) = new_order else { continue };
-        let old = lhs.dative_bond(id).ast.order.clone();
+        let old = lhs.dative_bond(id).attributes.order.clone();
         let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::DativeBond(DativeBondDelta::ModifyField {
@@ -4803,7 +4812,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.aromatic_system(id).ast.charge.clone();
+        let old = lhs.aromatic_system(id).attributes.charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
@@ -4818,7 +4827,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.multicenter_bond(id).ast.charge.clone();
+        let old = lhs.multicenter_bond(id).attributes.charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
@@ -4836,7 +4845,7 @@ fn build_reaction(
         }
         let has_aromatic = lhs
             .dative_bond(id)
-            .ast
+            .attributes
             .constraints
             .iter()
             .any(|c| matches!(c, DativeBondConstraintForm::Aromatic(_)));
@@ -4863,7 +4872,7 @@ fn build_reaction(
         }
         let Some(op) = op else { continue };
         let kind = lhs.stereo_atom(id).kind();
-        let old = lhs.stereo_atom(id).ast.configuration.clone();
+        let old = lhs.stereo_atom(id).attributes.configuration.clone();
         let (new, delta) = match &op {
             StereoOp::Swap => (old.swap(), StereoAtomDelta::Swap { id, kind }),
             StereoOp::Mirror => (old.mirror(), StereoAtomDelta::Mirror { id, kind }),
@@ -4900,7 +4909,7 @@ fn build_reaction(
         }
         let Some(op) = op else { continue };
         let kind = lhs.stereo_bond(id).kind();
-        let old = lhs.stereo_bond(id).ast.configuration.clone();
+        let old = lhs.stereo_bond(id).attributes.configuration.clone();
         let (new, delta) = match &op {
             StereoOp::Swap => (old.swap(), StereoBondDelta::Swap { id, kind }),
             StereoOp::Mirror => (old.mirror(), StereoBondDelta::Mirror { id, kind }),
@@ -4940,13 +4949,13 @@ fn build_reaction(
         added_atom_ids.push(atom);
         deltas.push(Delta::Atom(AtomDelta::Add {
             id: atom,
-            ast: AtomForm::from_element(element),
+            attributes: AtomForm::from_element(element),
         }));
         if let Some(anchor) = anchor {
             deltas.push(Delta::Bond(BondDelta::Add {
                 id: BondId((bond_count + offset) as u32),
                 atoms: [anchor, atom],
-                ast: BondForm::from_order(1),
+                attributes: BondForm::from_order(1),
             }));
         }
     }
@@ -4956,7 +4965,7 @@ fn build_reaction(
         deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(lhs.noncovalent_bonds().count() as u32),
             atoms: [added_atom_ids[0], added_atom_ids[1]],
-            ast: NoncovalentBondForm {
+            attributes: NoncovalentBondForm {
                 kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::VanDerWaals),
                 constraints: Default::default(),
             },

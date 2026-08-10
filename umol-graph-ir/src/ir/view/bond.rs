@@ -1,4 +1,4 @@
-//! Bond views: `BondViews` namespace, `BondView` / `BondViewMut` AST bundles,
+//! Bond views: `BondViews` namespace, `BondView` / `BondViewMut` attribute bundles,
 //! `BondEditorView` / `BondEditorViewMut` builder bundles.
 
 use std::collections::HashSet;
@@ -46,7 +46,7 @@ impl<'a> BondViews<'a> {
             BondView {
                 id: BondId::from(id),
                 atoms: [s, t],
-                ast: &bonds[id.index()],
+                attributes: &bonds[id.index()],
                 molecule,
             }
         })
@@ -74,7 +74,7 @@ impl<'a> BondViews<'a> {
         Some(BondView {
             id,
             atoms: [s, t],
-            ast: &self.bonds[id.index()],
+            attributes: &self.bonds[id.index()],
             molecule: self.molecule,
         })
     }
@@ -123,29 +123,29 @@ impl<'a> BondViews<'a> {
 pub struct BondView<'a> {
     pub id: BondId,
     atoms: [NodeId; 2],
-    pub ast: &'a BondForm,
+    pub attributes: &'a BondForm,
     molecule: &'a Molecule,
 }
 
 impl<'a> BondView<'a> {
     #[inline]
     pub fn order(&self) -> &'a NumForm {
-        &self.ast.order
+        &self.attributes.order
     }
 
     #[inline]
     pub fn charge(&self) -> &'a NumForm {
-        &self.ast.charge
+        &self.attributes.charge
     }
 
     #[inline]
     pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
-        &self.ast.unpaired_electrons
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
     pub fn constraints(&self) -> &'a BondConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     /// The two atom indices incident to this bond.
@@ -207,12 +207,12 @@ impl<'a> BondView<'a> {
 
     /// Is bond ground
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 
     /// Is bond undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.ast.is_undetermined()
+        self.attributes.is_undetermined()
     }
 }
 
@@ -221,7 +221,7 @@ impl<'a> BondView<'a> {
 pub struct BondViewMut<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut BondForm,
+    pub attributes: &'a mut BondForm,
 }
 
 // Editor-scope view bundles for bonds.
@@ -229,13 +229,13 @@ pub struct BondViewMut<'a> {
 pub struct BondEditorView<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a BondForm,
+    pub attributes: &'a BondForm,
 }
 
 pub struct BondEditorViewMut<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut BondForm,
+    pub attributes: &'a mut BondForm,
 }
 
 #[cfg(test)]
@@ -307,7 +307,7 @@ mod tests {
     #[rstest]
     fn test_bond_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().bonds().iter(), vec![], |view| {
-            (view.id, view.atom_ids(), view.ast.clone())
+            (view.id, view.atom_ids(), view.attributes.clone())
         });
         assert_exact_size_by(
             molecule.bonds().iter(),
@@ -316,7 +316,7 @@ mod tests {
                 (BondId(1), [AtomId(1), AtomId(2)], BondForm::from_order(2)),
                 (BondId(2), [AtomId(2), AtomId(3)], BondForm::from_order(1)),
             ],
-            |view| (view.id, view.atom_ids(), view.ast.clone()),
+            |view| (view.id, view.atom_ids(), view.attributes.clone()),
         );
     }
 
@@ -334,7 +334,7 @@ mod tests {
         let view = res.unwrap();
         assert_eq!(view.id, BondId(1));
         assert_eq!(view.atom_ids(), [AtomId(1), AtomId(2)]);
-        assert_eq!(*view.ast, BondForm::from_order(2));
+        assert_eq!(*view.attributes, BondForm::from_order(2));
     }
 
     #[rstest]

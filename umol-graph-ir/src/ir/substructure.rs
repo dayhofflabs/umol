@@ -113,7 +113,10 @@ impl Molecule {
         host: &'h Molecule,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> (Vec<Cow<'h, AtomForm>>, Vec<Cow<'h, BondForm>>) {
-        let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
+        let derive_atoms = self
+            .atoms()
+            .iter()
+            .any(|a| !a.attributes.constraints.is_empty());
         let mut atom_ring_scopes = Vec::new();
         let mut derive_ring_degree = false;
         let mut derive_ring_valence = false;
@@ -184,13 +187,16 @@ impl Molecule {
                             ));
                         }
                     }
-                    Cow::Owned(a.ast.clone().with_constraints(constraints))
+                    Cow::Owned(a.attributes.clone().with_constraints(constraints))
                 } else {
-                    Cow::Borrowed(a.ast)
+                    Cow::Borrowed(a.attributes)
                 }
             })
             .collect();
-        let derive_bonds = self.bonds().iter().any(|b| !b.ast.constraints.is_empty());
+        let derive_bonds = self
+            .bonds()
+            .iter()
+            .any(|b| !b.attributes.constraints.is_empty());
         let host_bonds = host
             .bonds()
             .iter()
@@ -206,9 +212,9 @@ impl Molecule {
                             ));
                         }
                     }
-                    Cow::Owned(b.ast.clone().with_constraints(constraints))
+                    Cow::Owned(b.attributes.clone().with_constraints(constraints))
                 } else {
-                    Cow::Borrowed(b.ast)
+                    Cow::Borrowed(b.attributes)
                 }
             })
             .collect();
@@ -233,13 +239,13 @@ impl Molecule {
             &mut |query_node, host_node| {
                 pattern
                     .atom(AtomId::from(query_node))
-                    .ast
+                    .attributes
                     .matches(&host_atoms[host_node.index()])
             },
             &mut |query_edge, host_edge| {
                 pattern
                     .bond(BondId::from(query_edge))
-                    .ast
+                    .attributes
                     .matches(&host_bonds[host_edge.index()])
             },
             subiso,
@@ -293,10 +299,10 @@ impl Molecule {
             // kind only (the exact AST/participation check is `verify_overlays`).
             &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
                 (Entity::Atom(pa), Entity::Atom(ha)) => {
-                    pattern.atom(pa).ast.matches(&host_atoms[ha.index()])
+                    pattern.atom(pa).attributes.matches(&host_atoms[ha.index()])
                 }
                 (Entity::Bond(pb), Entity::Bond(hb)) => {
-                    pattern.bond(pb).ast.matches(&host_bonds[hb.index()])
+                    pattern.bond(pb).attributes.matches(&host_bonds[hb.index()])
                 }
                 (pe, he) => pe.kind() == he.kind(),
             },
@@ -343,7 +349,11 @@ impl Molecule {
             return None;
         }
         for &(p, h) in dative_bonds.matched_pairs() {
-            if !pattern.dative_bond(p).ast.matches(host.dative_bond(h).ast) {
+            if !pattern
+                .dative_bond(p)
+                .attributes
+                .matches(host.dative_bond(h).attributes)
+            {
                 return None;
             }
         }
@@ -357,7 +367,13 @@ impl Molecule {
             let h_view = host.aromatic_system(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
             let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
-            if !overlay_matches(p_view.ast, h_view.ast, &pat_atoms, &host_atoms, &atoms) {
+            if !overlay_matches(
+                p_view.attributes,
+                h_view.attributes,
+                &pat_atoms,
+                &host_atoms,
+                &atoms,
+            ) {
                 return None;
             }
         }
@@ -371,7 +387,13 @@ impl Molecule {
             let h_view = host.multicenter_bond(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
             let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
-            if !overlay_matches(p_view.ast, h_view.ast, &pat_atoms, &host_atoms, &atoms) {
+            if !overlay_matches(
+                p_view.attributes,
+                h_view.attributes,
+                &pat_atoms,
+                &host_atoms,
+                &atoms,
+            ) {
                 return None;
             }
         }
@@ -383,8 +405,8 @@ impl Molecule {
         for &(p, h) in noncovalent_bonds.matched_pairs() {
             if !pattern
                 .noncovalent_bond(p)
-                .ast
-                .matches(host.noncovalent_bond(h).ast)
+                .attributes
+                .matches(host.noncovalent_bond(h).attributes)
             {
                 return None;
             }

@@ -109,7 +109,7 @@ impl<'a> CountsValence<'a> {
                 Ok(None) => continue,
                 Err(contradiction) => return Solution::Contradictory(contradiction),
             };
-            let current = ast.atom(id).ast;
+            let current = ast.atom(id).attributes;
             let update = current.difference_to(&selected);
             edits.update_atom(AtomHandle::Id(id), current, &update);
         }
@@ -154,26 +154,26 @@ impl<'a> CountsValence<'a> {
             return Ok(None);
         }
         let input = CountsInput::for_molecule_atom(atom);
-        let mut selected = self.select_candidate(atom.ast, input)?;
+        let mut selected = self.select_candidate(atom.attributes, input)?;
         if selected.isotope_mass.is_undetermined() {
             selected.isotope_mass = IsotopeMassForm::Natural;
         }
         Ok(Some(selected))
     }
 
-    pub fn resolve_atom(&self, ast: &mut AtomForm) -> Result<(), CountsError> {
-        if ast.is_ground() {
+    pub fn resolve_atom(&self, atom: &mut AtomForm) -> Result<(), CountsError> {
+        if atom.is_ground() {
             return Ok(());
         }
-        if ast.element.is_undetermined() {
+        if atom.element.is_undetermined() {
             return Ok(());
         };
-        if ast.charge.is_undetermined() {
+        if atom.charge.is_undetermined() {
             return Ok(());
         };
 
-        let input = CountsInput::for_atom(ast);
-        *ast = self.select_candidate(ast, input)?;
+        let input = CountsInput::for_atom(atom);
+        *atom = self.select_candidate(atom, input)?;
         Ok(())
     }
 
@@ -195,7 +195,7 @@ impl<'a> CountsValence<'a> {
         };
         let charge = atom.charge().as_lit().unwrap_or(0);
         let input = CountsInput::for_molecule_atom(atom);
-        match self.select_candidate(atom.ast, input) {
+        match self.select_candidate(atom.attributes, input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,
@@ -583,7 +583,10 @@ mod tests {
             resolver.resolve(&mut molecule),
             Ok(Solution::Determined(()))
         );
-        assert_eq!(molecule.atom(AtomId(atom_id)).ast.to_string(), expected);
+        assert_eq!(
+            molecule.atom(AtomId(atom_id)).attributes.to_string(),
+            expected
+        );
     }
 
     #[rstest]

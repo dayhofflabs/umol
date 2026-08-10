@@ -399,7 +399,7 @@ impl ValenceInvariants {
                             )),
                             ..Default::default()
                         };
-                        let Some(candidate) = atom.ast.meet(&assignment) else {
+                        let Some(candidate) = atom.attributes.meet(&assignment) else {
                             continue;
                         };
                         candidates.push(candidate.into_ground());

@@ -748,7 +748,7 @@ mod tests {
         let mut inline = molecule.clone().edit();
         inline
             .atom_mut(AtomId(0))
-            .ast
+            .attributes
             .constraints
             .set(constraint.clone());
         let inline = inline.build();

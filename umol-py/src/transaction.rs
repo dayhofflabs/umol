@@ -143,7 +143,7 @@ mod tests {
         let snapshot = editor.snapshot().unwrap();
 
         let mut built = editor.build().unwrap();
-        *built.inner_mut().atom_mut(GraphIrAtomId(0)).ast =
+        *built.inner_mut().atom_mut(GraphIrAtomId(0)).attributes =
             GraphIrAtomForm::from_element(ChemElement::N);
         let snapshot_error = editor.snapshot().unwrap_err();
         let build_error = editor.build().unwrap_err();

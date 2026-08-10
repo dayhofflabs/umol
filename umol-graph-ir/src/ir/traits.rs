@@ -232,12 +232,12 @@ impl<T: Canonicalize> Canonical<T> {
 }
 
 /// The patch algebra over one entity's fields and constraints. A delta is the morphism between two
-/// states (`Ast`s): `apply` is its action — carrying a state forward by a `ModifyField` /
+/// states (`Attributes`): `apply` is its action — carrying a state forward by a `ModifyField` /
 /// `ModifyConstraint` delta — and `diff` is the inverse, factoring two states back into the deltas
 /// between them, with `apply(lhs, diff(lhs, rhs)) == rhs`.
 pub trait EntityPatch: Sized {
     type Id: Copy + Eq + Hash + From<usize>;
-    type Ast: Clone;
+    type Attributes: Clone;
     type FieldChange;
     type Constraint: Canonicalize;
 
@@ -247,22 +247,25 @@ pub trait EntityPatch: Sized {
         old: Option<Self::Constraint>,
         new: Option<Self::Constraint>,
     ) -> Self;
-    fn apply_field(ast: &mut Self::Ast, change: Self::FieldChange) -> Result<(), Contradiction>;
-    fn diff_field(lhs: &Self::Ast, rhs: &Self::Ast) -> Vec<Self::FieldChange>;
+    fn apply_field(
+        attributes: &mut Self::Attributes,
+        change: Self::FieldChange,
+    ) -> Result<(), Contradiction>;
+    fn diff_field(lhs: &Self::Attributes, rhs: &Self::Attributes) -> Vec<Self::FieldChange>;
     fn apply_constraint(
-        ast: &mut Self::Ast,
+        attributes: &mut Self::Attributes,
         old: Option<Self::Constraint>,
         new: Option<Self::Constraint>,
     ) -> Result<(), Contradiction>;
     #[allow(clippy::type_complexity)]
     fn diff_constraints(
-        lhs: &Self::Ast,
-        rhs: &Self::Ast,
+        lhs: &Self::Attributes,
+        rhs: &Self::Attributes,
     ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
 
     /// The `ModifyField` / `ModifyConstraint` deltas carrying `lhs` to `rhs` for one entity — the
     /// inverse of `apply_*_change`, recovering a `Modified` entity's deltas.
-    fn diff(id: Self::Id, lhs: &Self::Ast, rhs: &Self::Ast) -> Vec<Self> {
+    fn diff(id: Self::Id, lhs: &Self::Attributes, rhs: &Self::Attributes) -> Vec<Self> {
         let mut out: Vec<Self> = Self::diff_field(lhs, rhs)
             .into_iter()
             .map(|change| Self::modify_field(id, change))

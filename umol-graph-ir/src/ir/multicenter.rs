@@ -358,10 +358,10 @@ mod tests {
         true,
     )]
     fn test_multicenter_bond_form_is_ground(
-        #[case] ast: MulticenterBondForm,
+        #[case] form: MulticenterBondForm,
         #[case] expected: bool,
     ) {
-        assert_eq!(ast.is_ground(), expected);
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]

@@ -580,7 +580,7 @@ impl NoncovalentBondConstraintsView {
                     .noncovalent_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("noncovalent bond id out of range"))?;
-                f(&view.ast.constraints)
+                f(&view.attributes.constraints)
             }
             NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
                 let bond = bond.bind(py).borrow();
@@ -600,7 +600,7 @@ impl NoncovalentBondConstraintsView {
                 .borrow_mut(py)
                 .inner_mut()
                 .noncovalent_bond_mut(*id)
-                .ast
+                .attributes
                 .constraints),
             NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
                 f(&mut bond.borrow_mut(py).inner_mut().constraints)

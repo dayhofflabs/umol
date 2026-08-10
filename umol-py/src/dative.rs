@@ -277,7 +277,7 @@ impl DativeBondView {
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        NumForm::from_rust(py, &self.dative_bond(molecule.inner())?.ast.order)
+        NumForm::from_rust(py, &self.dative_bond(molecule.inner())?.attributes.order)
     }
 
     #[setter]
@@ -286,7 +286,7 @@ impl DativeBondView {
             .borrow_mut(py)
             .inner_mut()
             .dative_bond_mut(self.id)
-            .ast
+            .attributes
             .order = value.to_rust(py);
     }
 
@@ -310,7 +310,7 @@ impl DativeBondView {
             .borrow_mut(py)
             .inner_mut()
             .dative_bond_mut(self.id)
-            .ast
+            .attributes
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -319,7 +319,7 @@ impl DativeBondView {
     /// symmetric with `DativeBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.dative_bond(molecule.inner())?.ast;
+        let bond = self.dative_bond(molecule.inner())?.attributes;
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item(
@@ -391,7 +391,7 @@ impl DativeBondViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_dative_bond_index(molecule.inner(), index)?;
-        *molecule.inner_mut().dative_bond_mut(id).ast = bond.inner().clone();
+        *molecule.inner_mut().dative_bond_mut(id).attributes = bond.inner().clone();
         Ok(())
     }
 

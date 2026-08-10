@@ -77,12 +77,12 @@ impl Transformer for Aromatizer {
 /// - Anything else (sp³ C, two or more double bonds, undetermined data) →
 ///   `None`, marking the atom as not aromatic-eligible.
 pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
-    let ElementForm::Lit(element) = view.ast.element else {
+    let ElementForm::Lit(element) = view.attributes.element else {
         return None;
     };
     let double_count = view
         .neighbors()
-        .filter(|n| matches!(n.bond().ast.order, NumForm::Lit(2)))
+        .filter(|n| matches!(n.bond().attributes.order, NumForm::Lit(2)))
         .count();
     match double_count {
         1 => Some(1),
@@ -90,7 +90,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
             Element::N | Element::O | Element::S | Element::Se | Element::P | Element::As => {
                 Some(2)
             }
-            Element::C if matches!(view.ast.charge, NumForm::Lit(1)) => Some(0),
+            Element::C if matches!(view.attributes.charge, NumForm::Lit(1)) => Some(0),
             _ => None,
         },
         _ => None,
@@ -176,7 +176,11 @@ mod tests {
         let aromatic_bond_count = ast
             .bonds()
             .iter()
-            .filter(|view| view.ast.constraints.contains(BondConstraintKey::Aromatic))
+            .filter(|view| {
+                view.attributes
+                    .constraints
+                    .contains(BondConstraintKey::Aromatic)
+            })
             .count();
         assert_eq!(aromatic_bond_count, 6);
     }

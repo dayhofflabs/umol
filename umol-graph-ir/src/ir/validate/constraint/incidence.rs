@@ -330,8 +330,8 @@ pub fn validate_atom_constraint(
         AtomConstraintForm::TetrahedralStereo(_) => {
             let derived = match atom.stereo_atom() {
                 Some(stereo) => match (
-                    stereo.ast.configuration.kind(),
-                    stereo.ast.configuration.coset(),
+                    stereo.attributes.configuration.kind(),
+                    stereo.attributes.configuration.coset(),
                 ) {
                     (Some(StereoKind::Tetrahedral), Some(coset)) => {
                         TetrahedralStereoForm::stereo(coset.clone())
@@ -422,8 +422,8 @@ pub fn validate_bond_constraint(
         BondConstraintForm::CisTransStereo(_) => {
             let derived = match bond.stereo_bond() {
                 Some(stereo) => match (
-                    stereo.ast.configuration.kind(),
-                    stereo.ast.configuration.coset(),
+                    stereo.attributes.configuration.kind(),
+                    stereo.attributes.configuration.coset(),
                 ) {
                     (Some(StereoKind::CisTrans), Some(coset)) => {
                         CisTransStereoForm::stereo(coset.clone())

@@ -884,7 +884,7 @@ mod tests {
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.update_atom(
             GraphIrAtomHandle::Id(GraphIrAtomId(0)),
-            initial.atom(GraphIrAtomId(0)).ast,
+            initial.atom(GraphIrAtomId(0)).attributes,
             &GraphIrAtomUpdate {
                 implicit_hydrogens: Some(GraphIrNumForm::Lit(2)),
                 ..Default::default()

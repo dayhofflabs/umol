@@ -806,12 +806,12 @@ mod tests {
         assert_eq!(
             ast.atoms()
                 .iter()
-                .map(|atom| atom.ast.charge.clone())
+                .map(|atom| atom.attributes.charge.clone())
                 .collect::<Vec<_>>(),
             expected_atom_charges
         );
         assert_eq!(
-            ast.aromatic_system(AromaticSystemId(0)).ast.charge,
+            ast.aromatic_system(AromaticSystemId(0)).attributes.charge,
             expected_system_charge
         );
     }
@@ -846,7 +846,7 @@ mod tests {
         assert_eq!(
             ast.atoms()
                 .iter()
-                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             expected
         );
@@ -938,7 +938,7 @@ mod tests {
         assert_eq!(
             ast.atoms()
                 .iter()
-                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             vec![
                 Some(AromaticValenceForm::Aromatic(NumForm::Lit(2))),
@@ -951,7 +951,7 @@ mod tests {
         assert_eq!(
             ast.bonds()
                 .iter()
-                .map(|bond| bond.ast.constraints.aromatic())
+                .map(|bond| bond.attributes.constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );
@@ -990,7 +990,7 @@ mod tests {
 
         assert_eq!(
             ast.atom(AtomId(1))
-                .ast
+                .attributes
                 .constraints
                 .tetrahedral_stereo()
                 .cloned(),
@@ -1376,7 +1376,7 @@ mod tests {
                 .lhs
                 .atoms()
                 .iter()
-                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             vec![
                 Some(AromaticValenceForm::Aromatic(NumForm::Lit(2))),
@@ -1391,7 +1391,7 @@ mod tests {
                 .lhs
                 .bonds()
                 .iter()
-                .map(|bond| bond.ast.constraints.aromatic())
+                .map(|bond| bond.attributes.constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );

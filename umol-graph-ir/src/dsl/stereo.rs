@@ -42,15 +42,15 @@ pub struct StereoAtomDsl(pub StereoAtomForm);
 
 impl StereoAtomDsl {
     /// Zero-cost reference cast from `&StereoAtomForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &StereoAtomForm) -> &Self {
+    pub fn from_ref(form: &StereoAtomForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const StereoAtomForm as *const Self) }
+        unsafe { &*(form as *const StereoAtomForm as *const Self) }
     }
 }
 
 impl From<StereoAtomForm> for StereoAtomDsl {
-    fn from(ast: StereoAtomForm) -> Self {
-        Self(ast)
+    fn from(form: StereoAtomForm) -> Self {
+        Self(form)
     }
 }
 
@@ -132,11 +132,11 @@ impl ToEdn for StereoAtomDsl {
 
 /// Return the stereo atom keyword for canonical stereo atom shapes, or `None`
 /// when the full definition is required. Inverse of `expand_stereo_atom_keyword`.
-fn stereo_atom_keyword_for(ast: &StereoAtomForm) -> Option<&'static str> {
-    if !ast.constraints.is_empty() {
+fn stereo_atom_keyword_for(form: &StereoAtomForm) -> Option<&'static str> {
+    if !form.constraints.is_empty() {
         return None;
     }
-    match &ast.configuration {
+    match &form.configuration {
         StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)) => {
             Some("ccw")
         }
@@ -148,9 +148,9 @@ fn stereo_atom_keyword_for(ast: &StereoAtomForm) -> Option<&'static str> {
 impl FromIr<StereoAtomForm> for StereoAtomDsl {
     type Ctx = StereoAtomDefaults;
 
-    fn from_ir(ast: &StereoAtomForm, _ctx: &Self::Ctx) -> Self {
-        let ast = ast.clone();
-        StereoAtomDsl(ast.clone())
+    fn from_ir(form: &StereoAtomForm, _ctx: &Self::Ctx) -> Self {
+        let form = form.clone();
+        StereoAtomDsl(form.clone())
     }
 }
 
@@ -236,15 +236,15 @@ pub struct StereoBondDsl(pub StereoBondForm);
 
 impl StereoBondDsl {
     /// Zero-cost reference cast from `&StereoBondForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &StereoBondForm) -> &Self {
+    pub fn from_ref(form: &StereoBondForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const StereoBondForm as *const Self) }
+        unsafe { &*(form as *const StereoBondForm as *const Self) }
     }
 }
 
 impl From<StereoBondForm> for StereoBondDsl {
-    fn from(ast: StereoBondForm) -> Self {
-        Self(ast)
+    fn from(form: StereoBondForm) -> Self {
+        Self(form)
     }
 }
 
@@ -326,11 +326,11 @@ impl ToEdn for StereoBondDsl {
 
 /// Return the stereo bond keyword for canonical stereo bond shapes, or `None`
 /// when the full definition is required. Inverse of `expand_stereo_bond_keyword`.
-fn stereo_bond_keyword_for(ast: &StereoBondForm) -> Option<&'static str> {
-    if !ast.constraints.is_empty() {
+fn stereo_bond_keyword_for(form: &StereoBondForm) -> Option<&'static str> {
+    if !form.constraints.is_empty() {
         return None;
     }
-    match &ast.configuration {
+    match &form.configuration {
         StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)) => Some("z"),
         StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)) => Some("e"),
         _ => None,
@@ -340,8 +340,8 @@ fn stereo_bond_keyword_for(ast: &StereoBondForm) -> Option<&'static str> {
 impl FromIr<StereoBondForm> for StereoBondDsl {
     type Ctx = StereoBondDefaults;
 
-    fn from_ir(ast: &StereoBondForm, _ctx: &Self::Ctx) -> Self {
-        StereoBondDsl(ast.clone())
+    fn from_ir(form: &StereoBondForm, _ctx: &Self::Ctx) -> Self {
+        StereoBondDsl(form.clone())
     }
 }
 
@@ -1437,8 +1437,8 @@ impl<'de> FromEdn<'de> for StereogenicityDsl {
 impl FromIr<StereogenicityForm> for StereogenicityDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &StereogenicityForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &StereogenicityForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 
@@ -1525,8 +1525,8 @@ impl<'de> FromEdn<'de> for TopicityDsl {
 impl FromIr<TopicityForm> for TopicityDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &TopicityForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &TopicityForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 
@@ -1756,8 +1756,8 @@ macro_rules! stereo_constraint_dsl {
         impl FromIr<$constraint> for $dsl {
             type Ctx = StereoKind;
 
-            fn from_ir(ast: &$constraint, ctx: &Self::Ctx) -> Self {
-                Self(*ctx, ast.clone())
+            fn from_ir(form: &$constraint, ctx: &Self::Ctx) -> Self {
+                Self(*ctx, form.clone())
             }
         }
 
@@ -1795,8 +1795,8 @@ pub struct StereoCosetDsl(pub StereoCoset);
 impl FromIr<StereoCoset> for StereoCosetDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &StereoCoset, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(coset: &StereoCoset, _ctx: &Self::Ctx) -> Self {
+        Self(coset.clone())
     }
 }
 
@@ -1872,41 +1872,41 @@ impl ToEdn for StereoCosetDsl {
 /// (`:undetermined`, `:not-stereo`, or `{:stereo <coset>}`). `$kind` fixes the
 /// coset degree; the per-kind type's `Stereo` arm carries the coset.
 macro_rules! stereo_site_dsl {
-    ($dsl:ident, $ast:ident, $kind:expr, $parse:ident, $fmt:ident) => {
-        pub(crate) fn $parse(i: &mut &str) -> PResult<$ast> {
+    ($dsl:ident, $form:ident, $kind:expr, $parse:ident, $fmt:ident) => {
+        pub(crate) fn $parse(i: &mut &str) -> PResult<$form> {
             alt((
-                '*'.value($ast::Undetermined),
-                '!'.value($ast::NotStereo),
-                '+'.value($ast::Stereo(StereoCoset::Undetermined)),
-                (|i: &mut &str| stereo_coset(i, $kind.degree())).map($ast::Stereo),
+                '*'.value($form::Undetermined),
+                '!'.value($form::NotStereo),
+                '+'.value($form::Stereo(StereoCoset::Undetermined)),
+                (|i: &mut &str| stereo_coset(i, $kind.degree())).map($form::Stereo),
             ))
             .parse_next(i)
         }
 
-        pub(crate) fn $fmt(f: &mut fmt::Formatter<'_>, config: &$ast) -> fmt::Result {
+        pub(crate) fn $fmt(f: &mut fmt::Formatter<'_>, config: &$form) -> fmt::Result {
             match config {
-                $ast::Undetermined => write!(f, "*"),
-                $ast::NotStereo => write!(f, "!"),
-                $ast::Stereo(StereoCoset::Undetermined) => write!(f, "+"),
-                $ast::Stereo(coset) => fmt_stereo_coset(f, coset),
+                $form::Undetermined => write!(f, "*"),
+                $form::NotStereo => write!(f, "!"),
+                $form::Stereo(StereoCoset::Undetermined) => write!(f, "+"),
+                $form::Stereo(coset) => fmt_stereo_coset(f, coset),
             }
         }
 
         #[derive(Clone, Debug, PartialEq, Eq)]
-        pub struct $dsl(pub $ast);
+        pub struct $dsl(pub $form);
 
-        impl FromIr<$ast> for $dsl {
+        impl FromIr<$form> for $dsl {
             type Ctx = ();
 
-            fn from_ir(ast: &$ast, _ctx: &Self::Ctx) -> Self {
-                Self(ast.clone())
+            fn from_ir(form: &$form, _ctx: &Self::Ctx) -> Self {
+                Self(form.clone())
             }
         }
 
-        impl IntoIr<$ast> for $dsl {
+        impl IntoIr<$form> for $dsl {
             type Ctx = ();
 
-            fn into_ir(self, _ctx: &Self::Ctx) -> $ast {
+            fn into_ir(self, _ctx: &Self::Ctx) -> $form {
                 self.0
             }
         }
@@ -1914,8 +1914,8 @@ macro_rules! stereo_site_dsl {
         impl<'de> FromEdn<'de> for $dsl {
             fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
                 match edn {
-                    Edn::Keyword(k) if k.name() == "undetermined" => Ok(Self($ast::Undetermined)),
-                    Edn::Keyword(k) if k.name() == "not-stereo" => Ok(Self($ast::NotStereo)),
+                    Edn::Keyword(k) if k.name() == "undetermined" => Ok(Self($form::Undetermined)),
+                    Edn::Keyword(k) if k.name() == "not-stereo" => Ok(Self($form::NotStereo)),
                     Edn::Map(m) if m.len() == 1 => {
                         let (k, v) = m.iter().next().unwrap();
                         let Edn::Keyword(key) = k else {
@@ -1926,7 +1926,7 @@ macro_rules! stereo_site_dsl {
                             });
                         };
                         match key.name() {
-                            "stereo" => Ok(Self($ast::Stereo(
+                            "stereo" => Ok(Self($form::Stereo(
                                 StereoCosetDsl::from_edn(v)?.into_ir(&()),
                             ))),
                             other => Err(DeError::UnknownField {
@@ -1947,11 +1947,11 @@ macro_rules! stereo_site_dsl {
         impl ToEdn for $dsl {
             fn to_edn(&self) -> Edn<'static> {
                 match &self.0 {
-                    $ast::Undetermined => {
+                    $form::Undetermined => {
                         Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
                     }
-                    $ast::NotStereo => Edn::Keyword(EdnKeyword::owned("not-stereo".to_string())),
-                    $ast::Stereo(coset) => {
+                    $form::NotStereo => Edn::Keyword(EdnKeyword::owned("not-stereo".to_string())),
+                    $form::Stereo(coset) => {
                         single_key_map("stereo", StereoCosetDsl::from_ir(coset, &()).to_edn())
                     }
                 }
@@ -2300,14 +2300,14 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_dsl_into_ast() {
-        let ast = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
+        let form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
         assert_eq!(
-            StereoAtomDsl(ast.clone()).into_ir(&StereoAtomDefaults::default()),
-            ast
+            StereoAtomDsl(form.clone()).into_ir(&StereoAtomDefaults::default()),
+            form
         );
         assert_eq!(
-            StereoAtomDsl::from_ir(&ast, &StereoAtomDefaults::default()),
-            StereoAtomDsl(ast)
+            StereoAtomDsl::from_ir(&form, &StereoAtomDefaults::default()),
+            StereoAtomDsl(form)
         );
     }
 
@@ -2468,9 +2468,9 @@ mod tests {
     #[case::undetermined(StereoCoset::Undetermined)]
     #[case::lit_set(StereoCoset::lit_set([1, 2]))]
     #[case::term_swap(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))]
-    fn test_stereo_coset_dsl_into_ast(#[case] ast: StereoCoset) {
-        assert_eq!(StereoCosetDsl(ast.clone()).into_ir(&()), ast);
-        assert_eq!(StereoCosetDsl::from_ir(&ast, &()), StereoCosetDsl(ast));
+    fn test_stereo_coset_dsl_into_ast(#[case] coset: StereoCoset) {
+        assert_eq!(StereoCosetDsl(coset.clone()).into_ir(&()), coset);
+        assert_eq!(StereoCosetDsl::from_ir(&coset, &()), StereoCosetDsl(coset));
     }
 
     #[rustfmt::skip]
@@ -2520,9 +2520,9 @@ mod tests {
     #[case::undetermined(TetrahedralStereoForm::Undetermined)]
     #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
     #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_dsl_into_ast(#[case] ast: TetrahedralStereoForm) {
-        assert_eq!(TetrahedralStereoDsl(ast.clone()).into_ir(&()), ast);
-        assert_eq!(TetrahedralStereoDsl::from_ir(&ast, &()), TetrahedralStereoDsl(ast));
+    fn test_tetrahedral_stereo_dsl_into_ast(#[case] form: TetrahedralStereoForm) {
+        assert_eq!(TetrahedralStereoDsl(form.clone()).into_ir(&()), form);
+        assert_eq!(TetrahedralStereoDsl::from_ir(&form, &()), TetrahedralStereoDsl(form));
     }
 
     #[rustfmt::skip]

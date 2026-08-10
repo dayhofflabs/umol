@@ -110,7 +110,7 @@ impl HueckelRuleAromaticity {
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let view = ast.atom(atom);
-        let element = match view.ast.element {
+        let element = match view.attributes.element {
             ElementForm::Lit(e) => e,
             _ => return false,
         };
@@ -538,7 +538,7 @@ mod tests {
             .into_ring_set();
         let model = daylight_model();
         let systems = model.find_from_rings(&ast, &rings, &|v| match v
-            .ast
+            .attributes
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -571,7 +571,7 @@ mod tests {
             )
             .into_ring_set();
         let systems = model.find_from_rings(&ast, &rings, &|v| match v
-            .ast
+            .attributes
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -594,7 +594,7 @@ mod tests {
             )
             .into_ring_set();
         let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match v
-            .ast
+            .attributes
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)

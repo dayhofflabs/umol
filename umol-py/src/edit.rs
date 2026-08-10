@@ -641,7 +641,7 @@ impl Edit {
                                 HandleLike::from_atom_handle(&bond.endpoints[0]),
                                 HandleLike::from_atom_handle(&bond.endpoints[1]),
                             ),
-                            Py::new(py, BondForm::from_inner(bond.ast.clone()))?,
+                            Py::new(py, BondForm::from_inner(bond.attributes.clone()))?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -658,9 +658,9 @@ impl Edit {
                 id: HandleLike::from_bond_handle(id),
                 change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
             },
-            GraphIrEdit::AddDativeBond { atoms, ast } => Self::AddDativeBond {
+            GraphIrEdit::AddDativeBond { atoms, attributes } => Self::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, DativeBondForm::from_inner(ast.clone()))?,
+                ast: Py::new(py, DativeBondForm::from_inner(attributes.clone()))?,
             },
             GraphIrEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
                 removes: removes
@@ -678,9 +678,9 @@ impl Edit {
                 id: HandleLike::from_dative_bond_handle(id),
                 change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
             },
-            GraphIrEdit::AddAromaticSystem { atoms, ast } => Self::AddAromaticSystem {
+            GraphIrEdit::AddAromaticSystem { atoms, attributes } => Self::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, AromaticSystemForm::from_inner(ast.clone()))?,
+                ast: Py::new(py, AromaticSystemForm::from_inner(attributes.clone()))?,
             },
             GraphIrEdit::RemoveAromaticSystems { removes } => Self::RemoveAromaticSystems {
                 removes: removes
@@ -700,9 +700,9 @@ impl Edit {
                     change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
                 }
             }
-            GraphIrEdit::AddMulticenterBond { atoms, ast } => Self::AddMulticenterBond {
+            GraphIrEdit::AddMulticenterBond { atoms, attributes } => Self::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, MulticenterBondForm::from_inner(ast.clone()))?,
+                ast: Py::new(py, MulticenterBondForm::from_inner(attributes.clone()))?,
             },
             GraphIrEdit::RemoveMulticenterBonds { removes } => Self::RemoveMulticenterBonds {
                 removes: removes
@@ -725,12 +725,12 @@ impl Edit {
                     )?,
                 }
             }
-            GraphIrEdit::AddNoncovalentBond { atoms, ast } => Self::AddNoncovalentBond {
+            GraphIrEdit::AddNoncovalentBond { atoms, attributes } => Self::AddNoncovalentBond {
                 atoms: (
                     HandleLike::from_atom_handle(&atoms[0]),
                     HandleLike::from_atom_handle(&atoms[1]),
                 ),
-                ast: Py::new(py, NoncovalentBondForm::from_inner(ast.clone()))?,
+                ast: Py::new(py, NoncovalentBondForm::from_inner(attributes.clone()))?,
             },
             GraphIrEdit::RemoveNoncovalentBonds { removes } => Self::RemoveNoncovalentBonds {
                 removes: removes
@@ -756,7 +756,11 @@ impl Edit {
                     )?,
                 }
             }
-            GraphIrEdit::AddStereoAtom { site, ligands, ast } => Self::AddStereoAtom {
+            GraphIrEdit::AddStereoAtom {
+                site,
+                ligands,
+                attributes,
+            } => Self::AddStereoAtom {
                 site: HandleLike::from_atom_handle(site),
                 ligands: ligands
                     .iter()
@@ -767,7 +771,7 @@ impl Edit {
                         )
                     })
                     .collect(),
-                ast: Py::new(py, StereoAtomForm::from_inner(ast.clone()))?,
+                ast: Py::new(py, StereoAtomForm::from_inner(attributes.clone()))?,
             },
             GraphIrEdit::RemoveStereoAtoms { removes } => Self::RemoveStereoAtoms {
                 removes: StereoAtomRemovals(
@@ -796,7 +800,11 @@ impl Edit {
                 id: HandleLike::from_stereo_atom_handle(id),
                 change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
             },
-            GraphIrEdit::AddStereoBond { site, ligands, ast } => Self::AddStereoBond {
+            GraphIrEdit::AddStereoBond {
+                site,
+                ligands,
+                attributes,
+            } => Self::AddStereoBond {
                 site: HandleLike::from_bond_handle(site),
                 ligands: ligands
                     .iter()
@@ -807,7 +815,7 @@ impl Edit {
                         )
                     })
                     .collect(),
-                ast: Py::new(py, StereoBondForm::from_inner(ast.clone()))?,
+                ast: Py::new(py, StereoBondForm::from_inner(attributes.clone()))?,
             },
             GraphIrEdit::RemoveStereoBonds { removes } => Self::RemoveStereoBonds {
                 removes: StereoBondRemovals(
@@ -998,7 +1006,7 @@ impl Edit {
                     .iter()
                     .map(|((first, second), ast)| GraphIrAddBond {
                         endpoints: [first.to_atom_handle(), second.to_atom_handle()],
-                        ast: ast.bind(py).borrow().inner().clone(),
+                        attributes: ast.bind(py).borrow().inner().clone(),
                     })
                     .collect(),
             },
@@ -1016,7 +1024,7 @@ impl Edit {
             },
             Self::AddDativeBond { atoms, ast } => GraphIrEdit::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                ast: ast.bind(py).borrow().inner().clone(),
+                attributes: ast.bind(py).borrow().inner().clone(),
             },
             Self::RemoveDativeBonds { removes } => GraphIrEdit::RemoveDativeBonds {
                 removes: removes
@@ -1036,7 +1044,7 @@ impl Edit {
             },
             Self::AddAromaticSystem { atoms, ast } => GraphIrEdit::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                ast: ast.bind(py).borrow().inner().clone(),
+                attributes: ast.bind(py).borrow().inner().clone(),
             },
             Self::RemoveAromaticSystems { removes } => GraphIrEdit::RemoveAromaticSystems {
                 removes: removes
@@ -1058,7 +1066,7 @@ impl Edit {
             }
             Self::AddMulticenterBond { atoms, ast } => GraphIrEdit::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                ast: ast.bind(py).borrow().inner().clone(),
+                attributes: ast.bind(py).borrow().inner().clone(),
             },
             Self::RemoveMulticenterBonds { removes } => GraphIrEdit::RemoveMulticenterBonds {
                 removes: removes
@@ -1080,7 +1088,7 @@ impl Edit {
             }
             Self::AddNoncovalentBond { atoms, ast } => GraphIrEdit::AddNoncovalentBond {
                 atoms: [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                ast: ast.bind(py).borrow().inner().clone(),
+                attributes: ast.bind(py).borrow().inner().clone(),
             },
             Self::RemoveNoncovalentBonds { removes } => GraphIrEdit::RemoveNoncovalentBonds {
                 removes: removes
@@ -1106,7 +1114,7 @@ impl Edit {
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                ast: ast.bind(py).borrow().inner().clone(),
+                attributes: ast.bind(py).borrow().inner().clone(),
             },
             Self::RemoveStereoAtoms { removes } => GraphIrEdit::RemoveStereoAtoms {
                 removes: removes
@@ -1135,7 +1143,7 @@ impl Edit {
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                ast: ast.bind(py).borrow().inner().clone(),
+                attributes: ast.bind(py).borrow().inner().clone(),
             },
             Self::RemoveStereoBonds { removes } => GraphIrEdit::RemoveStereoBonds {
                 removes: removes
@@ -1387,7 +1395,7 @@ impl Edits {
                     .into_iter()
                     .map(|((first, second), ast)| GraphIrAddBond {
                         endpoints: [first.to_atom_handle(), second.to_atom_handle()],
-                        ast: ast.bind(py).borrow().inner().clone(),
+                        attributes: ast.bind(py).borrow().inner().clone(),
                     }),
             )
             .into_iter()
@@ -1947,7 +1955,7 @@ mod tests {
         GraphIrEdit::AddAtoms { atoms: vec![GraphIrAtomForm::default()] },
         GraphIrEdit::AddBonds { bonds: vec![GraphIrAddBond {
             endpoints: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrBondForm::default(),
+            attributes: GraphIrBondForm::default(),
         }] },
         GraphIrEdit::RemoveTopology {
             atoms: vec![GraphIrAtomHandle::New(0)],
@@ -1969,7 +1977,7 @@ mod tests {
         },
         GraphIrEdit::AddDativeBond {
             atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrDativeBondForm::default(),
+            attributes: GraphIrDativeBondForm::default(),
         },
         GraphIrEdit::RemoveDativeBonds { removes: vec![(
             GraphIrDativeBondHandle::New(0),
@@ -1985,7 +1993,7 @@ mod tests {
         },
         GraphIrEdit::AddAromaticSystem {
             atoms: vec![GraphIrAtomHandle::New(0)],
-            ast: GraphIrAromaticSystemForm::default(),
+            attributes: GraphIrAromaticSystemForm::default(),
         },
         GraphIrEdit::RemoveAromaticSystems { removes: vec![(
             GraphIrAromaticSystemHandle::Id(GraphIrAromaticSystemId(0)),
@@ -2001,7 +2009,7 @@ mod tests {
         },
         GraphIrEdit::AddMulticenterBond {
             atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrMulticenterBondForm::default(),
+            attributes: GraphIrMulticenterBondForm::default(),
         },
         GraphIrEdit::RemoveMulticenterBonds { removes: vec![(
             GraphIrMulticenterBondHandle::New(0),
@@ -2017,7 +2025,7 @@ mod tests {
         },
         GraphIrEdit::AddNoncovalentBond {
             atoms: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
-            ast: GraphIrNoncovalentBondForm::default(),
+            attributes: GraphIrNoncovalentBondForm::default(),
         },
         GraphIrEdit::RemoveNoncovalentBonds { removes: vec![(
             GraphIrNoncovalentBondHandle::New(0),
@@ -2034,7 +2042,7 @@ mod tests {
         GraphIrEdit::AddStereoAtom {
             site: GraphIrAtomHandle::New(0),
             ligands: vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::Atom)],
-            ast: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, 0_u32),
+            attributes: GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, 0_u32),
         },
         GraphIrEdit::RemoveStereoAtoms { removes: vec![(
             GraphIrStereoAtomHandle::Id(GraphIrStereoAtomId(0)),
@@ -2052,7 +2060,7 @@ mod tests {
         GraphIrEdit::AddStereoBond {
             site: GraphIrBondHandle::Id(GraphIrBondId(0)),
             ligands: vec![(GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::LonePair)],
-            ast: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, 0_u32),
+            attributes: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, 0_u32),
         },
         GraphIrEdit::RemoveStereoBonds { removes: vec![(
             GraphIrStereoBondHandle::New(0),

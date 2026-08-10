@@ -62,7 +62,7 @@ proptest! {
                                 AtomHandle::Id(AtomId(0)),
                                 AtomHandle::Id(AtomId(1)),
                             ],
-                            ast: BondForm::default(),
+                            attributes: BondForm::default(),
                         }],
                     });
                 }
@@ -71,7 +71,7 @@ proptest! {
                     direct.add_dative_bond(Vec::new(), DativeBondForm::default());
                     entries.push(Edit::AddDativeBond {
                         atoms: Vec::new(),
-                        ast: DativeBondForm::default(),
+                        attributes: DativeBondForm::default(),
                     });
                 }
                 EntityKind::AromaticSystem => {
@@ -79,7 +79,7 @@ proptest! {
                     direct.add_aromatic_system(Vec::new(), AromaticSystemForm::default());
                     entries.push(Edit::AddAromaticSystem {
                         atoms: Vec::new(),
-                        ast: AromaticSystemForm::default(),
+                        attributes: AromaticSystemForm::default(),
                     });
                 }
                 EntityKind::MulticenterBond => {
@@ -87,7 +87,7 @@ proptest! {
                     direct.add_multicenter_bond(Vec::new(), MulticenterBondForm::default());
                     entries.push(Edit::AddMulticenterBond {
                         atoms: Vec::new(),
-                        ast: MulticenterBondForm::default(),
+                        attributes: MulticenterBondForm::default(),
                     });
                 }
                 EntityKind::NoncovalentBond => {
@@ -98,7 +98,7 @@ proptest! {
                     );
                     entries.push(Edit::AddNoncovalentBond {
                         atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        ast: NoncovalentBondForm::default(),
+                        attributes: NoncovalentBondForm::default(),
                     });
                 }
                 EntityKind::StereoAtom => {
@@ -111,7 +111,7 @@ proptest! {
                     entries.push(Edit::AddStereoAtom {
                         site: AtomHandle::Id(AtomId(0)),
                         ligands: Vec::new(),
-                        ast: StereoAtomForm::new(
+                        attributes: StereoAtomForm::new(
                             StereoKind::Tetrahedral,
                             StereoCoset::Lit(0),
                         ),
@@ -127,7 +127,7 @@ proptest! {
                     entries.push(Edit::AddStereoBond {
                         site: BondHandle::Id(BondId(0)),
                         ligands: Vec::new(),
-                        ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                        attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                     });
                 }
             }
@@ -424,38 +424,38 @@ proptest! {
             .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
 
         if kinds.contains(&EntityKind::Atom) {
-            prop_assert_eq!(&editor.atom(AtomId(4)).ast.charge, &NumForm::Lit(1));
+            prop_assert_eq!(&editor.atom(AtomId(4)).attributes.charge, &NumForm::Lit(1));
         }
         if kinds.contains(&EntityKind::Bond) {
-            prop_assert_eq!(&editor.bond(BondId(1)).ast.order, &NumForm::Lit(2));
+            prop_assert_eq!(&editor.bond(BondId(1)).attributes.order, &NumForm::Lit(2));
         }
         if kinds.contains(&EntityKind::DativeBond) {
             prop_assert_eq!(
-                &editor.dative_bond(DativeBondId(0)).ast.order,
+                &editor.dative_bond(DativeBondId(0)).attributes.order,
                 &NumForm::Lit(2),
             );
         }
         if kinds.contains(&EntityKind::AromaticSystem) {
             prop_assert_eq!(
-                &editor.aromatic_system(AromaticSystemId(0)).ast.charge,
+                &editor.aromatic_system(AromaticSystemId(0)).attributes.charge,
                 &NumForm::Lit(1),
             );
         }
         if kinds.contains(&EntityKind::MulticenterBond) {
             prop_assert_eq!(
-                &editor.multicenter_bond(MulticenterBondId(0)).ast.charge,
+                &editor.multicenter_bond(MulticenterBondId(0)).attributes.charge,
                 &NumForm::Lit(-1),
             );
         }
         if kinds.contains(&EntityKind::NoncovalentBond) {
             prop_assert_eq!(
-                &editor.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
+                &editor.noncovalent_bond(NoncovalentBondId(0)).attributes.kind,
                 &NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
             );
         }
         if kinds.contains(&EntityKind::StereoAtom) {
             prop_assert_eq!(
-                &editor.stereo_atom(StereoAtomId(0)).ast.configuration,
+                &editor.stereo_atom(StereoAtomId(0)).attributes.configuration,
                 &StereoConfigurationForm::kinded(
                     StereoKind::Tetrahedral,
                     StereoCoset::Lit(0),
@@ -464,7 +464,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::StereoBond) {
             prop_assert_eq!(
-                &editor.stereo_bond(StereoBondId(0)).ast.configuration,
+                &editor.stereo_bond(StereoBondId(0)).attributes.configuration,
                 &StereoConfigurationForm::kinded(
                     StereoKind::CisTrans,
                     StereoCoset::Lit(0),
@@ -514,22 +514,22 @@ proptest! {
         let mut a = ast;
         a.lift_constraints();
         for view in a.atoms().iter() {
-            prop_assert!(view.ast.constraints.is_empty());
+            prop_assert!(view.attributes.constraints.is_empty());
         }
         for view in a.bonds().iter() {
-            prop_assert!(view.ast.constraints.is_empty());
+            prop_assert!(view.attributes.constraints.is_empty());
         }
         for view in a.dative_bonds().iter() {
-            prop_assert!(view.ast.constraints.is_empty());
+            prop_assert!(view.attributes.constraints.is_empty());
         }
         for view in a.aromatic_systems().iter() {
-            prop_assert!(view.ast.constraints.is_empty());
+            prop_assert!(view.attributes.constraints.is_empty());
         }
         for view in a.multicenter_bonds().iter() {
-            prop_assert!(view.ast.constraints.is_empty());
+            prop_assert!(view.attributes.constraints.is_empty());
         }
         for view in a.noncovalent_bonds().iter() {
-            prop_assert!(view.ast.constraints.is_empty());
+            prop_assert!(view.attributes.constraints.is_empty());
         }
     }
 
@@ -811,31 +811,31 @@ proptest! {
 
         for (id, key) in atom_keys {
             prop_assert!(
-                a.atom(id).ast.constraints.contains(key),
+                a.atom(id).attributes.constraints.contains(key),
                 "atom {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in bond_keys {
             prop_assert!(
-                a.bond(id).ast.constraints.contains(key),
+                a.bond(id).attributes.constraints.contains(key),
                 "bond {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in dative_keys {
             prop_assert!(
-                a.dative_bond(id).ast.constraints.contains(key),
+                a.dative_bond(id).attributes.constraints.contains(key),
                 "dative bond {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in aromatic_keys {
             prop_assert!(
-                a.aromatic_system(id).ast.constraints.contains(key),
+                a.aromatic_system(id).attributes.constraints.contains(key),
                 "aromatic system {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in multicenter_keys {
             prop_assert!(
-                a.multicenter_bond(id).ast.constraints.contains(key),
+                a.multicenter_bond(id).attributes.constraints.contains(key),
                 "multicenter bond {id:?} missing key {key:?} after inline",
             );
         }

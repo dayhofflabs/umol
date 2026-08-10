@@ -145,7 +145,7 @@ mod tests {
         let (mut lhs, rhs, comap) = derivation_parts;
         let expected = lhs.clone();
         let derivation = ReactionDerivation::new(lhs.clone(), rhs, comap);
-        *lhs.atom_mut(AtomId(0)).ast = AtomForm::from_element(Element::N);
+        *lhs.atom_mut(AtomId(0)).attributes = AtomForm::from_element(Element::N);
         assert_eq!(derivation.lhs(), &expected);
     }
 

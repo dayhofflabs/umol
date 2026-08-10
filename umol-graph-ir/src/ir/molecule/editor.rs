@@ -754,9 +754,12 @@ impl MoleculeEditor {
         &mut self,
         site: AtomId,
         ligands: Vec<StereoLigand>,
-        ast: StereoAtomForm,
+        attributes: StereoAtomForm,
     ) -> StereoAtomId {
-        StereoAtomId(self.stereo_atoms.push([NodeId::from(site)], ligands, ast))
+        StereoAtomId(
+            self.stereo_atoms
+                .push([NodeId::from(site)], ligands, attributes),
+        )
     }
 
     /// Append a stereo-bond overlay directly to the editor.
@@ -764,9 +767,12 @@ impl MoleculeEditor {
         &mut self,
         site: BondId,
         ligands: Vec<StereoLigand>,
-        ast: StereoBondForm,
+        attributes: StereoBondForm,
     ) -> StereoBondId {
-        StereoBondId(self.stereo_bonds.push([EdgeId::from(site)], ligands, ast))
+        StereoBondId(
+            self.stereo_bonds
+                .push([EdgeId::from(site)], ligands, attributes),
+        )
     }
 
     /// Add a molecule-level constraint (molecule-scope predicate or
@@ -784,13 +790,13 @@ impl MoleculeEditor {
     pub fn atom(&self, id: AtomId) -> AtomEditorView<'_> {
         AtomEditorView {
             id,
-            ast: &self.atoms[id.index()],
+            attributes: &self.atoms[id.index()],
         }
     }
 
     pub fn atom_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
-        let ast = &mut Arc::make_mut(&mut self.atoms)[id.index()];
-        AtomEditorViewMut { id, ast }
+        let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
+        AtomEditorViewMut { id, attributes }
     }
 
     pub fn bond(&self, id: BondId) -> BondEditorView<'_> {
@@ -798,7 +804,7 @@ impl MoleculeEditor {
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
         BondEditorView {
             id,
-            ast: &self.bonds[id.index()],
+            attributes: &self.bonds[id.index()],
             atoms,
         }
     }
@@ -806,8 +812,12 @@ impl MoleculeEditor {
     pub fn bond_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
         let endpoints = self.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
-        let ast = &mut Arc::make_mut(&mut self.bonds)[id.index()];
-        BondEditorViewMut { id, ast, atoms }
+        let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
+        BondEditorViewMut {
+            id,
+            attributes,
+            atoms,
+        }
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondEditorView<'_> {
@@ -892,7 +902,7 @@ impl MoleculeEditor {
                 let parts = arc.participants(rid);
                 NoncovalentBondEditorView {
                     id,
-                    ast: arc.data(rid),
+                    attributes: arc.data(rid),
                     atoms: [AtomId::from(parts[0]), AtomId::from(parts[1])],
                 }
             }
@@ -900,7 +910,7 @@ impl MoleculeEditor {
                 let entry = &vec[id.index()];
                 NoncovalentBondEditorView {
                     id,
-                    ast: &entry.1,
+                    attributes: &entry.1,
                     atoms: [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])],
                 }
             }
@@ -919,7 +929,7 @@ impl MoleculeEditor {
         let atoms = [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])];
         NoncovalentBondEditorViewMut {
             id,
-            ast: &mut entry.1,
+            attributes: &mut entry.1,
             atoms,
         }
     }
@@ -930,7 +940,7 @@ impl MoleculeEditor {
                 let rid = RelationId(id.0);
                 StereoAtomEditorView {
                     id,
-                    ast: arc.data(rid),
+                    attributes: arc.data(rid),
                     site: AtomId::from(arc.participants_1(rid)[0]),
                     ligands: arc.participants_2(rid),
                 }
@@ -939,7 +949,7 @@ impl MoleculeEditor {
                 let entry = &vec[id.index()];
                 StereoAtomEditorView {
                     id,
-                    ast: &entry.2,
+                    attributes: &entry.2,
                     site: AtomId::from(entry.0[0]),
                     ligands: &entry.1,
                 }
@@ -953,7 +963,7 @@ impl MoleculeEditor {
                 let rid = RelationId(id.0);
                 StereoBondEditorView {
                     id,
-                    ast: arc.data(rid),
+                    attributes: arc.data(rid),
                     site: BondId::from(arc.participants_1(rid)[0]),
                     ligands: arc.participants_2(rid),
                 }
@@ -962,7 +972,7 @@ impl MoleculeEditor {
                 let entry = &vec[id.index()];
                 StereoBondEditorView {
                     id,
-                    ast: &entry.2,
+                    attributes: &entry.2,
                     site: BondId::from(entry.0[0]),
                     ligands: &entry.1,
                 }
@@ -970,84 +980,96 @@ impl MoleculeEditor {
         }
     }
 
-    /// `true` iff noncovalent bond `id` structurally equals `(atoms, ast)` — participants (unordered)
-    /// and `ast` up to canonical form, `ast` reindexed into the stored participant frame.
+    /// `true` iff noncovalent bond `id` structurally equals `(atoms, attributes)` — participants (unordered)
+    /// and `attributes` up to canonical form, `attributes` reindexed into the stored participant frame.
     pub(crate) fn noncovalent_bond_equiv(
         &self,
         id: NoncovalentBondId,
         atoms: [AtomId; 2],
-        ast: &NoncovalentBondForm,
+        attributes: &NoncovalentBondForm,
     ) -> bool {
         self.noncovalent_bonds
             .participant_permutation(id.index(), &atoms.map(NodeId::from))
-            .is_some_and(|sigma| ast.equiv_under(&self.noncovalent_bonds.data(id.index()), &sigma))
+            .is_some_and(|sigma| {
+                attributes.equiv_under(&self.noncovalent_bonds.data(id.index()), &sigma)
+            })
     }
 
-    /// `true` iff aromatic system `id` structurally equals `(atoms, ast)`.
+    /// `true` iff aromatic system `id` structurally equals `(atoms, attributes)`.
     pub(crate) fn aromatic_system_equiv(
         &self,
         id: AromaticSystemId,
         atoms: &[AtomId],
-        ast: &AromaticSystemForm,
+        attributes: &AromaticSystemForm,
     ) -> bool {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.aromatic_systems
             .participant_permutation(id.index(), &nodes)
-            .is_some_and(|sigma| ast.equiv_under(&self.aromatic_systems.data(id.index()), &sigma))
+            .is_some_and(|sigma| {
+                attributes.equiv_under(&self.aromatic_systems.data(id.index()), &sigma)
+            })
     }
 
-    /// `true` iff multicenter bond `id` structurally equals `(atoms, ast)`.
+    /// `true` iff multicenter bond `id` structurally equals `(atoms, attributes)`.
     pub(crate) fn multicenter_bond_equiv(
         &self,
         id: MulticenterBondId,
         atoms: &[AtomId],
-        ast: &MulticenterBondForm,
+        attributes: &MulticenterBondForm,
     ) -> bool {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.multicenter_bonds
             .participant_permutation(id.index(), &nodes)
-            .is_some_and(|sigma| ast.equiv_under(&self.multicenter_bonds.data(id.index()), &sigma))
+            .is_some_and(|sigma| {
+                attributes.equiv_under(&self.multicenter_bonds.data(id.index()), &sigma)
+            })
     }
 
-    /// `true` iff dative bond `id` structurally equals `(acceptor, donors, ast)` — the acceptor
-    /// (ordered, single) and donors (unordered) factors and `ast` up to canonical form.
+    /// `true` iff dative bond `id` structurally equals `(acceptor, donors, attributes)` — the acceptor
+    /// (ordered, single) and donors (unordered) factors and `attributes` up to canonical form.
     pub(crate) fn dative_bond_equiv(
         &self,
         id: DativeBondId,
         acceptor: AtomId,
         donors: &[AtomId],
-        ast: &DativeBondForm,
+        attributes: &DativeBondForm,
     ) -> bool {
         let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
             .participant_permutation(id.index(), &[NodeId::from(acceptor)], &donor_nodes)
-            .is_some_and(|(s1, s2)| ast.equiv_under(&self.dative_bonds.data(id.index()), &s1, &s2))
+            .is_some_and(|(s1, s2)| {
+                attributes.equiv_under(&self.dative_bonds.data(id.index()), &s1, &s2)
+            })
     }
 
-    /// `true` iff stereo atom `id` structurally equals `(site, ligands, ast)`.
+    /// `true` iff stereo atom `id` structurally equals `(site, ligands, attributes)`.
     pub(crate) fn stereo_atom_equiv(
         &self,
         id: StereoAtomId,
         site: AtomId,
         ligands: &[StereoLigand],
-        ast: &StereoAtomForm,
+        attributes: &StereoAtomForm,
     ) -> bool {
         self.stereo_atoms
             .participant_permutation(id.index(), &[NodeId::from(site)], ligands)
-            .is_some_and(|(s1, s2)| ast.equiv_under(&self.stereo_atoms.data(id.index()), &s1, &s2))
+            .is_some_and(|(s1, s2)| {
+                attributes.equiv_under(&self.stereo_atoms.data(id.index()), &s1, &s2)
+            })
     }
 
-    /// `true` iff stereo bond `id` structurally equals `(site, ligands, ast)`.
+    /// `true` iff stereo bond `id` structurally equals `(site, ligands, attributes)`.
     pub(crate) fn stereo_bond_equiv(
         &self,
         id: StereoBondId,
         site: BondId,
         ligands: &[StereoLigand],
-        ast: &StereoBondForm,
+        attributes: &StereoBondForm,
     ) -> bool {
         self.stereo_bonds
             .participant_permutation(id.index(), &[EdgeId::from(site)], ligands)
-            .is_some_and(|(s1, s2)| ast.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2))
+            .is_some_and(|(s1, s2)| {
+                attributes.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2)
+            })
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
@@ -1059,7 +1081,7 @@ impl MoleculeEditor {
         let site = AtomId::from(entry.0[0]);
         StereoAtomEditorViewMut {
             id,
-            ast: &mut entry.2,
+            attributes: &mut entry.2,
             site,
             ligands: &entry.1,
         }
@@ -1074,7 +1096,7 @@ impl MoleculeEditor {
         let site = BondId::from(entry.0[0]);
         StereoBondEditorViewMut {
             id,
-            ast: &mut entry.2,
+            attributes: &mut entry.2,
             site,
             ligands: &entry.1,
         }
@@ -1371,7 +1393,7 @@ impl MoleculeEditor {
     fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_compaction: &UndoCompaction) {
         let mut next = vec![None; self.atoms.len() + removed.len()];
         for removed in removed {
-            next[removed.id.index()] = Some(removed.ast);
+            next[removed.id.index()] = Some(removed.attributes);
         }
         for (idx, atom) in self.atoms.iter().cloned().enumerate() {
             let old = undo_compaction.uncompact_atom(AtomId(idx as u32));
@@ -1386,7 +1408,7 @@ impl MoleculeEditor {
         let mut old_bonds: Vec<Option<BondForm>> = vec![None; self.bonds.len() + removed.len()];
         for removed in removed {
             old_endpoints[removed.id.index()] = Some(removed.endpoints);
-            old_bonds[removed.id.index()] = Some(removed.ast);
+            old_bonds[removed.id.index()] = Some(removed.attributes);
         }
         for (idx, bond) in self.bonds.iter().cloned().enumerate() {
             let old_id = undo_compaction.uncompact_bond(BondId(idx as u32));
@@ -1429,7 +1451,7 @@ impl MoleculeEditor {
             next[removed.id.index()] = Some((
                 [NodeId::from(*acceptor)],
                 donors.iter().map(|&a| NodeId::from(a)).collect(),
-                removed.ast,
+                removed.attributes,
             ));
         }
         self.dative_bonds =
@@ -1450,7 +1472,7 @@ impl MoleculeEditor {
         for removed in removed {
             next[removed.id.index()] = Some((
                 removed.atoms.into_iter().map(NodeId::from).collect(),
-                removed.ast,
+                removed.attributes,
             ));
         }
         self.aromatic_systems =
@@ -1471,7 +1493,7 @@ impl MoleculeEditor {
         for removed in removed {
             next[removed.id.index()] = Some((
                 removed.atoms.into_iter().map(NodeId::from).collect(),
-                removed.ast,
+                removed.attributes,
             ));
         }
         self.multicenter_bonds =
@@ -1495,7 +1517,7 @@ impl MoleculeEditor {
                     NodeId::from(removed.atoms[0]),
                     NodeId::from(removed.atoms[1]),
                 ],
-                removed.ast,
+                removed.attributes,
             ));
         }
         self.noncovalent_bonds =
@@ -1515,8 +1537,11 @@ impl MoleculeEditor {
             next[old_id.index()] = Some((site, ligands, data));
         }
         for removed in removed {
-            next[removed.id.index()] =
-                Some(([NodeId::from(removed.site)], removed.ligands, removed.ast));
+            next[removed.id.index()] = Some((
+                [NodeId::from(removed.site)],
+                removed.ligands,
+                removed.attributes,
+            ));
         }
         self.stereo_atoms =
             FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
@@ -1535,8 +1560,11 @@ impl MoleculeEditor {
             next[old_id.index()] = Some((site, ligands, data));
         }
         for removed in removed {
-            next[removed.id.index()] =
-                Some(([EdgeId::from(removed.site)], removed.ligands, removed.ast));
+            next[removed.id.index()] = Some((
+                [EdgeId::from(removed.site)],
+                removed.ligands,
+                removed.attributes,
+            ));
         }
         self.stereo_bonds =
             FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
@@ -1681,18 +1709,18 @@ mod tests {
         let expected = triatomic.clone().build();
         let removed_atoms = vec![RemovedAtom {
             id: AtomId(1),
-            ast: triatomic.atom(AtomId(1)).ast.clone(),
+            attributes: triatomic.atom(AtomId(1)).attributes.clone(),
         }];
         let removed_bonds = vec![
             RemovedBond {
                 id: BondId(0),
                 endpoints: triatomic.bond(BondId(0)).atoms,
-                ast: triatomic.bond(BondId(0)).ast.clone(),
+                attributes: triatomic.bond(BondId(0)).attributes.clone(),
             },
             RemovedBond {
                 id: BondId(1),
                 endpoints: triatomic.bond(BondId(1)).atoms,
-                ast: triatomic.bond(BondId(1)).ast.clone(),
+                attributes: triatomic.bond(BondId(1)).attributes.clone(),
             },
         ];
 
@@ -1712,12 +1740,12 @@ mod tests {
         let expected = triatomic.clone().build();
         let added_atom = AddedAtom {
             id: triatomic.add_atom(AtomForm::from_element(Element::F)),
-            ast: AtomForm::from_element(Element::F),
+            attributes: AtomForm::from_element(Element::F),
         };
         let added_bond = AddedBond {
             id: triatomic.add_bond(AtomId(2), added_atom.id, BondForm::from_order(1)),
             endpoints: [AtomId(2), added_atom.id],
-            ast: BondForm::from_order(1),
+            attributes: BondForm::from_order(1),
         };
 
         triatomic.remove_added_topology(&[added_atom], &[added_bond]);
@@ -1737,7 +1765,7 @@ mod tests {
         let removed = RemovedDativeBond {
             id: DativeBondId(0),
             atoms: view.atom_ids().collect(),
-            ast: view.ast.clone(),
+            attributes: view.attributes.clone(),
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
@@ -1770,16 +1798,16 @@ mod tests {
         );
     }
 
-    // `edit()` → `build()` reproduces the AST including both stereo overlays.
+    // `edit()` → `build()` reproduces the molecule including both stereo overlays.
     #[rstest]
     fn test_molecule_editor_build() {
-        let ast = mol_dsl!(
+        let molecule = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "F" "Cl"]
                 :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
                 :stereo-atoms [{:site 0 :ligands [1 3 4] :type "Th1"}]
                 :stereo-bonds [{:site 1 :ligands [0 2] :type "Ct1"}]}"#
         );
-        assert_eq!(ast.edit().build(), ast);
+        assert_eq!(molecule.edit().build(), molecule);
     }
 
     // `remove` forward-compacts stereo-atom node refs: removing a non-participant
@@ -1791,12 +1819,12 @@ mod tests {
         #[case] remove_atoms: Vec<AtomId>,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
-        let ast = mol_dsl!(
+        let molecule = mol_dsl!(
             r#"{:atoms ["C" "C" "F" "Cl" "Br"]
                 :bonds [[1 2 "1"] [1 3 "1"] [1 4 "1"]]
                 :stereo-atoms [{:site 1 :ligands [2 3 4] :type "Th1"}]}"#
         );
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.remove(&remove_atoms, &[]);
         let surviving: Vec<Vec<AtomId>> = editor
             .build()
@@ -1816,12 +1844,12 @@ mod tests {
         #[case] remove_bonds: Vec<BondId>,
         #[case] expected: Vec<BondId>,
     ) {
-        let ast = mol_dsl!(
+        let molecule = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "C"]
                 :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
                 :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
         );
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.remove(&[], &remove_bonds);
         let surviving: Vec<BondId> = editor
             .build()

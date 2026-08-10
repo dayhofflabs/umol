@@ -999,7 +999,7 @@ macro_rules! stereo_constraints {
                             .$namespace()
                             .get(*id)
                             .ok_or_else(|| PyIndexError::new_err($id_error))?;
-                        f(&view.ast.constraints)
+                        f(&view.attributes.constraints)
                     }
                     $backing::Value(entity) => {
                         let entity = entity.bind(py).borrow();
@@ -1019,7 +1019,7 @@ macro_rules! stereo_constraints {
                         .borrow_mut(py)
                         .inner_mut()
                         .$entity_mut(*id)
-                        .ast
+                        .attributes
                         .constraints),
                     $backing::Value(entity) => {
                         f(&mut entity.borrow_mut(py).inner_mut().constraints)

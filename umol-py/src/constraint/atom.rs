@@ -1178,7 +1178,7 @@ impl AtomConstraintsView {
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
-                f(&view.ast.constraints)
+                f(&view.attributes.constraints)
             }
             AtomConstraintsBacking::Atom(atom) => {
                 let atom = atom.bind(py).borrow();
@@ -1198,7 +1198,7 @@ impl AtomConstraintsView {
                 .borrow_mut(py)
                 .inner_mut()
                 .atom_mut(*id)
-                .ast
+                .attributes
                 .constraints),
             AtomConstraintsBacking::Atom(atom) => {
                 f(&mut atom.borrow_mut(py).inner_mut().constraints)
@@ -1643,7 +1643,7 @@ impl AtomRingSizeCounts {
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
-                f(&view.ast.constraints)
+                f(&view.attributes.constraints)
             }
             AtomRingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().inner().constraints),
             AtomRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
@@ -1657,7 +1657,7 @@ impl AtomRingSizeCounts {
                 .borrow_mut(py)
                 .inner_mut()
                 .atom_mut(*id)
-                .ast
+                .attributes
                 .constraints),
             AtomRingSizeBacking::Atom(atom) => f(&mut atom.borrow_mut(py).inner_mut().constraints),
             AtomRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),

@@ -335,10 +335,10 @@ mod tests {
         true
     )]
     fn test_noncovalent_bond_form_is_ground(
-        #[case] ast: NoncovalentBondForm,
+        #[case] form: NoncovalentBondForm,
         #[case] expected: bool,
     ) {
-        assert_eq!(ast.is_ground(), expected);
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rstest]
@@ -398,11 +398,11 @@ mod tests {
     #[case::lit(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HalogenBond), Some(NoncovalentBondKind::HalogenBond))]
     #[case::undetermined(NoncovalentBondKindForm::Undetermined, None)]
     fn test_noncovalent_bond_kind_form_as_lit(
-        #[case] ast: NoncovalentBondKindForm,
+        #[case] form: NoncovalentBondKindForm,
         #[case] expected: Option<NoncovalentBondKind>,
     ) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
+        assert_eq!(form.as_lit(), expected);
+        assert_eq!(form.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -410,10 +410,10 @@ mod tests {
     #[case::undetermined(NoncovalentBondKindForm::Undetermined, true)]
     #[case::lit(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), false)]
     fn test_noncovalent_bond_kind_form_is_undetermined(
-        #[case] ast: NoncovalentBondKindForm,
+        #[case] form: NoncovalentBondKindForm,
         #[case] expected: bool,
     ) {
-        assert_eq!(ast.is_undetermined(), expected);
+        assert_eq!(form.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]

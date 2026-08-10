@@ -68,7 +68,7 @@ impl HmoAromaticity {
             .atoms()
             .iter()
             .filter_map(|view| {
-                let element = match view.ast.element {
+                let element = match view.attributes.element {
                     ElementForm::Lit(e) => e,
                     _ => return None,
                 };
@@ -151,7 +151,7 @@ impl HmoAromaticity {
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(n);
         for (i, &atom) in pi_atoms.iter().enumerate() {
             let view = ast.atom(atom);
-            let element = match view.ast.element {
+            let element = match view.attributes.element {
                 ElementForm::Lit(e) => e,
                 _ => {
                     return Err(HmoError::UndeterminedAtom(
@@ -365,7 +365,7 @@ mod tests {
         let atoms: Vec<AtomId> = ast.atoms().ids().collect();
         model
             .build_calculator(ast, &atoms, &|v| match v
-                .ast
+                .attributes
                 .constraints
                 .aromatic_valence()
                 .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -513,7 +513,7 @@ mod tests {
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,
                 &|v| match v
-                    .ast
+                    .attributes
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -558,7 +558,7 @@ mod tests {
         let atoms: Vec<AtomId> = pyridine.atoms().ids().collect();
         let calc = hmo_model
             .build_calculator(&pyridine, &atoms, &|v| match v
-                .ast
+                .attributes
                 .constraints
                 .aromatic_valence()
                 .unwrap_or(&AromaticValenceForm::Undetermined)

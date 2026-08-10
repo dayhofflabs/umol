@@ -92,15 +92,15 @@ impl MoleculeBuilder {
     }
 
     /// Add a dative bond from `donors` to `acceptor` — its own family, not a bond order. Carries
-    /// `ast` (a `DativeBondForm` or a DSL spec string).
+    /// `attributes` (a `DativeBondForm` or a DSL spec string).
     pub fn dative_bond(
         &mut self,
         donors: impl IntoIterator<Item = AtomId>,
         acceptor: AtomId,
-        ast: impl Into<DativeBondForm>,
+        attributes: impl Into<DativeBondForm>,
     ) -> DativeBondId {
         self.editor
-            .add_dative_bond(donors.into_iter().collect(), acceptor, ast.into())
+            .add_dative_bond(donors.into_iter().collect(), acceptor, attributes.into())
     }
 
     /// Wire `atoms` into a path of single bonds (each consecutive pair). Returns the
@@ -124,63 +124,63 @@ impl MoleculeBuilder {
         bonds
     }
 
-    /// Add an aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemForm` — e.g.
+    /// Add an aromatic-system overlay over `atoms`, carrying `attributes` (an `AromaticSystemForm` — e.g.
     /// `from_electrons([1, 1, 1, 1, 1, 1])` for benzene — or a DSL spec string). The σ-framework is
     /// separate — add those bonds with the bond verbs.
     pub fn aromatic_system(
         &mut self,
         atoms: impl IntoIterator<Item = AtomId>,
-        ast: impl Into<AromaticSystemForm>,
+        attributes: impl Into<AromaticSystemForm>,
     ) -> AromaticSystemId {
         self.editor
-            .add_aromatic_system(atoms.into_iter().collect(), ast.into())
+            .add_aromatic_system(atoms.into_iter().collect(), attributes.into())
     }
 
-    /// Add a multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondForm` or a DSL
+    /// Add a multicenter-bond overlay over `atoms`, carrying `attributes` (a `MulticenterBondForm` or a DSL
     /// spec string).
     pub fn multicenter_bond(
         &mut self,
         atoms: impl IntoIterator<Item = AtomId>,
-        ast: impl Into<MulticenterBondForm>,
+        attributes: impl Into<MulticenterBondForm>,
     ) -> MulticenterBondId {
         self.editor
-            .add_multicenter_bond(atoms.into_iter().collect(), ast.into())
+            .add_multicenter_bond(atoms.into_iter().collect(), attributes.into())
     }
 
-    /// Add a noncovalent-bond overlay between `first` and `second`, carrying `ast` (a
+    /// Add a noncovalent-bond overlay between `first` and `second`, carrying `attributes` (a
     /// `NoncovalentBondForm` — e.g. `from_kind(...)` — or a DSL spec string).
     pub fn noncovalent_bond(
         &mut self,
         first: AtomId,
         second: AtomId,
-        ast: impl Into<NoncovalentBondForm>,
+        attributes: impl Into<NoncovalentBondForm>,
     ) -> NoncovalentBondId {
         self.editor
-            .add_noncovalent_bond([first, second], ast.into())
+            .add_noncovalent_bond([first, second], attributes.into())
     }
 
     /// Add a stereo-atom overlay: an atom `site` with its ordered `ligands` and a configuration
-    /// `ast`. Delegates to the editor's `add_stereo_atom`.
+    /// `attributes`. Delegates to the editor's `add_stereo_atom`.
     pub fn stereo_atom(
         &mut self,
         site: AtomId,
         ligands: impl IntoIterator<Item = StereoLigand>,
-        ast: impl Into<StereoAtomForm>,
+        attributes: impl Into<StereoAtomForm>,
     ) -> StereoAtomId {
         self.editor
-            .add_stereo_atom(site, ligands.into_iter().collect(), ast.into())
+            .add_stereo_atom(site, ligands.into_iter().collect(), attributes.into())
     }
 
     /// Add a stereo-bond overlay: a bond `site` with its ordered `ligands` and a configuration
-    /// `ast`. Delegates to the editor's `add_stereo_bond`.
+    /// `attributes`. Delegates to the editor's `add_stereo_bond`.
     pub fn stereo_bond(
         &mut self,
         site: BondId,
         ligands: impl IntoIterator<Item = StereoLigand>,
-        ast: impl Into<StereoBondForm>,
+        attributes: impl Into<StereoBondForm>,
     ) -> StereoBondId {
         self.editor
-            .add_stereo_bond(site, ligands.into_iter().collect(), ast.into())
+            .add_stereo_bond(site, ligands.into_iter().collect(), attributes.into())
     }
 
     /// Finalize into a `Molecule`. Unspecified atom fields stay open for resolution.
@@ -218,8 +218,8 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 3);
         assert_eq!(mol.bonds().count(), 2);
-        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(1));
-        assert_eq!(mol.bond(BondId(1)).ast, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(1));
+        assert_eq!(mol.bond(BondId(1)).attributes, &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -233,9 +233,12 @@ mod tests {
         let atom = builder.atom(spec);
         let mol = builder.build();
 
-        assert_eq!(mol.atom(atom).ast.charge, expected_charge);
+        assert_eq!(mol.atom(atom).attributes.charge, expected_charge);
         // an unspecified field is grounded regardless of the preset charge
-        assert_eq!(mol.atom(atom).ast.implicit_hydrogens, NumForm::Lit(0));
+        assert_eq!(
+            mol.atom(atom).attributes.implicit_hydrogens,
+            NumForm::Lit(0)
+        );
     }
 
     #[rstest]
@@ -249,7 +252,7 @@ mod tests {
 
         assert_eq!(bond, BondId(0));
         assert_eq!(
-            mol.bond(bond).ast,
+            mol.bond(bond).attributes,
             &BondForm::from_order(2).with_charge(-1_i64)
         );
     }
@@ -264,7 +267,7 @@ mod tests {
 
         assert_eq!(bond, BondId(0));
         assert_eq!(
-            mol.bond(bond).ast,
+            mol.bond(bond).attributes,
             &BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true))
         );
     }
@@ -322,7 +325,7 @@ mod tests {
         assert_eq!(system, AromaticSystemId(0));
         assert_eq!(mol.aromatic_systems().count(), 1);
         assert_eq!(
-            mol.aromatic_system(system).ast,
+            mol.aromatic_system(system).attributes,
             &AromaticSystemForm::from_electrons(vec![1, 1])
         );
         assert_eq!(
@@ -348,7 +351,7 @@ mod tests {
 
         assert_eq!(bond, MulticenterBondId(0));
         assert_eq!(
-            mol.multicenter_bond(bond).ast,
+            mol.multicenter_bond(bond).attributes,
             &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }
@@ -367,7 +370,7 @@ mod tests {
 
         assert_eq!(bond, NoncovalentBondId(0));
         assert_eq!(
-            mol.noncovalent_bond(bond).ast,
+            mol.noncovalent_bond(bond).attributes,
             &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }
@@ -400,7 +403,7 @@ mod tests {
             vec![c, f, cl, br, i]
         );
         assert_eq!(
-            mol.stereo_atom(stereo).ast,
+            mol.stereo_atom(stereo).attributes,
             &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
@@ -427,7 +430,7 @@ mod tests {
         assert_eq!(mol.stereo_bonds().count(), 1);
         assert_eq!(mol.stereo_bond(stereo).site_id(), bond);
         assert_eq!(
-            mol.stereo_bond(stereo).ast,
+            mol.stereo_bond(stereo).attributes,
             &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }

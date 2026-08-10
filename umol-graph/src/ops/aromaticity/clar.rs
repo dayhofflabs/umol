@@ -36,7 +36,7 @@ impl ClarAromaticity {
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let has_non_benzenoid = ast.atoms().iter().any(|view| {
-            !matches!(view.ast.element, ElementForm::Lit(Element::C))
+            !matches!(view.attributes.element, ElementForm::Lit(Element::C))
                 && electrons_at(&view).is_some()
         });
         if has_non_benzenoid {
@@ -55,7 +55,7 @@ impl ClarAromaticity {
                 cycle.len() == 6
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
-                        matches!(a.ast.element, ElementForm::Lit(Element::C))
+                        matches!(a.attributes.element, ElementForm::Lit(Element::C))
                             && electrons_at(&a).is_some()
                     })
             })
@@ -203,7 +203,10 @@ mod tests {
                 ring_info.get(i).is_some_and(|cycle| {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
-                            matches!(ast.atom(atom).ast.element, ElementForm::Lit(Element::C))
+                            matches!(
+                                ast.atom(atom).attributes.element,
+                                ElementForm::Lit(Element::C)
+                            )
                         })
                 })
             })
@@ -284,7 +287,7 @@ mod tests {
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| match v
-                    .ast
+                    .attributes
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -352,7 +355,7 @@ mod tests {
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| {
                     match v
-                        .ast
+                        .attributes
                         .constraints
                         .aromatic_valence()
                         .unwrap_or(&AromaticValenceForm::Undetermined)

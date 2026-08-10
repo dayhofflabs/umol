@@ -379,7 +379,7 @@ impl NoncovalentBondView {
     fn kind(&self, py: Python<'_>) -> PyResult<NoncovalentBondKindForm> {
         let molecule = self.owner.bind(py).borrow();
         Ok(NoncovalentBondKindForm::from_rust(
-            &self.noncovalent_bond(molecule.inner())?.ast.kind,
+            &self.noncovalent_bond(molecule.inner())?.attributes.kind,
         ))
     }
 
@@ -389,7 +389,7 @@ impl NoncovalentBondView {
             .borrow_mut(py)
             .inner_mut()
             .noncovalent_bond_mut(self.id)
-            .ast
+            .attributes
             .kind = value.to_rust(py);
     }
 
@@ -417,7 +417,7 @@ impl NoncovalentBondView {
             .borrow_mut(py)
             .inner_mut()
             .noncovalent_bond_mut(self.id)
-            .ast
+            .attributes
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -426,7 +426,7 @@ impl NoncovalentBondView {
     /// symmetric with `NoncovalentBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.noncovalent_bond(molecule.inner())?.ast;
+        let bond = self.noncovalent_bond(molecule.inner())?.attributes;
         let dict = PyDict::new(py);
         dict.set_item("kind", NoncovalentBondKindForm::from_rust(&bond.kind))?;
         dict.set_item(
@@ -508,7 +508,7 @@ impl NoncovalentBondViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_noncovalent_bond_index(molecule.inner(), index)?;
-        *molecule.inner_mut().noncovalent_bond_mut(id).ast = bond.inner().clone();
+        *molecule.inner_mut().noncovalent_bond_mut(id).attributes = bond.inner().clone();
         Ok(())
     }
 
@@ -1326,7 +1326,7 @@ mod tests {
                     .borrow()
                     .inner()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .ast
+                    .attributes
                     .constraints
                     .intramolecular(),
                 GraphIrBooleanForm::Lit(true)
@@ -1355,7 +1355,7 @@ mod tests {
                     .borrow()
                     .inner()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .ast
+                    .attributes
                     .constraints
                     .intramolecular(),
                 GraphIrBooleanForm::Lit(false)
@@ -1374,7 +1374,7 @@ mod tests {
                 .borrow_mut()
                 .inner_mut()
                 .noncovalent_bond_mut(GraphIrNoncovalentBondId(0))
-                .ast
+                .attributes
                 .constraints
                 .set(GraphIrNoncovalentBondConstraintForm::intramolecular(true));
             let view = NoncovalentBondConstraintsView {
@@ -1401,7 +1401,7 @@ mod tests {
                     .borrow()
                     .inner()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .ast
+                    .attributes
                     .constraints
                     .intramolecular(),
                 GraphIrBooleanForm::Lit(true)

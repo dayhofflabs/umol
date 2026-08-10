@@ -31,15 +31,15 @@ pub struct AromaticSystemDsl(pub AromaticSystemForm);
 
 impl AromaticSystemDsl {
     /// Zero-cost reference cast from `&AromaticSystemForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &AromaticSystemForm) -> &Self {
+    pub fn from_ref(form: &AromaticSystemForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const AromaticSystemForm as *const Self) }
+        unsafe { &*(form as *const AromaticSystemForm as *const Self) }
     }
 }
 
 impl From<AromaticSystemForm> for AromaticSystemDsl {
-    fn from(ast: AromaticSystemForm) -> Self {
-        Self(ast)
+    fn from(form: AromaticSystemForm) -> Self {
+        Self(form)
     }
 }
 
@@ -83,8 +83,8 @@ impl ToEdn for AromaticSystemDsl {
 impl FromIr<AromaticSystemForm> for AromaticSystemDsl {
     type Ctx = AromaticSystemDefaults;
 
-    fn from_ir(ast: &AromaticSystemForm, cfg: &Self::Ctx) -> Self {
-        let mut out = ast.clone();
+    fn from_ir(form: &AromaticSystemForm, cfg: &Self::Ctx) -> Self {
+        let mut out = form.clone();
         lower_aromatic_system(&mut out, cfg);
         AromaticSystemDsl(out)
     }
@@ -186,53 +186,54 @@ fn aromatic_system_predicate(i: &mut &str) -> PResult<AromaticSystemPredicate> {
 }
 
 fn apply_predicates(
-    form: &mut AromaticSystemDsl,
+    dsl: &mut AromaticSystemDsl,
     preds: Vec<AromaticSystemPredicate>,
 ) -> Result<(), ParseError> {
-    let ast = &mut form.0;
+    let system = &mut dsl.0;
     for pred in preds {
         match pred {
             AromaticSystemPredicate::Charge(v) => {
-                if !matches!(ast.charge, NumForm::Undetermined) {
+                if !matches!(system.charge, NumForm::Undetermined) {
                     return Err(ParseError::DuplicateAromaticSystemPredicate(
                         "#c".to_string(),
                     ));
                 }
-                ast.charge = v;
+                system.charge = v;
             }
             AromaticSystemPredicate::UnpairedElectrons(predicate) => {
                 apply_unpaired_electrons_predicate(
-                    &mut ast.unpaired_electrons,
+                    &mut system.unpaired_electrons,
                     predicate,
                     ParseError::DuplicateAromaticSystemPredicate,
                 )?;
             }
             AromaticSystemPredicate::Electrons(v) => {
                 let c = AromaticSystemConstraintForm::ElectronCount(v);
-                if ast.constraints.contains(c.key()) {
+                if system.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateAromaticSystemPredicate(
                         "#e".to_string(),
                     ));
                 }
-                ast.constraints.set(c);
+                system.constraints.set(c);
             }
         }
     }
     Ok(())
 }
 
-fn electron_count_value(ast: &AromaticSystemForm) -> Option<&NumForm> {
-    ast.constraints
+fn electron_count_value(system: &AromaticSystemForm) -> Option<&NumForm> {
+    system
+        .constraints
         .iter()
         .map(|AromaticSystemConstraintForm::ElectronCount(v)| v)
         .next()
 }
 
-fn fmt_aromatic_system_form(f: &mut fmt::Formatter<'_>, ast: &AromaticSystemForm) -> fmt::Result {
-    fmt_electron_counts(f, &ast.electrons)?;
-    fmt_charge(f, &ast.charge)?;
-    fmt_unpaired_electrons(f, &ast.unpaired_electrons)?;
-    if let Some(v) = electron_count_value(ast) {
+fn fmt_aromatic_system_form(f: &mut fmt::Formatter<'_>, form: &AromaticSystemForm) -> fmt::Result {
+    fmt_electron_counts(f, &form.electrons)?;
+    fmt_charge(f, &form.charge)?;
+    fmt_unpaired_electrons(f, &form.unpaired_electrons)?;
+    if let Some(v) = electron_count_value(form) {
         fmt_electrons(f, v)?;
     }
     Ok(())
@@ -432,13 +433,13 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
     }
 }
 
-fn raise_aromatic_system(ast: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
+fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
     let AromaticSystemForm {
         charge,
         unpaired_electrons,
         electrons: _,
         constraints: _,
-    } = ast;
+    } = system;
 
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
@@ -449,13 +450,13 @@ fn raise_aromatic_system(ast: &mut AromaticSystemForm, cfg: &AromaticSystemDefau
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-fn lower_aromatic_system(ast: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
+fn lower_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
     let AromaticSystemForm {
         charge,
         unpaired_electrons,
         electrons: _,
         constraints: _,
-    } = ast;
+    } = system;
 
     if matches!(
         (&cfg.charge, &*charge),

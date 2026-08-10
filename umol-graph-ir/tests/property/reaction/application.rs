@@ -571,11 +571,11 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let rule_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
+        let rule_attributes = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_atoms: vec![(AtomId(0), rule_frame.clone(), rule_ast.clone())],
+            stereo_atoms: vec![(AtomId(0), rule_frame.clone(), rule_attributes.clone())],
             ..Default::default()
         });
         let reaction = Reaction::new(
@@ -584,7 +584,7 @@ proptest! {
                 id: StereoAtomId(0),
                 site: AtomId(0),
                 ligands: rule_frame.clone(),
-                ast: rule_ast,
+                attributes: rule_attributes,
             })]),
         );
         let host = Molecule::from_entries(MoleculeEntries {
@@ -714,11 +714,11 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let rule_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
+        let rule_attributes = StereoBondForm::new(StereoKind::CisTrans, coset);
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_bonds: vec![(BondId(0), rule_frame.clone(), rule_ast.clone())],
+            stereo_bonds: vec![(BondId(0), rule_frame.clone(), rule_attributes.clone())],
             ..Default::default()
         });
         let reaction = Reaction::new(
@@ -727,7 +727,7 @@ proptest! {
                 id: StereoBondId(0),
                 site: BondId(0),
                 ligands: rule_frame.clone(),
-                ast: rule_ast,
+                attributes: rule_attributes,
             })]),
         );
         let host = Molecule::from_entries(MoleculeEntries {

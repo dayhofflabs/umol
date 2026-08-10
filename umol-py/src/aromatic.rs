@@ -305,7 +305,7 @@ impl AromaticSystemView {
     fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsForm> {
         let molecule = self.owner.bind(py).borrow();
         Ok(ElectronCountsForm::from_rust(
-            &self.aromatic_system(molecule.inner())?.ast.electrons,
+            &self.aromatic_system(molecule.inner())?.attributes.electrons,
         ))
     }
 
@@ -315,14 +315,17 @@ impl AromaticSystemView {
             .borrow_mut(py)
             .inner_mut()
             .aromatic_system_mut(self.id)
-            .ast
+            .attributes
             .electrons = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        NumForm::from_rust(py, &self.aromatic_system(molecule.inner())?.ast.charge)
+        NumForm::from_rust(
+            py,
+            &self.aromatic_system(molecule.inner())?.attributes.charge,
+        )
     }
 
     #[setter]
@@ -331,7 +334,7 @@ impl AromaticSystemView {
             .borrow_mut(py)
             .inner_mut()
             .aromatic_system_mut(self.id)
-            .ast
+            .attributes
             .charge = value.to_rust(py);
     }
 
@@ -342,7 +345,7 @@ impl AromaticSystemView {
             py,
             &self
                 .aromatic_system(molecule.inner())?
-                .ast
+                .attributes
                 .unpaired_electrons,
         )
     }
@@ -353,7 +356,7 @@ impl AromaticSystemView {
             .borrow_mut(py)
             .inner_mut()
             .aromatic_system_mut(self.id)
-            .ast
+            .attributes
             .unpaired_electrons = value.to_rust(py);
     }
 
@@ -381,7 +384,7 @@ impl AromaticSystemView {
             .borrow_mut(py)
             .inner_mut()
             .aromatic_system_mut(self.id)
-            .ast
+            .attributes
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -390,7 +393,7 @@ impl AromaticSystemView {
     /// symmetric with `AromaticSystemForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let system = self.aromatic_system(molecule.inner())?.ast;
+        let system = self.aromatic_system(molecule.inner())?.attributes;
         let dict = PyDict::new(py);
         dict.set_item(
             "electrons",
@@ -480,7 +483,7 @@ impl AromaticSystemViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_aromatic_system_index(molecule.inner(), index)?;
-        *molecule.inner_mut().aromatic_system_mut(id).ast = system.inner().clone();
+        *molecule.inner_mut().aromatic_system_mut(id).attributes = system.inner().clone();
         Ok(())
     }
 

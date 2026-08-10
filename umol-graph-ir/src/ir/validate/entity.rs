@@ -177,7 +177,7 @@ fn noncovalent_structure_check(ast: &Molecule) -> Option<EntityStructureContradi
 /// per-entity `has_conflict` primitive; the detailed contradiction locates the offending atom.
 fn aromatic_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
     for view in ast.aromatic_systems().iter() {
-        if let ElectronCountsForm::Lit(counts) = &view.ast.electrons {
+        if let ElectronCountsForm::Lit(counts) = &view.attributes.electrons {
             let atoms_len = view.atom_ids().count();
             if counts.len() != atoms_len {
                 return Some(
@@ -215,7 +215,7 @@ fn aromatic_structure_check(ast: &Molecule) -> Option<EntityStructureContradicti
 /// locates the offender.
 fn multicenter_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
     for view in ast.multicenter_bonds().iter() {
-        if let ElectronCountsForm::Lit(counts) = &view.ast.electrons {
+        if let ElectronCountsForm::Lit(counts) = &view.attributes.electrons {
             let atoms_len = view.atom_ids().count();
             if counts.len() != atoms_len {
                 return Some(

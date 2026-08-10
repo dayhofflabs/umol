@@ -421,11 +421,11 @@ fn test_molecule_dsl_edn_parse_electrons_undetermined(#[case] source: &str) {
     let electrons = ast
         .aromatic_systems()
         .iter()
-        .map(|v| v.ast.electrons.clone())
+        .map(|v| v.attributes.electrons.clone())
         .chain(
             ast.multicenter_bonds()
                 .iter()
-                .map(|v| v.ast.electrons.clone()),
+                .map(|v| v.attributes.electrons.clone()),
         )
         .next()
         .unwrap();

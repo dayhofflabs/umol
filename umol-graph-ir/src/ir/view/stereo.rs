@@ -54,7 +54,7 @@ impl<'a> StereoAtomViews<'a> {
             id: StereoAtomId::from(rid),
             site: set.participants_1(rid)[0],
             ligands: set.participants_2(rid),
-            ast: set.data(rid),
+            attributes: set.data(rid),
             molecule,
         })
     }
@@ -81,7 +81,7 @@ impl<'a> StereoAtomViews<'a> {
             id,
             site: self.stereo_atoms.participants_1(rid)[0],
             ligands: self.stereo_atoms.participants_2(rid),
-            ast: self.stereo_atoms.data(rid),
+            attributes: self.stereo_atoms.data(rid),
             molecule: self.molecule,
         })
     }
@@ -117,7 +117,7 @@ impl<'a> StereoAtomViews<'a> {
                 id,
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -161,7 +161,7 @@ impl<'a> StereoAtomViews<'a> {
                 id,
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -196,7 +196,7 @@ impl<'a> StereoAtomViews<'a> {
                 id,
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -209,7 +209,7 @@ pub struct StereoAtomView<'a> {
     pub id: StereoAtomId,
     site: NodeId,
     ligands: &'a [StereoLigand],
-    pub ast: &'a StereoAtomForm,
+    pub attributes: &'a StereoAtomForm,
     molecule: &'a Molecule,
 }
 
@@ -217,7 +217,7 @@ impl<'a> StereoAtomView<'a> {
     #[inline]
     /// The coordination-geometry kind.
     pub fn kind(&self) -> StereoKind {
-        self.ast
+        self.attributes
             .configuration
             .kind()
             .expect("stereo view has a concrete kind")
@@ -226,7 +226,7 @@ impl<'a> StereoAtomView<'a> {
     #[inline]
     /// The stereo coset.
     pub fn coset(&self) -> &'a StereoCoset {
-        self.ast
+        self.attributes
             .configuration
             .coset()
             .expect("stereo view has a concrete coset")
@@ -235,7 +235,7 @@ impl<'a> StereoAtomView<'a> {
     #[inline]
     /// The stereo atom constraints.
     pub fn constraints(&self) -> &'a StereoAtomConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     /// ID of the stereo site atom.
@@ -339,7 +339,7 @@ impl<'a> StereoAtomView<'a> {
     }
 
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 }
 
@@ -381,7 +381,7 @@ impl<'a> StereoBondViews<'a> {
             id: StereoBondId::from(rid),
             site: set.participants_1(rid)[0],
             ligands: set.participants_2(rid),
-            ast: set.data(rid),
+            attributes: set.data(rid),
             molecule,
         })
     }
@@ -406,7 +406,7 @@ impl<'a> StereoBondViews<'a> {
             id,
             site: self.stereo_bonds.participants_1(rid)[0],
             ligands: self.stereo_bonds.participants_2(rid),
-            ast: self.stereo_bonds.data(rid),
+            attributes: self.stereo_bonds.data(rid),
             molecule: self.molecule,
         })
     }
@@ -442,7 +442,7 @@ impl<'a> StereoBondViews<'a> {
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
 
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -486,7 +486,7 @@ impl<'a> StereoBondViews<'a> {
                 id,
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -519,7 +519,7 @@ impl<'a> StereoBondViews<'a> {
                 id,
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -548,7 +548,7 @@ impl<'a> StereoBondViews<'a> {
                 id,
                 site: set.participants_1(rid)[0],
                 ligands: set.participants_2(rid),
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 molecule,
             }
         })
@@ -561,7 +561,7 @@ pub struct StereoBondView<'a> {
     pub id: StereoBondId,
     site: EdgeId,
     ligands: &'a [StereoLigand],
-    pub ast: &'a StereoBondForm,
+    pub attributes: &'a StereoBondForm,
     molecule: &'a Molecule,
 }
 
@@ -569,7 +569,7 @@ impl<'a> StereoBondView<'a> {
     #[inline]
     /// The coordination-geometry kind.
     pub fn kind(&self) -> StereoKind {
-        self.ast
+        self.attributes
             .configuration
             .kind()
             .expect("stereo view has a concrete kind")
@@ -578,7 +578,7 @@ impl<'a> StereoBondView<'a> {
     #[inline]
     /// The stereo coset.
     pub fn coset(&self) -> &'a StereoCoset {
-        self.ast
+        self.attributes
             .configuration
             .coset()
             .expect("stereo view has a concrete coset")
@@ -587,7 +587,7 @@ impl<'a> StereoBondView<'a> {
     #[inline]
     /// The stereo bond constraints.
     pub fn constraints(&self) -> &'a StereoBondConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     /// ID of the stereo site bond.
@@ -692,7 +692,7 @@ impl<'a> StereoBondView<'a> {
     }
 
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 }
 
@@ -801,7 +801,7 @@ pub struct StereoAtomViewMut<'a> {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: &'a mut StereoAtomForm,
+    pub attributes: &'a mut StereoAtomForm,
 }
 
 /// Mutable borrowed view of a stereo bond: its id, site bond + ligand frame
@@ -811,39 +811,39 @@ pub struct StereoBondViewMut<'a> {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: &'a mut StereoBondForm,
+    pub attributes: &'a mut StereoBondForm,
 }
 
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
 // builder storage so old-state checks compare without cloning; callers clone
-// only what they keep (the `ast`).
+// only what they keep (the `attributes`).
 
 pub struct StereoAtomEditorView<'a> {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a StereoAtomForm,
+    pub attributes: &'a StereoAtomForm,
 }
 
 pub struct StereoAtomEditorViewMut<'a> {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a mut StereoAtomForm,
+    pub attributes: &'a mut StereoAtomForm,
 }
 
 pub struct StereoBondEditorView<'a> {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a StereoBondForm,
+    pub attributes: &'a StereoBondForm,
 }
 
 pub struct StereoBondEditorViewMut<'a> {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
-    pub ast: &'a mut StereoBondForm,
+    pub attributes: &'a mut StereoBondForm,
 }
 
 #[cfg(test)]
@@ -1027,7 +1027,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            view.ast,
+            view.attributes,
             &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
     }
@@ -1096,7 +1096,7 @@ mod tests {
     fn test_stereo_atom_view_site(molecule: Molecule) {
         let view = molecule.stereo_atom(StereoAtomId(0)).site();
         assert_eq!(view.id, AtomId(0));
-        assert_eq!(view.ast, &AtomForm::from_element(Element::C));
+        assert_eq!(view.attributes, &AtomForm::from_element(Element::C));
     }
 
     #[rstest]
@@ -1227,7 +1227,7 @@ mod tests {
             .unwrap();
         let atom = ligand.atom();
         assert_eq!(atom.id, AtomId(1));
-        assert_eq!(atom.ast, &AtomForm::from_element(Element::C));
+        assert_eq!(atom.attributes, &AtomForm::from_element(Element::C));
     }
 
     #[rstest]
@@ -1469,7 +1469,7 @@ mod tests {
         assert_eq!(view.site_id(), BondId(1));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert_eq!(
-            view.ast,
+            view.attributes,
             &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
     }

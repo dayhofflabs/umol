@@ -35,15 +35,15 @@ pub struct DativeBondDsl(pub DativeBondForm);
 
 impl DativeBondDsl {
     /// Zero-cost reference cast from `&DativeBondForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &DativeBondForm) -> &Self {
+    pub fn from_ref(form: &DativeBondForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const DativeBondForm as *const Self) }
+        unsafe { &*(form as *const DativeBondForm as *const Self) }
     }
 }
 
 impl From<DativeBondForm> for DativeBondDsl {
-    fn from(ast: DativeBondForm) -> Self {
-        Self(ast)
+    fn from(form: DativeBondForm) -> Self {
+        Self(form)
     }
 }
 
@@ -122,11 +122,11 @@ impl ToEdn for DativeBondDsl {
 /// [`expand_dative_keyword`]: every shape this returns must round-trip.
 ///
 /// Canonical means: no constraints and an integer order in 1..=4.
-fn dative_keyword_for(ast: &DativeBondForm) -> Option<&'static str> {
-    if !ast.constraints.is_empty() {
+fn dative_keyword_for(form: &DativeBondForm) -> Option<&'static str> {
+    if !form.constraints.is_empty() {
         return None;
     }
-    match &ast.order {
+    match &form.order {
         NumForm::Lit(1) => Some("single"),
         NumForm::Lit(2) => Some("double"),
         NumForm::Lit(3) => Some("triple"),
@@ -138,8 +138,8 @@ fn dative_keyword_for(ast: &DativeBondForm) -> Option<&'static str> {
 impl FromIr<DativeBondForm> for DativeBondDsl {
     type Ctx = DativeBondDefaults;
 
-    fn from_ir(ast: &DativeBondForm, _cfg: &Self::Ctx) -> Self {
-        DativeBondDsl(ast.clone())
+    fn from_ir(form: &DativeBondForm, _cfg: &Self::Ctx) -> Self {
+        DativeBondDsl(form.clone())
     }
 }
 
@@ -332,18 +332,18 @@ fn dative_bond_predicate(i: &mut &str) -> PResult<DativeBondPredicate> {
 }
 
 fn apply_predicates(
-    form: &mut DativeBondDsl,
+    dsl: &mut DativeBondDsl,
     preds: Vec<DativeBondPredicate>,
 ) -> Result<(), ParseError> {
-    let ast = &mut form.0;
+    let bond = &mut dsl.0;
     for pred in preds {
         let DativeBondPredicate::Constraint(c) = pred;
-        if ast.constraints.contains(c.key()) {
+        if bond.constraints.contains(c.key()) {
             return Err(ParseError::DuplicateDativeBondPredicate(
                 constraint_tag(&c).to_string(),
             ));
         }
-        ast.constraints.set(c);
+        bond.constraints.set(c);
     }
     Ok(())
 }

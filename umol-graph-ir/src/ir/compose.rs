@@ -65,14 +65,14 @@ fn compose_all(
 
     let mut node_match = |ra: NodeId, lb: NodeId| {
         r_a.atom(AtomId::from(ra))
-            .ast
-            .meet(l_b.atom(AtomId::from(lb)).ast)
+            .attributes
+            .meet(l_b.atom(AtomId::from(lb)).attributes)
             .is_some()
     };
     let mut edge_match = |re: EdgeId, le: EdgeId| {
         r_a.bond(BondId::from(re))
-            .ast
-            .meet(l_b.bond(BondId::from(le)).ast)
+            .attributes
+            .meet(l_b.bond(BondId::from(le)).attributes)
             .is_some()
     };
     let a_inverse = a.reverse().ok()?;
@@ -178,12 +178,12 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomForm::from_element(Element::O),
+                    attributes: AtomForm::from_element(Element::O),
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: BondForm::from_order(1),
+                    attributes: BondForm::from_order(1),
                 }),
             ]),
         ),
@@ -200,12 +200,12 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomForm::from_element(Element::O),
+                    attributes: AtomForm::from_element(Element::O),
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: BondForm::from_order(2),
+                    attributes: BondForm::from_order(2),
                 }),
             ]),
         )]
@@ -218,12 +218,12 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
-                    ast: AtomForm::from_element(Element::C),
+                    attributes: AtomForm::from_element(Element::C),
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: BondForm::from_order(1),
+                    attributes: BondForm::from_order(1),
                 }),
             ]),
         ),
@@ -254,7 +254,7 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         ),
@@ -276,7 +276,7 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         )]
@@ -332,7 +332,7 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         ),
@@ -358,7 +358,7 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         )]
@@ -509,7 +509,7 @@ mod tests {
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                 id: NoncovalentBondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             })]),
         ),
         Reaction::new(
@@ -530,7 +530,7 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         )]
@@ -543,7 +543,7 @@ mod tests {
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                 id: NoncovalentBondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             })]),
         ),
         Reaction::new(
@@ -564,7 +564,7 @@ mod tests {
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
-                    ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
         )]
@@ -577,7 +577,7 @@ mod tests {
             Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Remove {
                 id: AromaticSystemId(0),
                 atoms: vec![AtomId(0), AtomId(1)],
-                ast: AromaticSystemForm::from_electrons(vec![1, 2]),
+                attributes: AromaticSystemForm::from_electrons(vec![1, 2]),
             })]),
         ),
         Reaction::new(
@@ -598,7 +598,7 @@ mod tests {
                 Delta::AromaticSystem(AromaticSystemDelta::Remove {
                     id: AromaticSystemId(0),
                     atoms: vec![AtomId(0), AtomId(1)],
-                    ast: AromaticSystemForm::from_electrons(vec![1, 2]),
+                    attributes: AromaticSystemForm::from_electrons(vec![1, 2]),
                 }),
             ]),
         )]
@@ -671,7 +671,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomForm::from_element(Element::C),
+                attributes: AtomForm::from_element(Element::C),
             })]),
         ),
         Reaction::new(
@@ -699,7 +699,7 @@ mod tests {
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove {
                     id: AtomId(1),
-                    ast: AtomForm::from_element(Element::C),
+                    attributes: AtomForm::from_element(Element::C),
                 }),
                 Delta::Atom(AtomDelta::ModifyField {
                     id: AtomId(0),

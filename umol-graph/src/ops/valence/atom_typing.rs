@@ -57,7 +57,7 @@ impl<'a> AtomTypingValence<'a> {
                 Ok(None) => continue,
                 Err(contradiction) => return Solution::Contradictory(contradiction),
             };
-            let current = ast.atom(id).ast;
+            let current = ast.atom(id).attributes;
             let update = current.difference_to(&selected);
             edits.update_atom(AtomHandle::Id(id), current, &update);
         }
@@ -96,7 +96,7 @@ impl<'a> AtomTypingValence<'a> {
             return Ok(None);
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
-        let mut selected = atom.ast.clone();
+        let mut selected = atom.attributes.clone();
         selected.constraints.extend(atom.derive_constraints(false));
         let best =
             self.select_candidate(&selected, element, charge)
@@ -125,7 +125,7 @@ impl<'a> AtomTypingValence<'a> {
             return Solution::Underdetermined(());
         };
         let constraints = atom.derive_constraints(true);
-        let pattern = atom.ast.clone().with_constraints(constraints);
+        let pattern = atom.attributes.clone().with_constraints(constraints);
         let charge = pattern.charge.as_lit().map(|n| n as i8);
         let admitted = self.select_candidate(&pattern, element, charge).is_some();
         if admitted {

@@ -48,7 +48,7 @@ impl MulticenterBondsResolver {
 
         let mut edits = Edits::new();
         for bond_id in ast.multicenter_bonds().ids() {
-            let bond = ast.multicenter_bond(bond_id).ast;
+            let bond = ast.multicenter_bond(bond_id).attributes;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = MulticenterBondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {
@@ -211,7 +211,7 @@ mod tests {
         };
         molecule
             .multicenter_bond_mut(MulticenterBondId(1))
-            .ast
+            .attributes
             .charge = NumForm::Lit(9);
         let expected = molecule.clone();
         let mut editor = molecule.edit();

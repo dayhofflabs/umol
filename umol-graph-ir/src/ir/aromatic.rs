@@ -325,10 +325,10 @@ mod tests {
     #[case::all_ground_six(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)), true)]
     #[case::ground_with_constraint(AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1; 6])).with_charge(0).with_unpaired_electrons((0, 1)).with_constraint(AromaticSystemConstraintForm::electron_count(6)), true)]
     fn test_aromatic_system_form_is_ground(
-        #[case] ast: AromaticSystemForm,
+        #[case] form: AromaticSystemForm,
         #[case] expected: bool,
     ) {
-        assert_eq!(ast.is_ground(), expected);
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]

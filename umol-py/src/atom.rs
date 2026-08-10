@@ -620,7 +620,7 @@ impl AtomView {
         molecule
             .atoms()
             .get(self.id)
-            .map(|view| view.ast)
+            .map(|view| view.attributes)
             .ok_or_else(|| PyIndexError::new_err("atom id out of range"))
     }
 }
@@ -650,7 +650,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .element = value.to_rust(py);
     }
 
@@ -668,7 +668,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .isotope_mass = value.to_rust(py);
     }
 
@@ -684,7 +684,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .charge = value.to_rust(py);
     }
 
@@ -700,7 +700,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .implicit_hydrogens = value.to_rust(py);
     }
 
@@ -716,7 +716,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .lone_pairs = value.to_rust(py);
     }
 
@@ -732,7 +732,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .unpaired_electrons = value.to_rust(py);
     }
 
@@ -756,7 +756,7 @@ impl AtomView {
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
-            .ast
+            .attributes
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -842,7 +842,7 @@ impl AtomViews {
     fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_atom_index(molecule.inner(), index)?;
-        *molecule.inner_mut().atom_mut(id).ast = atom.inner().clone();
+        *molecule.inner_mut().atom_mut(id).attributes = atom.inner().clone();
         Ok(())
     }
 

@@ -227,12 +227,12 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
         elements: molecule
             .atoms()
             .iter()
-            .map(|atom| atom.ast.element.clone())
+            .map(|atom| atom.attributes.element.clone())
             .collect(),
         nonzero_atom_charges: molecule
             .atoms()
             .iter()
-            .filter_map(|atom| match atom.ast.charge {
+            .filter_map(|atom| match atom.attributes.charge {
                 NumForm::Lit(0) => None,
                 NumForm::Lit(charge) => Some((atom.id, charge)),
                 _ => panic!("fixture atom charge is undetermined"),
@@ -241,7 +241,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
         nonzero_lone_pairs: molecule
             .atoms()
             .iter()
-            .filter_map(|atom| match atom.ast.lone_pairs {
+            .filter_map(|atom| match atom.attributes.lone_pairs {
                 NumForm::Lit(0) => None,
                 NumForm::Lit(lone_pairs) => Some((atom.id, lone_pairs)),
                 _ => panic!("fixture atom lone-pair count is undetermined"),
@@ -336,13 +336,13 @@ fn test_kekulization_fixture_output(
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.ast.order == NumForm::Lit(2))
+        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
         .map(|bond| bond.id)
         .collect();
     let covered_atoms: HashSet<AtomId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.ast.order == NumForm::Lit(2))
+        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
     let expected_covered_atoms: HashSet<AtomId> = first
@@ -353,7 +353,7 @@ fn test_kekulization_fixture_output(
     let input_total_charge: i64 = input
         .atoms()
         .iter()
-        .map(|atom| match atom.ast.charge {
+        .map(|atom| match atom.attributes.charge {
             NumForm::Lit(charge) => charge,
             _ => panic!("input atom charge is undetermined"),
         })
@@ -361,7 +361,7 @@ fn test_kekulization_fixture_output(
             input
                 .aromatic_systems()
                 .iter()
-                .map(|system| match system.ast.charge {
+                .map(|system| match system.attributes.charge {
                     NumForm::Lit(charge) => charge,
                     _ => panic!("input aromatic-system charge is undetermined"),
                 }),
@@ -370,12 +370,19 @@ fn test_kekulization_fixture_output(
     let output_total_charge: i64 = first
         .atoms()
         .iter()
-        .map(|atom| match atom.ast.charge {
+        .map(|atom| match atom.attributes.charge {
             NumForm::Lit(charge) => charge,
             _ => panic!("output atom charge is undetermined"),
         })
         .sum();
-    let system_charge = match input.aromatic_systems().iter().next().unwrap().ast.charge {
+    let system_charge = match input
+        .aromatic_systems()
+        .iter()
+        .next()
+        .unwrap()
+        .attributes
+        .charge
+    {
         NumForm::Lit(charge) => charge,
         _ => panic!("input aromatic-system charge is undetermined"),
     };
@@ -388,17 +395,17 @@ fn test_kekulization_fixture_output(
     assert_eq!(ValenceInvariants::check(&first), Solution::Determined(()));
     assert_eq!(first.aromatic_systems().count(), 0);
     assert!(first.atoms().iter().all(|atom| !atom
-        .ast
+        .attributes
         .constraints
         .contains(AtomConstraintKey::AromaticValence)));
-    assert!(first
-        .bonds()
-        .iter()
-        .all(|bond| !bond.ast.constraints.contains(BondConstraintKey::Aromatic)));
+    assert!(first.bonds().iter().all(|bond| !bond
+        .attributes
+        .constraints
+        .contains(BondConstraintKey::Aromatic)));
 
     if let Some(exposed) = expected_exposed_atom {
-        let before = input.atom(exposed).ast;
-        let after = first.atom(exposed).ast;
+        let before = input.atom(exposed).attributes;
+        let after = first.atom(exposed).attributes;
         let NumForm::Lit(before_charge) = before.charge else {
             panic!("input exposed-atom charge is undetermined");
         };
@@ -454,8 +461,8 @@ fn test_kekulization_fixture_output_error(
         .parse()
         .unwrap();
     let mut input = dsl.into_ir(&MoleculeDefaults::ground());
-    input.atom_mut(AtomId(4)).ast.charge = exposed_charge;
-    input.atom_mut(AtomId(4)).ast.lone_pairs = exposed_lone_pairs;
+    input.atom_mut(AtomId(4)).attributes.charge = exposed_charge;
+    input.atom_mut(AtomId(4)).attributes.lone_pairs = exposed_lone_pairs;
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
 

@@ -50,7 +50,7 @@ impl<'a> DativeBondViews<'a> {
         let set = self.dative_bonds;
         set.relation_ids().map(move |rid| DativeBondView {
             id: DativeBondId::from(rid),
-            ast: set.data(rid),
+            attributes: set.data(rid),
             acceptor_id: set.participants_1(rid)[0],
             donors: set.participants_2(rid),
             molecule,
@@ -91,7 +91,7 @@ impl<'a> DativeBondViews<'a> {
         let rid = RelationId::from(id);
         Some(DativeBondView {
             id,
-            ast: self.dative_bonds.data(rid),
+            attributes: self.dative_bonds.data(rid),
             acceptor_id: self.dative_bonds.participants_1(rid)[0],
             donors: self.dative_bonds.participants_2(rid),
             molecule: self.molecule,
@@ -119,7 +119,7 @@ impl<'a> DativeBondViews<'a> {
             let rid = RelationId::from(id);
             DativeBondView {
                 id,
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 acceptor_id: set.participants_1(rid)[0],
                 donors: set.participants_2(rid),
                 molecule,
@@ -182,19 +182,19 @@ pub struct DativeBondView<'a> {
     pub id: DativeBondId,
     acceptor_id: NodeId,
     donors: &'a [NodeId],
-    pub ast: &'a DativeBondForm,
+    pub attributes: &'a DativeBondForm,
     molecule: &'a Molecule,
 }
 
 impl<'a> DativeBondView<'a> {
     #[inline]
     pub fn order(&self) -> &'a NumForm {
-        &self.ast.order
+        &self.attributes.order
     }
 
     #[inline]
     pub fn constraints(&self) -> &'a DativeBondConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     /// Donor atom ids.
@@ -246,12 +246,12 @@ impl<'a> DativeBondView<'a> {
 
     /// Is dative bond ground
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 
     /// Is dative bond undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.ast.is_undetermined()
+        self.attributes.is_undetermined()
     }
 }
 
@@ -262,7 +262,7 @@ pub struct DativeBondViewMut<'a> {
     pub id: DativeBondId,
     pub donors: Vec<AtomId>,
     pub acceptor: AtomId,
-    pub ast: &'a mut DativeBondForm,
+    pub attributes: &'a mut DativeBondForm,
 }
 
 // Editor-scope view bundles for dative bonds.
@@ -271,7 +271,7 @@ pub struct DativeBondEditorView<'a> {
     pub id: DativeBondId,
     donors: &'a [NodeId],
     acceptor: AtomId,
-    pub ast: &'a DativeBondForm,
+    pub attributes: &'a DativeBondForm,
 }
 
 impl<'a> DativeBondEditorView<'a> {
@@ -279,13 +279,13 @@ impl<'a> DativeBondEditorView<'a> {
         id: DativeBondId,
         donors: &'a [NodeId],
         acceptor: AtomId,
-        ast: &'a DativeBondForm,
+        attributes: &'a DativeBondForm,
     ) -> Self {
         Self {
             id,
             donors,
             acceptor,
-            ast,
+            attributes,
         }
     }
 
@@ -307,7 +307,7 @@ pub struct DativeBondEditorViewMut<'a> {
     pub id: DativeBondId,
     donors: &'a [NodeId],
     acceptor: AtomId,
-    pub ast: &'a mut DativeBondForm,
+    pub attributes: &'a mut DativeBondForm,
 }
 
 impl<'a> DativeBondEditorViewMut<'a> {
@@ -315,13 +315,13 @@ impl<'a> DativeBondEditorViewMut<'a> {
         id: DativeBondId,
         donors: &'a [NodeId],
         acceptor: AtomId,
-        ast: &'a mut DativeBondForm,
+        attributes: &'a mut DativeBondForm,
     ) -> Self {
         Self {
             id,
             donors,
             acceptor,
-            ast,
+            attributes,
         }
     }
 
@@ -405,12 +405,12 @@ mod tests {
     #[rstest]
     fn test_dative_bond_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().dative_bonds().iter(), vec![], |view| {
-            (view.id, view.acceptor_id(), view.ast.clone())
+            (view.id, view.acceptor_id(), view.attributes.clone())
         });
         assert_exact_size_by(
             molecule.dative_bonds().iter(),
             vec![(DativeBondId(0), AtomId(3), DativeBondForm::from_order(1))],
-            |view| (view.id, view.acceptor_id(), view.ast.clone()),
+            |view| (view.id, view.acceptor_id(), view.attributes.clone()),
         );
     }
 
@@ -518,8 +518,8 @@ mod tests {
     #[rstest]
     fn test_dative_bond_editor_view_atom_ids() {
         let donors = [NodeId(1), NodeId(2)];
-        let ast = DativeBondForm::from_order(1);
-        let view = DativeBondEditorView::new(DativeBondId(0), &donors, AtomId(3), &ast);
+        let attributes = DativeBondForm::from_order(1);
+        let view = DativeBondEditorView::new(DativeBondId(0), &donors, AtomId(3), &attributes);
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(1), AtomId(2), AtomId(3)],
@@ -530,8 +530,9 @@ mod tests {
     #[rstest]
     fn test_dative_bond_editor_view_mut_atom_ids() {
         let donors = [NodeId(1), NodeId(2)];
-        let mut ast = DativeBondForm::from_order(1);
-        let view = DativeBondEditorViewMut::new(DativeBondId(0), &donors, AtomId(3), &mut ast);
+        let mut attributes = DativeBondForm::from_order(1);
+        let view =
+            DativeBondEditorViewMut::new(DativeBondId(0), &donors, AtomId(3), &mut attributes);
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(1), AtomId(2), AtomId(3)],

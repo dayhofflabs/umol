@@ -44,7 +44,7 @@ impl<'a> NoncovalentBondViews<'a> {
         let set = self.noncovalent_bonds;
         set.relation_ids().map(move |rid| NoncovalentBondView {
             id: NoncovalentBondId::from(rid),
-            ast: set.data(rid),
+            attributes: set.data(rid),
             atoms: {
                 let parts = set.participants(rid);
                 [parts[0], parts[1]]
@@ -75,7 +75,7 @@ impl<'a> NoncovalentBondViews<'a> {
         let parts = self.noncovalent_bonds.participants(rid);
         Some(NoncovalentBondView {
             id,
-            ast: self.noncovalent_bonds.data(rid),
+            attributes: self.noncovalent_bonds.data(rid),
             atoms: [parts[0], parts[1]],
             molecule: self.molecule,
         })
@@ -109,7 +109,7 @@ impl<'a> NoncovalentBondViews<'a> {
             let parts = set.participants(rid);
             NoncovalentBondView {
                 id,
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 atoms: [parts[0], parts[1]],
                 molecule,
             }
@@ -165,19 +165,19 @@ impl<'a> NoncovalentBondViews<'a> {
 pub struct NoncovalentBondView<'a> {
     pub id: NoncovalentBondId,
     atoms: [NodeId; 2],
-    pub ast: &'a NoncovalentBondForm,
+    pub attributes: &'a NoncovalentBondForm,
     molecule: &'a Molecule,
 }
 
 impl<'a> NoncovalentBondView<'a> {
     #[inline]
     pub fn kind(&self) -> &'a NoncovalentBondKindForm {
-        &self.ast.kind
+        &self.attributes.kind
     }
 
     #[inline]
     pub fn constraints(&self) -> &'a NoncovalentBondConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     /// The two atom ids in this noncovalent interaction.
@@ -193,12 +193,12 @@ impl<'a> NoncovalentBondView<'a> {
 
     /// Is noncovalent bond ground
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 
     /// Is noncovalent bond undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.ast.is_undetermined()
+        self.attributes.is_undetermined()
     }
 }
 
@@ -208,7 +208,7 @@ impl<'a> NoncovalentBondView<'a> {
 pub struct NoncovalentBondViewMut<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut NoncovalentBondForm,
+    pub attributes: &'a mut NoncovalentBondForm,
 }
 
 // Builder-scope view bundles for noncovalent bonds.
@@ -216,13 +216,13 @@ pub struct NoncovalentBondViewMut<'a> {
 pub struct NoncovalentBondEditorView<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a NoncovalentBondForm,
+    pub attributes: &'a NoncovalentBondForm,
 }
 
 pub struct NoncovalentBondEditorViewMut<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: &'a mut NoncovalentBondForm,
+    pub attributes: &'a mut NoncovalentBondForm,
 }
 
 #[cfg(test)]
@@ -297,7 +297,7 @@ mod tests {
         assert_exact_size_by(
             Molecule::default().noncovalent_bonds().iter(),
             vec![],
-            |view| (view.id, view.atom_ids(), view.ast.clone()),
+            |view| (view.id, view.atom_ids(), view.attributes.clone()),
         );
         assert_exact_size_by(
             molecule.noncovalent_bonds().iter(),
@@ -306,7 +306,7 @@ mod tests {
                 [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
-            |view| (view.id, view.atom_ids(), view.ast.clone()),
+            |view| (view.id, view.atom_ids(), view.attributes.clone()),
         );
     }
 

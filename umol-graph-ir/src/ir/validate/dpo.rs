@@ -156,11 +156,14 @@ mod tests {
             ..Default::default()
         }),
         Deltas::from_iter([
-            Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomForm::from_element(Element::C) }),
+            Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::from_element(Element::C),
+            }),
             Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: BondForm::from_order(1),
+                attributes: BondForm::from_order(1),
             }),
         ]),
     ))]
@@ -180,7 +183,7 @@ mod tests {
         }),
         Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
             id: AtomId(0),
-            ast: AtomForm::from_element(Element::C),
+            attributes: AtomForm::from_element(Element::C),
         })]),
     ))]
     fn test_dpo_validator_validate_reaction(#[case] reaction: Reaction) {
@@ -202,7 +205,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomForm::from_element(Element::C),
+                attributes: AtomForm::from_element(Element::C),
             })]),
         ),
         DpoContradiction::DanglingBond { atom: AtomId(0), bond: BondId(0) }
@@ -217,7 +220,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomForm::from_element(Element::N),
+                attributes: AtomForm::from_element(Element::N),
             })]),
         ),
         DpoContradiction::DanglingDativeBond { atom: AtomId(0), dative: DativeBondId(0) }
@@ -232,7 +235,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomForm::from_element(Element::C),
+                attributes: AtomForm::from_element(Element::C),
             })]),
         ),
         DpoContradiction::DanglingAromaticSystem { atom: AtomId(0), system: AromaticSystemId(0) }
@@ -251,7 +254,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomForm::from_element(Element::B),
+                attributes: AtomForm::from_element(Element::B),
             })]),
         ),
         DpoContradiction::DanglingMulticenterBond { atom: AtomId(0), multicenter: MulticenterBondId(0) }
@@ -266,7 +269,7 @@ mod tests {
             }),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
-                ast: AtomForm::from_element(Element::O),
+                attributes: AtomForm::from_element(Element::O),
             })]),
         ),
         DpoContradiction::DanglingNoncovalentBond { atom: AtomId(0), noncovalent: NoncovalentBondId(0) }

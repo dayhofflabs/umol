@@ -30,7 +30,7 @@ impl BondsResolver {
     pub fn plan(&self, ast: &Molecule) -> Edits {
         let mut edits = Edits::new();
         for bond_id in ast.bonds().ids() {
-            let bond = ast.bond(bond_id).ast;
+            let bond = ast.bond(bond_id).attributes;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = BondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {
@@ -130,7 +130,7 @@ mod tests {
     fn test_bonds_resolver_plan_stale() {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
         let edits = BondsResolver::new().plan(&molecule);
-        molecule.bond_mut(BondId(1)).ast.charge = NumForm::Lit(9);
+        molecule.bond_mut(BondId(1)).attributes.charge = NumForm::Lit(9);
         let expected = molecule.clone();
         let mut editor = molecule.edit();
         assert_eq!(

@@ -49,7 +49,7 @@ impl<'a> AromaticSystemViews<'a> {
         let set = self.aromatic_systems;
         set.relation_ids().map(move |rid| AromaticSystemView {
             id: AromaticSystemId::from(rid),
-            ast: set.data(rid),
+            attributes: set.data(rid),
             atoms: set.participants(rid),
             molecule,
         })
@@ -80,7 +80,7 @@ impl<'a> AromaticSystemViews<'a> {
         let rid = RelationId::from(id);
         Some(AromaticSystemView {
             id,
-            ast: self.aromatic_systems.data(rid),
+            attributes: self.aromatic_systems.data(rid),
             atoms: self.aromatic_systems.participants(rid),
             molecule: self.molecule,
         })
@@ -113,7 +113,7 @@ impl<'a> AromaticSystemViews<'a> {
             let rid = RelationId::from(id);
             AromaticSystemView {
                 id,
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 atoms: set.participants(rid),
                 molecule,
             }
@@ -172,29 +172,29 @@ impl<'a> AromaticSystemViews<'a> {
 pub struct AromaticSystemView<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
-    pub ast: &'a AromaticSystemForm,
+    pub attributes: &'a AromaticSystemForm,
     molecule: &'a Molecule,
 }
 
 impl<'a> AromaticSystemView<'a> {
     #[inline]
     pub fn electrons(&self) -> &'a ElectronCountsForm {
-        &self.ast.electrons
+        &self.attributes.electrons
     }
 
     #[inline]
     pub fn charge(&self) -> &'a NumForm {
-        &self.ast.charge
+        &self.attributes.charge
     }
 
     #[inline]
     pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
-        &self.ast.unpaired_electrons
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
     pub fn constraints(&self) -> &'a AromaticSystemConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
@@ -232,7 +232,7 @@ impl<'a> AromaticSystemView<'a> {
     /// Sum of per-atom electron contributions on this aromatic system.
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     pub fn electron_count(&self) -> NumForm {
-        match &self.ast.electrons {
+        match &self.attributes.electrons {
             ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
             ElectronCountsForm::Undetermined => NumForm::Undetermined,
         }
@@ -281,12 +281,12 @@ impl<'a> AromaticSystemView<'a> {
 
     /// Is aromatic system ground
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 
     /// Is aromatic system undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.ast.is_undetermined()
+        self.attributes.is_undetermined()
     }
 }
 
@@ -296,7 +296,7 @@ impl<'a> AromaticSystemView<'a> {
 pub struct AromaticSystemViewMut<'a> {
     pub id: AromaticSystemId,
     pub atoms: Vec<AtomId>,
-    pub ast: &'a mut AromaticSystemForm,
+    pub attributes: &'a mut AromaticSystemForm,
 }
 
 // Editor-scope view bundles for aromatic systems.
@@ -304,16 +304,20 @@ pub struct AromaticSystemViewMut<'a> {
 pub struct AromaticSystemEditorView<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
-    pub ast: &'a AromaticSystemForm,
+    pub attributes: &'a AromaticSystemForm,
 }
 
 impl<'a> AromaticSystemEditorView<'a> {
     pub(crate) fn new(
         id: AromaticSystemId,
         atoms: &'a [NodeId],
-        ast: &'a AromaticSystemForm,
+        attributes: &'a AromaticSystemForm,
     ) -> Self {
-        Self { id, atoms, ast }
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
@@ -324,16 +328,20 @@ impl<'a> AromaticSystemEditorView<'a> {
 pub struct AromaticSystemEditorViewMut<'a> {
     pub id: AromaticSystemId,
     atoms: &'a [NodeId],
-    pub ast: &'a mut AromaticSystemForm,
+    pub attributes: &'a mut AromaticSystemForm,
 }
 
 impl<'a> AromaticSystemEditorViewMut<'a> {
     pub(crate) fn new(
         id: AromaticSystemId,
         atoms: &'a [NodeId],
-        ast: &'a mut AromaticSystemForm,
+        attributes: &'a mut AromaticSystemForm,
     ) -> Self {
-        Self { id, atoms, ast }
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
@@ -593,8 +601,8 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_editor_view_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let ast = AromaticSystemForm::default();
-        let view = AromaticSystemEditorView::new(AromaticSystemId(0), &atoms, &ast);
+        let attributes = AromaticSystemForm::default();
+        let view = AromaticSystemEditorView::new(AromaticSystemId(0), &atoms, &attributes);
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -605,8 +613,8 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_editor_view_mut_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let mut ast = AromaticSystemForm::default();
-        let view = AromaticSystemEditorViewMut::new(AromaticSystemId(0), &atoms, &mut ast);
+        let mut attributes = AromaticSystemForm::default();
+        let view = AromaticSystemEditorViewMut::new(AromaticSystemId(0), &atoms, &mut attributes);
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],

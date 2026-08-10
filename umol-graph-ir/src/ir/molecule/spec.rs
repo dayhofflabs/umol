@@ -133,37 +133,37 @@ pub enum MoleculeSpecTerm {
         name: Option<String>,
         first: AtomArg,
         second: AtomArg,
-        ast: BondForm,
+        attributes: BondForm,
     },
     Chain(Vec<AtomArg>),
     Ring(Vec<AtomArg>),
     DativeBond {
         donors: Vec<AtomArg>,
         acceptor: AtomArg,
-        ast: DativeBondForm,
+        attributes: DativeBondForm,
     },
     AromaticSystem {
         atoms: Vec<AtomArg>,
-        ast: AromaticSystemForm,
+        attributes: AromaticSystemForm,
     },
     MulticenterBond {
         atoms: Vec<AtomArg>,
-        ast: MulticenterBondForm,
+        attributes: MulticenterBondForm,
     },
     NoncovalentBond {
         first: AtomArg,
         second: AtomArg,
-        ast: NoncovalentBondForm,
+        attributes: NoncovalentBondForm,
     },
     StereoAtom {
         site: AtomArg,
         ligands: Vec<StereoLigandArg>,
-        ast: StereoAtomForm,
+        attributes: StereoAtomForm,
     },
     StereoBond {
         site: BondArg,
         ligands: Vec<StereoLigandArg>,
-        ast: StereoBondForm,
+        attributes: StereoBondForm,
     },
     Ground,
 }
@@ -184,7 +184,7 @@ pub fn single(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondForm::from_order(1),
+        attributes: BondForm::from_order(1),
     }
 }
 
@@ -194,7 +194,7 @@ pub fn double(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondForm::from_order(2),
+        attributes: BondForm::from_order(2),
     }
 }
 
@@ -204,7 +204,7 @@ pub fn triple(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondForm::from_order(3),
+        attributes: BondForm::from_order(3),
     }
 }
 
@@ -213,13 +213,13 @@ pub fn triple(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
 pub fn bond(
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    ast: impl Into<BondForm>,
+    attributes: impl Into<BondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
@@ -229,13 +229,13 @@ pub fn named_bond(
     name: impl Into<String>,
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    ast: impl Into<BondForm>,
+    attributes: impl Into<BondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
         name: Some(name.into()),
         first: first.into(),
         second: second.into(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
@@ -246,7 +246,7 @@ pub fn aromatic_bond(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> M
         name: None,
         first: first.into(),
         second: second.into(),
-        ast: BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true)),
+        attributes: BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true)),
     }
 }
 
@@ -260,80 +260,80 @@ pub fn ring(specs: impl IntoIterator<Item = impl Into<AtomArg>>) -> MoleculeSpec
     MoleculeSpecTerm::Ring(specs.into_iter().map(Into::into).collect())
 }
 
-/// A dative bond from `donors` to `acceptor`, carrying `ast` (a `DativeBondForm` or a DSL spec string).
+/// A dative bond from `donors` to `acceptor`, carrying `attributes` (a `DativeBondForm` or a DSL spec string).
 pub fn dative_bond(
     donors: impl IntoIterator<Item = impl Into<AtomArg>>,
     acceptor: impl Into<AtomArg>,
-    ast: impl Into<DativeBondForm>,
+    attributes: impl Into<DativeBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::DativeBond {
         donors: donors.into_iter().map(Into::into).collect(),
         acceptor: acceptor.into(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
-/// An aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemForm` — e.g. from
+/// An aromatic-system overlay over `atoms`, carrying `attributes` (an `AromaticSystemForm` — e.g. from
 /// `from_electrons` — or a DSL spec string).
 pub fn aromatic_system(
     atoms: impl IntoIterator<Item = impl Into<AtomArg>>,
-    ast: impl Into<AromaticSystemForm>,
+    attributes: impl Into<AromaticSystemForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::AromaticSystem {
         atoms: atoms.into_iter().map(Into::into).collect(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
-/// A multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondForm` or a DSL spec
+/// A multicenter-bond overlay over `atoms`, carrying `attributes` (a `MulticenterBondForm` or a DSL spec
 /// string).
 pub fn multicenter_bond(
     atoms: impl IntoIterator<Item = impl Into<AtomArg>>,
-    ast: impl Into<MulticenterBondForm>,
+    attributes: impl Into<MulticenterBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::MulticenterBond {
         atoms: atoms.into_iter().map(Into::into).collect(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
-/// A noncovalent-bond overlay between `first` and `second`, carrying `ast` (a `NoncovalentBondForm` —
+/// A noncovalent-bond overlay between `first` and `second`, carrying `attributes` (a `NoncovalentBondForm` —
 /// e.g. from `from_kind` — or a DSL spec string).
 pub fn noncovalent_bond(
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    ast: impl Into<NoncovalentBondForm>,
+    attributes: impl Into<NoncovalentBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::NoncovalentBond {
         first: first.into(),
         second: second.into(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
-/// A stereo-atom overlay on `site`, with its ordered `ligands` and configuration `ast`.
+/// A stereo-atom overlay on `site`, with its ordered `ligands` and configuration `attributes`.
 pub fn stereo_atom(
     site: impl Into<AtomArg>,
     ligands: impl IntoIterator<Item = impl Into<StereoLigandArg>>,
-    ast: impl Into<StereoAtomForm>,
+    attributes: impl Into<StereoAtomForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::StereoAtom {
         site: site.into(),
         ligands: ligands.into_iter().map(Into::into).collect(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
-/// A stereo-bond overlay on the named bond `site`, with its ordered `ligands` and configuration `ast`.
+/// A stereo-bond overlay on the named bond `site`, with its ordered `ligands` and configuration `attributes`.
 pub fn stereo_bond(
     site: impl Into<BondArg>,
     ligands: impl IntoIterator<Item = impl Into<StereoLigandArg>>,
-    ast: impl Into<StereoBondForm>,
+    attributes: impl Into<StereoBondForm>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::StereoBond {
         site: site.into(),
         ligands: ligands.into_iter().map(Into::into).collect(),
-        ast: ast.into(),
+        attributes: attributes.into(),
     }
 }
 
@@ -376,11 +376,11 @@ impl MoleculeSpec {
                     name,
                     first,
                     second,
-                    ast,
+                    attributes,
                 } => {
                     let first = cx.resolve(first);
                     let second = cx.resolve(second);
-                    let id = cx.builder.bond(first, second, ast);
+                    let id = cx.builder.bond(first, second, attributes);
                     if let Some(name) = name {
                         cx.bond_names.insert(name, (id, first, second));
                     }
@@ -396,34 +396,46 @@ impl MoleculeSpec {
                 MoleculeSpecTerm::DativeBond {
                     donors,
                     acceptor,
-                    ast,
+                    attributes,
                 } => {
                     let donors = cx.resolve_all(donors);
                     let acceptor = cx.resolve(acceptor);
-                    cx.builder.dative_bond(donors, acceptor, ast);
+                    cx.builder.dative_bond(donors, acceptor, attributes);
                 }
-                MoleculeSpecTerm::AromaticSystem { atoms, ast } => {
+                MoleculeSpecTerm::AromaticSystem { atoms, attributes } => {
                     let ids = cx.resolve_all(atoms);
-                    cx.builder.aromatic_system(ids, ast);
+                    cx.builder.aromatic_system(ids, attributes);
                 }
-                MoleculeSpecTerm::MulticenterBond { atoms, ast } => {
+                MoleculeSpecTerm::MulticenterBond { atoms, attributes } => {
                     let ids = cx.resolve_all(atoms);
-                    cx.builder.multicenter_bond(ids, ast);
+                    cx.builder.multicenter_bond(ids, attributes);
                 }
-                MoleculeSpecTerm::NoncovalentBond { first, second, ast } => {
+                MoleculeSpecTerm::NoncovalentBond {
+                    first,
+                    second,
+                    attributes,
+                } => {
                     let first = cx.resolve(first);
                     let second = cx.resolve(second);
-                    cx.builder.noncovalent_bond(first, second, ast);
+                    cx.builder.noncovalent_bond(first, second, attributes);
                 }
-                MoleculeSpecTerm::StereoAtom { site, ligands, ast } => {
+                MoleculeSpecTerm::StereoAtom {
+                    site,
+                    ligands,
+                    attributes,
+                } => {
                     let site = cx.resolve(site);
                     let ligands = cx.resolve_stereo_ligands(ligands, site, site);
-                    cx.builder.stereo_atom(site, ligands, ast);
+                    cx.builder.stereo_atom(site, ligands, attributes);
                 }
-                MoleculeSpecTerm::StereoBond { site, ligands, ast } => {
+                MoleculeSpecTerm::StereoBond {
+                    site,
+                    ligands,
+                    attributes,
+                } => {
                     let (bond, first, second) = cx.resolve_bond(site);
                     let ligands = cx.resolve_stereo_ligands(ligands, first, second);
-                    cx.builder.stereo_bond(bond, ligands, ast);
+                    cx.builder.stereo_bond(bond, ligands, attributes);
                 }
             }
         }
@@ -599,7 +611,7 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 2);
         assert_eq!(mol.bonds().count(), 1);
-        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(2));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -609,7 +621,7 @@ mod tests {
         let spec = atoms([Element::C, Element::O]) + single(0, 1);
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(1));
+        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(1));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -642,7 +654,7 @@ mod tests {
         let spec = atoms([Element::C, Element::C]) + bond_term;
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).ast, &expected);
+        assert_eq!(mol.bond(BondId(0)).attributes, &expected);
     }
 
     #[rstest]
@@ -673,7 +685,7 @@ mod tests {
 
         assert_eq!(mol.dative_bonds().count(), 1);
         assert_eq!(
-            mol.dative_bond(DativeBondId(0)).ast,
+            mol.dative_bond(DativeBondId(0)).attributes,
             &DativeBondForm::default()
         );
     }
@@ -688,7 +700,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.aromatic_system(AromaticSystemId(0)).ast,
+            mol.aromatic_system(AromaticSystemId(0)).attributes,
             &AromaticSystemForm::from_electrons(vec![1, 1])
         );
     }
@@ -703,7 +715,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.multicenter_bond(MulticenterBondId(0)).ast,
+            mol.multicenter_bond(MulticenterBondId(0)).attributes,
             &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }
@@ -719,7 +731,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.noncovalent_bond(NoncovalentBondId(0)).ast,
+            mol.noncovalent_bond(NoncovalentBondId(0)).attributes,
             &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }
@@ -731,7 +743,7 @@ mod tests {
             + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2));
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).ast, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -759,7 +771,7 @@ mod tests {
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]
         );
         assert_eq!(
-            mol.stereo_atom(StereoAtomId(0)).ast,
+            mol.stereo_atom(StereoAtomId(0)).attributes,
             &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
@@ -790,7 +802,7 @@ mod tests {
             vec![AtomId(0), AtomId(1)]
         );
         assert_eq!(
-            mol.stereo_bond(StereoBondId(0)).ast,
+            mol.stereo_bond(StereoBondId(0)).attributes,
             &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }
@@ -801,6 +813,6 @@ mod tests {
     fn test_molecule_spec_ground(#[case] spec: MoleculeSpec, #[case] expected_charge: NumForm) {
         let mol = spec.build();
 
-        assert_eq!(mol.atom(AtomId(0)).ast.charge, expected_charge);
+        assert_eq!(mol.atom(AtomId(0)).attributes.charge, expected_charge);
     }
 }

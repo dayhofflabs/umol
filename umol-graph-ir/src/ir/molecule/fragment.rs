@@ -320,11 +320,11 @@ mod tests {
         // the free port became a wildcard atom double-bonded to the carbon
         assert_eq!(pattern.atoms().count(), 2);
         assert_eq!(
-            pattern.atom(AtomId(1)).ast,
+            pattern.atom(AtomId(1)).attributes,
             &AtomForm::new(ElementForm::undetermined())
         );
         assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
-        assert_eq!(pattern.bond(BondId(0)).ast, &BondForm::from_order(2));
+        assert_eq!(pattern.bond(BondId(0)).attributes, &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -396,7 +396,10 @@ mod tests {
 
         assert_eq!(joined.body().atoms().count(), 2);
         assert_eq!(joined.body().bonds().count(), 1);
-        assert_eq!(joined.body().bond(BondId(0)).ast, &BondForm::from_order(1));
+        assert_eq!(
+            joined.body().bond(BondId(0)).attributes,
+            &BondForm::from_order(1)
+        );
         assert_eq!(
             joined.body().bond(BondId(0)).atom_ids(),
             [AtomId(0), AtomId(1)]
@@ -422,7 +425,7 @@ mod tests {
 
         let body = left.attach("a", right, "b").finish();
 
-        assert_eq!(body.bond(BondId(0)).ast, &BondForm::from_order(2));
+        assert_eq!(body.bond(BondId(0)).attributes, &BondForm::from_order(2));
     }
 
     #[rstest]

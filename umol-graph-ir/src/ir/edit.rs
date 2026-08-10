@@ -42,14 +42,14 @@ use super::stereo::{
 use super::traits::{Canonicalize, Lattice};
 use super::value::NumForm;
 
-/// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded ast.
+/// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded attributes.
 pub type StereoAtomRemoval = (
     StereoAtomHandle,
     AtomHandle,
     Vec<(AtomHandle, StereoLigandKind)>,
     StereoAtomForm,
 );
-/// One stereo-bond removal in a batched `RemoveStereoBonds`: id, site (a bond), ligand frame, ast.
+/// One stereo-bond removal in a batched `RemoveStereoBonds`: id, site (a bond), ligand frame, attributes.
 pub type StereoBondRemoval = (
     StereoBondHandle,
     BondHandle,
@@ -263,7 +263,7 @@ impl StereoBondFieldChange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddBond {
     pub endpoints: [AtomHandle; 2],
-    pub ast: BondForm,
+    pub attributes: BondForm,
 }
 
 /// One modification of a molecule the caller holds.
@@ -306,7 +306,7 @@ pub enum Edit {
     // Dative bonds
     AddDativeBond {
         atoms: Vec<AtomHandle>,
-        ast: DativeBondForm,
+        attributes: DativeBondForm,
     },
     RemoveDativeBonds {
         removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)>,
@@ -319,7 +319,7 @@ pub enum Edit {
     // Aromatic systems
     AddAromaticSystem {
         atoms: Vec<AtomHandle>,
-        ast: AromaticSystemForm,
+        attributes: AromaticSystemForm,
     },
     RemoveAromaticSystems {
         removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)>,
@@ -332,7 +332,7 @@ pub enum Edit {
     // Multicenter bonds
     AddMulticenterBond {
         atoms: Vec<AtomHandle>,
-        ast: MulticenterBondForm,
+        attributes: MulticenterBondForm,
     },
     RemoveMulticenterBonds {
         removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondForm)>,
@@ -345,7 +345,7 @@ pub enum Edit {
     // Noncovalent bonds
     AddNoncovalentBond {
         atoms: [AtomHandle; 2],
-        ast: NoncovalentBondForm,
+        attributes: NoncovalentBondForm,
     },
     RemoveNoncovalentBonds {
         removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondForm)>,
@@ -361,7 +361,7 @@ pub enum Edit {
     AddStereoAtom {
         site: AtomHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoAtomForm,
+        attributes: StereoAtomForm,
     },
     RemoveStereoAtoms {
         removes: Vec<StereoAtomRemoval>,
@@ -373,7 +373,7 @@ pub enum Edit {
     AddStereoBond {
         site: BondHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoBondForm,
+        attributes: StereoBondForm,
     },
     RemoveStereoBonds {
         removes: Vec<StereoBondRemoval>,
@@ -502,9 +502,11 @@ impl Edits {
         self.edits.push(edit);
     }
 
-    pub fn add_atom(&mut self, ast: AtomForm) -> AtomHandle {
+    pub fn add_atom(&mut self, attributes: AtomForm) -> AtomHandle {
         let handle = AtomHandle::New(self.created_atoms);
-        self.push(Edit::AddAtoms { atoms: vec![ast] });
+        self.push(Edit::AddAtoms {
+            atoms: vec![attributes],
+        });
         handle
     }
 
@@ -517,12 +519,17 @@ impl Edits {
         handles
     }
 
-    pub fn add_bond(&mut self, first: AtomHandle, second: AtomHandle, ast: BondForm) -> BondHandle {
+    pub fn add_bond(
+        &mut self,
+        first: AtomHandle,
+        second: AtomHandle,
+        attributes: BondForm,
+    ) -> BondHandle {
         let handle = BondHandle::New(self.created_bonds);
         self.push(Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [first, second],
-                ast,
+                attributes,
             }],
         });
         handle
@@ -540,10 +547,10 @@ impl Edits {
     pub fn add_dative_bond(
         &mut self,
         atoms: Vec<AtomHandle>,
-        ast: DativeBondForm,
+        attributes: DativeBondForm,
     ) -> DativeBondHandle {
         let handle = DativeBondHandle::New(self.created_dative_bonds);
-        self.push(Edit::AddDativeBond { atoms, ast });
+        self.push(Edit::AddDativeBond { atoms, attributes });
         handle
     }
 
@@ -553,17 +560,17 @@ impl Edits {
     ) -> Vec<DativeBondHandle> {
         bonds
             .into_iter()
-            .map(|(atoms, ast)| self.add_dative_bond(atoms, ast))
+            .map(|(atoms, attributes)| self.add_dative_bond(atoms, attributes))
             .collect()
     }
 
     pub fn add_aromatic_system(
         &mut self,
         atoms: Vec<AtomHandle>,
-        ast: AromaticSystemForm,
+        attributes: AromaticSystemForm,
     ) -> AromaticSystemHandle {
         let handle = AromaticSystemHandle::New(self.created_aromatic_systems);
-        self.push(Edit::AddAromaticSystem { atoms, ast });
+        self.push(Edit::AddAromaticSystem { atoms, attributes });
         handle
     }
 
@@ -573,17 +580,17 @@ impl Edits {
     ) -> Vec<AromaticSystemHandle> {
         systems
             .into_iter()
-            .map(|(atoms, ast)| self.add_aromatic_system(atoms, ast))
+            .map(|(atoms, attributes)| self.add_aromatic_system(atoms, attributes))
             .collect()
     }
 
     pub fn add_multicenter_bond(
         &mut self,
         atoms: Vec<AtomHandle>,
-        ast: MulticenterBondForm,
+        attributes: MulticenterBondForm,
     ) -> MulticenterBondHandle {
         let handle = MulticenterBondHandle::New(self.created_multicenter_bonds);
-        self.push(Edit::AddMulticenterBond { atoms, ast });
+        self.push(Edit::AddMulticenterBond { atoms, attributes });
         handle
     }
 
@@ -593,17 +600,17 @@ impl Edits {
     ) -> Vec<MulticenterBondHandle> {
         bonds
             .into_iter()
-            .map(|(atoms, ast)| self.add_multicenter_bond(atoms, ast))
+            .map(|(atoms, attributes)| self.add_multicenter_bond(atoms, attributes))
             .collect()
     }
 
     pub fn add_noncovalent_bond(
         &mut self,
         atoms: [AtomHandle; 2],
-        ast: NoncovalentBondForm,
+        attributes: NoncovalentBondForm,
     ) -> NoncovalentBondHandle {
         let handle = NoncovalentBondHandle::New(self.created_noncovalent_bonds);
-        self.push(Edit::AddNoncovalentBond { atoms, ast });
+        self.push(Edit::AddNoncovalentBond { atoms, attributes });
         handle
     }
 
@@ -613,7 +620,7 @@ impl Edits {
     ) -> Vec<NoncovalentBondHandle> {
         bonds
             .into_iter()
-            .map(|(atoms, ast)| self.add_noncovalent_bond(atoms, ast))
+            .map(|(atoms, attributes)| self.add_noncovalent_bond(atoms, attributes))
             .collect()
     }
 
@@ -621,10 +628,14 @@ impl Edits {
         &mut self,
         site: AtomHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoAtomForm,
+        attributes: StereoAtomForm,
     ) -> StereoAtomHandle {
         let handle = StereoAtomHandle::New(self.created_stereo_atoms);
-        self.push(Edit::AddStereoAtom { site, ligands, ast });
+        self.push(Edit::AddStereoAtom {
+            site,
+            ligands,
+            attributes,
+        });
         handle
     }
 
@@ -640,7 +651,7 @@ impl Edits {
     ) -> Vec<StereoAtomHandle> {
         atoms
             .into_iter()
-            .map(|(site, ligands, ast)| self.add_stereo_atom(site, ligands, ast))
+            .map(|(site, ligands, attributes)| self.add_stereo_atom(site, ligands, attributes))
             .collect()
     }
 
@@ -648,10 +659,14 @@ impl Edits {
         &mut self,
         site: BondHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoBondForm,
+        attributes: StereoBondForm,
     ) -> StereoBondHandle {
         let handle = StereoBondHandle::New(self.created_stereo_bonds);
-        self.push(Edit::AddStereoBond { site, ligands, ast });
+        self.push(Edit::AddStereoBond {
+            site,
+            ligands,
+            attributes,
+        });
         handle
     }
 
@@ -667,7 +682,7 @@ impl Edits {
     ) -> Vec<StereoBondHandle> {
         bonds
             .into_iter()
-            .map(|(site, ligands, ast)| self.add_stereo_bond(site, ligands, ast))
+            .map(|(site, ligands, attributes)| self.add_stereo_bond(site, ligands, attributes))
             .collect()
     }
 
@@ -1610,83 +1625,83 @@ fn collect_molecule_constraint_entities(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedAtom {
     pub id: AtomId,
-    pub ast: AtomForm,
+    pub attributes: AtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedBond {
     pub id: BondId,
     pub endpoints: [AtomId; 2],
-    pub ast: BondForm,
+    pub attributes: BondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedAtom {
     pub id: AtomId,
-    pub ast: AtomForm,
+    pub attributes: AtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedBond {
     pub id: BondId,
     pub endpoints: [AtomId; 2],
-    pub ast: BondForm,
+    pub attributes: BondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedDativeBond {
     pub id: DativeBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: DativeBondForm,
+    pub attributes: DativeBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedDativeBond {
     pub id: DativeBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: DativeBondForm,
+    pub attributes: DativeBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedAromaticSystem {
     pub id: AromaticSystemId,
     pub atoms: Vec<AtomId>,
-    pub ast: AromaticSystemForm,
+    pub attributes: AromaticSystemForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedAromaticSystem {
     pub id: AromaticSystemId,
     pub atoms: Vec<AtomId>,
-    pub ast: AromaticSystemForm,
+    pub attributes: AromaticSystemForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedMulticenterBond {
     pub id: MulticenterBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: MulticenterBondForm,
+    pub attributes: MulticenterBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedMulticenterBond {
     pub id: MulticenterBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: MulticenterBondForm,
+    pub attributes: MulticenterBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedNoncovalentBond {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: NoncovalentBondForm,
+    pub attributes: NoncovalentBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedNoncovalentBond {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
-    pub ast: NoncovalentBondForm,
+    pub attributes: NoncovalentBondForm,
 }
 
 // Stereo elements carry both factors: the `site` (atom/bond) and the ordered
@@ -1696,7 +1711,7 @@ pub struct AddedStereoAtom {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoAtomForm,
+    pub attributes: StereoAtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1704,7 +1719,7 @@ pub struct RemovedStereoAtom {
     pub id: StereoAtomId,
     pub site: AtomId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoAtomForm,
+    pub attributes: StereoAtomForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1712,7 +1727,7 @@ pub struct AddedStereoBond {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoBondForm,
+    pub attributes: StereoBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1720,7 +1735,7 @@ pub struct RemovedStereoBond {
     pub id: StereoBondId,
     pub site: BondId,
     pub ligands: Vec<StereoLigand>,
-    pub ast: StereoBondForm,
+    pub attributes: StereoBondForm,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2028,35 +2043,35 @@ mod tests {
                 Edit::AddAtoms { atoms: vec![atom] },
                 Edit::AddDativeBond {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: dative,
+                    attributes: dative,
                 },
                 Edit::AddBonds {
                     bonds: vec![AddBond {
                         endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                        ast: bond,
+                        attributes: bond,
                     }],
                 },
                 Edit::AddAromaticSystem {
                     atoms: vec![AtomHandle::New(0)],
-                    ast: aromatic,
+                    attributes: aromatic,
                 },
                 Edit::AddMulticenterBond {
                     atoms: vec![AtomHandle::New(0)],
-                    ast: multicenter,
+                    attributes: multicenter,
                 },
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                    ast: noncovalent,
+                    attributes: noncovalent,
                 },
                 Edit::AddStereoAtom {
                     site: AtomHandle::New(0),
                     ligands: vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
-                    ast: stereo_atom,
+                    attributes: stereo_atom,
                 },
                 Edit::AddStereoBond {
                     site: BondHandle::New(0),
                     ligands: vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
-                    ast: stereo_bond,
+                    attributes: stereo_bond,
                 },
             ],
         );
@@ -2096,11 +2111,11 @@ mod tests {
         let bonds = vec![
             AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                ast: single.clone(),
+                attributes: single.clone(),
             },
             AddBond {
                 endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-                ast: double.clone(),
+                attributes: double.clone(),
             },
         ];
 
@@ -2123,7 +2138,7 @@ mod tests {
                 Edit::AddBonds {
                     bonds: vec![AddBond {
                         endpoints: [AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(3)),],
-                        ast: triple,
+                        attributes: triple,
                     }],
                 },
             ],
@@ -2216,55 +2231,55 @@ mod tests {
             vec![
                 Edit::AddDativeBond {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: DativeBondForm::default(),
+                    attributes: DativeBondForm::default(),
                 },
                 Edit::AddDativeBond {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
-                    ast: DativeBondForm::default(),
+                    attributes: DativeBondForm::default(),
                 },
                 Edit::AddAromaticSystem {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: AromaticSystemForm::default(),
+                    attributes: AromaticSystemForm::default(),
                 },
                 Edit::AddAromaticSystem {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
-                    ast: AromaticSystemForm::default(),
+                    attributes: AromaticSystemForm::default(),
                 },
                 Edit::AddMulticenterBond {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
-                    ast: MulticenterBondForm::default(),
+                    attributes: MulticenterBondForm::default(),
                 },
                 Edit::AddMulticenterBond {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
-                    ast: MulticenterBondForm::default(),
+                    attributes: MulticenterBondForm::default(),
                 },
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    ast: NoncovalentBondForm::default(),
+                    attributes: NoncovalentBondForm::default(),
                 },
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-                    ast: NoncovalentBondForm::default(),
+                    attributes: NoncovalentBondForm::default(),
                 },
                 Edit::AddStereoAtom {
                     site: AtomHandle::Id(AtomId(0)),
                     ligands: Vec::new(),
-                    ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                    attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 },
                 Edit::AddStereoAtom {
                     site: AtomHandle::Id(AtomId(1)),
                     ligands: Vec::new(),
-                    ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 },
                 Edit::AddStereoBond {
                     site: BondHandle::Id(BondId(0)),
                     ligands: Vec::new(),
-                    ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 },
                 Edit::AddStereoBond {
                     site: BondHandle::Id(BondId(1)),
                     ligands: Vec::new(),
-                    ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 },
             ],
         );
@@ -2434,39 +2449,39 @@ mod tests {
                 bonds: vec![
                     AddBond {
                         endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        ast: BondForm::from_order(1),
+                        attributes: BondForm::from_order(1),
                     },
                     AddBond {
                         endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
-                        ast: BondForm::from_order(1),
+                        attributes: BondForm::from_order(1),
                     },
                 ],
             },
             Edit::AddDativeBond {
                 atoms: Vec::new(),
-                ast: DativeBondForm::default(),
+                attributes: DativeBondForm::default(),
             },
             Edit::AddAromaticSystem {
                 atoms: Vec::new(),
-                ast: AromaticSystemForm::default(),
+                attributes: AromaticSystemForm::default(),
             },
             Edit::AddMulticenterBond {
                 atoms: Vec::new(),
-                ast: MulticenterBondForm::default(),
+                attributes: MulticenterBondForm::default(),
             },
             Edit::AddNoncovalentBond {
                 atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                ast: NoncovalentBondForm::default(),
+                attributes: NoncovalentBondForm::default(),
             },
             Edit::AddStereoAtom {
                 site: AtomHandle::Id(AtomId(0)),
                 ligands: Vec::new(),
-                ast: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             },
             Edit::AddStereoBond {
                 site: BondHandle::Id(BondId(0)),
                 ligands: Vec::new(),
-                ast: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             },
         ];
         let mut edits: Edits = entries.clone().into_iter().collect();
@@ -2636,7 +2651,7 @@ mod tests {
             .transact(applied_edits)
             .expect("atom update edits should apply");
 
-        assert_eq!(editor.atom(AtomId(0)).ast, &expected);
+        assert_eq!(editor.atom(AtomId(0)).attributes, &expected);
     }
 
     #[rustfmt::skip]
@@ -2728,7 +2743,7 @@ mod tests {
             .transact(applied_edits)
             .expect("bond update edits should apply");
 
-        assert_eq!(editor.bond(BondId(0)).ast, &expected);
+        assert_eq!(editor.bond(BondId(0)).attributes, &expected);
     }
 
     #[rustfmt::skip]
@@ -2785,7 +2800,7 @@ mod tests {
 
         assert_eq!(edits.as_slice(), expected);
 
-        let expected_ast = current.update(&update);
+        let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(), AtomForm::default()],
             dative: vec![(vec![AtomId(0)], AtomId(1), current.clone())],
@@ -2802,7 +2817,10 @@ mod tests {
             .transact(applied_edits)
             .expect("dative-bond update edits should apply");
 
-        assert_eq!(editor.dative_bond(DativeBondId(0)).ast, &expected_ast);
+        assert_eq!(
+            editor.dative_bond(DativeBondId(0)).attributes,
+            &expected_attributes
+        );
     }
 
     #[rustfmt::skip]
@@ -2868,7 +2886,7 @@ mod tests {
 
         assert_eq!(edits.as_slice(), expected);
 
-        let expected_ast = current.update(&update);
+        let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::default(),
@@ -2890,8 +2908,8 @@ mod tests {
             .expect("aromatic-system update edits should apply");
 
         assert_eq!(
-            editor.aromatic_system(AromaticSystemId(0)).ast,
-            &expected_ast,
+            editor.aromatic_system(AromaticSystemId(0)).attributes,
+            &expected_attributes,
         );
     }
 
@@ -2958,7 +2976,7 @@ mod tests {
 
         assert_eq!(edits.as_slice(), expected);
 
-        let expected_ast = current.update(&update);
+        let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::default(),
@@ -2980,8 +2998,8 @@ mod tests {
             .expect("multicenter-bond update edits should apply");
 
         assert_eq!(
-            editor.multicenter_bond(MulticenterBondId(0)).ast,
-            &expected_ast,
+            editor.multicenter_bond(MulticenterBondId(0)).attributes,
+            &expected_attributes,
         );
     }
 
@@ -3038,7 +3056,7 @@ mod tests {
 
         assert_eq!(edits.as_slice(), expected);
 
-        let expected_ast = current.update(&update);
+        let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(), AtomForm::default()],
             noncovalent: vec![(AtomId(0), AtomId(1), current.clone())],
@@ -3056,8 +3074,8 @@ mod tests {
             .expect("noncovalent-bond update edits should apply");
 
         assert_eq!(
-            editor.noncovalent_bond(NoncovalentBondId(0)).ast,
-            &expected_ast,
+            editor.noncovalent_bond(NoncovalentBondId(0)).attributes,
+            &expected_attributes,
         );
     }
 
@@ -3115,7 +3133,7 @@ mod tests {
 
         assert_eq!(edits.as_slice(), expected);
 
-        let expected_ast = current.update(&update);
+        let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 5],
             stereo_atoms: vec![(
@@ -3138,7 +3156,10 @@ mod tests {
             .transact(applied_edits)
             .expect("stereo-atom update edits should apply");
 
-        assert_eq!(editor.stereo_atom(StereoAtomId(0)).ast, &expected_ast);
+        assert_eq!(
+            editor.stereo_atom(StereoAtomId(0)).attributes,
+            &expected_attributes
+        );
     }
 
     #[rustfmt::skip]
@@ -3195,7 +3216,7 @@ mod tests {
 
         assert_eq!(edits.as_slice(), expected);
 
-        let expected_ast = current.update(&update);
+        let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 6],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -3219,7 +3240,10 @@ mod tests {
             .transact(applied_edits)
             .expect("stereo-bond update edits should apply");
 
-        assert_eq!(editor.stereo_bond(StereoBondId(0)).ast, &expected_ast);
+        assert_eq!(
+            editor.stereo_bond(StereoBondId(0)).attributes,
+            &expected_attributes
+        );
     }
 
     #[rustfmt::skip]

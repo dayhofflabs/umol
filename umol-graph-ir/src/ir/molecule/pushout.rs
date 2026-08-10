@@ -54,10 +54,10 @@ impl Molecule {
             ) {
                 (Some(l), Some(r)) => self
                     .atom(AtomId::from(l))
-                    .ast
-                    .meet(other.atom(AtomId::from(r)).ast)?,
-                (Some(l), None) => self.atom(AtomId::from(l)).ast.clone(),
-                (None, Some(r)) => other.atom(AtomId::from(r)).ast.clone(),
+                    .attributes
+                    .meet(other.atom(AtomId::from(r)).attributes)?,
+                (Some(l), None) => self.atom(AtomId::from(l)).attributes.clone(),
+                (None, Some(r)) => other.atom(AtomId::from(r)).attributes.clone(),
                 (None, None) => unreachable!("a glued node originates from a side"),
             };
             atoms.push(atom);
@@ -73,10 +73,10 @@ impl Molecule {
             ) {
                 (Some(l), Some(r)) => self
                     .bond(BondId::from(l))
-                    .ast
-                    .meet(other.bond(BondId::from(r)).ast)?,
-                (Some(l), None) => self.bond(BondId::from(l)).ast.clone(),
-                (None, Some(r)) => other.bond(BondId::from(r)).ast.clone(),
+                    .attributes
+                    .meet(other.bond(BondId::from(r)).attributes)?,
+                (Some(l), None) => self.bond(BondId::from(l)).attributes.clone(),
+                (None, Some(r)) => other.bond(BondId::from(r)).attributes.clone(),
                 (None, None) => unreachable!("a glued edge originates from a side"),
             };
             bonds.push((AtomId::from(u), AtomId::from(v), bond));

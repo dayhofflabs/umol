@@ -670,7 +670,7 @@ fn render_atoms(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .atoms()
         .iter()
-        .map(|view| render_atom_entry(view.id, view.ast, meta))
+        .map(|view| render_atom_entry(view.id, view.attributes, meta))
         .collect();
     Edn::Vector(entries.into())
 }
@@ -738,7 +738,7 @@ fn render_bonds(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
             render_bond_entry(
                 view.id,
                 view.atom_ids(),
-                BondDsl::from_ref(view.ast).to_edn(),
+                BondDsl::from_ref(view.attributes).to_edn(),
                 meta,
             )
         })
@@ -787,7 +787,7 @@ fn render_dative(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
                 view.id,
                 view.donor_ids(),
                 view.acceptor_id(),
-                DativeBondDsl::from_ref(view.ast).to_edn(),
+                DativeBondDsl::from_ref(view.attributes).to_edn(),
                 meta,
             )
         })
@@ -830,7 +830,7 @@ fn render_aromatic(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
                 view.id,
                 view.atom_ids(),
                 Edn::Str(Cow::Owned(
-                    AromaticSystemDsl::from_ref(view.ast).to_string(),
+                    AromaticSystemDsl::from_ref(view.attributes).to_string(),
                 )),
                 meta,
             )
@@ -874,7 +874,7 @@ fn render_multicenter(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
                 view.id,
                 view.atom_ids(),
                 Edn::Str(Cow::Owned(
-                    MulticenterBondDsl::from_ref(view.ast).to_string(),
+                    MulticenterBondDsl::from_ref(view.attributes).to_string(),
                 )),
                 meta,
             )
@@ -912,7 +912,7 @@ fn render_noncovalent(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
             render_noncovalent_entry(
                 view.id,
                 view.atom_ids(),
-                NoncovalentBondDsl::from_ref(view.ast).to_edn(),
+                NoncovalentBondDsl::from_ref(view.attributes).to_edn(),
                 meta,
             )
         })
@@ -952,7 +952,7 @@ fn render_stereo_atoms(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> 
                     .into_iter()
                     .map(|l| render_stereo_ligand(l, meta))
                     .collect(),
-                StereoAtomDsl::from_ref(view.ast).to_edn(),
+                StereoAtomDsl::from_ref(view.attributes).to_edn(),
                 meta,
             )
         })
@@ -992,7 +992,7 @@ fn render_stereo_bonds(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> 
                     .into_iter()
                     .map(|l| render_stereo_ligand(l, meta))
                     .collect(),
-                StereoBondDsl::from_ref(view.ast).to_edn(),
+                StereoBondDsl::from_ref(view.attributes).to_edn(),
                 meta,
             )
         })

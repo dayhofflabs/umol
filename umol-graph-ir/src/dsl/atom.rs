@@ -48,15 +48,15 @@ pub struct AtomDsl(pub AtomForm);
 
 impl AtomDsl {
     /// Zero-cost reference cast from `&AtomForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &AtomForm) -> &Self {
+    pub fn from_ref(form: &AtomForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const AtomForm as *const Self) }
+        unsafe { &*(form as *const AtomForm as *const Self) }
     }
 }
 
 impl From<AtomForm> for AtomDsl {
-    fn from(ast: AtomForm) -> Self {
-        Self(ast)
+    fn from(form: AtomForm) -> Self {
+        Self(form)
     }
 }
 
@@ -104,8 +104,8 @@ impl ToEdn for AtomDsl {
 impl FromIr<AtomForm> for AtomDsl {
     type Ctx = AtomDefaults;
 
-    fn from_ir(ast: &AtomForm, cfg: &Self::Ctx) -> Self {
-        let mut out = ast.clone();
+    fn from_ir(form: &AtomForm, cfg: &Self::Ctx) -> Self {
+        let mut out = form.clone();
         lower_atom(&mut out, cfg);
         AtomDsl(out)
     }
@@ -630,61 +630,61 @@ fn multicenter_valence(i: &mut &str) -> PResult<MulticenterValenceForm> {
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
 }
 
-fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(), ParseError> {
-    let ast = &mut form.0;
+fn apply_predicates(dsl: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(), ParseError> {
+    let atom = &mut dsl.0;
     for pred in preds {
         match pred {
             AtomPredicate::IsotopeMass(v) => {
-                if !matches!(ast.isotope_mass, IsotopeMassForm::Undetermined) {
+                if !matches!(atom.isotope_mass, IsotopeMassForm::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#i".to_string()));
                 }
-                ast.isotope_mass = v;
+                atom.isotope_mass = v;
             }
             AtomPredicate::Charge(v) => {
-                if !matches!(ast.charge, NumForm::Undetermined) {
+                if !matches!(atom.charge, NumForm::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#c".to_string()));
                 }
-                ast.charge = v;
+                atom.charge = v;
             }
             AtomPredicate::ImplicitHydrogens(v) => {
-                if !matches!(ast.implicit_hydrogens, NumForm::Undetermined) {
+                if !matches!(atom.implicit_hydrogens, NumForm::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#h".to_string()));
                 }
-                ast.implicit_hydrogens = v;
+                atom.implicit_hydrogens = v;
             }
             AtomPredicate::LonePairs(v) => {
-                if !matches!(ast.lone_pairs, NumForm::Undetermined) {
+                if !matches!(atom.lone_pairs, NumForm::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#n".to_string()));
                 }
-                ast.lone_pairs = v;
+                atom.lone_pairs = v;
             }
             AtomPredicate::UnpairedElectrons(predicate) => {
                 apply_unpaired_electrons_predicate(
-                    &mut ast.unpaired_electrons,
+                    &mut atom.unpaired_electrons,
                     predicate,
                     ParseError::DuplicateAtomPredicate,
                 )?;
             }
             AtomPredicate::Constraint(c) => {
-                if ast.constraints.contains(c.key()) {
+                if atom.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateAtomPredicate(
                         constraint_tag(c.key()).to_string(),
                     ));
                 }
-                ast.constraints.set(c);
+                atom.constraints.set(c);
             }
         }
     }
     Ok(())
 }
 
-fn fmt_atom_form(f: &mut fmt::Formatter<'_>, ast: &AtomForm) -> fmt::Result {
-    fmt_element(f, &ast.element)?;
-    fmt_isotope_mass(f, &ast.isotope_mass)?;
-    fmt_charge(f, &ast.charge)?;
-    fmt_value_field(f, "#h", &ast.implicit_hydrogens)?;
-    fmt_value_field(f, "#n", &ast.lone_pairs)?;
-    fmt_unpaired_electrons(f, &ast.unpaired_electrons)
+fn fmt_atom_form(f: &mut fmt::Formatter<'_>, form: &AtomForm) -> fmt::Result {
+    fmt_element(f, &form.element)?;
+    fmt_isotope_mass(f, &form.isotope_mass)?;
+    fmt_charge(f, &form.charge)?;
+    fmt_value_field(f, "#h", &form.implicit_hydrogens)?;
+    fmt_value_field(f, "#n", &form.lone_pairs)?;
+    fmt_unpaired_electrons(f, &form.unpaired_electrons)
 }
 
 fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementForm) -> fmt::Result {
@@ -829,7 +829,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintForm) -> fmt::Re
     }
 }
 
-pub(crate) fn raise_atom(ast: &mut AtomForm, cfg: &AtomDefaults) {
+pub(crate) fn raise_atom(atom: &mut AtomForm, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomForm field is a compile error
     // here, forcing the author to decide how raising should handle it.
     let AtomForm {
@@ -840,7 +840,7 @@ pub(crate) fn raise_atom(ast: &mut AtomForm, cfg: &AtomDefaults) {
         lone_pairs,
         unpaired_electrons,
         constraints,
-    } = ast;
+    } = atom;
 
     if matches!(*isotope_mass, IsotopeMassForm::Undetermined) {
         *isotope_mass = match cfg.isotope {
@@ -920,7 +920,7 @@ fn raise_atom_constraints(constraints: &mut AtomConstraintsForm, cfg: &AtomDefau
     }
 }
 
-pub(crate) fn lower_atom(ast: &mut AtomForm, cfg: &AtomDefaults) {
+pub(crate) fn lower_atom(atom: &mut AtomForm, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomForm field is a compile error
     // here, forcing the author to decide how lowering should handle it.
     let AtomForm {
@@ -931,7 +931,7 @@ pub(crate) fn lower_atom(ast: &mut AtomForm, cfg: &AtomDefaults) {
         lone_pairs,
         unpaired_electrons,
         constraints,
-    } = ast;
+    } = atom;
 
     if matches!(
         (&cfg.isotope, &*isotope_mass),
@@ -1074,8 +1074,8 @@ impl ToEdn for AromaticValenceDsl {
 impl FromIr<AromaticValenceForm> for AromaticValenceDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &AromaticValenceForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &AromaticValenceForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 
@@ -1148,8 +1148,8 @@ impl ToEdn for MulticenterValenceDsl {
 impl FromIr<MulticenterValenceForm> for MulticenterValenceDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &MulticenterValenceForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &MulticenterValenceForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 
@@ -1283,8 +1283,8 @@ impl ToEdn for AtomConstraintDsl {
 impl FromIr<AtomConstraintForm> for AtomConstraintDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &AtomConstraintForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &AtomConstraintForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 
@@ -1700,19 +1700,19 @@ mod tests {
 
     #[rstest]
     fn test_atom_dsl_from_ast() {
-        let mut ast = AtomForm::new(ElementForm::Lit(Element::C));
-        ast.charge = NumForm::Lit(0);
-        ast.lone_pairs = NumForm::Lit(0);
-        ast.implicit_hydrogens = NumForm::Lit(0);
-        ast.isotope_mass = IsotopeMassForm::Natural;
-        ast.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
-        ast.constraints
+        let mut form = AtomForm::new(ElementForm::Lit(Element::C));
+        form.charge = NumForm::Lit(0);
+        form.lone_pairs = NumForm::Lit(0);
+        form.implicit_hydrogens = NumForm::Lit(0);
+        form.isotope_mass = IsotopeMassForm::Natural;
+        form.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
+        form.constraints
             .set(AtomConstraintForm::Valence(NumForm::Lit(0)));
-        ast.constraints.set(AtomConstraintForm::AromaticValence(
+        form.constraints.set(AtomConstraintForm::AromaticValence(
             AromaticValenceForm::NotAromatic,
         ));
         let cfg = AtomDefaults::zeroed();
-        let dsl = AtomDsl::from_ir(&ast, &cfg);
+        let dsl = AtomDsl::from_ir(&form, &cfg);
         assert_eq!(dsl.0.charge, NumForm::Undetermined);
         assert_eq!(dsl.0.lone_pairs, NumForm::Undetermined);
         assert_eq!(dsl.0.implicit_hydrogens, NumForm::Undetermined);
@@ -1725,21 +1725,21 @@ mod tests {
     fn test_atom_dsl_into_ast() {
         let dsl = AtomDsl(AtomForm::new(ElementForm::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
-        let ast = dsl.into_ir(&cfg);
-        assert_eq!(ast.charge, NumForm::Lit(0));
-        assert_eq!(ast.lone_pairs, NumForm::Lit(0));
-        assert_eq!(ast.implicit_hydrogens, NumForm::Lit(0));
-        assert_eq!(ast.isotope_mass, IsotopeMassForm::Natural);
+        let form = dsl.into_ir(&cfg);
+        assert_eq!(form.charge, NumForm::Lit(0));
+        assert_eq!(form.lone_pairs, NumForm::Lit(0));
+        assert_eq!(form.implicit_hydrogens, NumForm::Lit(0));
+        assert_eq!(form.isotope_mass, IsotopeMassForm::Natural);
         assert_eq!(
-            ast.unpaired_electrons,
+            form.unpaired_electrons,
             UnpairedElectronsForm::from((0_u8, 1_u8))
         );
         assert_eq!(
-            ast.constraints.get(AtomConstraintKey::Valence),
+            form.constraints.get(AtomConstraintKey::Valence),
             Some(&AtomConstraintForm::Valence(NumForm::Lit(0)))
         );
         assert_eq!(
-            ast.constraints.get(AtomConstraintKey::AromaticValence),
+            form.constraints.get(AtomConstraintKey::AromaticValence),
             Some(&AtomConstraintForm::AromaticValence(
                 AromaticValenceForm::NotAromatic
             ))
@@ -1907,23 +1907,23 @@ mod tests {
     #[case::charged("N#c+")]
     #[case::aromatic("C#h3#a+")]
     fn test_atom_form_from_str_to_string_roundtrip(#[case] s: &str) {
-        let ast: AtomForm = s.parse().unwrap();
-        assert_eq!(ast.to_string(), s);
+        let form: AtomForm = s.parse().unwrap();
+        assert_eq!(form.to_string(), s);
     }
 
     #[rstest]
     fn test_atom_form_from_str_carbon_element() {
-        let ast: AtomForm = "C".parse().unwrap();
-        assert_eq!(ast.element, ElementForm::Lit(Element::C));
-        assert_eq!(ast.charge, NumForm::Undetermined);
+        let form: AtomForm = "C".parse().unwrap();
+        assert_eq!(form.element, ElementForm::Lit(Element::C));
+        assert_eq!(form.charge, NumForm::Undetermined);
     }
 
     #[rstest]
     fn test_atom_form_to_edn_roundtrip() {
         use umol_edn::ToEdn;
-        let ast: AtomForm = "C#c+#h3".parse().unwrap();
-        let edn = ast.to_edn();
+        let form: AtomForm = "C#c+#h3".parse().unwrap();
+        let edn = form.to_edn();
         let back = AtomForm::from_edn(&edn).unwrap();
-        assert_eq!(back, ast);
+        assert_eq!(back, form);
     }
 }

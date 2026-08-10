@@ -298,7 +298,7 @@ impl BondView {
         molecule
             .bonds()
             .get(self.id)
-            .map(|view| view.ast)
+            .map(|view| view.attributes)
             .ok_or_else(|| PyIndexError::new_err("bond id out of range"))
     }
 }
@@ -340,7 +340,7 @@ impl BondView {
             .borrow_mut(py)
             .inner_mut()
             .bond_mut(self.id)
-            .ast
+            .attributes
             .order = value.to_rust(py);
     }
 
@@ -356,7 +356,7 @@ impl BondView {
             .borrow_mut(py)
             .inner_mut()
             .bond_mut(self.id)
-            .ast
+            .attributes
             .charge = value.to_rust(py);
     }
 
@@ -372,7 +372,7 @@ impl BondView {
             .borrow_mut(py)
             .inner_mut()
             .bond_mut(self.id)
-            .ast
+            .attributes
             .unpaired_electrons = value.to_rust(py);
     }
 
@@ -396,7 +396,7 @@ impl BondView {
             .borrow_mut(py)
             .inner_mut()
             .bond_mut(self.id)
-            .ast
+            .attributes
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -473,7 +473,7 @@ impl BondViews {
     fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_bond_index(molecule.inner(), index)?;
-        *molecule.inner_mut().bond_mut(id).ast = bond.inner().clone();
+        *molecule.inner_mut().bond_mut(id).attributes = bond.inner().clone();
         Ok(())
     }
 

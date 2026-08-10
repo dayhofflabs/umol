@@ -194,20 +194,21 @@ impl AromaticityPerception {
     ) -> Result<Solution<AromaticityDerivation, AromaticityContradiction>, AromaticityError> {
         if ast.atoms().iter().any(|atom| {
             matches!(
-                atom.ast.constraints.aromatic_valence(),
+                atom.attributes.constraints.aromatic_valence(),
                 Some(AromaticValenceForm::Aromatic(value))
                     if !matches!(value, NumForm::Lit(_))
             )
-        }) || ast
-            .aromatic_systems()
-            .iter()
-            .any(|system| matches!(system.ast.electrons, ElectronCountsForm::Undetermined))
-        {
+        }) || ast.aromatic_systems().iter().any(|system| {
+            matches!(
+                system.attributes.electrons,
+                ElectronCountsForm::Undetermined
+            )
+        }) {
             return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
         }
 
         let systems = match self.find_systems(ast, config, |atom| {
-            match atom.ast.constraints.aromatic_valence() {
+            match atom.attributes.constraints.aromatic_valence() {
                 Some(AromaticValenceForm::Aromatic(NumForm::Lit(value))) => {
                     u8::try_from(*value).ok()
                 }
@@ -238,7 +239,7 @@ impl AromaticityPerception {
 
         for atom in ast.atoms().iter() {
             if matches!(
-                atom.ast.constraints.aromatic_valence(),
+                atom.attributes.constraints.aromatic_valence(),
                 Some(AromaticValenceForm::Aromatic(_))
             ) && !accepted_atoms.contains(&atom.id)
             {
@@ -249,7 +250,7 @@ impl AromaticityPerception {
 
         let mut valid_existing = Vec::new();
         for existing in ast.aromatic_systems().iter() {
-            let ElectronCountsForm::Lit(existing_electrons) = &existing.ast.electrons else {
+            let ElectronCountsForm::Lit(existing_electrons) = &existing.attributes.electrons else {
                 return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
             };
             let existing_atoms: Vec<AtomId> = existing.atom_ids().collect();
@@ -323,7 +324,7 @@ impl AromaticityPerception {
             let has_matching_candidate =
                 system_members.iter().any(|candidate| candidate == &members);
             for atom in ast.atoms().iter() {
-                let Some(constraint) = atom.ast.constraints.aromatic_valence() else {
+                let Some(constraint) = atom.attributes.constraints.aromatic_valence() else {
                     continue;
                 };
                 let mismatch = match constraint {
@@ -349,7 +350,10 @@ impl AromaticityPerception {
             }
 
             for bond in ast.aromatic_system(system).bonds() {
-                if matches!(bond.ast.constraints.aromatic(), BooleanForm::Lit(false)) {
+                if matches!(
+                    bond.attributes.constraints.aromatic(),
+                    BooleanForm::Lit(false)
+                ) {
                     inconsistencies.insert(
                         AromaticityInconsistency::AromaticBondConstraintMismatch {
                             bond: bond.id,
@@ -384,7 +388,7 @@ impl AromaticityPerception {
             .collect();
         for bond_id in bond_ids {
             let bond = ast.bond_mut(bond_id);
-            bond.ast
+            bond.attributes
                 .constraints
                 .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
         }
@@ -443,7 +447,7 @@ mod tests {
     fn aromatic_valence_lit(ast: &Molecule, idx: AtomId) -> Option<i64> {
         match ast
             .atom(idx)
-            .ast
+            .attributes
             .constraints
             .get(AtomConstraintKey::AromaticValence)?
         {
@@ -501,7 +505,7 @@ mod tests {
         let outcome = perception
             .find_systems(ast, AromaticityConfig::default(), |v| {
                 match v
-                    .ast
+                    .attributes
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -744,7 +748,11 @@ mod tests {
         let aromatic_bond_count = ast
             .bonds()
             .iter()
-            .filter(|view| view.ast.constraints.contains(BondConstraintKey::Aromatic))
+            .filter(|view| {
+                view.attributes
+                    .constraints
+                    .contains(BondConstraintKey::Aromatic)
+            })
             .count();
         assert_eq!(aromatic_bond_count, 6);
     }
@@ -827,7 +835,7 @@ mod tests {
         let outcome = any_hueckel()
             .find_systems(&ast, AromaticityConfig::default(), |v| {
                 match v
-                    .ast
+                    .attributes
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -843,15 +851,18 @@ mod tests {
         any_hueckel().add_systems(&mut ast, systems);
 
         let system = ast.aromatic_system(AromaticSystemId(0));
-        assert_eq!(system.ast.charge, NumForm::Lit(system_charge));
-        assert_eq!(system.ast.electrons, ElectronCountsForm::Lit(electrons));
+        assert_eq!(system.attributes.charge, NumForm::Lit(system_charge));
+        assert_eq!(
+            system.attributes.electrons,
+            ElectronCountsForm::Lit(electrons)
+        );
         for (i, (q, k)) in atom_charges
             .iter()
             .zip(aromatic_valences.iter())
             .enumerate()
         {
             let idx = AtomId(i as u32);
-            assert_eq!(ast.atom(idx).ast.charge, NumForm::Lit(*q));
+            assert_eq!(ast.atom(idx).attributes.charge, NumForm::Lit(*q));
             assert_eq!(aromatic_valence_lit(&ast, idx), Some(*k));
         }
     }
@@ -874,10 +885,11 @@ mod tests {
         let solution = run_full(&perception, &mut ast);
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 0);
-        let any_aromatic = ast
-            .bonds()
-            .iter()
-            .any(|view| view.ast.constraints.contains(BondConstraintKey::Aromatic));
+        let any_aromatic = ast.bonds().iter().any(|view| {
+            view.attributes
+                .constraints
+                .contains(BondConstraintKey::Aromatic)
+        });
         assert!(!any_aromatic);
     }
 }

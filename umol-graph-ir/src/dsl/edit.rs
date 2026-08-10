@@ -253,7 +253,7 @@ enum EditInput {
     },
     BondAdd {
         atoms: [AtomHandle; 2],
-        ast: BondDsl,
+        attributes: BondDsl,
     },
     BondRemove(BondHandle),
     BondModify {
@@ -264,7 +264,7 @@ enum EditInput {
     DativeBondAdd {
         donors: Vec<AtomHandle>,
         acceptor: AtomHandle,
-        ast: DativeBondDsl,
+        attributes: DativeBondDsl,
     },
     DativeBondsRemove(Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondDsl)>),
     DativeBondModify {
@@ -274,7 +274,7 @@ enum EditInput {
     },
     AromaticSystemAdd {
         atoms: Vec<AtomHandle>,
-        ast: AromaticSystemDsl,
+        attributes: AromaticSystemDsl,
     },
     AromaticSystemsRemove(Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemDsl)>),
     AromaticSystemModify {
@@ -284,7 +284,7 @@ enum EditInput {
     },
     MulticenterBondAdd {
         atoms: Vec<AtomHandle>,
-        ast: MulticenterBondDsl,
+        attributes: MulticenterBondDsl,
     },
     MulticenterBondsRemove(Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondDsl)>),
     MulticenterBondModify {
@@ -294,7 +294,7 @@ enum EditInput {
     },
     NoncovalentBondAdd {
         atoms: [AtomHandle; 2],
-        ast: NoncovalentBondDsl,
+        attributes: NoncovalentBondDsl,
     },
     NoncovalentBondsRemove(Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondDsl)>),
     NoncovalentBondModify {
@@ -305,7 +305,7 @@ enum EditInput {
     StereoAtomAdd {
         site: AtomHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoAtomDsl,
+        attributes: StereoAtomDsl,
     },
     StereoAtomsRemove(Vec<StereoAtomRemovalInput>),
     StereoAtomModify {
@@ -316,7 +316,7 @@ enum EditInput {
     StereoBondAdd {
         site: BondHandle,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        ast: StereoBondDsl,
+        attributes: StereoBondDsl,
     },
     StereoBondsRemove(Vec<StereoBondRemovalInput>),
     StereoBondModify {
@@ -360,7 +360,7 @@ impl<'de> FromEdn<'de> for EditInput {
 impl ToEdn for EditInput {
     fn to_edn(&self) -> Edn<'static> {
         match self {
-            Self::AtomAdd(ast) => edit_map("atom", "add", ast.to_edn()),
+            Self::AtomAdd(attributes) => edit_map("atom", "add", attributes.to_edn()),
             Self::AtomRemove(id) => edit_map("atom", "remove", id.to_edn()),
             Self::AtomModify { id, expect, update } => edit_map(
                 "atom",
@@ -373,11 +373,11 @@ impl ToEdn for EditInput {
             ),
             Self::BondAdd {
                 atoms: [first, second],
-                ast,
+                attributes,
             } => edit_map(
                 "bond",
                 "add",
-                Edn::Vector(vec![first.to_edn(), second.to_edn(), ast.to_edn()].into()),
+                Edn::Vector(vec![first.to_edn(), second.to_edn(), attributes.to_edn()].into()),
             ),
             Self::BondRemove(id) => edit_map("bond", "remove", id.to_edn()),
             Self::BondModify { id, expect, update } => edit_map(
@@ -392,11 +392,11 @@ impl ToEdn for EditInput {
             Self::DativeBondAdd {
                 donors,
                 acceptor,
-                ast,
+                attributes,
             } => edit_map(
                 "dative-bond",
                 "add",
-                dative_entry_edn(None, donors, acceptor, ast.to_edn()),
+                dative_entry_edn(None, donors, acceptor, attributes.to_edn()),
             ),
             Self::DativeBondsRemove(removes) => edit_map(
                 "dative-bonds",
@@ -404,11 +404,16 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, atoms, ast)| {
+                        .map(|(id, atoms, attributes)| {
                             let (acceptor, donors) = atoms
                                 .split_last()
                                 .expect("dative edit always has an acceptor");
-                            dative_entry_edn(Some(id.to_edn()), donors, acceptor, ast.to_edn())
+                            dative_entry_edn(
+                                Some(id.to_edn()),
+                                donors,
+                                acceptor,
+                                attributes.to_edn(),
+                            )
                         })
                         .collect::<Vec<_>>()
                         .into(),
@@ -423,10 +428,10 @@ impl ToEdn for EditInput {
                     DativeBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
-            Self::AromaticSystemAdd { atoms, ast } => edit_map(
+            Self::AromaticSystemAdd { atoms, attributes } => edit_map(
                 "aromatic-system",
                 "add",
-                relation_entry_edn(None, atoms, ast.to_edn()),
+                relation_entry_edn(None, atoms, attributes.to_edn()),
             ),
             Self::AromaticSystemsRemove(removes) => edit_map(
                 "aromatic-systems",
@@ -434,8 +439,8 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, atoms, ast)| {
-                            relation_entry_edn(Some(id.to_edn()), atoms, ast.to_edn())
+                        .map(|(id, atoms, attributes)| {
+                            relation_entry_edn(Some(id.to_edn()), atoms, attributes.to_edn())
                         })
                         .collect::<Vec<_>>()
                         .into(),
@@ -450,10 +455,10 @@ impl ToEdn for EditInput {
                     AromaticSystemUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
-            Self::MulticenterBondAdd { atoms, ast } => edit_map(
+            Self::MulticenterBondAdd { atoms, attributes } => edit_map(
                 "multicenter-bond",
                 "add",
-                relation_entry_edn(None, atoms, ast.to_edn()),
+                relation_entry_edn(None, atoms, attributes.to_edn()),
             ),
             Self::MulticenterBondsRemove(removes) => edit_map(
                 "multicenter-bonds",
@@ -461,8 +466,8 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, atoms, ast)| {
-                            relation_entry_edn(Some(id.to_edn()), atoms, ast.to_edn())
+                        .map(|(id, atoms, attributes)| {
+                            relation_entry_edn(Some(id.to_edn()), atoms, attributes.to_edn())
                         })
                         .collect::<Vec<_>>()
                         .into(),
@@ -477,10 +482,10 @@ impl ToEdn for EditInput {
                     MulticenterBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
-            Self::NoncovalentBondAdd { atoms, ast } => edit_map(
+            Self::NoncovalentBondAdd { atoms, attributes } => edit_map(
                 "noncovalent-bond",
                 "add",
-                relation_entry_edn(None, atoms, ast.to_edn()),
+                relation_entry_edn(None, atoms, attributes.to_edn()),
             ),
             Self::NoncovalentBondsRemove(removes) => edit_map(
                 "noncovalent-bonds",
@@ -488,8 +493,8 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, atoms, ast)| {
-                            relation_entry_edn(Some(id.to_edn()), atoms, ast.to_edn())
+                        .map(|(id, atoms, attributes)| {
+                            relation_entry_edn(Some(id.to_edn()), atoms, attributes.to_edn())
                         })
                         .collect::<Vec<_>>()
                         .into(),
@@ -504,10 +509,14 @@ impl ToEdn for EditInput {
                     NoncovalentBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
-            Self::StereoAtomAdd { site, ligands, ast } => edit_map(
+            Self::StereoAtomAdd {
+                site,
+                ligands,
+                attributes,
+            } => edit_map(
                 "stereo-atom",
                 "add",
-                stereo_entry_edn(None, site.to_edn(), ligands, ast.to_edn()),
+                stereo_entry_edn(None, site.to_edn(), ligands, attributes.to_edn()),
             ),
             Self::StereoAtomsRemove(removes) => edit_map(
                 "stereo-atoms",
@@ -515,12 +524,12 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, site, ligands, ast)| {
+                        .map(|(id, site, ligands, attributes)| {
                             stereo_entry_edn(
                                 Some(id.to_edn()),
                                 site.to_edn(),
                                 ligands,
-                                ast.to_edn(),
+                                attributes.to_edn(),
                             )
                         })
                         .collect::<Vec<_>>()
@@ -536,10 +545,14 @@ impl ToEdn for EditInput {
                     StereoAtomUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
-            Self::StereoBondAdd { site, ligands, ast } => edit_map(
+            Self::StereoBondAdd {
+                site,
+                ligands,
+                attributes,
+            } => edit_map(
                 "stereo-bond",
                 "add",
-                stereo_entry_edn(None, site.to_edn(), ligands, ast.to_edn()),
+                stereo_entry_edn(None, site.to_edn(), ligands, attributes.to_edn()),
             ),
             Self::StereoBondsRemove(removes) => edit_map(
                 "stereo-bonds",
@@ -547,12 +560,12 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, site, ligands, ast)| {
+                        .map(|(id, site, ligands, attributes)| {
                             stereo_entry_edn(
                                 Some(id.to_edn()),
                                 site.to_edn(),
                                 ligands,
-                                ast.to_edn(),
+                                attributes.to_edn(),
                             )
                         })
                         .collect::<Vec<_>>()
@@ -597,8 +610,8 @@ impl ToEdn for EditInput {
 impl EditInput {
     fn append_to(self, edits: &mut Edits, defaults: &MoleculeDefaults) -> Result<(), DeError> {
         match self {
-            Self::AtomAdd(ast) => {
-                edits.add_atom(ast.into_ir(&defaults.atom));
+            Self::AtomAdd(attributes) => {
+                edits.add_atom(attributes.into_ir(&defaults.atom));
             }
             Self::AtomRemove(id) => edits.remove_atom(id),
             Self::AtomModify { id, expect, update } => {
@@ -606,9 +619,9 @@ impl EditInput {
             }
             Self::BondAdd {
                 atoms: [first, second],
-                ast,
+                attributes,
             } => {
-                edits.add_bond(first, second, ast.into_ir(&defaults.bond));
+                edits.add_bond(first, second, attributes.into_ir(&defaults.bond));
             }
             Self::BondRemove(id) => edits.remove_bond(id),
             Self::BondModify { id, expect, update } => {
@@ -617,78 +630,94 @@ impl EditInput {
             Self::DativeBondAdd {
                 mut donors,
                 acceptor,
-                ast,
+                attributes,
             } => {
                 donors.push(acceptor);
-                edits.add_dative_bond(donors, ast.into_ir(&defaults.dative_bond));
+                edits.add_dative_bond(donors, attributes.into_ir(&defaults.dative_bond));
             }
             Self::DativeBondsRemove(removes) => edits.remove_dative_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.dative_bond)))
+                    .map(|(id, atoms, attributes)| {
+                        (id, atoms, attributes.into_ir(&defaults.dative_bond))
+                    })
                     .collect(),
             ),
             Self::DativeBondModify { id, expect, update } => {
                 append_dative_bond_modify(edits, id, expect, update)?;
             }
-            Self::AromaticSystemAdd { atoms, ast } => {
-                edits.add_aromatic_system(atoms, ast.into_ir(&defaults.aromatic_system));
+            Self::AromaticSystemAdd { atoms, attributes } => {
+                edits.add_aromatic_system(atoms, attributes.into_ir(&defaults.aromatic_system));
             }
             Self::AromaticSystemsRemove(removes) => edits.remove_aromatic_systems(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.aromatic_system)))
+                    .map(|(id, atoms, attributes)| {
+                        (id, atoms, attributes.into_ir(&defaults.aromatic_system))
+                    })
                     .collect(),
             ),
             Self::AromaticSystemModify { id, expect, update } => {
                 append_aromatic_system_modify(edits, id, expect, update)?;
             }
-            Self::MulticenterBondAdd { atoms, ast } => {
-                edits.add_multicenter_bond(atoms, ast.into_ir(&defaults.multicenter_bond));
+            Self::MulticenterBondAdd { atoms, attributes } => {
+                edits.add_multicenter_bond(atoms, attributes.into_ir(&defaults.multicenter_bond));
             }
             Self::MulticenterBondsRemove(removes) => edits.remove_multicenter_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.multicenter_bond)))
+                    .map(|(id, atoms, attributes)| {
+                        (id, atoms, attributes.into_ir(&defaults.multicenter_bond))
+                    })
                     .collect(),
             ),
             Self::MulticenterBondModify { id, expect, update } => {
                 append_multicenter_bond_modify(edits, id, expect, update)?;
             }
-            Self::NoncovalentBondAdd { atoms, ast } => {
-                edits.add_noncovalent_bond(atoms, ast.into_ir(&defaults.noncovalent_bond));
+            Self::NoncovalentBondAdd { atoms, attributes } => {
+                edits.add_noncovalent_bond(atoms, attributes.into_ir(&defaults.noncovalent_bond));
             }
             Self::NoncovalentBondsRemove(removes) => edits.remove_noncovalent_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, ast)| (id, atoms, ast.into_ir(&defaults.noncovalent_bond)))
+                    .map(|(id, atoms, attributes)| {
+                        (id, atoms, attributes.into_ir(&defaults.noncovalent_bond))
+                    })
                     .collect(),
             ),
             Self::NoncovalentBondModify { id, expect, update } => {
                 append_noncovalent_bond_modify(edits, id, expect, update)?;
             }
-            Self::StereoAtomAdd { site, ligands, ast } => {
-                edits.add_stereo_atom(site, ligands, ast.into_ir(&defaults.stereo_atom));
+            Self::StereoAtomAdd {
+                site,
+                ligands,
+                attributes,
+            } => {
+                edits.add_stereo_atom(site, ligands, attributes.into_ir(&defaults.stereo_atom));
             }
             Self::StereoAtomsRemove(removes) => edits.remove_stereo_atoms(
                 removes
                     .into_iter()
-                    .map(|(id, site, ligands, ast)| {
-                        (id, site, ligands, ast.into_ir(&defaults.stereo_atom))
+                    .map(|(id, site, ligands, attributes)| {
+                        (id, site, ligands, attributes.into_ir(&defaults.stereo_atom))
                     })
                     .collect(),
             ),
             Self::StereoAtomModify { id, expect, update } => {
                 append_stereo_atom_modify(edits, id, expect, update)?;
             }
-            Self::StereoBondAdd { site, ligands, ast } => {
-                edits.add_stereo_bond(site, ligands, ast.into_ir(&defaults.stereo_bond));
+            Self::StereoBondAdd {
+                site,
+                ligands,
+                attributes,
+            } => {
+                edits.add_stereo_bond(site, ligands, attributes.into_ir(&defaults.stereo_bond));
             }
             Self::StereoBondsRemove(removes) => edits.remove_stereo_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, site, ligands, ast)| {
-                        (id, site, ligands, ast.into_ir(&defaults.stereo_bond))
+                    .map(|(id, site, ligands, attributes)| {
+                        (id, site, ligands, attributes.into_ir(&defaults.stereo_bond))
                     })
                     .collect(),
             ),
@@ -706,13 +735,13 @@ impl EditInput {
         let inputs = match edit {
             Edit::AddAtoms { atoms } => atoms
                 .iter()
-                .map(|ast| Self::AtomAdd(AtomDsl::from_ir(ast, &defaults.atom)))
+                .map(|attributes| Self::AtomAdd(AtomDsl::from_ir(attributes, &defaults.atom)))
                 .collect(),
             Edit::AddBonds { bonds } => bonds
                 .iter()
                 .map(|bond| Self::BondAdd {
                     atoms: bond.endpoints.clone(),
-                    ast: BondDsl::from_ir(&bond.ast, &defaults.bond),
+                    attributes: BondDsl::from_ir(&bond.attributes, &defaults.bond),
                 })
                 .collect(),
             Edit::RemoveTopology { atoms, bonds } if atoms.len() == 1 && bonds.is_empty() => {
@@ -757,20 +786,20 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddDativeBond { atoms, ast } => {
+            Edit::AddDativeBond { atoms, attributes } => {
                 let (acceptor, donors) = atoms.split_last().ok_or_else(|| {
                     DeError::Custom("dative-bond addition has no acceptor".to_string())
                 })?;
                 vec![Self::DativeBondAdd {
                     donors: donors.to_vec(),
                     acceptor: acceptor.clone(),
-                    ast: DativeBondDsl::from_ir(ast, &defaults.dative_bond),
+                    attributes: DativeBondDsl::from_ir(attributes, &defaults.dative_bond),
                 }]
             }
             Edit::RemoveDativeBonds { removes } => vec![Self::DativeBondsRemove(
                 removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         if atoms.is_empty() {
                             return Err(DeError::Custom(
                                 "dative-bond removal has no acceptor".to_string(),
@@ -779,7 +808,7 @@ impl EditInput {
                         Ok((
                             id.clone(),
                             atoms.clone(),
-                            DativeBondDsl::from_ir(ast, &defaults.dative_bond),
+                            DativeBondDsl::from_ir(attributes, &defaults.dative_bond),
                         ))
                     })
                     .collect::<Result<_, _>>()?,
@@ -800,18 +829,18 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddAromaticSystem { atoms, ast } => vec![Self::AromaticSystemAdd {
+            Edit::AddAromaticSystem { atoms, attributes } => vec![Self::AromaticSystemAdd {
                 atoms: atoms.clone(),
-                ast: AromaticSystemDsl::from_ir(ast, &defaults.aromatic_system),
+                attributes: AromaticSystemDsl::from_ir(attributes, &defaults.aromatic_system),
             }],
             Edit::RemoveAromaticSystems { removes } => vec![Self::AromaticSystemsRemove(
                 removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.clone(),
                             atoms.clone(),
-                            AromaticSystemDsl::from_ir(ast, &defaults.aromatic_system),
+                            AromaticSystemDsl::from_ir(attributes, &defaults.aromatic_system),
                         )
                     })
                     .collect(),
@@ -832,18 +861,18 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddMulticenterBond { atoms, ast } => vec![Self::MulticenterBondAdd {
+            Edit::AddMulticenterBond { atoms, attributes } => vec![Self::MulticenterBondAdd {
                 atoms: atoms.clone(),
-                ast: MulticenterBondDsl::from_ir(ast, &defaults.multicenter_bond),
+                attributes: MulticenterBondDsl::from_ir(attributes, &defaults.multicenter_bond),
             }],
             Edit::RemoveMulticenterBonds { removes } => vec![Self::MulticenterBondsRemove(
                 removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.clone(),
                             atoms.clone(),
-                            MulticenterBondDsl::from_ir(ast, &defaults.multicenter_bond),
+                            MulticenterBondDsl::from_ir(attributes, &defaults.multicenter_bond),
                         )
                     })
                     .collect(),
@@ -864,18 +893,18 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddNoncovalentBond { atoms, ast } => vec![Self::NoncovalentBondAdd {
+            Edit::AddNoncovalentBond { atoms, attributes } => vec![Self::NoncovalentBondAdd {
                 atoms: atoms.clone(),
-                ast: NoncovalentBondDsl::from_ir(ast, &defaults.noncovalent_bond),
+                attributes: NoncovalentBondDsl::from_ir(attributes, &defaults.noncovalent_bond),
             }],
             Edit::RemoveNoncovalentBonds { removes } => vec![Self::NoncovalentBondsRemove(
                 removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.clone(),
                             atoms.clone(),
-                            NoncovalentBondDsl::from_ir(ast, &defaults.noncovalent_bond),
+                            NoncovalentBondDsl::from_ir(attributes, &defaults.noncovalent_bond),
                         )
                     })
                     .collect(),
@@ -896,20 +925,24 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddStereoAtom { site, ligands, ast } => vec![Self::StereoAtomAdd {
+            Edit::AddStereoAtom {
+                site,
+                ligands,
+                attributes,
+            } => vec![Self::StereoAtomAdd {
                 site: site.clone(),
                 ligands: ligands.clone(),
-                ast: StereoAtomDsl::from_ir(ast, &defaults.stereo_atom),
+                attributes: StereoAtomDsl::from_ir(attributes, &defaults.stereo_atom),
             }],
             Edit::RemoveStereoAtoms { removes } => vec![Self::StereoAtomsRemove(
                 removes
                     .iter()
-                    .map(|(id, site, ligands, ast)| {
+                    .map(|(id, site, ligands, attributes)| {
                         (
                             id.clone(),
                             site.clone(),
                             ligands.clone(),
-                            StereoAtomDsl::from_ir(ast, &defaults.stereo_atom),
+                            StereoAtomDsl::from_ir(attributes, &defaults.stereo_atom),
                         )
                     })
                     .collect(),
@@ -930,20 +963,24 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddStereoBond { site, ligands, ast } => vec![Self::StereoBondAdd {
+            Edit::AddStereoBond {
+                site,
+                ligands,
+                attributes,
+            } => vec![Self::StereoBondAdd {
                 site: site.clone(),
                 ligands: ligands.clone(),
-                ast: StereoBondDsl::from_ir(ast, &defaults.stereo_bond),
+                attributes: StereoBondDsl::from_ir(attributes, &defaults.stereo_bond),
             }],
             Edit::RemoveStereoBonds { removes } => vec![Self::StereoBondsRemove(
                 removes
                     .iter()
-                    .map(|(id, site, ligands, ast)| {
+                    .map(|(id, site, ligands, attributes)| {
                         (
                             id.clone(),
                             site.clone(),
                             ligands.clone(),
-                            StereoBondDsl::from_ir(ast, &defaults.stereo_bond),
+                            StereoBondDsl::from_ir(attributes, &defaults.stereo_bond),
                         )
                     })
                     .collect(),
@@ -1011,7 +1048,7 @@ fn parse_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                     AtomHandle::from_edn(&parts[0])?,
                     AtomHandle::from_edn(&parts[1])?,
                 ],
-                ast: BondDsl::from_edn(&parts[2])?,
+                attributes: BondDsl::from_edn(&parts[2])?,
             })
         }
         "remove" => Ok(EditInput::BondRemove(BondHandle::from_edn(payload)?)),
@@ -1028,11 +1065,11 @@ fn parse_dative_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "dative-bond edit")?;
     match op {
         "add" => {
-            let (donors, acceptor, ast) = parse_dative_bond_addition(payload)?;
+            let (donors, acceptor, attributes) = parse_dative_bond_addition(payload)?;
             Ok(EditInput::DativeBondAdd {
                 donors,
                 acceptor,
-                ast,
+                attributes,
             })
         }
         "modify" => {
@@ -1071,8 +1108,8 @@ fn parse_aromatic_system_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "aromatic-system edit")?;
     match op {
         "add" => {
-            let (atoms, ast) = parse_aromatic_system_addition(payload)?;
-            Ok(EditInput::AromaticSystemAdd { atoms, ast })
+            let (atoms, attributes) = parse_aromatic_system_addition(payload)?;
+            Ok(EditInput::AromaticSystemAdd { atoms, attributes })
         }
         "modify" => {
             let (id, expect, update) = parse_aromatic_system_checked_update(payload)?;
@@ -1110,8 +1147,8 @@ fn parse_multicenter_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "multicenter-bond edit")?;
     match op {
         "add" => {
-            let (atoms, ast) = parse_multicenter_bond_addition(payload)?;
-            Ok(EditInput::MulticenterBondAdd { atoms, ast })
+            let (atoms, attributes) = parse_multicenter_bond_addition(payload)?;
+            Ok(EditInput::MulticenterBondAdd { atoms, attributes })
         }
         "modify" => {
             let (id, expect, update) = parse_multicenter_bond_checked_update(payload)?;
@@ -1149,8 +1186,8 @@ fn parse_noncovalent_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "noncovalent-bond edit")?;
     match op {
         "add" => {
-            let (atoms, ast) = parse_noncovalent_bond_addition(payload)?;
-            Ok(EditInput::NoncovalentBondAdd { atoms, ast })
+            let (atoms, attributes) = parse_noncovalent_bond_addition(payload)?;
+            Ok(EditInput::NoncovalentBondAdd { atoms, attributes })
         }
         "modify" => {
             let (id, expect, update) = parse_noncovalent_bond_checked_update(payload)?;
@@ -1197,9 +1234,9 @@ fn parse_dative_bond_addition(
     let mut helper = EdnMapHelper::new(map);
     let donors = helper.required("donors")?;
     let acceptor = helper.required("acceptor")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((donors, acceptor, ast))
+    Ok((donors, acceptor, attributes))
 }
 
 fn parse_dative_bond_removal(
@@ -1216,10 +1253,10 @@ fn parse_dative_bond_removal(
     let id = helper.required("id")?;
     let mut donors: Vec<AtomHandle> = helper.required("donors")?;
     let acceptor = helper.required("acceptor")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
     donors.push(acceptor);
-    Ok((id, donors, ast))
+    Ok((id, donors, attributes))
 }
 
 fn parse_aromatic_system_addition(
@@ -1234,9 +1271,9 @@ fn parse_aromatic_system_addition(
     };
     let mut helper = EdnMapHelper::new(map);
     let atoms = helper.required("atoms")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((atoms, ast))
+    Ok((atoms, attributes))
 }
 
 fn parse_aromatic_system_removal(
@@ -1252,9 +1289,9 @@ fn parse_aromatic_system_removal(
     let mut helper = EdnMapHelper::new(map);
     let id = helper.required("id")?;
     let atoms = helper.required("atoms")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((id, atoms, ast))
+    Ok((id, atoms, attributes))
 }
 
 fn parse_multicenter_bond_addition(
@@ -1269,9 +1306,9 @@ fn parse_multicenter_bond_addition(
     };
     let mut helper = EdnMapHelper::new(map);
     let atoms = helper.required("atoms")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((atoms, ast))
+    Ok((atoms, attributes))
 }
 
 fn parse_multicenter_bond_removal(
@@ -1287,9 +1324,9 @@ fn parse_multicenter_bond_removal(
     let mut helper = EdnMapHelper::new(map);
     let id = helper.required("id")?;
     let atoms = helper.required("atoms")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((id, atoms, ast))
+    Ok((id, atoms, attributes))
 }
 
 fn parse_noncovalent_bond_addition(
@@ -1304,9 +1341,9 @@ fn parse_noncovalent_bond_addition(
     };
     let mut helper = EdnMapHelper::new(map);
     let atoms = helper.required("atoms")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((atoms, ast))
+    Ok((atoms, attributes))
 }
 
 fn parse_noncovalent_bond_removal(
@@ -1322,17 +1359,21 @@ fn parse_noncovalent_bond_removal(
     let mut helper = EdnMapHelper::new(map);
     let id = helper.required("id")?;
     let atoms = helper.required("atoms")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((id, atoms, ast))
+    Ok((id, atoms, attributes))
 }
 
 fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "stereo-atom edit")?;
     match op {
         "add" => {
-            let (site, ligands, ast) = parse_stereo_atom_addition(payload)?;
-            Ok(EditInput::StereoAtomAdd { site, ligands, ast })
+            let (site, ligands, attributes) = parse_stereo_atom_addition(payload)?;
+            Ok(EditInput::StereoAtomAdd {
+                site,
+                ligands,
+                attributes,
+            })
         }
         "modify" => {
             let (id, expect, update) = parse_stereo_atom_checked_update(payload)?;
@@ -1370,8 +1411,12 @@ fn parse_stereo_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "stereo-bond edit")?;
     match op {
         "add" => {
-            let (site, ligands, ast) = parse_stereo_bond_addition(payload)?;
-            Ok(EditInput::StereoBondAdd { site, ligands, ast })
+            let (site, ligands, attributes) = parse_stereo_bond_addition(payload)?;
+            Ok(EditInput::StereoBondAdd {
+                site,
+                ligands,
+                attributes,
+            })
         }
         "modify" => {
             let (id, expect, update) = parse_stereo_bond_checked_update(payload)?;
@@ -1416,9 +1461,9 @@ fn parse_stereo_atom_addition(edn: &Edn<'_>) -> Result<StereoAtomAdditionInput, 
     let mut helper = EdnMapHelper::new(map);
     let site = helper.required("site")?;
     let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((site, parse_stereo_ligands(&ligands)?, ast))
+    Ok((site, parse_stereo_ligands(&ligands)?, attributes))
 }
 
 fn parse_stereo_atom_removal(edn: &Edn<'_>) -> Result<StereoAtomRemovalInput, DeError> {
@@ -1433,9 +1478,9 @@ fn parse_stereo_atom_removal(edn: &Edn<'_>) -> Result<StereoAtomRemovalInput, De
     let id = helper.required("id")?;
     let site = helper.required("site")?;
     let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((id, site, parse_stereo_ligands(&ligands)?, ast))
+    Ok((id, site, parse_stereo_ligands(&ligands)?, attributes))
 }
 
 fn parse_stereo_bond_addition(edn: &Edn<'_>) -> Result<StereoBondAdditionInput, DeError> {
@@ -1449,9 +1494,9 @@ fn parse_stereo_bond_addition(edn: &Edn<'_>) -> Result<StereoBondAdditionInput, 
     let mut helper = EdnMapHelper::new(map);
     let site = helper.required("site")?;
     let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((site, parse_stereo_ligands(&ligands)?, ast))
+    Ok((site, parse_stereo_ligands(&ligands)?, attributes))
 }
 
 fn parse_stereo_bond_removal(edn: &Edn<'_>) -> Result<StereoBondRemovalInput, DeError> {
@@ -1466,9 +1511,9 @@ fn parse_stereo_bond_removal(edn: &Edn<'_>) -> Result<StereoBondRemovalInput, De
     let id = helper.required("id")?;
     let site = helper.required("site")?;
     let ligands: Vec<Edn<'_>> = helper.required("ligands")?;
-    let ast = helper.required("type")?;
+    let attributes = helper.required("type")?;
     helper.finalize()?;
-    Ok((id, site, parse_stereo_ligands(&ligands)?, ast))
+    Ok((id, site, parse_stereo_ligands(&ligands)?, attributes))
 }
 
 fn parse_stereo_ligands(ligands: &[Edn<'_>]) -> Result<Vec<StereoLigandInput>, DeError> {
@@ -4147,7 +4192,7 @@ mod tests {
             Edit::AddBonds {
                 bonds: vec![AddBond {
                     endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                    ast: BondForm::from_order(1),
+                    attributes: BondForm::from_order(1),
                 }],
             },
         ]),
@@ -4468,7 +4513,7 @@ mod tests {
         Edits::from_iter([Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                ast: BondForm {
+                attributes: BondForm {
                     order: NumForm::Lit(1),
                     charge: NumForm::Lit(0),
                     unpaired_electrons: UnpairedElectronsForm::closed_shell(),
@@ -4562,7 +4607,7 @@ mod tests {
         Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                ast: BondForm::from_order(1).into_ground(),
+                attributes: BondForm::from_order(1).into_ground(),
             }],
         },
         MoleculeDefaults::ground(),
@@ -4639,7 +4684,7 @@ mod tests {
         r#"{:dative-bond {:add {:donors [0 {:new 0}] :acceptor 2 :type :single}}}"#,
         Edit::AddDativeBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
-            ast: DativeBondForm::from_order(1),
+            attributes: DativeBondForm::from_order(1),
         },
     )]
     #[case::dative_remove(
@@ -4676,7 +4721,7 @@ mod tests {
         r#"{:aromatic-system {:add {:atoms [0 {:new 0} 2] :type "[1,1,1]"}}}"#,
         Edit::AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
-            ast: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
     )]
     #[case::aromatic_remove(
@@ -4730,7 +4775,7 @@ mod tests {
         r#"{:multicenter-bond {:add {:atoms [0 {:new 0} 2] :type "[1,1,0]"}}}"#,
         Edit::AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
-            ast: MulticenterBondForm::from_electrons(vec![1, 1, 0]),
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1, 0]),
         },
     )]
     #[case::multicenter_remove(
@@ -4784,7 +4829,7 @@ mod tests {
         r#"{:noncovalent-bond {:add {:atoms [0 {:new 0}] :type "Hbd"}}}"#,
         Edit::AddNoncovalentBond {
             atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-            ast: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         },
     )]
     #[case::noncovalent_remove(
@@ -4830,7 +4875,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::LonePair),
                 (AtomHandle::New(3), StereoLigandKind::Atom),
             ],
-            ast: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
         },
     )]
     #[case::stereo_atom_remove(
@@ -4898,7 +4943,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::LonePair),
                 (AtomHandle::New(3), StereoLigandKind::Atom),
             ],
-            ast: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+            attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
         },
     )]
     #[case::stereo_bond_remove(
@@ -4985,7 +5030,7 @@ mod tests {
         r#"{:aromatic-system {:add {:atoms [0 1] :type "[1,1]"}}}"#,
         Edit::AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-            ast: AromaticSystemForm::from_electrons(vec![1, 1]).into_ground(),
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1]).into_ground(),
         },
     )]
     #[case::aromatic_remove(
@@ -5002,7 +5047,7 @@ mod tests {
         r#"{:multicenter-bond {:add {:atoms [0 1] :type "[1,1]"}}}"#,
         Edit::AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-            ast: MulticenterBondForm::from_electrons(vec![1, 1]).into_ground(),
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1]).into_ground(),
         },
     )]
     #[case::multicenter_remove(

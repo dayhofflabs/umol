@@ -91,7 +91,7 @@ mod tests {
         CountsValence::new(valence_table).resolve(&mut ast).unwrap();
         assert_eq!(ast.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
-            assert_eq!(ast.atom(AtomId(i)).ast.to_string(), expected_atom);
+            assert_eq!(ast.atom(AtomId(i)).attributes.to_string(), expected_atom);
         }
     }
 
@@ -134,7 +134,7 @@ mod tests {
     ) {
         let ast = parse_mol_bytes_with(METHANE_MOL.as_bytes(), &io_config, &model, &resolve_config)
             .unwrap();
-        assert_eq!(ast.atom(AtomId(0)).ast.to_string(), expected);
+        assert_eq!(ast.atom(AtomId(0)).attributes.to_string(), expected);
     }
 
     #[rstest]
@@ -173,7 +173,7 @@ mod tests {
         assert_eq!(
             ast.atoms()
                 .iter()
-                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             expected
         );

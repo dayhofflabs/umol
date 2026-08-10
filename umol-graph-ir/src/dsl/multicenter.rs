@@ -33,15 +33,15 @@ pub struct MulticenterBondDsl(pub MulticenterBondForm);
 
 impl MulticenterBondDsl {
     /// Zero-cost reference cast from `&MulticenterBondForm`. Relies on `repr(transparent)`.
-    pub fn from_ref(ast: &MulticenterBondForm) -> &Self {
+    pub fn from_ref(form: &MulticenterBondForm) -> &Self {
         // SAFETY: `#[repr(transparent)]` guarantees identical layout.
-        unsafe { &*(ast as *const MulticenterBondForm as *const Self) }
+        unsafe { &*(form as *const MulticenterBondForm as *const Self) }
     }
 }
 
 impl From<MulticenterBondForm> for MulticenterBondDsl {
-    fn from(ast: MulticenterBondForm) -> Self {
-        Self(ast)
+    fn from(form: MulticenterBondForm) -> Self {
+        Self(form)
     }
 }
 
@@ -85,8 +85,8 @@ impl ToEdn for MulticenterBondDsl {
 impl FromIr<MulticenterBondForm> for MulticenterBondDsl {
     type Ctx = MulticenterBondDefaults;
 
-    fn from_ir(ast: &MulticenterBondForm, cfg: &Self::Ctx) -> Self {
-        let mut out = ast.clone();
+    fn from_ir(form: &MulticenterBondForm, cfg: &Self::Ctx) -> Self {
+        let mut out = form.clone();
         lower_multicenter_bond(&mut out, cfg);
         MulticenterBondDsl(out)
     }
@@ -188,53 +188,56 @@ fn multicenter_bond_predicate(i: &mut &str) -> PResult<MulticenterBondPredicate>
 }
 
 fn apply_predicates(
-    form: &mut MulticenterBondDsl,
+    dsl: &mut MulticenterBondDsl,
     preds: Vec<MulticenterBondPredicate>,
 ) -> Result<(), ParseError> {
-    let ast = &mut form.0;
+    let bond = &mut dsl.0;
     for pred in preds {
         match pred {
             MulticenterBondPredicate::Charge(v) => {
-                if !matches!(ast.charge, NumForm::Undetermined) {
+                if !matches!(bond.charge, NumForm::Undetermined) {
                     return Err(ParseError::DuplicateMulticenterBondPredicate(
                         "#c".to_string(),
                     ));
                 }
-                ast.charge = v;
+                bond.charge = v;
             }
             MulticenterBondPredicate::UnpairedElectrons(predicate) => {
                 apply_unpaired_electrons_predicate(
-                    &mut ast.unpaired_electrons,
+                    &mut bond.unpaired_electrons,
                     predicate,
                     ParseError::DuplicateMulticenterBondPredicate,
                 )?;
             }
             MulticenterBondPredicate::Electrons(v) => {
                 let c = MulticenterBondConstraintForm::ElectronCount(v);
-                if ast.constraints.contains(c.key()) {
+                if bond.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateMulticenterBondPredicate(
                         "#e".to_string(),
                     ));
                 }
-                ast.constraints.set(c);
+                bond.constraints.set(c);
             }
         }
     }
     Ok(())
 }
 
-fn electron_count_value(ast: &MulticenterBondForm) -> Option<&NumForm> {
-    ast.constraints
+fn electron_count_value(bond: &MulticenterBondForm) -> Option<&NumForm> {
+    bond.constraints
         .iter()
         .map(|MulticenterBondConstraintForm::ElectronCount(v)| v)
         .next()
 }
 
-fn fmt_multicenter_bond_form(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondForm) -> fmt::Result {
-    fmt_electron_counts(f, &ast.electrons)?;
-    fmt_charge(f, &ast.charge)?;
-    fmt_unpaired_electrons(f, &ast.unpaired_electrons)?;
-    if let Some(v) = electron_count_value(ast) {
+fn fmt_multicenter_bond_form(
+    f: &mut fmt::Formatter<'_>,
+    form: &MulticenterBondForm,
+) -> fmt::Result {
+    fmt_electron_counts(f, &form.electrons)?;
+    fmt_charge(f, &form.charge)?;
+    fmt_unpaired_electrons(f, &form.unpaired_electrons)?;
+    if let Some(v) = electron_count_value(form) {
         fmt_electrons(f, v)?;
     }
     Ok(())
@@ -434,13 +437,13 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
     }
 }
 
-fn raise_multicenter_bond(ast: &mut MulticenterBondForm, cfg: &MulticenterBondDefaults) {
+fn raise_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondDefaults) {
     let MulticenterBondForm {
         charge,
         unpaired_electrons,
         electrons: _,
         constraints: _,
-    } = ast;
+    } = bond;
 
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
@@ -451,13 +454,13 @@ fn raise_multicenter_bond(ast: &mut MulticenterBondForm, cfg: &MulticenterBondDe
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-fn lower_multicenter_bond(ast: &mut MulticenterBondForm, cfg: &MulticenterBondDefaults) {
+fn lower_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondDefaults) {
     let MulticenterBondForm {
         charge,
         unpaired_electrons,
         electrons: _,
         constraints: _,
-    } = ast;
+    } = bond;
 
     if matches!(
         (&cfg.charge, &*charge),

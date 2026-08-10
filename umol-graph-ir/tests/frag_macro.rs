@@ -64,9 +64,9 @@ fn test_frag_finish_open() {
 
     assert_eq!(pattern.atoms().count(), 2);
     assert_eq!(
-        pattern.atom(AtomId(1)).ast,
+        pattern.atom(AtomId(1)).attributes,
         &AtomForm::new(ElementForm::undetermined())
     );
     assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
-    assert_eq!(pattern.bond(BondId(0)).ast, &BondForm::from_order(1));
+    assert_eq!(pattern.bond(BondId(0)).attributes, &BondForm::from_order(1));
 }

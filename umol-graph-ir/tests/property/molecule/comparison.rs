@@ -131,7 +131,7 @@ proptest! {
         let correspondence = identity_correspondence(&ast);
         let mut other = ast.clone();
         if other.atoms().count() > 0 {
-            other.atom_mut(AtomId(0)).ast.charge = NumForm::Lit(99);
+            other.atom_mut(AtomId(0)).attributes.charge = NumForm::Lit(99);
         }
 
         prop_assert_eq!(
@@ -155,7 +155,7 @@ proptest! {
             ..Default::default()
         });
         if change_mapped_atom && count > 0 {
-            right.atom_mut(AtomId((count - 1) as u32)).ast.charge = NumForm::Lit(99);
+            right.atom_mut(AtomId((count - 1) as u32)).attributes.charge = NumForm::Lit(99);
         }
         let images: Vec<AtomId> = (0..count).rev().map(AtomId::from).collect();
         let correspondence = MoleculeCorrespondence::new(

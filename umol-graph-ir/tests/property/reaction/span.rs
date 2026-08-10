@@ -96,33 +96,41 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
             atoms: atoms.into_iter().rev().collect(),
             bonds: bonds
                 .into_iter()
-                .map(|(first, second, ast)| (reverse_atom(first), reverse_atom(second), ast))
+                .map(|(first, second, attributes)| {
+                    (reverse_atom(first), reverse_atom(second), attributes)
+                })
                 .collect(),
             dative: dative
                 .into_iter()
-                .map(|(donors, acceptor, ast)| {
+                .map(|(donors, acceptor, attributes)| {
                     (
                         donors.into_iter().map(reverse_atom).collect(),
                         reverse_atom(acceptor),
-                        ast,
+                        attributes,
                     )
                 })
                 .collect(),
             aromatic: aromatic
                 .into_iter()
-                .map(|(atoms, ast)| (atoms.into_iter().map(reverse_atom).collect(), ast))
+                .map(|(atoms, attributes)| {
+                    (atoms.into_iter().map(reverse_atom).collect(), attributes)
+                })
                 .collect(),
             multicenter: multicenter
                 .into_iter()
-                .map(|(atoms, ast)| (atoms.into_iter().map(reverse_atom).collect(), ast))
+                .map(|(atoms, attributes)| {
+                    (atoms.into_iter().map(reverse_atom).collect(), attributes)
+                })
                 .collect(),
             noncovalent: noncovalent
                 .into_iter()
-                .map(|(first, second, ast)| (reverse_atom(first), reverse_atom(second), ast))
+                .map(|(first, second, attributes)| {
+                    (reverse_atom(first), reverse_atom(second), attributes)
+                })
                 .collect(),
             stereo_atoms: stereo_atoms
                 .into_iter()
-                .map(|(site, ligands, ast)| {
+                .map(|(site, ligands, attributes)| {
                     (
                         reverse_atom(site),
                         ligands
@@ -131,13 +139,13 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
                                 StereoLigand::new(reverse_atom(ligand.atom_id), ligand.kind)
                             })
                             .collect(),
-                        ast,
+                        attributes,
                     )
                 })
                 .collect(),
             stereo_bonds: stereo_bonds
                 .into_iter()
-                .map(|(site, ligands, ast)| {
+                .map(|(site, ligands, attributes)| {
                     (
                         site,
                         ligands
@@ -146,7 +154,7 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
                                 StereoLigand::new(reverse_atom(ligand.atom_id), ligand.kind)
                             })
                             .collect(),
-                        ast,
+                        attributes,
                     )
                 })
                 .collect(),
@@ -211,8 +219,9 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                 })
                 .collect();
             let bonds = lhs_anchored(entries.bonds.into_iter().enumerate().filter_map(
-                |(old_id, (first, second, ast))| {
-                    bond_presence[old_id].map(|presence| ((old_id, first, second, ast), presence))
+                |(old_id, (first, second, attributes))| {
+                    bond_presence[old_id]
+                        .map(|presence| ((old_id, first, second, attributes), presence))
                 },
             ));
             let mut bond_ids = vec![None; bond_presence.len()];
@@ -221,7 +230,7 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
             }
 
             let dative = lhs_anchored(entries.dative.into_iter().filter_map(
-                |(donors, acceptor, ast)| {
+                |(donors, acceptor, attributes)| {
                     let presence = intersection_presence(
                         donors
                             .iter()
@@ -229,38 +238,42 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                             .chain(once(acceptor))
                             .map(presence_of_atom),
                     )?;
-                    Some(((donors, acceptor, ast), presence))
+                    Some(((donors, acceptor, attributes), presence))
                 },
             ));
-            let aromatic = lhs_anchored(entries.aromatic.into_iter().filter_map(|(atoms, ast)| {
-                let presence = intersection_presence(atoms.iter().copied().map(presence_of_atom))?;
-                Some(((atoms, ast), presence))
-            }));
-            let multicenter =
-                lhs_anchored(entries.multicenter.into_iter().filter_map(|(atoms, ast)| {
+            let aromatic = lhs_anchored(entries.aromatic.into_iter().filter_map(
+                |(atoms, attributes)| {
                     let presence =
                         intersection_presence(atoms.iter().copied().map(presence_of_atom))?;
-                    Some(((atoms, ast), presence))
-                }));
+                    Some(((atoms, attributes), presence))
+                },
+            ));
+            let multicenter = lhs_anchored(entries.multicenter.into_iter().filter_map(
+                |(atoms, attributes)| {
+                    let presence =
+                        intersection_presence(atoms.iter().copied().map(presence_of_atom))?;
+                    Some(((atoms, attributes), presence))
+                },
+            ));
             let noncovalent = lhs_anchored(entries.noncovalent.into_iter().filter_map(
-                |(first, second, ast)| {
+                |(first, second, attributes)| {
                     let presence =
                         intersection_presence([presence_of_atom(first), presence_of_atom(second)])?;
-                    Some(((first, second, ast), presence))
+                    Some(((first, second, attributes), presence))
                 },
             ));
             let stereo_atoms = lhs_anchored(entries.stereo_atoms.into_iter().filter_map(
-                |(site, ligands, ast)| {
+                |(site, ligands, attributes)| {
                     let presence = intersection_presence(
                         once(site)
                             .chain(ligands.iter().map(|ligand| ligand.atom_id))
                             .map(presence_of_atom),
                     )?;
-                    Some(((site, ligands, ast), presence))
+                    Some(((site, ligands, attributes), presence))
                 },
             ));
             let stereo_bonds = lhs_anchored(entries.stereo_bonds.into_iter().filter_map(
-                |(site, ligands, ast)| {
+                |(site, ligands, attributes)| {
                     let site_presence = bond_presence.get(site.0 as usize).copied().flatten()?;
                     let site = bond_ids.get(site.0 as usize).copied().flatten()?;
                     let presence = intersection_presence(
@@ -270,7 +283,7 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                                 .map(|ligand| presence_of_atom(ligand.atom_id)),
                         ),
                     )?;
-                    Some(((site, ligands, ast), presence))
+                    Some(((site, ligands, attributes), presence))
                 },
             ));
 
@@ -279,44 +292,48 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                     .atoms
                     .into_iter()
                     .zip(atom_presence)
-                    .map(|(ast, presence)| entity_span(ast, presence))
+                    .map(|(attributes, presence)| entity_span(attributes, presence))
                     .collect(),
                 bonds: bonds
                     .into_iter()
-                    .map(|((_, first, second, ast), presence)| {
-                        (first, second, entity_span(ast, presence))
+                    .map(|((_, first, second, attributes), presence)| {
+                        (first, second, entity_span(attributes, presence))
                     })
                     .collect(),
                 dative: dative
                     .into_iter()
-                    .map(|((donors, acceptor, ast), presence)| {
-                        (donors, acceptor, entity_span(ast, presence))
+                    .map(|((donors, acceptor, attributes), presence)| {
+                        (donors, acceptor, entity_span(attributes, presence))
                     })
                     .collect(),
                 aromatic: aromatic
                     .into_iter()
-                    .map(|((atoms, ast), presence)| (atoms, entity_span(ast, presence)))
+                    .map(|((atoms, attributes), presence)| {
+                        (atoms, entity_span(attributes, presence))
+                    })
                     .collect(),
                 multicenter: multicenter
                     .into_iter()
-                    .map(|((atoms, ast), presence)| (atoms, entity_span(ast, presence)))
+                    .map(|((atoms, attributes), presence)| {
+                        (atoms, entity_span(attributes, presence))
+                    })
                     .collect(),
                 noncovalent: noncovalent
                     .into_iter()
-                    .map(|((first, second, ast), presence)| {
-                        (first, second, entity_span(ast, presence))
+                    .map(|((first, second, attributes), presence)| {
+                        (first, second, entity_span(attributes, presence))
                     })
                     .collect(),
                 stereo_atoms: stereo_atoms
                     .into_iter()
-                    .map(|((site, ligands, ast), presence)| {
-                        (site, ligands, entity_span(ast, presence))
+                    .map(|((site, ligands, attributes), presence)| {
+                        (site, ligands, entity_span(attributes, presence))
                     })
                     .collect(),
                 stereo_bonds: stereo_bonds
                     .into_iter()
-                    .map(|((site, ligands, ast), presence)| {
-                        (site, ligands, entity_span(ast, presence))
+                    .map(|((site, ligands, attributes), presence)| {
+                        (site, ligands, entity_span(attributes, presence))
                     })
                     .collect(),
                 constraints: Vec::new(),

@@ -249,8 +249,8 @@ mod tests {
     #[case::order_undetermined(DativeBondForm::new(NumForm::Undetermined), false)]
     #[case::ground_with_constraint(DativeBondForm { order: NumForm::Lit(1),
         constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)) }, true)]
-    fn test_dative_bond_form_is_ground(#[case] ast: DativeBondForm, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    fn test_dative_bond_form_is_ground(#[case] form: DativeBondForm, #[case] expected: bool) {
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]

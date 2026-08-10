@@ -50,7 +50,7 @@ fn test_clar_aromaticity_find_from_rings() {
             &ast,
             &rings,
             MaximumIndependentSetAlgorithm::BranchAndBound,
-            &|view| match &view.ast.element {
+            &|view| match &view.attributes.element {
                 ElementForm::Lit(Element::C) => Some(1),
                 _ => None,
             },

@@ -1,4 +1,4 @@
-//! Atom views: `AtomViews` namespace, `AtomView` / `AtomViewMut` AST bundles,
+//! Atom views: `AtomViews` namespace, `AtomView` / `AtomViewMut` attribute bundles,
 //! `AtomEditorView` / `AtomEditorViewMut` builder bundles.
 
 use umol_chem::element::Element;
@@ -51,7 +51,7 @@ impl<'a> AtomViews<'a> {
         let graph = molecule.raw_graph();
         graph.node_ids().map(move |id| AtomView {
             id: AtomId::from(id),
-            ast: &atoms[id.index()],
+            attributes: &atoms[id.index()],
             molecule,
         })
     }
@@ -66,7 +66,7 @@ impl<'a> AtomViews<'a> {
         }
         Some(AtomView {
             id,
-            ast: &self.atoms[id.index()],
+            attributes: &self.atoms[id.index()],
             molecule: self.molecule,
         })
     }
@@ -82,44 +82,44 @@ impl<'a> AtomViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct AtomView<'a> {
     pub id: AtomId,
-    pub ast: &'a AtomForm,
+    pub attributes: &'a AtomForm,
     molecule: &'a Molecule,
 }
 
 impl<'a> AtomView<'a> {
     #[inline]
     pub fn element(&self) -> &'a ElementForm {
-        &self.ast.element
+        &self.attributes.element
     }
 
     #[inline]
     pub fn isotope_mass(&self) -> &'a IsotopeMassForm {
-        &self.ast.isotope_mass
+        &self.attributes.isotope_mass
     }
 
     #[inline]
     pub fn charge(&self) -> &'a NumForm {
-        &self.ast.charge
+        &self.attributes.charge
     }
 
     #[inline]
     pub fn implicit_hydrogens(&self) -> &'a NumForm {
-        &self.ast.implicit_hydrogens
+        &self.attributes.implicit_hydrogens
     }
 
     #[inline]
     pub fn lone_pairs(&self) -> &'a NumForm {
-        &self.ast.lone_pairs
+        &self.attributes.lone_pairs
     }
 
     #[inline]
     pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
-        &self.ast.unpaired_electrons
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
     pub fn constraints(&self) -> &'a AtomConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     /// Iterator over incident bonds and their neighbor atoms. Equivalent to
@@ -141,7 +141,7 @@ impl<'a> AtomView<'a> {
     /// to `Undetermined` if any bond order is non-`Lit`.
     pub fn valence(&self) -> NumForm {
         self.neighbors()
-            .map(|n| n.bond().ast.order.clone())
+            .map(|n| n.bond().attributes.order.clone())
             .fold(NumForm::Lit(0), |acc, order| acc + order)
     }
 
@@ -160,7 +160,7 @@ impl<'a> AtomView<'a> {
             if donor_ids.len() != 1 || donor_ids[0] != self.id {
                 continue;
             }
-            sum = sum + view.ast.order.clone();
+            sum = sum + view.attributes.order.clone();
         }
         sum
     }
@@ -179,7 +179,7 @@ impl<'a> AtomView<'a> {
             }
             // TODO(doc 117): define the multi-donor acceptor projection after
             // separating binary dative bonds from coordination/haptic relations.
-            sum = sum + view.ast.order.clone();
+            sum = sum + view.attributes.order.clone();
         }
         sum
     }
@@ -194,7 +194,7 @@ impl<'a> AtomView<'a> {
         let Some(pos) = sys.atom_ids().position(|a| a == self.id) else {
             return NumForm::Undetermined;
         };
-        match &sys.ast.electrons {
+        match &sys.attributes.electrons {
             ElectronCountsForm::Lit(counts) => counts
                 .get(pos)
                 .map(|&n| NumForm::Lit(n))
@@ -232,7 +232,7 @@ impl<'a> AtomView<'a> {
             let Some(pos) = view.atom_ids().position(|a| a == self.id) else {
                 return NumForm::Undetermined;
             };
-            let term = match &view.ast.electrons {
+            let term = match &view.attributes.electrons {
                 ElectronCountsForm::Lit(counts) => counts
                     .get(pos)
                     .map(|&n| NumForm::Lit(n))
@@ -434,12 +434,12 @@ impl<'a> AtomView<'a> {
 
     /// Is atom ground
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 
     /// Is atom undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.ast.is_undetermined()
+        self.attributes.is_undetermined()
     }
 }
 
@@ -447,19 +447,19 @@ impl<'a> AtomView<'a> {
 #[derive(Debug)]
 pub struct AtomViewMut<'a> {
     pub id: AtomId,
-    pub ast: &'a mut AtomForm,
+    pub attributes: &'a mut AtomForm,
 }
 
 // Editor-scope view bundles for atoms.
 
 pub struct AtomEditorView<'a> {
     pub id: AtomId,
-    pub ast: &'a AtomForm,
+    pub attributes: &'a AtomForm,
 }
 
 pub struct AtomEditorViewMut<'a> {
     pub id: AtomId,
-    pub ast: &'a mut AtomForm,
+    pub attributes: &'a mut AtomForm,
 }
 
 #[cfg(test)]
@@ -539,7 +539,7 @@ mod tests {
     #[rstest]
     fn test_atom_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().atoms().iter(), vec![], |view| {
-            (view.id, view.ast.clone())
+            (view.id, view.attributes.clone())
         });
         assert_exact_size_by(
             molecule.atoms().iter(),
@@ -549,7 +549,7 @@ mod tests {
                 (AtomId(2), AtomForm::from_element(Element::N)),
                 (AtomId(3), AtomForm::from_element(Element::O)),
             ],
-            |view| (view.id, view.ast.clone()),
+            |view| (view.id, view.attributes.clone()),
         );
     }
 
@@ -566,7 +566,7 @@ mod tests {
         assert!(res.is_some());
         let atom = res.unwrap();
         assert_eq!(atom.id, AtomId(2));
-        assert_eq!(atom.ast, &AtomForm::from_element(Element::N));
+        assert_eq!(atom.attributes, &AtomForm::from_element(Element::N));
     }
 
     #[rstest]
@@ -596,7 +596,7 @@ mod tests {
                 (
                     neighbor.bond_id(),
                     neighbor.atom_id(),
-                    neighbor.bond().ast.clone(),
+                    neighbor.bond().attributes.clone(),
                 )
             },
         );

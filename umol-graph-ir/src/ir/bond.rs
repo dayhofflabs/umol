@@ -309,8 +309,8 @@ mod tests {
         constraints: BondConstraintsForm::new() }, false)]
     #[case::ground_with_constraint(BondForm { order: NumForm::Lit(1), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
         constraints: BondConstraintsForm::from(BondConstraintForm::Aromatic(BooleanForm::Lit(true))) }, true)]
-    fn test_bond_form_is_ground(#[case] ast: BondForm, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    fn test_bond_form_is_ground(#[case] form: BondForm, #[case] expected: bool) {
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]

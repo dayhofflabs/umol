@@ -122,7 +122,7 @@ impl StereoConformanceValidator {
                 StereoInconsistency::StereoAtomFailure { stereo_atom } => {
                     let atom = ast.stereo_atom(stereo_atom).site_id();
                     ast.atom(atom)
-                        .ast
+                        .attributes
                         .constraints
                         .tetrahedral_stereo()
                         .is_some_and(|constraint| !constraint.is_undetermined())
@@ -130,7 +130,7 @@ impl StereoConformanceValidator {
                 StereoInconsistency::StereoBondFailure { stereo_bond } => {
                     let bond = ast.stereo_bond(stereo_bond).site_id();
                     ast.bond(bond)
-                        .ast
+                        .attributes
                         .constraints
                         .cis_trans_stereo()
                         .is_some_and(|constraint| !constraint.is_undetermined())
@@ -144,7 +144,7 @@ impl StereoConformanceValidator {
         for (atom, _, _) in &derivation.atoms {
             let asserted = ast
                 .atom(*atom)
-                .ast
+                .attributes
                 .constraints
                 .tetrahedral_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined());
@@ -157,7 +157,7 @@ impl StereoConformanceValidator {
         for (bond, _, _) in &derivation.bonds {
             let asserted = ast
                 .bond(*bond)
-                .ast
+                .attributes
                 .constraints
                 .cis_trans_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined());
@@ -426,7 +426,7 @@ mod tests {
     #[case::matching_stereogenicity(
         CFCLBRI,
         (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast
+            ast.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)));
         }) as fn(&mut Molecule)
@@ -589,7 +589,7 @@ mod tests {
     #[case::coset_out_of_range(
         CFCLBRI,
         (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
+            ast.stereo_atom_mut(StereoAtomId(0)).attributes.configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
         }) as fn(&mut Molecule),
         StereoValidatorContradiction::CosetOutOfRange {
             kind: StereoKind::Tetrahedral,
@@ -600,7 +600,7 @@ mod tests {
     #[case::arity(
         CFCLBRI,
         (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast.configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0);
+            ast.stereo_atom_mut(StereoAtomId(0)).attributes.configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0);
         }) as fn(&mut Molecule),
         StereoValidatorContradiction::LigandArity {
             kind: StereoKind::TrigonalBipyramidal,
@@ -611,7 +611,7 @@ mod tests {
     #[case::improper_on_achiral(
         BUTENE,
         (|ast: &mut Molecule| {
-            ast.stereo_bond_mut(StereoBondId(0)).ast
+            ast.stereo_bond_mut(StereoBondId(0)).attributes
                 .constraints
                 .set(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)));
         }) as fn(&mut Molecule),
@@ -622,7 +622,7 @@ mod tests {
     #[case::stereogenicity_mismatch(
         CFCLBRI,
         (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast
+            ast.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric)));
         }) as fn(&mut Molecule),
@@ -634,7 +634,7 @@ mod tests {
     #[case::topicity_mismatch(
         CFCLBRI,
         (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast
+            ast.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::Topicity(TopicityForm {
                     pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
@@ -650,7 +650,7 @@ mod tests {
     #[case::ligand_symmetry_violation(
         CFCLBRI,
         (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).ast
+            ast.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
                     permutation: OrientedLigandPermutation {

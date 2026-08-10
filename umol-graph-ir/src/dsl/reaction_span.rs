@@ -1778,17 +1778,23 @@ mod tests {
             ..Default::default()
         }),
         Deltas::from_iter([
-            Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomForm::from_element(Element::O) }),
+            Delta::Atom(AtomDelta::Remove {
+                id: AtomId(1),
+                attributes: AtomForm::from_element(Element::O),
+            }),
             Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
-                ast: BondForm::from_order(1),
+                attributes: BondForm::from_order(1),
             }),
-            Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomForm::from_element(Element::N) }),
+            Delta::Atom(AtomDelta::Add {
+                id: AtomId(2),
+                attributes: AtomForm::from_element(Element::N),
+            }),
             Delta::Bond(BondDelta::Add {
                 id: BondId(1),
                 atoms: [AtomId(0), AtomId(2)],
-                ast: BondForm::from_order(1),
+                attributes: BondForm::from_order(1),
             }),
             Delta::Constraint(ConstraintDelta::Add(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),

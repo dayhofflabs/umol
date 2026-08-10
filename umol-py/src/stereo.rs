@@ -1385,7 +1385,7 @@ macro_rules! stereo_view {
                 let molecule = self.owner.bind(py).borrow();
                 StereoConfigurationForm::from_rust(
                     py,
-                    &self.view(molecule.inner())?.ast.configuration,
+                    &self.view(molecule.inner())?.attributes.configuration,
                 )
             }
 
@@ -1395,7 +1395,7 @@ macro_rules! stereo_view {
                     .borrow_mut(py)
                     .inner_mut()
                     .$entity_mut(self.id)
-                    .ast
+                    .attributes
                     .configuration = value.to_rust(py);
             }
 
@@ -1419,7 +1419,7 @@ macro_rules! stereo_view {
                     .borrow_mut(py)
                     .inner_mut()
                     .$entity_mut(self.id)
-                    .ast
+                    .attributes
                     .constraints = value.to_rust(py)?;
                 Ok(())
             }
@@ -1428,7 +1428,7 @@ macro_rules! stereo_view {
             /// entries — symmetric with the value pyclass's `asdict`, read through the view.
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                 let molecule = self.owner.bind(py).borrow();
-                let ast = self.view(molecule.inner())?.ast;
+                let ast = self.view(molecule.inner())?.attributes;
                 let dict = PyDict::new(py);
                 dict.set_item(
                     "configuration",
@@ -1524,7 +1524,7 @@ macro_rules! stereo_views {
             ) -> PyResult<()> {
                 let mut molecule = self.owner.borrow_mut(py);
                 let id = $resolve_index(molecule.inner(), index)?;
-                *molecule.inner_mut().$entity_mut(id).ast = value.inner().clone();
+                *molecule.inner_mut().$entity_mut(id).attributes = value.inner().clone();
                 Ok(())
             }
 

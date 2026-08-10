@@ -886,8 +886,8 @@ mod tests {
     #[case::unpaired_electrons_undetermined(AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Lit(12), charge: NumForm::Lit(0),
         implicit_hydrogens: NumForm::Lit(4), lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::default(),
         constraints: AtomConstraintsForm::new() }, false)]
-    fn test_atom_form_is_ground(#[case] ast: AtomForm, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    fn test_atom_form_is_ground(#[case] form: AtomForm, #[case] expected: bool) {
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]
@@ -1084,9 +1084,9 @@ mod tests {
     #[case::notset(ElementForm::not(Element::H), None)]
     #[case::var_in(ElementForm::var_in("e", [Element::C]), None)]
     #[case::var(ElementForm::var("e"), None)]
-    fn test_element_form_as_lit(#[case] ast: ElementForm, #[case] expected: Option<Element>) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
+    fn test_element_form_as_lit(#[case] form: ElementForm, #[case] expected: Option<Element>) {
+        assert_eq!(form.as_lit(), expected);
+        assert_eq!(form.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -1097,8 +1097,8 @@ mod tests {
     #[case::notset(ElementForm::not(Element::H), false)]
     #[case::var_in(ElementForm::var_in("e", [Element::C]), false)]
     #[case::var(ElementForm::var("e"), false)]
-    fn test_element_form_is_undetermined(#[case] ast: ElementForm, #[case] expected: bool) {
-        assert_eq!(ast.is_undetermined(), expected);
+    fn test_element_form_is_undetermined(#[case] form: ElementForm, #[case] expected: bool) {
+        assert_eq!(form.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
@@ -1244,11 +1244,11 @@ mod tests {
     #[case::var(IsotopeMassForm::var("m"), None)]
     #[case::var_in(IsotopeMassForm::var_in("m", [12]), None)]
     fn test_isotope_mass_form_as_lit(
-        #[case] ast: IsotopeMassForm,
+        #[case] form: IsotopeMassForm,
         #[case] expected: Option<IsotopeMass>,
     ) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
+        assert_eq!(form.as_lit(), expected);
+        assert_eq!(form.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -1259,8 +1259,8 @@ mod tests {
     #[case::litset(IsotopeMassForm::lit_set([12, 13]), false)]
     #[case::var(IsotopeMassForm::var("m"), false)]
     #[case::var_in(IsotopeMassForm::var_in("m", [12]), false)]
-    fn test_isotope_mass_form_is_undetermined(#[case] ast: IsotopeMassForm, #[case] expected: bool) {
-        assert_eq!(ast.is_undetermined(), expected);
+    fn test_isotope_mass_form_is_undetermined(#[case] form: IsotopeMassForm, #[case] expected: bool) {
+        assert_eq!(form.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
@@ -1271,8 +1271,8 @@ mod tests {
     #[case::litset(IsotopeMassForm::lit_set([12, 13]), false)]
     #[case::var(IsotopeMassForm::var("m"), false)]
     #[case::var_in(IsotopeMassForm::var_in("m", [12]), false)]
-    fn test_isotope_mass_form_is_ground(#[case] ast: IsotopeMassForm, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    fn test_isotope_mass_form_is_ground(#[case] form: IsotopeMassForm, #[case] expected: bool) {
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]

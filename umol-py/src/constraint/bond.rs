@@ -558,7 +558,7 @@ impl BondConstraintsView {
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
-                f(&view.ast.constraints)
+                f(&view.attributes.constraints)
             }
             BondConstraintsBacking::Bond(bond) => {
                 let bond = bond.bind(py).borrow();
@@ -578,7 +578,7 @@ impl BondConstraintsView {
                 .borrow_mut(py)
                 .inner_mut()
                 .bond_mut(*id)
-                .ast
+                .attributes
                 .constraints),
             BondConstraintsBacking::Bond(bond) => {
                 f(&mut bond.borrow_mut(py).inner_mut().constraints)
@@ -831,7 +831,7 @@ impl BondRingSizeCounts {
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
-                f(&view.ast.constraints)
+                f(&view.attributes.constraints)
             }
             BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().inner().constraints),
             BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
@@ -845,7 +845,7 @@ impl BondRingSizeCounts {
                 .borrow_mut(py)
                 .inner_mut()
                 .bond_mut(*id)
-                .ast
+                .attributes
                 .constraints),
             BondRingSizeBacking::Bond(bond) => f(&mut bond.borrow_mut(py).inner_mut().constraints),
             BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),

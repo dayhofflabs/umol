@@ -47,7 +47,7 @@ impl<'a> MulticenterBondViews<'a> {
         let set = self.multicenter_bonds;
         set.relation_ids().map(move |rid| MulticenterBondView {
             id: MulticenterBondId::from(rid),
-            ast: set.data(rid),
+            attributes: set.data(rid),
             atoms: set.participants(rid),
             molecule,
         })
@@ -83,7 +83,7 @@ impl<'a> MulticenterBondViews<'a> {
         let rid = RelationId::from(id);
         Some(MulticenterBondView {
             id,
-            ast: self.multicenter_bonds.data(rid),
+            attributes: self.multicenter_bonds.data(rid),
             atoms: self.multicenter_bonds.participants(rid),
             molecule: self.molecule,
         })
@@ -116,7 +116,7 @@ impl<'a> MulticenterBondViews<'a> {
             let rid = RelationId::from(id);
             MulticenterBondView {
                 id,
-                ast: set.data(rid),
+                attributes: set.data(rid),
                 atoms: set.participants(rid),
                 molecule,
             }
@@ -174,29 +174,29 @@ impl<'a> MulticenterBondViews<'a> {
 pub struct MulticenterBondView<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
-    pub ast: &'a MulticenterBondForm,
+    pub attributes: &'a MulticenterBondForm,
     molecule: &'a Molecule,
 }
 
 impl<'a> MulticenterBondView<'a> {
     #[inline]
     pub fn electrons(&self) -> &'a ElectronCountsForm {
-        &self.ast.electrons
+        &self.attributes.electrons
     }
 
     #[inline]
     pub fn charge(&self) -> &'a NumForm {
-        &self.ast.charge
+        &self.attributes.charge
     }
 
     #[inline]
     pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
-        &self.ast.unpaired_electrons
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
     pub fn constraints(&self) -> &'a MulticenterBondConstraintsForm {
-        &self.ast.constraints
+        &self.attributes.constraints
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
@@ -213,7 +213,7 @@ impl<'a> MulticenterBondView<'a> {
     /// Sum of per-atom electron contributions on this multicenter bond.
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     pub fn electron_count(&self) -> NumForm {
-        match &self.ast.electrons {
+        match &self.attributes.electrons {
             ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
             ElectronCountsForm::Undetermined => NumForm::Undetermined,
         }
@@ -241,12 +241,12 @@ impl<'a> MulticenterBondView<'a> {
 
     /// Is multicenter bond ground
     pub fn is_ground(&self) -> bool {
-        self.ast.is_ground()
+        self.attributes.is_ground()
     }
 
     /// Is multicenter bond undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.ast.is_undetermined()
+        self.attributes.is_undetermined()
     }
 }
 
@@ -256,7 +256,7 @@ impl<'a> MulticenterBondView<'a> {
 pub struct MulticenterBondViewMut<'a> {
     pub id: MulticenterBondId,
     pub atoms: Vec<AtomId>,
-    pub ast: &'a mut MulticenterBondForm,
+    pub attributes: &'a mut MulticenterBondForm,
 }
 
 // Builder-scope view bundles for multicenter bonds.
@@ -264,16 +264,20 @@ pub struct MulticenterBondViewMut<'a> {
 pub struct MulticenterBondEditorView<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
-    pub ast: &'a MulticenterBondForm,
+    pub attributes: &'a MulticenterBondForm,
 }
 
 impl<'a> MulticenterBondEditorView<'a> {
     pub(crate) fn new(
         id: MulticenterBondId,
         atoms: &'a [NodeId],
-        ast: &'a MulticenterBondForm,
+        attributes: &'a MulticenterBondForm,
     ) -> Self {
-        Self { id, atoms, ast }
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
@@ -284,16 +288,20 @@ impl<'a> MulticenterBondEditorView<'a> {
 pub struct MulticenterBondEditorViewMut<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
-    pub ast: &'a mut MulticenterBondForm,
+    pub attributes: &'a mut MulticenterBondForm,
 }
 
 impl<'a> MulticenterBondEditorViewMut<'a> {
     pub(crate) fn new(
         id: MulticenterBondId,
         atoms: &'a [NodeId],
-        ast: &'a mut MulticenterBondForm,
+        attributes: &'a mut MulticenterBondForm,
     ) -> Self {
-        Self { id, atoms, ast }
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
@@ -490,8 +498,8 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_editor_view_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let ast = MulticenterBondForm::default();
-        let view = MulticenterBondEditorView::new(MulticenterBondId(0), &atoms, &ast);
+        let attributes = MulticenterBondForm::default();
+        let view = MulticenterBondEditorView::new(MulticenterBondId(0), &atoms, &attributes);
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -502,8 +510,8 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_editor_view_mut_atom_ids() {
         let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let mut ast = MulticenterBondForm::default();
-        let view = MulticenterBondEditorViewMut::new(MulticenterBondId(0), &atoms, &mut ast);
+        let mut attributes = MulticenterBondForm::default();
+        let view = MulticenterBondEditorViewMut::new(MulticenterBondId(0), &atoms, &mut attributes);
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],

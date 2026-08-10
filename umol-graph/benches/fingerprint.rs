@@ -66,12 +66,12 @@ fn ethanol_deoxygenation(molecule: &Molecule) -> Reaction {
         Deltas::from_iter([
             Delta::Atom(AtomDelta::Remove {
                 id: AtomId(2),
-                ast: molecule.atom(AtomId(2)).ast.clone(),
+                attributes: molecule.atom(AtomId(2)).attributes.clone(),
             }),
             Delta::Bond(BondDelta::Remove {
                 id: BondId(1),
                 atoms: [AtomId(1), AtomId(2)],
-                ast: molecule.bond(BondId(1)).ast.clone(),
+                attributes: molecule.bond(BondId(1)).attributes.clone(),
             }),
         ]),
     )

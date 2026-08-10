@@ -181,7 +181,7 @@ impl AromaticityResolver {
                             (
                                 AromaticSystemHandle::Id(system),
                                 view.atom_ids().map(AtomHandle::Id).collect(),
-                                view.ast.clone(),
+                                view.attributes.clone(),
                             )
                         })
                         .collect();
@@ -193,14 +193,14 @@ impl AromaticityResolver {
                     update.constraints.set(AtomConstraintForm::AromaticValence(
                         AromaticValenceForm::Undetermined,
                     ));
-                    edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).ast, &update);
+                    edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).attributes, &update);
                 }
                 for bond in remove_bond_constraints {
                     let mut update = BondUpdate::default();
                     update
                         .constraints
                         .set(BondConstraintForm::Aromatic(BooleanForm::Undetermined));
-                    edits.update_bond(BondHandle::Id(bond), ast.bond(bond).ast, &update);
+                    edits.update_bond(BondHandle::Id(bond), ast.bond(bond).attributes, &update);
                 }
 
                 let replaced_candidates: BTreeSet<usize> = replacements
@@ -273,7 +273,11 @@ impl AromaticityResolver {
         let mut edits = Edits::new();
         edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), system);
         for (atom_id, update) in atom_updates {
-            edits.update_atom(AtomHandle::Id(atom_id), ast.atom(atom_id).ast, &update);
+            edits.update_atom(
+                AtomHandle::Id(atom_id),
+                ast.atom(atom_id).attributes,
+                &update,
+            );
         }
 
         let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
@@ -287,7 +291,7 @@ impl AromaticityResolver {
         }
         for bond_id in bond_ids {
             if matches!(
-                ast.bond(bond_id).ast.constraints.aromatic(),
+                ast.bond(bond_id).attributes.constraints.aromatic(),
                 BooleanForm::Lit(_)
             ) {
                 continue;
@@ -296,7 +300,11 @@ impl AromaticityResolver {
             update
                 .constraints
                 .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
-            edits.update_bond(BondHandle::Id(bond_id), ast.bond(bond_id).ast, &update);
+            edits.update_bond(
+                BondHandle::Id(bond_id),
+                ast.bond(bond_id).attributes,
+                &update,
+            );
         }
         edits
     }
@@ -400,7 +408,7 @@ mod tests {
             Ok(Solution::Determined(Edits::from_iter([
                 Edit::AddAromaticSystem {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                    ast: AromaticSystemForm::from_electrons(vec![1; 6])
+                    attributes: AromaticSystemForm::from_electrons(vec![1; 6])
                         .with_charge(0)
                         .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 },
@@ -496,7 +504,7 @@ mod tests {
             },
             Edit::AddAromaticSystem {
                 atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                ast: AromaticSystemForm::from_electrons(vec![2, 0, 1, 1, 1, 1])
+                attributes: AromaticSystemForm::from_electrons(vec![2, 0, 1, 1, 1, 1])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             },
@@ -713,14 +721,17 @@ mod tests {
         );
         assert_eq!(molecule.aromatic_systems().count(), 1);
         assert_eq!(
-            molecule.aromatic_system(AromaticSystemId(0)).ast.charge,
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .attributes
+                .charge,
             expected_system_charge
         );
         assert_eq!(
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.ast.charge.clone())
+                .map(|atom| atom.attributes.charge.clone())
                 .collect::<Vec<_>>(),
             expected_atom_charges
         );
@@ -728,12 +739,12 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             expected_aromatic_valences
         );
         assert!(molecule.bonds().iter().all(|bond| matches!(
-            bond.ast.constraints.get(BondConstraintKey::Aromatic),
+            bond.attributes.constraints.get(BondConstraintKey::Aromatic),
             Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
         )));
     }
