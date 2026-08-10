@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python Build"
+  short_description: "Build and test umol-py in its Python 3.13 venv"
+  default_prompt: "Use $python-build to rebuild and test the umol Python bindings safely."
